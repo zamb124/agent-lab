@@ -619,7 +619,9 @@ export class LandingHeader extends PlatformElement {
 
     get user() {
         const v = this._authSel.value;
-        return (v && v.user && v.user.raw) || (v && v.user) || null;
+        if (!v || !v.user) return null;
+        if (v.user.raw) return v.user.raw;
+        return v.user;
     }
 
     _lt(key: string) {

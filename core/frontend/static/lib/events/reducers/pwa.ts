@@ -24,6 +24,7 @@ export interface PwaState {
     deploymentVersion: string | null;
 }
 import { PWA_EVENTS } from '../effects/pwa.effect.js';
+import { payloadFields } from '../payload.js';
 
 export const initialPwaState: PwaState = Object.freeze({
     pushPermission: 'default',
@@ -38,12 +39,12 @@ export const initialPwaState: PwaState = Object.freeze({
 export function pwaReducer(state: PwaState = initialPwaState, event: PlatformEvent): PwaState {
     switch (event.type) {
         case CoreEvents.PWA_PUSH_PERMISSION_REQUESTED: {
-            const perm = ((event.payload || {}) as { permission?: unknown }).permission;
+            const perm = (payloadFields(event)).permission;
             if (perm !== 'default' && perm !== 'granted' && perm !== 'denied') return state;
             return state.pushPermission === perm ? state : { ...state, pushPermission: perm };
         }
         case CoreEvents.PWA_PUSH_REGISTERED: {
-            const endpoint = ((event.payload || {}) as { endpoint?: unknown }).endpoint;
+            const endpoint = (payloadFields(event)).endpoint;
             return { ...state, pushRegistered: true, pushEndpoint: typeof endpoint === 'string' && endpoint ? endpoint : state.pushEndpoint };
         }
         case PWA_EVENTS.PUSH_UNSUBSCRIBED:
@@ -55,7 +56,7 @@ export function pwaReducer(state: PwaState = initialPwaState, event: PlatformEve
         case CoreEvents.PWA_UPDATE_AVAILABLE:
             return state.updateAvailable ? state : { ...state, updateAvailable: true };
         case PWA_EVENTS.DEPLOYMENT_VERSION_LOADED: {
-            const version = ((event.payload || {}) as { version?: unknown }).version;
+            const version = (payloadFields(event)).version;
             if (typeof version !== 'string' || !version || version === state.deploymentVersion) return state;
             return { ...state, deploymentVersion: version };
         }

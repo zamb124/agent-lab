@@ -55,3 +55,12 @@ export const searchProviderDeleteOp = createAsyncOp({
         ctx.dispatch(searchProvidersLoadOp.events.REQUESTED, null, { source: 'local' });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'search/providers_load': typeof searchProvidersLoadOp;
+        'search/provider_update': typeof searchProviderPutOp;
+        'search/provider_order_update': typeof searchProviderOrderPutOp;
+        'search/provider_reset': typeof searchProviderDeleteOp;
+    }
+}

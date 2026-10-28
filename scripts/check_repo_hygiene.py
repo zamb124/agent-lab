@@ -50,6 +50,8 @@ ALLOWED_ROOT_FILES: frozenset[str] = frozenset(
         "package.json",
         "pyproject.toml",
         "pytest.ini",
+        "tsconfig.base.json",
+        "tsconfig.json",
         "uv.lock",
         "vitest.config.mjs",
         "web-test-runner.config.mjs",

@@ -23,7 +23,7 @@ async def ensure_submitted_a2a_task(
     ``Emitter.create_ensured`` so ensure and emitter construction stay one contract.
     """
     owner_user_id = state.initiator_user_id or state.user_id
-    if await A2ATaskProjection.task_exists_in_scope(
+    if await A2ATaskProjection.any_task_id_matches_scope(
         company_id=company_id,
         task_id=state.task_id,
         session_id=state.session_id,

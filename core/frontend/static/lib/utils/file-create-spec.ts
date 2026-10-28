@@ -22,6 +22,47 @@ const DEFAULT_RETENTION_BY_SOURCE = Object.freeze({
     generated_ephemeral: 'generated_ephemeral',
 });
 
+function defaultRetentionKind(sourceKind: string): string | undefined {
+    switch (sourceKind) {
+        case 'crm_entity':
+            return DEFAULT_RETENTION_BY_SOURCE.crm_entity;
+        case 'flow_session':
+            return DEFAULT_RETENTION_BY_SOURCE.flow_session;
+        case 'flow_asset':
+            return DEFAULT_RETENTION_BY_SOURCE.flow_asset;
+        case 'work_item':
+            return DEFAULT_RETENTION_BY_SOURCE.work_item;
+        case 'sync_message':
+            return DEFAULT_RETENTION_BY_SOURCE.sync_message;
+        case 'sync_channel_asset':
+            return DEFAULT_RETENTION_BY_SOURCE.sync_channel_asset;
+        case 'sync_call_recording':
+            return DEFAULT_RETENTION_BY_SOURCE.sync_call_recording;
+        case 'sync_speech_segment':
+            return DEFAULT_RETENTION_BY_SOURCE.sync_speech_segment;
+        case 'browser_artifact':
+            return DEFAULT_RETENTION_BY_SOURCE.browser_artifact;
+        case 'rag_document':
+            return DEFAULT_RETENTION_BY_SOURCE.rag_document;
+        case 'office_document':
+            return DEFAULT_RETENTION_BY_SOURCE.office_document;
+        case 'calendar_event':
+            return DEFAULT_RETENTION_BY_SOURCE.calendar_event;
+        case 'mail_message':
+            return DEFAULT_RETENTION_BY_SOURCE.mail_message;
+        case 'wiki_page':
+            return DEFAULT_RETENTION_BY_SOURCE.wiki_page;
+        case 'code_agent_source':
+            return DEFAULT_RETENTION_BY_SOURCE.code_agent_source;
+        case 'platform_auxiliary':
+            return DEFAULT_RETENTION_BY_SOURCE.platform_auxiliary;
+        case 'generated_ephemeral':
+            return DEFAULT_RETENTION_BY_SOURCE.generated_ephemeral;
+        default:
+            return undefined;
+    }
+}
+
 /**
  * @param {{
  *   sourceKind: string,
@@ -57,7 +98,7 @@ export function buildFileCreateSpecJson(params: FileCreateSpecParams): string {
         : {};
     const retentionKind = typeof params.retentionKind === 'string' && params.retentionKind.length > 0
         ? params.retentionKind
-        : (DEFAULT_RETENTION_BY_SOURCE as Record<string, string>)[sourceKind];
+        : defaultRetentionKind(sourceKind);
     if (typeof retentionKind !== 'string' || retentionKind.length === 0) {
         throw new Error(`buildFileCreateSpecJson: retentionKind required for sourceKind=${sourceKind}`);
     }

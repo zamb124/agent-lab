@@ -93,7 +93,7 @@ async def _require_runnable_tool(di: Di, tool_id: str) -> BaseTool:
     registry_tool = _resolve_registry_tool(di, tool_id)
     if registry_tool is not None:
         return registry_tool
-    stored = await ToolReference.get(ToolReference.row_id(tool_id))
+    stored = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
     if stored is None:
         raise_not_found(LookupError(f"Tool '{tool_id}' not found"))
     try:
@@ -195,7 +195,7 @@ async def _company_tool_picker_index(
     *,
     mcp: ToolIndexMcpFilter,
 ) -> list[ToolListIndexItem]:
-    return await ToolReference.list_index(
+    return await ToolReference.list_tool_index(
         mcp=mcp,
         exclude_tool_ids=builtin_tool_ids(),
     )
@@ -480,7 +480,7 @@ async def op_flows_tools_list(
     tools = [tool_row for tool_row in tools if tool_row.tool_id in allowed_ids]
     response_items: list[ToolResponse] = []
     for tool_row in tools:
-        toolkit_ids = await AgentToolkit.get_toolkit_ids_for_tool(tool_row.tool_id)
+        toolkit_ids = await AgentToolkit.toolkit_ids_for_tool(tool_row.tool_id)
         response_items.append(
             _enrich_tool_response_from_registry(
                 di,
@@ -572,9 +572,9 @@ async def op_flows_tools_item(
 ) -> ToolResponse:
     _ = user
     _ = await require_view_tool_or_flow(di, payload.tool_id)
-    tool = await ToolReference.get(ToolReference.row_id(payload.tool_id))
+    tool = await ToolReference.get(ToolReference.row_id_for_active_company(payload.tool_id))
     if tool is not None:
-        toolkit_ids = await AgentToolkit.get_toolkit_ids_for_tool(tool.tool_id)
+        toolkit_ids = await AgentToolkit.toolkit_ids_for_tool(tool.tool_id)
         return _enrich_tool_response_from_registry(
             di,
             _tool_response_from_reference(tool, agent_toolkit_ids=toolkit_ids),
@@ -582,10 +582,10 @@ async def op_flows_tools_item(
     registry_tool = _resolve_registry_tool(di, payload.tool_id)
     if registry_tool is not None:
         return _tool_response_from_registry_tool(registry_tool)
-    flow_cfg = await FlowConfig.get_latest(payload.tool_id)
+    flow_cfg = await FlowConfig.current_for_flow(payload.tool_id)
     if flow_cfg is None:
         raise_not_found(LookupError("Tool not found"))
-    flow_toolkit_ids = await AgentToolkit.get_toolkit_ids_for_flow(flow_cfg.flow_id)
+    flow_toolkit_ids = await AgentToolkit.toolkit_ids_for_flow(flow_cfg.flow_id)
     flow_item = _flow_response(flow_cfg)
     return flow_item.model_copy(update={"agent_toolkit_ids": flow_toolkit_ids})
 
@@ -631,7 +631,7 @@ async def op_flows_tools_create(
         company_id=scope.company_id,
         permission=ref.permission,
     )
-    await AgentToolkit.set_tool_toolkit_membership(
+    await AgentToolkit.replace_tool_toolkit_membership(
         tool_id=ref.tool_id,
         toolkit_ids=list(payload.agent_toolkit_ids),
     )
@@ -653,7 +653,7 @@ async def op_flows_tools_remove(
     _ = user
     _raise_if_platform_builtin(payload.tool_id, action="deleted")
     scope = await require_view_tool(di, payload.tool_id)
-    deleted = await ToolReference.delete_by_id(ToolReference.row_id(payload.tool_id))
+    deleted = await ToolReference.delete_by_id(ToolReference.row_id_for_active_company(payload.tool_id))
     if not deleted:
         raise_not_found(LookupError("Tool not found"))
     await di.flow_access_service.sync_tool_deleted(

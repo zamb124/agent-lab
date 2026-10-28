@@ -15,6 +15,32 @@ const SERVICE_DEV_PORTS = Object.freeze({
     grafana: '3000',
 });
 
+function devPort(serviceId: string): string {
+    switch (serviceId) {
+        case 'flows': return SERVICE_DEV_PORTS.flows;
+        case 'frontend': return SERVICE_DEV_PORTS.frontend;
+        case 'crm': return SERVICE_DEV_PORTS.crm;
+        case 'rag': return SERVICE_DEV_PORTS.rag;
+        case 'sync': return SERVICE_DEV_PORTS.sync;
+        case 'worktracker': return SERVICE_DEV_PORTS.worktracker;
+        case 'documents': return SERVICE_DEV_PORTS.documents;
+        case 'wiki': return SERVICE_DEV_PORTS.wiki;
+        case 'litserve': return SERVICE_DEV_PORTS.litserve;
+        case 'grafana': return SERVICE_DEV_PORTS.grafana;
+        default:
+            throw new Error(`buildServiceEntryUrl: unknown service id "${serviceId}"`);
+    }
+}
+
+function navigatorStandalone(navigator: Navigator): boolean {
+    const nav: unknown = navigator;
+    if (typeof nav !== 'object' || nav === null) {
+        throw new Error('isStandalonePwaMode: navigator is required');
+    }
+    if (!('standalone' in nav)) return false;
+    return nav.standalone === true;
+}
+
 function isLocalHost(hostname: string): boolean {
     return (
         hostname === 'localhost'
@@ -50,10 +76,7 @@ export function buildServiceEntryUrl(serviceId: string): string {
     if (!isLocalHost(hostname)) {
         return servicePath;
     }
-    const targetPort = (SERVICE_DEV_PORTS as Record<string, string | undefined>)[serviceId];
-    if (!targetPort) {
-        throw new Error(`buildServiceEntryUrl: unknown service id "${serviceId}"`);
-    }
+    const targetPort = devPort(serviceId);
     if (window.location.port === targetPort) {
         return servicePath;
     }
@@ -104,5 +127,5 @@ export function buildFrontendPublicPath(path: string): string {
 export function isStandalonePwaMode(): boolean {
     const mq = window.matchMedia('(display-mode: standalone)');
     if (mq && mq.matches) return true;
-    return (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    return navigatorStandalone(window.navigator);
 }

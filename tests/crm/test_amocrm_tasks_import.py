@@ -134,7 +134,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         assert stats["tasks_skipped_no_parent"] == 0
         assert stats["relationships"] == 2
 
-        rows = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
+        rows = await CRMEntity.list_by_namespace_entity_type_and_external_ref(
             company_id="system",
             namespace=ns,
             entity_type="task",
@@ -150,7 +150,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         assert "Позвонить" in ent.description
 
         # Канбан-статус и срок живут в парном WorkItem, не на CRM-узле.
-        work_item = await WorkItem.find_work_item_by_crm_entity(
+        work_item = await WorkItem.any_crm_activity_by_entity_id(
             "system", ent.entity_id
         )
         assert work_item is not None
@@ -158,14 +158,14 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         assert work_item.due_date is not None
         assert work_item.due_date.date() == date(2024, 1, 1)
 
-        lead_rows = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
+        lead_rows = await CRMEntity.list_by_namespace_entity_type_and_external_ref(
             company_id="system",
             namespace=ns,
             entity_type="lead",
             source_id=AMO_PROVIDER_ID,
             record_id="555",
         )
-        member_rows = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
+        member_rows = await CRMEntity.list_by_namespace_entity_type_and_external_ref(
             company_id="system",
             namespace=ns,
             entity_type="member",

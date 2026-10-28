@@ -106,7 +106,7 @@ async def _mcp_json(
     cleaned_server_id = server_id.strip()
     if cleaned_server_id == "":
         raise ValueError("server_id is required")
-    config = await MCPServerConfig.get(MCPServerConfig.row_id(cleaned_server_id))
+    config = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(cleaned_server_id))
     if config is None:
         raise ValueError(f"MCP server not found: {cleaned_server_id}")
     client = await get_mcp_client(

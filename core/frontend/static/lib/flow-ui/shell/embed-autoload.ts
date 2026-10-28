@@ -1,6 +1,7 @@
-import './drawer.js';
-import './page-host.js';
+import { isPlainRecord } from '../../events/payload.js';
 import { assignLinnexFlowUI, createLinnexFlowUI } from './embed-host-api.js';
+import { FlowUIDrawer } from './drawer.js';
+import { FlowUIPageHost, type FlowUiPageHostConfig } from './page-host.js';
 import {
     bearerFor,
     buildHostConfig,
@@ -19,9 +20,22 @@ export {
 } from './embed-script-config.js';
 export { createLinnexFlowUI } from './embed-host-api.js';
 
-interface EmbedConfigHost extends HTMLElement {
-    config: Record<string, unknown>;
-    open?: boolean;
+function requirePageHost(element: HTMLElement): FlowUIPageHost {
+    if (!(element instanceof FlowUIPageHost)) {
+        throw new Error('Linnex Flow UI embed: flow-ui-page-host is not registered');
+    }
+    return element;
+}
+
+function requireDrawer(element: HTMLElement): FlowUIDrawer {
+    if (!(element instanceof FlowUIDrawer)) {
+        throw new Error('Linnex Flow UI embed: flow-ui-drawer is not registered');
+    }
+    return element;
+}
+
+function isPageHostConfig(value: unknown): value is FlowUiPageHostConfig {
+    return isPlainRecord(value) && typeof value.baseUrl === 'string' && value.baseUrl.length > 0;
 }
 
 function sourceScript(): HTMLOrSVGElement {
@@ -70,15 +84,18 @@ export async function mount() {
     const hostConfig = buildHostConfig(script, token, flowsBaseUrl);
 
     if (presentation === 'page') {
-        const pageHost = document.createElement('flow-ui-page-host') as EmbedConfigHost;
+        const pageHost = requirePageHost(document.createElement('flow-ui-page-host'));
         applyPlatformUiOrigin(pageHost, hostConfig.platformUiOrigin);
+        if (!isPageHostConfig(hostConfig)) {
+            throw new Error('Linnex Flow UI embed: page host config requires baseUrl');
+        }
         pageHost.config = hostConfig;
         document.body.append(pageHost);
         publishHost(pageHost, hostConfig.embedId, 'page');
         return;
     }
 
-    const drawer = document.createElement('flow-ui-drawer') as EmbedConfigHost;
+    const drawer = requireDrawer(document.createElement('flow-ui-drawer'));
     applyPlatformUiOrigin(drawer, hostConfig.platformUiOrigin);
     drawer.open = script.dataset.initialOpen === 'true';
     drawer.config = {
@@ -91,10 +108,10 @@ export async function mount() {
 }
 
 mount().catch((error) => {
-    console.error('Linnex Flow UI embed failed', error);
     globalThis.dispatchEvent(new CustomEvent('linnex-flow-ui-error', {
         detail: Object.freeze({
             message: error instanceof Error ? error.message : String(error),
         }),
     }));
+    throw error;
 });

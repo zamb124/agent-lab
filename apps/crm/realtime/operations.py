@@ -568,7 +568,7 @@ async def op_templates_update(
         for field_name in incoming.model_fields_set:
             data[field_name] = getattr(incoming, field_name)
         crm_settings = NamespaceCRMSettings.model_validate(data).model_dump(mode="json")
-    updated = await NamespaceTemplate.update_fields(
+    updated = await NamespaceTemplate.update_name_description_icon_and_crm_settings(
         template,
         name=payload.name,
         description=payload.description,
@@ -748,7 +748,7 @@ async def _backfill_missing_colors(
             continue
         assigned_color = assign_color_from_palette(used_colors)
         used_colors.add(assigned_color)
-        await EntityType.update_fields(
+        await EntityType.update_field_patch(
             entity_type.type_id,
             namespace=entity_type.namespace,
             patch={"color": assigned_color},
@@ -764,12 +764,12 @@ async def _list_entity_types_page(
 ) -> OffsetPage[EntityTypeResponse]:
     company_id = _company_scope().company_id
     listed = (
-        EntityType.in_company(company_id, namespace=namespace)
+        EntityType.query_by_namespace_in_company(company_id, namespace=namespace)
         .order_by("-is_system", "type_id")
         .limit(limit)
         .offset(offset)
     )
-    total_rows = EntityType.in_company(company_id, namespace=namespace)
+    total_rows = EntityType.query_by_namespace_in_company(company_id, namespace=namespace)
     page, total = await asyncio.gather(listed.all(), total_rows.count())
     if len(page) == 0:
         return OffsetPage[EntityTypeResponse](
@@ -843,7 +843,7 @@ async def op_entity_types_item(
     color = entity_type.color
     if color is None or not color.strip():
         assigned_color = assign_color_from_palette(set())
-        await EntityType.update_fields(
+        await EntityType.update_field_patch(
             payload.type_id,
             namespace=namespace,
             patch={"color": assigned_color},
@@ -952,7 +952,7 @@ async def op_entity_types_update(
     if resolved_color is None or not resolved_color.strip():
         fields["color"] = assign_color_from_palette(set())
     if len(fields) > 0:
-        await EntityType.update_fields(
+        await EntityType.update_field_patch(
             payload.type_id, namespace=namespace, patch=fields
         )
     refreshed = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
@@ -973,7 +973,7 @@ async def op_entity_types_public_fields(
     _ = di
     namespace = _normalize_namespace(payload.namespace)
     _ = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
-    await EntityType.update_fields(
+    await EntityType.update_field_patch(
         payload.type_id,
         namespace=namespace,
         patch={"public_fields": payload.public_fields},
@@ -2072,7 +2072,7 @@ async def op_relationships_create(
     _ = user
     _ = di
     scope = _company_scope()
-    all_types = await RelationshipType.in_company(
+    all_types = await RelationshipType.query_by_system_in_company(
         scope.company_id,
         include_system=True,
     ).all()
@@ -2123,7 +2123,7 @@ async def op_relationship_types_list(
     _ = user
     _ = di
     company_id = _company_scope().company_id
-    rows = RelationshipType.in_company(
+    rows = RelationshipType.query_by_system_in_company(
         company_id,
         include_system=True,
     )
@@ -2696,7 +2696,7 @@ async def op_activity_tasks_list(
         limit=payload.limit,
         offset=payload.offset,
     )
-    total = await WorkItem.count_work_items(
+    total = await WorkItem.count_for_filters(
         scope.company_id,
         namespace=payload.namespace,
         kind=WorkItemKind.CRM_ACTIVITY,

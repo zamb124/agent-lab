@@ -11,6 +11,7 @@ import { PlatformElement } from '../platform-element/index.js';
 import type { OpController } from '../base/use-resource.js';
 import type { SelectController } from '../events/select-controller.js';
 import { openWorkItemDetail } from '../utils/work-item-deeplink.js';
+import { isPlainRecord } from '../events/payload.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
 import './platform-icon.js';
 import './platform-user-chip.js';
@@ -31,6 +32,11 @@ export interface WorkItemLike {
         user_ids?: unknown[];
         claimed_by_user_id?: unknown;
     };
+}
+
+function isWorkItem(value: unknown): value is WorkItemLike {
+    if (!isPlainRecord(value)) return false;
+    return typeof value.work_item_id === 'string' && value.work_item_id.length > 0;
 }
 
 function _assigneeUserId(item: WorkItemLike | null | undefined): string {
@@ -307,8 +313,8 @@ export class PlatformWorkItemBadge extends PlatformElement {
         this._previewCloseTimer = null;
         this._getOp = this.useOp('worktracker/work_item_get');
         this._locale = this.select((s) => {
-            const i18n = s.i18n as { locale?: string } | undefined;
-            return typeof i18n?.locale === 'string' && i18n.locale.length > 0 ? i18n.locale : 'en';
+            const locale = s.i18n.locale;
+            return locale.length > 0 ? locale : 'en';
         });
     }
 
@@ -330,9 +336,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
             return this.item;
         }
         const result = this._getOp.lastResult;
-        if (result && typeof result === 'object' && typeof (result as WorkItemLike).work_item_id === 'string') {
-            return result as WorkItemLike;
-        }
+        if (isWorkItem(result)) return result;
         return null;
     }
 
@@ -345,7 +349,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
             return;
         }
         const cached = this._getOp.lastResult;
-        if (cached && typeof cached === 'object' && (cached as WorkItemLike).work_item_id === id) {
+        if (isWorkItem(cached) && cached.work_item_id === id) {
             return;
         }
         this._getOp.run({ work_item_id: id });

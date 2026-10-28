@@ -7,6 +7,13 @@
  */
 
 import { resolvePlatformFilesApiBase } from './platform-files-url.js';
+import { isPlainRecord } from '../events/payload.js';
+
+function errorDetail(body: unknown, status: number): string {
+    if (!isPlainRecord(body)) return `HTTP ${status}`;
+    const detail = body.detail;
+    return typeof detail === 'string' ? detail : `HTTP ${status}`;
+}
 
 /** Defaults совпадают с FilesConfig (Pydantic). */
 export const PLATFORM_FILES_UPLOAD_DEFAULTS = Object.freeze({
@@ -25,16 +32,12 @@ async function _readJsonOrThrow(response: Response, context: string): Promise<Re
         body = JSON.parse(text);
     }
     if (!response.ok) {
-        const detail =
-            body && typeof body === 'object' && typeof (body as Record<string, unknown>).detail === 'string'
-                ? (body as Record<string, unknown>).detail
-                : `HTTP ${response.status}`;
-        throw new Error(`${context}: ${detail}`);
+        throw new Error(`${context}: ${errorDetail(body, response.status)}`);
     }
-    if (body === null || typeof body !== 'object') {
+    if (!isPlainRecord(body)) {
         throw new Error(`${context}: JSON object required`);
     }
-    return body as Record<string, unknown>;
+    return body;
 }
 
 /**
@@ -163,8 +166,8 @@ async function _uploadChunked(file: File, specJson: string, opts: UploadChunkedO
                 credentials: opts.credentials,
                 headers: { ...opts.headers },
             });
-        } catch {
-            // abort best-effort; original error is raised
+        } catch (abortErr) {
+            throw new AggregateError([err, abortErr], 'chunked upload failed, abort of the upload failed too');
         }
         throw err;
     }
@@ -244,17 +247,16 @@ export async function uploadPlatformFile(input: UploadPlatformFileInput): Promis
  * }}
  */
 export function isPlatformFileRef(value: unknown): value is Record<string, unknown> & { file_id: string; original_name: string; content_type: string; file_size: number } {
-    if (!value || typeof value !== 'object') {
-        return false;
-    }
-    const ref = value as Record<string, unknown>;
-    return (
-        typeof ref.file_id === 'string'
-        && ref.file_id.length > 0
-        && typeof ref.original_name === 'string'
-        && typeof ref.content_type === 'string'
-        && typeof ref.file_size === 'number'
-    );
+    if (!isPlainRecord(value)) return false;
+    const fileId = value.file_id;
+    const originalName = value.original_name;
+    const contentType = value.content_type;
+    const fileSize = value.file_size;
+    return typeof fileId === 'string'
+        && fileId.length > 0
+        && typeof originalName === 'string'
+        && typeof contentType === 'string'
+        && typeof fileSize === 'number';
 }
 
 /**

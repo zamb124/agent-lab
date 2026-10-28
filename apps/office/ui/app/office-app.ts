@@ -74,6 +74,7 @@ import { documentEditorConfigOp } from '../events/resources/editor.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { buildOfficeAssistantContext } from '../_helpers/platform-assistant-context.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/office-sidebar.js';
@@ -134,8 +135,8 @@ export class OfficeApp extends PlatformApp {
 
     constructor() {
         super();
-        this._companiesListSel = this.select((s) => (s.companies as Record<string, unknown>).list);
-        this._companiesLoadingSel = this.select((s) => (s.companies as Record<string, unknown>).loading);
+        this._companiesListSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._assistantDocumentsSel = this.select((s) => s.officeDocuments);
     }
 
@@ -246,9 +247,13 @@ export class OfficeApp extends PlatformApp {
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         const auth = this._authSelect.value;
+        const companies = this._companiesListSel.value;
+        if (companies !== undefined && companies !== null && !Array.isArray(companies)) {
+            throw new Error('office: companies list must be an array');
+        }
         applyCompanyHostRedirectIfNeeded(
             auth,
-            (this._companiesListSel.value || []) as never[],
+            (Array.isArray(companies) ? companies : []) as never[],
             Boolean(this._companiesLoadingSel.value),
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );
@@ -267,7 +272,12 @@ export class OfficeApp extends PlatformApp {
     }
 
     override async getPlatformAssistantContextVariables(routeKey: string, params: Record<string, string>): Promise<Record<string, unknown>> {
-        return buildOfficeAssistantContext(routeKey, params, (this._assistantDocumentsSel.value || {}) as Record<string, unknown>);
+        const rawDocuments = this._assistantDocumentsSel.value;
+        if (rawDocuments !== undefined && rawDocuments !== null && !isPlainRecord(rawDocuments)) {
+            throw new Error('office: assistant documents state must be an object');
+        }
+        const documents = isPlainRecord(rawDocuments) ? rawDocuments : {};
+        return buildOfficeAssistantContext(routeKey, params, documents);
     }
 
     override renderRoute(routeKey: string | null, params: Record<string, string>) {

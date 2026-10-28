@@ -31,11 +31,15 @@ function _parseTimeMs(value: string): number {
 }
 
 function _maxPairMs(durationValue: string, delayValue: string): number {
-    const durations = String(durationValue || '').split(',');
-    const delays = String(delayValue || '').split(',');
+    const durations = durationValue.split(',');
+    const delays = delayValue.split(',');
     let max = 0;
     for (let i = 0; i < durations.length; i += 1) {
-        const duration = _parseTimeMs(durations[i] ?? '');
+        const durationToken = durations[i];
+        if (durationToken === undefined) {
+            throw new Error('motion: duration token missing');
+        }
+        const duration = _parseTimeMs(durationToken);
         const delay = _parseTimeMs(delays[i] ?? delays[delays.length - 1] ?? '0ms');
         max = Math.max(max, duration + delay);
     }

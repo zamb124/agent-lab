@@ -139,7 +139,7 @@ async def op_editor_file_config(
     file_category, onlyoffice_document_type = resolve_binding_metadata(
         meta.original_name, _content_type_base(meta)
     )
-    binding = await FileRecord.for_company(
+    binding = await FileRecord.by_file_id(
         payload.file_id,
         scope.company_id,
     )

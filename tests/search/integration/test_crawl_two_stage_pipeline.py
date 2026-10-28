@@ -68,7 +68,7 @@ async def test_layer1_indexes_and_search_before_enrichment_with_llm_flag_enabled
     assert crawl_url.enrichment_model is None
 
     url, _canonical, markdown, title, content_hash, _structural_signals = (
-        await CrawlUrl.get_layer1_snapshot(crawl_url_id)
+        await CrawlUrl.require_layer1_snapshot(crawl_url_id)
     )
     assert REAL_CRAWL_DOMAIN in url
     assert len(markdown.strip()) >= 50

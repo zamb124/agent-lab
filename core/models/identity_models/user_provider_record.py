@@ -35,13 +35,15 @@ class UserProviderRecord(PlatformModel):
     metadata: JsonObject = Field(default_factory=dict, description="Данные профиля провайдера")
 
     @classmethod
-    async def find_by_provider_user_id(cls, provider_user_id: str) -> Self | None:
+    async def any_by_provider_user_id(cls, provider_user_id: str) -> Self | None:
+        """Любая строка provider_user_id. Уникальна пара (provider_name, provider_user_id), поэтому при нескольких строках какая вернётся, не задано. Нет строк — None. Пустой provider_user_id — ValueError."""
         if provider_user_id == "":
             raise ValueError("provider_user_id is required")
         return await cls.objects.filter(provider_user_id=provider_user_id).first()
 
     @classmethod
-    async def list_by_user_id(cls, user_id: str) -> list[Self]:
+    async def list_unordered_by_user_id(cls, user_id: str) -> list[Self]:
+        """Все строки user_id. Порядка и limit нет. Пустой user_id — ValueError."""
         if user_id == "":
             raise ValueError("user_id is required")
         return await cls.objects.filter(user_id=user_id).all()

@@ -75,14 +75,22 @@ export interface BuildListTasksOptions {
  * UUID v4 через getRandomValues: ``crypto.randomUUID`` есть только в secure context,
  * а локальный стенд и E2E ходят по HTTP company-host.
  */
+function uuidByte(bytes: Uint8Array, index: number): number {
+    const value = bytes[index];
+    if (value === undefined) {
+        throw new Error('flow-ui: uuid byte missing');
+    }
+    return value;
+}
+
 export function randomUuid(): string {
     if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
         throw new Error('flow-ui: crypto.getRandomValues is required');
     }
     const bytes = new Uint8Array(16);
     globalThis.crypto.getRandomValues(bytes);
-    bytes[6] = ((bytes[6] || 0) & 0x0f) | 0x40;
-    bytes[8] = ((bytes[8] || 0) & 0x3f) | 0x80;
+    bytes[6] = (uuidByte(bytes, 6) & 0x0f) | 0x40;
+    bytes[8] = (uuidByte(bytes, 8) & 0x3f) | 0x80;
     const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
@@ -98,8 +106,8 @@ function rpc(method: string, params: Record<string, unknown>): A2aRpcBody {
 export function a2aEndpointUrl({ baseUrl = '', flowId = '', embedId = '' }: A2aEndpointTarget): string {
     const root = String(baseUrl).trim().replace(/\/$/, '');
     if (!root) throw new Error('flow-ui: baseUrl is required');
-    const embed = String(embedId || '').trim();
-    const flow = String(flowId || '').trim();
+    const embed = typeof embedId === 'string' ? embedId.trim() : '';
+    const flow = typeof flowId === 'string' ? flowId.trim() : '';
     if (embed) return `${root}/api/v1/embed/${encodeURIComponent(embed)}`;
     if (!flow) throw new Error('flow-ui: flowId or embedId is required');
     return `${root}/api/v1/${encodeURIComponent(flow)}`;

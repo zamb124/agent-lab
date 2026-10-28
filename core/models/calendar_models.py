@@ -124,7 +124,8 @@ class CalendarEvent(PlatformModel):
 
 
     @classmethod
-    async def find_in_company(cls, company_id: str, event_id: str) -> Self | None:
+    async def by_event_id(cls, company_id: str, event_id: str) -> Self | None:
+        """Строка компании по event_id. Нет строки — None. Пустые company_id и event_id — ValueError."""
         return await cls.objects.filter(
             event_id=_calendar_required(event_id, "event_id"),
             company_id=_calendar_required(company_id, "company_id"),

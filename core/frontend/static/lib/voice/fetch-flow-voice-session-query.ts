@@ -9,6 +9,8 @@
  * из company/settings при подключении сокета.
  */
 
+import { isPlainRecord } from '../events/payload.js';
+
 /**
  * @param {string|null|undefined} branchId
  * @returns {string}
@@ -57,11 +59,11 @@ export interface FetchFlowVoiceSessionQueryParams {
 }
 
 export async function fetchFlowVoiceSessionQueryDict(p: FetchFlowVoiceSessionQueryParams): Promise<Record<string, string>> {
-    const fid = String(p.flowId || '').trim();
-    const root = String(p.flowsApiRoot || '').replace(/\/$/, '');
-    if (fid === '' || root === '') {
+    if (typeof p.flowId !== 'string' || p.flowId.trim() === '' || typeof p.flowsApiRoot !== 'string' || p.flowsApiRoot.trim() === '') {
         throw new Error('fetchFlowVoiceSessionQueryDict: flowId and flowsApiRoot required');
     }
+    const fid = p.flowId.trim();
+    const root = p.flowsApiRoot.replace(/\/$/, '');
     const bid = normalizeBranchIdForFlowVoiceSessionQuery(p.branchId);
     const url = `${root}/api/v1/flows/${encodeURIComponent(fid)}/voice-session-query?branch_id=${encodeURIComponent(bid)}`;
     const credentials = p.credentials === 'omit' ? 'omit' : 'include';
@@ -80,8 +82,8 @@ export async function fetchFlowVoiceSessionQueryDict(p: FetchFlowVoiceSessionQue
         const t = await res.text();
         throw new Error(`voice-session-query HTTP ${res.status}: ${t}`);
     }
-    const body = await res.json() as { query?: unknown } | null;
-    if (!body || typeof body !== 'object' || !body.query || typeof body.query !== 'object') {
+    const body: unknown = await res.json();
+    if (!isPlainRecord(body) || !isPlainRecord(body.query)) {
         throw new Error('voice-session-query: invalid response body');
     }
     return voiceSessionQueryToStringRecord(body.query);

@@ -46,9 +46,14 @@ function md5ii(a: number, b: number, c: number, d: number, x: number, s: number,
     return md5cmn(c ^ (b | ~d), a, b, x, s, t);
 }
 
+function limb(words: number[], index: number): number {
+    const value = words[index];
+    return value === undefined ? 0 : value;
+}
+
 function binlMd5(input: number[], lengthBits: number): number[] {
     const x = input.slice();
-    x[lengthBits >> 5] = (x[lengthBits >> 5] ?? 0) | (0x80 << (lengthBits % 32));
+    x[lengthBits >> 5] = limb(x, lengthBits >> 5) | (0x80 << (lengthBits % 32));
     x[(((lengthBits + 64) >>> 9) << 4) + 14] = lengthBits;
 
     let a = 1732584193;
@@ -56,7 +61,7 @@ function binlMd5(input: number[], lengthBits: number): number[] {
     let c = -1732584194;
     let d = 271733878;
 
-    const xAt = (i: number): number => x[i] ?? 0;
+    const xAt = (i: number): number => limb(x, i);
     for (let i = 0; i < x.length; i += 16) {
         const olda = a;
         const oldb = b;
@@ -143,7 +148,7 @@ function binl2rstr(input: number[]): string {
     let output = '';
     const length32 = input.length * 32;
     for (let i = 0; i < length32; i += 8) {
-        output += String.fromCharCode(((input[i >> 5] ?? 0) >>> (i % 32)) & 0xff);
+        output += String.fromCharCode((limb(input, i >> 5) >>> (i % 32)) & 0xff);
     }
     return output;
 }
@@ -156,7 +161,7 @@ function rstr2binl(input: string): number[] {
     }
     const length8 = input.length * 8;
     for (let i = 0; i < length8; i += 8) {
-        output[i >> 5] = (output[i >> 5] ?? 0) | ((input.charCodeAt(i / 8) & 0xff) << (i % 32));
+        output[i >> 5] = limb(output, i >> 5) | ((input.charCodeAt(i / 8) & 0xff) << (i % 32));
     }
     return output;
 }
@@ -180,7 +185,9 @@ function utf8Encode(input: string): string {
     const bytes = new TextEncoder().encode(input);
     let s = '';
     for (let i = 0; i < bytes.length; i += 1) {
-        s += String.fromCharCode(bytes[i] ?? 0);
+        const byte = bytes[i];
+        if (byte === undefined) throw new Error('md5: utf-8 byte missing');
+        s += String.fromCharCode(byte);
     }
     return s;
 }

@@ -248,7 +248,7 @@ class SchedulerService:
         return await PlatformScheduledTask.upsert_by_schedule_task_id(task)
 
     async def get(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
-        task = await PlatformScheduledTask.find_in_company(
+        task = await PlatformScheduledTask.by_schedule_task_id(
             company_id=company_id, schedule_task_id=schedule_task_id
         )
         if task is None:
@@ -303,7 +303,7 @@ class SchedulerService:
         )
 
     async def list(self, company_id: str, filters: PlatformScheduleFilter) -> list[PlatformScheduledTask]:
-        tasks = await PlatformScheduledTask.list_for_company(
+        tasks = await PlatformScheduledTask.list_filtered_by_created_at_desc(
             company_id=company_id, filters=filters
         )
         return [self._enrich_next_run_at(task) for task in tasks]
@@ -317,7 +317,7 @@ class SchedulerService:
         source = get_schedule_source(self._redis_url)
         await source.startup()
         _ = await source.delete_schedule(task.schedule_id)
-        _ = await PlatformScheduledTask.update_status(
+        _ = await PlatformScheduledTask.update_status_schedule_runs_and_error(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.PAUSED,
@@ -331,7 +331,7 @@ class SchedulerService:
             raise ValueError(f"task status must be paused, got {self._status_value(task.status)}")
         schedule_id = await self._create_schedule(task)
         next_run_at = self._calculate_next_run_at(task)
-        _ = await PlatformScheduledTask.update_status(
+        _ = await PlatformScheduledTask.update_status_schedule_runs_and_error(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.PENDING,
@@ -349,7 +349,7 @@ class SchedulerService:
             source = get_schedule_source(self._redis_url)
             await source.startup()
             _ = await source.delete_schedule(task.schedule_id)
-        _ = await PlatformScheduledTask.update_status(
+        _ = await PlatformScheduledTask.update_status_schedule_runs_and_error(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.CANCELLED,
@@ -376,7 +376,7 @@ class SchedulerService:
         next_run_at = task.next_run_at
         if task.schedule_type in (PlatformScheduleType.CRON, PlatformScheduleType.INTERVAL):
             next_run_at = self._calculate_next_run_at(task)
-        _ = await PlatformScheduledTask.update_status(
+        _ = await PlatformScheduledTask.update_status_schedule_runs_and_error(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=task.status,
@@ -387,7 +387,7 @@ class SchedulerService:
         return await self.get(company_id, schedule_task_id)
 
     async def mark_failed(self, company_id: str, schedule_task_id: str, error_message: str) -> None:
-        _ = await PlatformScheduledTask.update_status(
+        _ = await PlatformScheduledTask.update_status_schedule_runs_and_error(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.FAILED,

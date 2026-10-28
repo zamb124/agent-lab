@@ -414,7 +414,7 @@ class EntityService:
     async def _platform_company_entity_ids(self) -> frozenset[str]:
         """ID CRM-сущностей активной платформенной компании (атрибут platform_company_id)."""
         company_id = self._get_company_id()
-        rows = await CRMEntity.all_by_entity_type_and_attribute(
+        rows = await CRMEntity.list_by_entity_type_and_attribute(
             entity_type=COMPANY_ENTITY_TYPE,
             attribute_key=PLATFORM_COMPANY_ID_ATTR,
             attribute_value=company_id,
@@ -854,7 +854,7 @@ class EntityService:
 
     async def get_note_voice_entity_id(self, note_id: str) -> str | None:
         """Возвращает entity_id автора заметки (note_voice relationship), если есть."""
-        return await Relationship.target_by_source_and_type(
+        return await Relationship.any_target_entity_id_by_source_and_type(
             self._get_company_id(),
             note_id,
             NOTE_VOICE_RELATIONSHIP_TYPE,
@@ -1251,7 +1251,7 @@ class EntityService:
         try:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
-            removed = await CRMEntity.take_by_id(entity.entity_id)
+            removed = await CRMEntity.delete_returning(entity.entity_id)
             if removed is not None:
                 _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
@@ -1496,23 +1496,23 @@ class EntityService:
         merged_tags = _union_str_lists(survivor.tags, source.tags)
         merged_attachments = _union_str_lists(survivor.attachment_ids, source.attachment_ids)
 
-        _ = await Relationship.rewrite_entity_id(
+        _ = await Relationship.update_source_and_target_entity_id(
             company_id,
             source_id,
             survivor_id,
         )
-        await Relationship.deduplicate_for_entity(survivor_id)
+        await Relationship.delete_loops_and_duplicate_edges(survivor_id)
 
-        _ = await CRMEntity.rewrite_source_entity_id(
+        _ = await CRMEntity.update_source_entity_id(
             company_id, source_id, survivor_id
         )
 
-        _ = await AccessRequest.rewrite_entity_resource_id(
+        _ = await AccessRequest.update_entity_resource_id(
             company_id,
             source_id,
             survivor_id,
         )
-        await AccessRequest.deduplicate_pending_for_entity(survivor_id)
+        await AccessRequest.delete_duplicate_pending_for_entity(survivor_id)
 
         survivor_for_authz = await CRMEntity.get(survivor_id)
         if survivor_for_authz is None:
@@ -1527,7 +1527,7 @@ class EntityService:
             raise ValueError("Source entity disappeared before merge completed")
         source_fresh.attachment_ids = []
         source_fresh.updated_at = datetime.now(UTC)
-        source_fresh = await CRMEntity.save_loaded(source_fresh)
+        source_fresh = await CRMEntity.update_loaded(source_fresh)
         await index_crm_entity(self._rag, source_fresh, replace=True)
 
         surv = await CRMEntity.get(survivor_id)
@@ -1545,7 +1545,7 @@ class EntityService:
             namespace=surv.namespace,
             entity_subtype=surv.entity_subtype,
         )
-        surv = await CRMEntity.save_loaded(surv)
+        surv = await CRMEntity.update_loaded(surv)
         await index_crm_entity(self._rag, surv, replace=True)
 
         _ = await self._delete_entity_with_saga(source_id)
@@ -1679,7 +1679,7 @@ class EntityService:
             entity.description = merged_desc
 
         entity.updated_at = datetime.now(UTC)
-        entity = await CRMEntity.save_loaded(entity)
+        entity = await CRMEntity.update_loaded(entity)
         await index_crm_entity(self._rag, entity, replace=True)
 
         logger.info("crm.entity.updated", entity_id=entity_id)
@@ -1761,7 +1761,7 @@ class EntityService:
                     voice_entity_in_payload=True,
                 )
             else:
-                resolved_voice = await Relationship.target_by_source_and_type(
+                resolved_voice = await Relationship.any_target_entity_id_by_source_and_type(
                     company_id,
                     entity.entity_id,
                     NOTE_VOICE_RELATIONSHIP_TYPE,
@@ -1774,7 +1774,7 @@ class EntityService:
                     context_entity_in_payload=True,
                 )
             else:
-                resolved_context = await Relationship.target_by_source_and_type(
+                resolved_context = await Relationship.any_target_entity_id_by_source_and_type(
                     company_id,
                     entity.entity_id,
                     IN_CONTEXT_RELATIONSHIP_TYPE,
@@ -1876,7 +1876,7 @@ class EntityService:
             min_created_at,
             max_created_at,
             total_entities,
-        ) = await CRMEntity.created_at_bounds(
+        ) = await CRMEntity.created_at_bounds_and_count(
             entity_type=entity_type,
             entity_subtype=entity_subtype,
             namespace=namespace,
@@ -1948,7 +1948,7 @@ class EntityService:
         )
 
         # Получаем source_entity_id и entity_type для всех сущностей в компоненте
-        entities = await CRMEntity.list_by_ids(component_order)
+        entities = await CRMEntity.list_across_companies_by_ids(component_order)
         source_entity_id_map = {e.entity_id: e.source_entity_id for e in entities}
         entity_type_map = {e.entity_id: e.entity_type for e in entities}
 
@@ -2020,7 +2020,7 @@ class EntityService:
         if not exclusive_entity_ids:
             return []
 
-        entities = await CRMEntity.list_by_ids(exclusive_entity_ids)
+        entities = await CRMEntity.list_across_companies_by_ids(exclusive_entity_ids)
         return [
             {
                 "entity_id": entity.entity_id,
@@ -2073,7 +2073,7 @@ class EntityService:
 
         async def delete_entity_from_db() -> None:
             await self._entity_access.sync_entity_deleted(entity)
-            removed = await CRMEntity.take_by_id(entity_id)
+            removed = await CRMEntity.delete_returning(entity_id)
             if removed is not None:
                 _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
 
@@ -2267,7 +2267,7 @@ class EntityService:
                     resolved_order.append(entity_id)
                 elif item.score > score_by_resolved[entity_id]:
                     score_by_resolved[entity_id] = item.score
-            matched = await CRMEntity.matching_by_ids(
+            matched = await CRMEntity.list_by_ids_and_filters(
                 company_id=cid,
                 entity_ids=resolved_order,
                 entity_type=entity_type,
@@ -2336,7 +2336,7 @@ class EntityService:
         """Гибридный поиск RRF (tsvector + pgvector) с фильтрацией по грантам."""
         k = 60
         rrf_max = 2.0 / (k + 1)
-        fts_entities = await CRMEntity.fts_ranked(
+        fts_entities = await CRMEntity.list_fts_ranked_pairs(
             query,
             entity_type,
             entity_subtype,
@@ -2400,7 +2400,7 @@ class EntityService:
         limit: int = 100,
     ) -> list[tuple[CRMEntity, float]]:
         """FTS поиск с ранжированием по ts_rank и фильтрацией по грантам."""
-        results = await CRMEntity.fts_ranked(
+        results = await CRMEntity.list_fts_ranked_pairs(
             query=query,
             entity_type=entity_type,
             entity_subtype=entity_subtype,
@@ -2423,7 +2423,7 @@ class EntityService:
         namespace: str | None = None,
     ) -> JsonObject:
         """Фасетная агрегация: по entity_type, status, месяц создания."""
-        return await CRMEntity.facet_counts(namespace=namespace)
+        return await CRMEntity.counts_by_type_status_and_month(namespace=namespace)
 
     async def search_mentions(
         self,
@@ -2751,7 +2751,7 @@ class EntityService:
         entity_rows = await EntityType.catalog(
             namespace=ns_for_types
         )
-        rel_rows = await RelationshipType.in_company(
+        rel_rows = await RelationshipType.query_by_system_in_company(
             self._get_company_id(),
             include_system=True,
         ).order_by("type_id").all()
@@ -3089,7 +3089,7 @@ class EntityService:
 
         valid_rel_type_ids = {
             t.type_id
-            for t in await RelationshipType.in_company(
+            for t in await RelationshipType.query_by_system_in_company(
                 self._get_company_id(),
                 include_system=True,
             ).order_by("type_id").all()
@@ -3291,7 +3291,7 @@ class EntityService:
         note, draft = await self._load_analysis_draft_from_note(note_id)
         namespace = self._resolve_namespace_for_write(note.namespace)
 
-        all_types = await RelationshipType.in_company(
+        all_types = await RelationshipType.query_by_system_in_company(
             self._get_company_id(),
             include_system=True,
         ).order_by("type_id").all()
@@ -3559,7 +3559,7 @@ class EntityService:
         entity_types = await EntityType.catalog(
             namespace=namespace
         )
-        relationship_types = await RelationshipType.all_with_prompt(
+        relationship_types = await RelationshipType.list_with_prompt(
             self._get_company_id(),
         )
 
@@ -3592,7 +3592,7 @@ class EntityService:
                 )
                 _known_entity_rows.append(member_entity)
 
-            company_entities = await CRMEntity.all_by_entity_type_and_attribute(
+            company_entities = await CRMEntity.list_by_entity_type_and_attribute(
                 entity_type=COMPANY_ENTITY_TYPE,
                 attribute_key=PLATFORM_COMPANY_ID_ATTR,
                 attribute_value=company_id,
@@ -4533,7 +4533,7 @@ class EntityService:
             seen_ids.add(entity_id)
             entity_ids.append(entity_id)
 
-        relationships_by_note = await Relationship.neighbors_for_entities(
+        relationships_by_note = await Relationship.incident_edges_by_entity_id(
             note_ids,
             relationship_types=list(_RESOLVED_NOTE_NEIGHBOR_REL_TYPES),
         )
@@ -5892,7 +5892,7 @@ class EntityService:
             else:
                 related_entity_ids.add(rel.source_entity_id)
 
-        related_entities = await CRMEntity.list_by_ids(list(related_entity_ids))
+        related_entities = await CRMEntity.list_across_companies_by_ids(list(related_entity_ids))
         related_entities_payload = await self._related_entities_as_api_dicts(related_entities)
 
         attachments = await self._attachment_service.get_attachments(entity_id)
@@ -5940,10 +5940,10 @@ class EntityService:
         if not entity_ids:
             return {}
 
-        entities = await CRMEntity.list_by_ids(entity_ids)
+        entities = await CRMEntity.list_across_companies_by_ids(entity_ids)
         entities_by_id = {e.entity_id: e for e in entities}
 
-        relationships_by_entity = await Relationship.neighbors_for_entities(entity_ids)
+        relationships_by_entity = await Relationship.incident_edges_by_entity_id(entity_ids)
 
         all_related_ids: set[str] = set()
         for eid, rels in relationships_by_entity.items():
@@ -5955,7 +5955,7 @@ class EntityService:
         all_related_ids -= set(entity_ids)
 
         related_entities = (
-            await CRMEntity.list_by_ids(list(all_related_ids)) if all_related_ids else []
+            await CRMEntity.list_across_companies_by_ids(list(all_related_ids)) if all_related_ids else []
         )
         related_payload_by_id: dict[str, JsonObject] = {}
         if related_entities:

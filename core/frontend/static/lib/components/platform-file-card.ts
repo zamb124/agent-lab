@@ -18,6 +18,16 @@ const RAG_INDEX_ICON_BY_STATUS = {
     absent: 'database',
 };
 
+function ragIndexIcon(status: string): string | undefined {
+    switch (status) {
+        case 'ready': return RAG_INDEX_ICON_BY_STATUS.ready;
+        case 'pending': return RAG_INDEX_ICON_BY_STATUS.pending;
+        case 'failed': return RAG_INDEX_ICON_BY_STATUS.failed;
+        case 'absent': return RAG_INDEX_ICON_BY_STATUS.absent;
+        default: return undefined;
+    }
+}
+
 const ITEM_KIND_FILE = 'file';
 const ITEM_KIND_CATALOG = 'catalog';
 
@@ -262,8 +272,8 @@ export class PlatformFileCard extends PlatformElement {
 
     _renderIndexStatus() {
         const status = typeof this.indexStatus === 'string' ? this.indexStatus.trim() : '';
-        const iconName = (RAG_INDEX_ICON_BY_STATUS as Record<string, string | undefined>)[status];
-        if (!iconName) {
+        const iconName = ragIndexIcon(status);
+        if (iconName === undefined) {
             return nothing;
         }
         const label = typeof this.indexStatusLabel === 'string' ? this.indexStatusLabel : '';

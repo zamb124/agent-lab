@@ -12,8 +12,12 @@
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
 import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
-import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { SyncChannelsSlice } from '../sync.types.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function eventRecord(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
 
 const EMPTY_TYPING = Object.freeze({});
 
@@ -69,8 +73,8 @@ export const channelsResource = createResourceCollection({
         selectChannel: 'channel_selected',
         setOwnRead: 'own_read_set',
     },
-    extraReducer: (state, event, events) => {
-        const s = state as SyncChannelsSlice;
+    extraReducer: (state: SyncChannelsSlice, event, events) => {
+        const s = state;
         switch (event.type) {
             case 'sync/context/company_cleared': {
                 return {
@@ -88,20 +92,20 @@ export const channelsResource = createResourceCollection({
                 };
             }
             case 'sync/channels/channel_selected': {
-                const p = event.payload as Record<string, any> | null;
-                const channelId = p && typeof p.channelId === 'string' ? p.channelId : null;
+                const p = eventRecord(event.payload);
+                const channelId = p !== null && typeof p.channelId === 'string' ? p.channelId : null;
                 return { ...s, selectedChannelId: channelId };
             }
             case 'sync/channel/created': {
-                const raw = event.payload as Record<string, any> | null;
-                if (!raw || typeof raw !== 'object' || typeof raw.channel_id !== 'string') return state;
+                const raw = eventRecord(event.payload);
+                if (raw === null || typeof raw.channel_id !== 'string') return state;
                 if (s.items.some((x) => x.channel_id === raw.channel_id)) return state;
                 const item = _normalizeChannel(raw);
                 return { ...s, items: Object.freeze([...s.items, item]) };
             }
             case 'sync/channel/read_updated': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.channel_id !== 'string') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.channel_id !== 'string') return state;
                 if (typeof p.read_at !== 'string') return state;
                 if (typeof p.reader_user_id !== 'string' || p.reader_user_id === '') return state;
                 const cur = s.readByChannelUser[p.channel_id];
@@ -116,13 +120,14 @@ export const channelsResource = createResourceCollection({
                 };
             }
             case 'sync/channel/typing': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.channel_id !== 'string') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.channel_id !== 'string') return state;
                 const existing = s.typingByChannel[p.channel_id];
-                const cur = (existing && typeof existing === 'object') ? existing : EMPTY_TYPING;
-                const userId = p.user && p.user.user_id;
+                const cur = existing === undefined ? EMPTY_TYPING : existing;
+                const user = isPlainRecord(p.user) ? p.user : null;
+                const userId = user !== null ? user.user_id : undefined;
                 if (typeof userId !== 'string') return state;
-                const next: Record<string, unknown> = { ...cur };
+                const next: Record<string, { thread_id: string | null; ts: number }> = { ...cur };
                 if (p.typing) {
                     const threadId = typeof p.thread_id === 'string' ? p.thread_id : null;
                     next[userId] = { thread_id: threadId, ts: Date.now() };
@@ -138,8 +143,8 @@ export const channelsResource = createResourceCollection({
                 };
             }
             case 'sync/channel/member_added': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.channel_id !== 'string') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.channel_id !== 'string') return state;
                 const cur = s.membersByChannel[p.channel_id];
                 if (!Array.isArray(cur)) return state;
                 if (cur.some((m) => m.user_id === p.added_user_id)) return state;
@@ -152,8 +157,8 @@ export const channelsResource = createResourceCollection({
                 };
             }
             case 'sync/channel/pins_changed': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.channel_id !== 'string') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.channel_id !== 'string') return state;
                 const idx = s.items.findIndex((x) => x.channel_id === p.channel_id);
                 if (idx === -1) return state;
                 const items = s.items.map((x, i) => (i === idx ? _normalizeChannel({ ...x, ...p }) : x));
@@ -162,39 +167,46 @@ export const channelsResource = createResourceCollection({
             case 'sync/channel_update/succeeded':
             case 'sync/channel_notifications_update/succeeded':
             case 'sync/messages_pin/succeeded': {
-                const r = (event.payload as Record<string, any> | null)?.result;
-                return _mergeChannelReadIntoItems(s, r);
+                const payload = eventRecord(event.payload);
+                const result = payload !== null && isPlainRecord(payload.result) ? payload.result : null;
+                return _mergeChannelReadIntoItems(s, result);
             }
             case 'sync/message/created': {
-                const m = event.payload as Record<string, any> | null;
-                if (!m || typeof m.channel_id !== 'string') return state;
+                const m = eventRecord(event.payload);
+                if (m === null || typeof m.channel_id !== 'string') return state;
                 const idx = s.items.findIndex((x) => x.channel_id === m.channel_id);
                 if (idx === -1) return state;
-                const channel = s.items[idx] as Record<string, any>;
+                const channel = s.items[idx];
+                if (channel === undefined) return state;
                 const isSelected = s.selectedChannelId === m.channel_id;
+                const channelPreview = typeof channel.last_message_preview === 'string' ? channel.last_message_preview : '';
                 const preview = typeof m.preview === 'string' ? m.preview
-                    : (typeof m.last_message_preview === 'string' ? m.last_message_preview : channel.last_message_preview);
-                const lastAt = typeof m.sent_at === 'string' ? m.sent_at : channel.last_message_at;
+                    : (typeof m.last_message_preview === 'string' ? m.last_message_preview : channelPreview);
+                const channelLastAt = typeof channel.last_message_at === 'string' ? channel.last_message_at : '';
+                const lastAt = typeof m.sent_at === 'string' ? m.sent_at : channelLastAt;
+                const unread = typeof channel.unread_count === 'number' ? channel.unread_count : 0;
+                const mentionUnread = typeof channel.mention_unread_count === 'number' ? channel.mention_unread_count : 0;
                 const next: Record<string, unknown> = {
                     ...channel,
                     last_message_preview: preview,
                     last_message_at: lastAt,
                 };
                 if (!isSelected && typeof m.local_id !== 'string') {
-                    next.unread_count = channel.unread_count + 1;
+                    next.unread_count = unread + 1;
                     if (Array.isArray(m.mentioned_user_ids) && m.mentioned_user_ids.length > 0) {
-                        next.mention_unread_count = channel.mention_unread_count + 1;
+                        next.mention_unread_count = mentionUnread + 1;
                     }
                 }
                 const items = s.items.map((x, i) => (i === idx ? _normalizeChannel(next) : x));
                 return { ...s, items: Object.freeze(items) };
             }
             case 'sync/channels/own_read_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 const idx = s.items.findIndex((x) => x.channel_id === p.channelId);
                 if (idx === -1) return state;
-                const channel = s.items[idx] as Record<string, any>;
+                const channel = s.items[idx];
+                if (channel === undefined) return state;
                 if (channel.unread_count === 0 && channel.mention_unread_count === 0) return state;
                 const items = s.items.map((x, i) => (i === idx
                     ? _normalizeChannel({ ...x, unread_count: 0, mention_unread_count: 0 })
@@ -215,8 +227,8 @@ export const channelMarkReadOp = createAsyncOp({
     commandType: 'sync/channels/mark_read_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/read' },
     onSuccess: (ctx, _result, event) => {
-        const p = (event as PlatformEvent | null)?.payload as Record<string, any> | null;
-        if (!p || typeof p.channel_id !== 'string' || p.channel_id === '') return;
+        const p = eventRecord(event.payload);
+        if (p === null || typeof p.channel_id !== 'string' || p.channel_id === '') return;
         ctx.dispatch('sync/channels/own_read_set', { channelId: p.channel_id }, { source: 'local' });
     },
 });
@@ -268,3 +280,15 @@ export const channelNotificationsUpdateOp = createAsyncOp({
     commandType: 'sync/channels/notification_settings_update_requested',
     restMirror: { method: 'PATCH', path: '/sync/api/v1/channels/:channel_id/notification-settings' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/channels': typeof channelsResource;
+        'sync/channel_mark_read': typeof channelMarkReadOp;
+        'sync/channel_typing': typeof channelTypingOp;
+        'sync/channel_update': typeof channelUpdateOp;
+        'sync/channel_add_member': typeof channelAddMemberOp;
+        'sync/channel_members_list': typeof channelMembersListOp;
+        'sync/channel_notifications_update': typeof channelNotificationsUpdateOp;
+    }
+}

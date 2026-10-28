@@ -187,7 +187,7 @@ class SuggestService:
         if len(entity_type_ids) == 0:
             entity_types_by_id = {}
         else:
-            entity_type_rows = await EntityType.in_company(
+            entity_type_rows = await EntityType.query_by_namespace_in_company(
                 company_id,
                 namespace=namespace,
             ).filter(type_id__in=entity_type_ids).all()

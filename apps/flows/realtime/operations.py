@@ -313,7 +313,7 @@ async def _sync_flow_authz(di: Di, flow_config: FlowConfig) -> None:
 
 
 async def persist_flow_with_authz(di: Di, flow_config: FlowConfig) -> None:
-    previous = await FlowConfig.get_latest(flow_config.flow_id)
+    previous = await FlowConfig.current_for_flow(flow_config.flow_id)
     _ = await FlowConfig.create_version(flow_config)
     try:
         await _sync_flow_authz(di, flow_config)
@@ -521,13 +521,13 @@ async def inline_tools_list(
 
 async def _inline_single_tool(tool: JsonValue, di: Di) -> JsonObject:
     if isinstance(tool, str):
-        tool_ref = await ToolReference.get(ToolReference.row_id(tool))
+        tool_ref = await ToolReference.get(ToolReference.row_id_for_active_company(tool))
         if tool_ref is not None:
             return parse_json_object(tool_ref.model_dump_json(), "tool")
-        node = await NodeConfig.get(NodeConfig.row_id(tool))
+        node = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(tool))
         if node is not None:
             return await _node_to_inline_tool(node, di)
-        flow_cfg = await FlowConfig.get_latest(tool)
+        flow_cfg = await FlowConfig.current_for_flow(tool)
         if flow_cfg is not None:
             return _flow_config_to_inline_tool(flow_cfg)
         raise_invalid(ValueError(f"Tool '{tool}' not found in library"))
@@ -543,7 +543,7 @@ async def _inline_single_tool(tool: JsonValue, di: Di) -> JsonObject:
             flow_ref = FlowToolReference.model_validate(tool_obj)
         except ValueError as exc:
             raise_invalid(exc)
-        flow_cfg = await FlowConfig.get_latest(flow_ref.flow_id)
+        flow_cfg = await FlowConfig.current_for_flow(flow_ref.flow_id)
         if flow_cfg is None:
             raise_invalid(ValueError(f"Flow tool target '{flow_ref.flow_id}' not found"))
         if flow_ref.branch_id != "default" and flow_ref.branch_id not in flow_cfg.branches:
@@ -565,7 +565,7 @@ async def _inline_single_tool(tool: JsonValue, di: Di) -> JsonObject:
         return tool_obj
 
     if isinstance(tool_id, str) and tool_id and "code" not in tool_obj:
-        tool_ref = await ToolReference.get(ToolReference.row_id(tool_id))
+        tool_ref = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
         if tool_ref is not None and tool_ref.code:
             merged = parse_json_object(tool_ref.model_dump_json(), "tool")
             merged.update(tool_obj)
@@ -624,7 +624,7 @@ async def inline_tools_in_nodes(
             tool_id = node_config["tool_id"]
             if not isinstance(tool_id, str):
                 raise_invalid(ValueError(f"nodes.{node_id}.tool_id must be a string"))
-            tool_ref = await ToolReference.get(ToolReference.row_id(tool_id))
+            tool_ref = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
             if tool_ref is not None and tool_ref.code:
                 node_config["code"] = tool_ref.code
                 if tool_ref.parameters_schema:
@@ -652,13 +652,13 @@ async def validate_tool_nodes(nodes: dict[str, JsonObject]) -> None:
         tool_id = node_config.get("tool_id")
         has_code = "code" in node_config and node_config.get("code")
         if isinstance(tool_id, str) and tool_id and not has_code:
-            tool = await ToolReference.get(ToolReference.row_id(tool_id))
+            tool = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
             if tool is not None:
                 continue
-            node = await NodeConfig.get(NodeConfig.row_id(tool_id))
+            node = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(tool_id))
             if node is not None:
                 continue
-            flow_cfg = await FlowConfig.get_latest(tool_id)
+            flow_cfg = await FlowConfig.current_for_flow(tool_id)
             if flow_cfg is None:
                 raise_invalid(ValueError(f"Tool '{tool_id}' not found in library"))
 
@@ -710,7 +710,7 @@ async def op_flows_list(
 ) -> OffsetPage[FlowResponse]:
     _ = user
     scope = company_scope()
-    index = await FlowConfig.list_index()
+    index = await FlowConfig.list_current_flow_index()
     if payload.type is not None:
         index = [row for row in index if row.type == payload.type]
     catalog_ids = [row.flow_id for row in index]
@@ -752,14 +752,14 @@ async def op_flows_item(
 ) -> FlowResponse:
     _ = user
     _ = await require_view_flow(di, payload.flow_id)
-    flow_cfg = await FlowConfig.get_latest(payload.flow_id)
+    flow_cfg = await FlowConfig.current_for_flow(payload.flow_id)
     if flow_cfg is None:
         raise_not_found(PlatformNotFoundError("Flow not found"))
     bundle_flags = await get_bundle_update_flags([flow_cfg], di, _flows_root())
     has_bundle_update = bundle_flags[flow_cfg.flow_id]
     return _flow_item_response(
         flow_cfg,
-        agent_toolkit_ids=await AgentToolkit.get_toolkit_ids_for_flow(flow_cfg.flow_id),
+        agent_toolkit_ids=await AgentToolkit.toolkit_ids_for_flow(flow_cfg.flow_id),
         has_bundle_update=has_bundle_update,
     )
 
@@ -819,7 +819,7 @@ async def op_flows_create(
     )
     await persist_flow_with_authz(di, flow_config)
     await sync_flow_employee(di.authz_service, di.mail_service, flow_config)
-    await AgentToolkit.set_flow_toolkit_membership(
+    await AgentToolkit.replace_flow_toolkit_membership(
         flow_id=flow_config.flow_id,
         toolkit_ids=list(payload.agent_toolkit_ids),
     )
@@ -838,7 +838,7 @@ async def op_flows_update(
 ) -> FlowResponse:
     _ = user
     _ = await require_edit_flow(di, payload.flow_id)
-    existing = await FlowConfig.get_latest(payload.flow_id)
+    existing = await FlowConfig.current_for_flow(payload.flow_id)
     if existing is None:
         raise_not_found(PlatformNotFoundError("Flow not found"))
     try:
@@ -876,7 +876,7 @@ async def op_flows_update(
     )
     await persist_flow_with_authz(di, flow_config)
     await sync_flow_employee(di.authz_service, di.mail_service, flow_config)
-    await AgentToolkit.set_flow_toolkit_membership(
+    await AgentToolkit.replace_flow_toolkit_membership(
         flow_id=payload.flow_id,
         toolkit_ids=list(payload.agent_toolkit_ids),
     )
@@ -900,7 +900,7 @@ async def op_flows_remove(
 ) -> FlowDeletedResponse:
     _ = user
     scope = await require_edit_flow(di, payload.flow_id)
-    existing = await FlowConfig.get_latest(payload.flow_id)
+    existing = await FlowConfig.current_for_flow(payload.flow_id)
     deleted = await FlowConfig.delete_by_flow_id(payload.flow_id)
     if not deleted:
         raise_not_found(PlatformNotFoundError("Flow not found"))
@@ -991,7 +991,7 @@ async def op_flows_store_bundles(
         description = raw_flow.get("description")
         if description is not None and not isinstance(description, str):
             raise_internal(RuntimeError(f"Bundle '{bundle_id}' field 'description' must be string"))
-        installed = await FlowConfig.get_latest(flow_id) is not None
+        installed = await FlowConfig.current_for_flow(flow_id) is not None
         result.append(
             FlowStoreBundleResponse(
                 bundle_id=bundle_id,
@@ -1071,7 +1071,7 @@ async def op_flows_reload_from_bundle(
                 raise_forbidden(exc)
             raise_not_found(exc)
         raise_invalid(exc)
-    reloaded_cfg = await FlowConfig.get_latest(loaded_id)
+    reloaded_cfg = await FlowConfig.current_for_flow(loaded_id)
     if reloaded_cfg is None:
         raise_internal(RuntimeError(f"Flow '{loaded_id}' missing after reload-from-bundle"))
     await publish_event_to_user(
@@ -1093,7 +1093,7 @@ async def op_flows_versions_list(
 ) -> ListResponse[str]:
     _ = user
     _ = await require_view_flow(di, payload.flow_id)
-    versions = await FlowConfig.list_versions(payload.flow_id)
+    versions = await FlowConfig.list_version_strings_by_version_desc(payload.flow_id)
     return ListResponse[str](items=versions)
 
 
@@ -1105,12 +1105,12 @@ async def op_flows_version_item(
 ) -> FlowResponse:
     _ = user
     _ = await require_view_flow(di, payload.flow_id)
-    version_cfg = await FlowConfig.get_version(payload.flow_id, payload.version)
+    version_cfg = await FlowConfig.by_flow_id_and_version(payload.flow_id, payload.version)
     if version_cfg is None:
         raise_not_found(PlatformNotFoundError("Version not found"))
     return _flow_item_response(
         version_cfg,
-        agent_toolkit_ids=await AgentToolkit.get_toolkit_ids_for_flow(version_cfg.flow_id),
+        agent_toolkit_ids=await AgentToolkit.toolkit_ids_for_flow(version_cfg.flow_id),
         has_bundle_update=False,
     )
 
@@ -1185,7 +1185,7 @@ async def op_flows_branch_create(
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
     _ = await require_edit_flow(di, flow_id)
-    flow_config = await FlowConfig.get_latest(flow_id)
+    flow_config = await FlowConfig.current_for_flow(flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     if payload.branch_id in flow_config.branches:
@@ -1216,7 +1216,7 @@ async def op_flows_branch_update(
     flow_id = _require_path_id(payload.flow_id, "flow_id")
     branch_id = _require_path_id(payload.branch_id, "branch_id")
     _ = await require_edit_flow(di, flow_id)
-    flow_config = await FlowConfig.get_latest(flow_id)
+    flow_config = await FlowConfig.current_for_flow(flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     if branch_id not in flow_config.branches:
@@ -1245,7 +1245,7 @@ async def op_flows_branch_remove(
 ) -> BranchMutationResponse:
     _ = user
     scope = await require_edit_flow(di, payload.flow_id)
-    flow_config = await FlowConfig.get_latest(payload.flow_id)
+    flow_config = await FlowConfig.current_for_flow(payload.flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
     if payload.branch_id not in flow_config.branches:
@@ -1286,7 +1286,7 @@ async def op_flows_voice_session_query(
 ) -> FlowVoiceSessionQueryResponse:
     _ = user
     scope = await require_view_flow(di, payload.flow_id)
-    cfg = await FlowConfig.get_latest(payload.flow_id)
+    cfg = await FlowConfig.current_for_flow(payload.flow_id)
     if cfg is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
     branch_id = _require_path_id(payload.branch_id, "branch_id")
@@ -1320,7 +1320,7 @@ async def op_flows_preview_share(
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
     scope = await require_share_flow(di, flow_id)
-    flow_cfg = await FlowConfig.get_latest(flow_id)
+    flow_cfg = await FlowConfig.current_for_flow(flow_id)
     if flow_cfg is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     branch_id = _require_path_id(payload.branch_id, "branch_id")
@@ -1427,7 +1427,7 @@ async def op_flows_nodes_bulk_delete(
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
     scope = await require_edit_flow(di, flow_id)
-    existing = await FlowConfig.get_latest(flow_id)
+    existing = await FlowConfig.current_for_flow(flow_id)
     if existing is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     nodes = existing.nodes
@@ -1471,7 +1471,7 @@ async def op_flows_metadata_update(
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
     _ = await require_edit_flow(di, flow_id)
-    existing = await FlowConfig.get_latest(flow_id)
+    existing = await FlowConfig.current_for_flow(flow_id)
     if existing is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     metadata: JsonObject = dict(existing.metadata)
@@ -1497,7 +1497,7 @@ async def _attach_nested_dataflow_for_editor(
             raise_invalid(ValueError(f"nodes.{node_id}.flow_id is required"))
         if nested_flow_id in seen_flow_ids:
             continue
-        nested_cfg = await FlowConfig.get_latest(nested_flow_id)
+        nested_cfg = await FlowConfig.current_for_flow(nested_flow_id)
         if nested_cfg is None:
             raise_not_found(PlatformNotFoundError(f"Flow '{nested_flow_id}' not found"))
         raw_nested_branch_id = node.get("branch_id")
@@ -1550,7 +1550,7 @@ async def op_flows_dataflow_inspect(
         if payload.flow_id is None:
             raise_invalid(ValueError("nodes or flow_id is required"))
         _ = await require_view_flow(di, payload.flow_id)
-        flow_cfg = await FlowConfig.get_latest(payload.flow_id)
+        flow_cfg = await FlowConfig.current_for_flow(payload.flow_id)
         if flow_cfg is None:
             raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
         effective = di.flow_factory.apply_branch(flow_cfg, payload.branch_id)

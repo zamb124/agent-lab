@@ -3,6 +3,8 @@
  * Launcher + panel are one unit. No DOM.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
+
 export interface DrawerViewport {
     width: number;
     height: number;
@@ -65,23 +67,34 @@ function clampNumber(value: number, min: number, max: number): number {
     return value;
 }
 
+function isDrawerViewport(value: unknown): value is DrawerViewport {
+    if (!isPlainRecord(value)) return false;
+    const width = value.width;
+    const height = value.height;
+    const margin = value.margin;
+    return typeof width === 'number' && Number.isFinite(width) && width > 0
+        && typeof height === 'number' && Number.isFinite(height) && height > 0
+        && typeof margin === 'number' && Number.isFinite(margin) && margin >= 0;
+}
+
 export function assertViewport(viewport: unknown): asserts viewport is DrawerViewport {
-    if (viewport === null || typeof viewport !== 'object' || Array.isArray(viewport)) {
+    if (!isPlainRecord(viewport)) {
         throw new Error('flow-ui-drawer geometry: viewport is required');
     }
-    const vp = viewport as Record<string, unknown>;
-    requireFiniteNumber(vp.width, 'viewport.width');
-    requireFiniteNumber(vp.height, 'viewport.height');
-    requireFiniteNumber(vp.margin, 'viewport.margin');
-    const v = viewport as DrawerViewport;
-    if (v.width <= 0) {
+    const width = requireFiniteNumber(viewport.width, 'viewport.width');
+    const height = requireFiniteNumber(viewport.height, 'viewport.height');
+    const margin = requireFiniteNumber(viewport.margin, 'viewport.margin');
+    if (width <= 0) {
         throw new Error('flow-ui-drawer geometry: viewport.width must be > 0');
     }
-    if (v.height <= 0) {
+    if (height <= 0) {
         throw new Error('flow-ui-drawer geometry: viewport.height must be > 0');
     }
-    if (v.margin < 0) {
+    if (margin < 0) {
         throw new Error('flow-ui-drawer geometry: viewport.margin must be >= 0');
+    }
+    if (!isDrawerViewport(viewport)) {
+        throw new Error('flow-ui-drawer geometry: viewport is required');
     }
 }
 
@@ -94,11 +107,10 @@ export function parseStoredGeometry(raw: unknown): StoredDrawerGeometry | null {
     if (raw === null || raw === undefined) {
         return null;
     }
-    if (typeof raw !== 'object' || Array.isArray(raw)) {
+    if (!isPlainRecord(raw)) {
         throw new Error('flow-ui-drawer geometry: stored value must be an object');
     }
-    const rec = raw as Record<string, unknown>;
-    const present = STORED_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(rec, key));
+    const present = STORED_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(raw, key));
     if (present.length === 0) {
         return null;
     }
@@ -108,23 +120,22 @@ export function parseStoredGeometry(raw: unknown): StoredDrawerGeometry | null {
         );
     }
     return Object.freeze({
-        launcherLeft: requireFiniteNumber(rec.launcherLeft, 'launcherLeft'),
-        launcherTop: requireFiniteNumber(rec.launcherTop, 'launcherTop'),
-        panelWidth: requireFiniteNumber(rec.panelWidth, 'panelWidth'),
-        panelHeight: requireFiniteNumber(rec.panelHeight, 'panelHeight'),
+        launcherLeft: requireFiniteNumber(raw.launcherLeft, 'launcherLeft'),
+        launcherTop: requireFiniteNumber(raw.launcherTop, 'launcherTop'),
+        panelWidth: requireFiniteNumber(raw.panelWidth, 'panelWidth'),
+        panelHeight: requireFiniteNumber(raw.panelHeight, 'panelHeight'),
     });
 }
 
 export function toStoredGeometry(cluster: unknown): StoredDrawerGeometry {
-    if (cluster === null || typeof cluster !== 'object' || Array.isArray(cluster)) {
+    if (!isPlainRecord(cluster)) {
         throw new Error('flow-ui-drawer geometry: cluster is required');
     }
-    const rec = cluster as Record<string, unknown>;
     const stored = parseStoredGeometry({
-        launcherLeft: rec.launcherLeft,
-        launcherTop: rec.launcherTop,
-        panelWidth: rec.panelWidth,
-        panelHeight: rec.panelHeight,
+        launcherLeft: cluster.launcherLeft,
+        launcherTop: cluster.launcherTop,
+        panelWidth: cluster.panelWidth,
+        panelHeight: cluster.panelHeight,
     });
     if (stored === null) {
         throw new Error('flow-ui-drawer geometry: cluster is missing stored fields');

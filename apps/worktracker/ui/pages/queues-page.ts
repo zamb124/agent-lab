@@ -165,7 +165,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
     }
 
     override render() {
-        const queues = this._queues.items || [];
+        const queues = this._queues.items;
         return html`
             <platform-breadcrumbs></platform-breadcrumbs>
             <page-header dense actions-overflow="visible">
@@ -213,7 +213,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
             ${queues.length > 0 ? html`
                 <div class="queue-list">
                     ${queues.map((q: Record<string, unknown>) => html`
-                        <button type="button" class="queue-row" @click=${() => this._openQueue(String(q.work_queue_id ?? ''))}>
+                        <button type="button" class="queue-row" @click=${() => this._openQueue(q.work_queue_id === undefined || q.work_queue_id === null ? '' : String(q.work_queue_id))}>
                             <span class="queue-icon">
                                 <platform-icon name="layers" size="18"></platform-icon>
                             </span>

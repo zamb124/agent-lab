@@ -211,9 +211,9 @@ async def telegram_webhook(
     """
     ctx = get_context()
     if ctx and ctx.active_company:
-        flow_config = await FlowConfig.get_latest(flow_id)
+        flow_config = await FlowConfig.current_for_flow(flow_id)
     else:
-        unscoped = await FlowConfig.get_latest_by_flow_id_unscoped(flow_id)
+        unscoped = await FlowConfig.current_unscoped(flow_id)
         if not unscoped:
             flow_config = None
         else:
@@ -319,9 +319,9 @@ async def generic_webhook(
     """
     ctx = get_context()
     if ctx and ctx.active_company:
-        flow_config = await FlowConfig.get_latest(flow_id)
+        flow_config = await FlowConfig.current_for_flow(flow_id)
     else:
-        unscoped = await FlowConfig.get_latest_by_flow_id_unscoped(flow_id)
+        unscoped = await FlowConfig.current_unscoped(flow_id)
         if not unscoped:
             flow_config = None
         else:

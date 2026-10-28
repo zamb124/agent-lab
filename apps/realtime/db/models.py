@@ -35,11 +35,13 @@ class PlatformEventLog(PlatformModel):
     deadline_at: datetime | None = DbField(default=None)
 
     @classmethod
-    async def create_platform_event_log(cls, row: Self) -> Self:
+    async def create(cls, row: Self) -> Self:
+        """Вставляет строку лога."""
         return await cls.objects.create(instance=row)
 
     @classmethod
-    async def expired_command_logs(cls, *, now: datetime, limit: int) -> list[Self]:
+    async def list_expired_commands(cls, *, now: datetime, limit: int) -> list[Self]:
+        """Команды с deadline_at < now в received и dispatched, ORDER BY deadline_at, не больше limit."""
         return await (
             cls.objects.filter(
                 deadline_at__isnull=False,
@@ -55,7 +57,8 @@ class PlatformEventLog(PlatformModel):
         )
 
     @classmethod
-    def terminal_event_logs(cls, causation_id: str) -> Query[Self]:
+    def terminal_query(cls, causation_id: str) -> Query[Self]:
+        """Запрос строк causation_id с типом на _succeeded или _failed. Порядок задаёт вызывающий."""
         return cls.objects.filter(causation_id=causation_id).filter(
             Q(type__endswith="_succeeded") | Q(type__endswith="_failed")
         )

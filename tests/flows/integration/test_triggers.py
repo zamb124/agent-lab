@@ -332,7 +332,7 @@ class TestTriggersAPI:
         assert data["trigger_id"] == "new_trigger"
         assert data["name"] == "New Trigger"
         assert data["type"] == "webhook"
-        saved = await FlowConfig.get_latest(flow_id)
+        saved = await FlowConfig.current_for_flow(flow_id)
         assert "new_trigger" in saved.triggers
         await FlowConfig.delete_by_flow_id(flow_id)
 
@@ -388,7 +388,7 @@ class TestTriggersAPI:
         data = response.json()
         assert data["name"] == "Updated Name"
         assert data["enabled"] is False
-        saved = await FlowConfig.get_latest(flow_id)
+        saved = await FlowConfig.current_for_flow(flow_id)
         assert saved.triggers["update_me"].name == "Updated Name"
         assert saved.triggers["update_me"].enabled is False
         await FlowConfig.delete_by_flow_id(flow_id)
@@ -410,7 +410,7 @@ class TestTriggersAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "deleted"
-        saved = await FlowConfig.get_latest(flow_id)
+        saved = await FlowConfig.current_for_flow(flow_id)
         assert "delete_me" not in saved.triggers
         await FlowConfig.delete_by_flow_id(flow_id)
 
@@ -1579,7 +1579,7 @@ class TestTriggerWithOutputActionsE2E:
             triggers={"tg_with_output": trigger},
         )
         await persist_owned_flow(di, agent)
-        loaded = await FlowConfig.get_latest(flow_id)
+        loaded = await FlowConfig.current_for_flow(flow_id)
         assert loaded is not None
         assert "tg_with_output" in loaded.triggers
         assert len(loaded.triggers["tg_with_output"].output_actions) == 1

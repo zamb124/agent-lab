@@ -49,6 +49,8 @@ COPY apps/ ./apps/
 COPY scripts/ ./scripts/
 COPY migrations/ ./migrations/
 COPY conf/ ./conf/
+COPY tests/ui/design-system/catalog.yaml ./tests/ui/design-system/catalog.yaml
+COPY tests/ui/design-system/components ./tests/ui/design-system/components
 
 # three + 3d-force-graph для CRM графа: apps/crm/main.py монтирует их из repo-root node_modules.
 # В образ без этой стадии vendor-URL отдавал index.html (SPA), что ломало загрузку модулей.
@@ -57,9 +59,9 @@ WORKDIR /vendor
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-# UI-бандлы: esbuild per-app → apps/<svc>/ui-dist/. Собирается из исходников
-# (.ts/.js), в образ уходит только скомпилированный вывод — браузер грузит
-# index.js + hashed chunks, mount отдаёт ui-dist (core/app/spa.py).
+# UI-бандлы: tsc (strict) и esbuild per-app → apps/<svc>/ui-dist/. В образ уходит
+# только скомпилированный вывод — браузер грузит index.js + hashed chunks,
+# mount отдаёт ui-dist (core/app/spa.py).
 FROM node:24-bookworm-slim AS ui-builder
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -67,8 +69,10 @@ RUN npm ci
 COPY tsconfig.json tsconfig.base.json ./
 COPY scripts/build_ui.mjs ./scripts/
 COPY core/frontend/static ./core/frontend/static
+COPY tests/ui/design-system/components ./tests/ui/design-system/components
 COPY apps/ ./apps/
-RUN npm run build:ui \
+RUN npm run typecheck:ui \
+    && npm run build:ui \
     && for d in apps/*/ui-dist; do mkdir -p "/out/$d" && cp -a "$d/." "/out/$d/"; done \
     && mkdir -p /out/core/frontend && cp -a core/frontend/embed-dist /out/core/frontend/embed-dist
 

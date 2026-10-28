@@ -13,6 +13,7 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, payloadFields, stringField } from '../payload.js';
 
 export interface RouterRoute {
     key: string;
@@ -41,35 +42,45 @@ export const initialRouterState: RouterState = Object.freeze({
     routes: Object.freeze([]),
 });
 
+function stringParams(record: Record<string, unknown>, eventType: string): Record<string, string> {
+    const params: Record<string, string> = {};
+    for (const key of Object.keys(record)) {
+        const value = record[key];
+        if (typeof value !== 'string') {
+            throw new Error(`${eventType}: param "${key}" must be a string`);
+        }
+        params[key] = value;
+    }
+    return params;
+}
+
 export function routerReducer(state: RouterState = initialRouterState, event: PlatformEvent): RouterState {
     switch (event.type) {
         case CoreEvents.ROUTER_ROUTE_CHANGED: {
-            const p = (event.payload || {}) as {
-                routeKey?: string | null; params?: Record<string, string>;
-                pathname?: string; search?: unknown;
-            };
+            const p = payloadFields(event);
             const searchNext = typeof p.search === 'string' ? p.search : '';
+            const params = isPlainRecord(p.params) ? stringParams(p.params, event.type) : {};
             return {
                 ...state,
-                routeKey: p.routeKey || null,
-                params: p.params || {},
-                pathname: p.pathname || state.pathname,
+                routeKey: stringField(p.routeKey),
+                params,
+                pathname: stringField(p.pathname) ?? state.pathname,
                 search: searchNext,
                 notFound: false,
             };
         }
         case CoreEvents.ROUTER_NOT_FOUND: {
-            const p = (event.payload || {}) as { pathname?: string };
+            const p = payloadFields(event);
             return {
                 ...state,
                 routeKey: null,
                 params: {},
-                pathname: p.pathname || state.pathname,
+                pathname: stringField(p.pathname) ?? state.pathname,
                 notFound: true,
             };
         }
         case CoreEvents.ROUTER_ROUTES_REGISTERED: {
-            const p = (event.payload || {}) as { routes?: RouterRoute[] };
+            const p = payloadFields(event);
             const routes = Array.isArray(p.routes) ? p.routes : state.routes;
             return { ...state, routes };
         }

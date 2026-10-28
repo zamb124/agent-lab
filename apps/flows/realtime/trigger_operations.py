@@ -94,7 +94,7 @@ def _trigger_response(trigger: TriggerConfig) -> TriggerResponse:
 
 async def _flow_for_view(di: Di, flow_id: str) -> FlowConfig:
     _ = await require_view_flow(di, flow_id)
-    flow_config = await FlowConfig.get_latest(flow_id)
+    flow_config = await FlowConfig.current_for_flow(flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow not found: {flow_id}"))
     return flow_config
@@ -102,7 +102,7 @@ async def _flow_for_view(di: Di, flow_id: str) -> FlowConfig:
 
 async def _flow_for_edit(di: Di, flow_id: str) -> FlowConfig:
     _ = await require_edit_flow(di, flow_id)
-    flow_config = await FlowConfig.get_latest(flow_id)
+    flow_config = await FlowConfig.current_for_flow(flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow not found: {flow_id}"))
     return flow_config
@@ -153,7 +153,7 @@ async def op_flows_triggers_verify(
 ) -> TriggerVerifyResponse:
     _ = user
     scope = await require_edit_flow(di, payload.flow_id)
-    flow_config = await FlowConfig.get_latest(payload.flow_id)
+    flow_config = await FlowConfig.current_for_flow(payload.flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow not found: {payload.flow_id}"))
 

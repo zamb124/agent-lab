@@ -10,6 +10,22 @@ import { FrontendCrawlDomainAddModal } from '../../modals/crawl-domain-add-modal
 import { FrontendCrawlDomainEditModal } from '../../modals/crawl-domain-edit-modal.js';
 import { FrontendCrawlUrlAddModal } from '../../modals/crawl-url-add-modal.js';
 import { FrontendCrawlProfileSettingsModal } from '../../modals/crawl-profile-settings-modal.js';
+
+function optionalText(value: string): string | undefined {
+    return value.length > 0 ? value : undefined;
+}
+
+function textOrDash(value: unknown): string {
+    if (typeof value === 'string' && value.length > 0) return value;
+    if (typeof value === 'number' && Number.isFinite(value) && value !== 0) return String(value);
+    return '—';
+}
+
+function patternList(value: unknown): unknown[] {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value)) throw new Error('crawl-report: url patterns must be an array');
+    return value;
+}
 import '../../components/crawl-report/crawl-report-enrichment-tags.js';
 import '../../components/crawl-report/crawl-report-metric-strip.js';
 import '../../components/crawl-report/crawl-report-running-banner.js';
@@ -23,6 +39,49 @@ import '@platform/lib/components/platform-button.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { OpController, ResourceController} from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+type CrawlRowSnapshots = {
+    domains: Map<unknown, unknown>;
+    urls: Map<unknown, unknown>;
+    jobs: Map<unknown, unknown>;
+};
+
+function listedItems(result: unknown): Record<string, any>[] {
+    if (result == null) {
+        return [];
+    }
+    if (!isPlainRecord(result) || !Array.isArray(result.items)) {
+        throw new Error('crawl-report-page: items array required');
+    }
+    const items: Record<string, any>[] = [];
+    for (const item of result.items) {
+        if (!isPlainRecord(item)) {
+            throw new Error('crawl-report-page: profile item must be an object');
+        }
+        const row: Record<string, any> = {};
+        for (const [key, field] of Object.entries(item)) {
+            row[key] = field;
+        }
+        items.push(row);
+    }
+    return items;
+}
+
+function summaryRecord(value: unknown): Record<string, unknown> | null {
+    return isPlainRecord(value) ? value : null;
+}
+
+function numericCount(value: unknown): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function rowSnapshot(snapshots: CrawlRowSnapshots, scope: string): Map<unknown, unknown> | null {
+    if (scope === 'domains' || scope === 'urls' || scope === 'jobs') {
+        return snapshots[scope];
+    }
+    return null;
+}
 
 const TABS = Object.freeze(['domains', 'urls', 'jobs']);
 const DEFAULT_PROFILE_ID = 'runet_platform';
@@ -388,7 +447,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
     private _urlRecrawl: OpController;
     private _localeSel: SelectController<any>;
     private _pollIntervalId: any;
-    private _rowSnapshots: Record<string, unknown>;
+    private _rowSnapshots: CrawlRowSnapshots;
 
 
     override connectedCallback(): void {
@@ -432,9 +491,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _shouldAutoRefresh() {
-        const summary = this._summaryOp.state.lastResult;
-        if (!summary) return false;
-        if ((summary as Record<string, any>).running_job) return true;
+        const summary = summaryRecord(this._summaryOp.state.lastResult);
+        if (summary === null) return false;
+        if (summary.running_job) return true;
         return this._countFromSummary('url_fetching') > 0 || this._countFromSummary('url_pending') > 0;
     }
 
@@ -452,8 +511,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _profileOptions() {
-        const result = this._profilesOp.state.lastResult;
-        const items = result && (result as Record<string, any>).items ? (result as Record<string, any>).items : [];
+        const items = listedItems(this._profilesOp.state.lastResult);
         if (items.length === 0) {
             return [{ value: this._profileId, label: this._profileId }];
         }
@@ -464,9 +522,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _selectedProfileBundle() {
-        const result = this._profilesOp.state.lastResult;
-        const items = result && (result as Record<string, any>).items ? (result as Record<string, any>).items : [];
-        return items.find((item: Record<string, any>) => item.profile.crawl_profile_id === this._profileId) ?? null;
+        const items = listedItems(this._profilesOp.state.lastResult);
+        const found = items.find((item: Record<string, any>) => item.profile.crawl_profile_id === this._profileId);
+        return found === undefined ? null : found;
     }
 
     _profilePayload() {
@@ -476,18 +534,18 @@ export class FrontendCrawlReportPage extends PlatformPage {
     _urlListPayload() {
         return {
             crawl_profile_id: this._profileId,
-            crawl_status: this._urlStatusFilter || undefined,
-            domain: this._urlDomainFilter || undefined,
-            content_type: this._urlContentTypeFilter || undefined,
-            primary_topic: this._urlPrimaryTopicFilter || undefined,
-            enriched_only: this._urlEnrichedOnlyFilter || undefined,
+            crawl_status: optionalText(this._urlStatusFilter),
+            domain: optionalText(this._urlDomainFilter),
+            content_type: optionalText(this._urlContentTypeFilter),
+            primary_topic: optionalText(this._urlPrimaryTopicFilter),
+            enriched_only: this._urlEnrichedOnlyFilter === true ? true : undefined,
         };
     }
 
     _reloadAll() {
         const payload = this._profilePayload();
         this._summaryOp.run(payload);
-        this._domains.load({ ...payload, status: this._domainStatusFilter || undefined });
+        this._domains.load({ ...payload, status: optionalText(this._domainStatusFilter) });
         this._urls.load(this._urlListPayload());
         this._jobs.load(payload);
     }
@@ -496,7 +554,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         const payload = this._profilePayload();
         this._summaryOp.run(payload);
         if (this._activeTab === 'domains') {
-            this._domains.load({ ...payload, status: this._domainStatusFilter || undefined });
+            this._domains.load({ ...payload, status: optionalText(this._domainStatusFilter) });
         } else if (this._activeTab === 'urls') {
             this._urls.load(this._urlListPayload());
         } else {
@@ -510,9 +568,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._urlContentTypeFilter = '';
         this._urlPrimaryTopicFilter = '';
         this._urlEnrichedOnlyFilter = false;
-        (this._rowSnapshots.domains as Map<string, unknown>).clear();
-        (this._rowSnapshots.urls as Map<string, unknown>).clear();
-        (this._rowSnapshots.jobs as Map<string, unknown>).clear();
+        this._rowSnapshots.domains.clear();
+        this._rowSnapshots.urls.clear();
+        this._rowSnapshots.jobs.clear();
         this._reloadAll();
         this._syncPollTimer();
     }
@@ -521,7 +579,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._domainStatusFilter = e.detail.value;
         this._domains.load({
             crawl_profile_id: this._profileId,
-            status: this._domainStatusFilter || undefined,
+            status: optionalText(this._domainStatusFilter),
         });
     }
 
@@ -598,8 +656,8 @@ export class FrontendCrawlReportPage extends PlatformPage {
             domain: row.domain,
             status: row.status,
             refresh_interval_seconds: row.refresh_interval_seconds,
-            include_url_patterns: row.include_url_patterns || [],
-            exclude_url_patterns: row.exclude_url_patterns || [],
+            include_url_patterns: patternList(row.include_url_patterns),
+            exclude_url_patterns: patternList(row.exclude_url_patterns),
         });
     }
 
@@ -703,8 +761,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _primaryTopicFilterValues() {
-        const summary = this._summaryOp.state.lastResult;
-        const rows = summary && Array.isArray((summary as Record<string, any>).primary_topic_counts) ? (summary as Record<string, any>).primary_topic_counts : [];
+        const summary = summaryRecord(this._summaryOp.state.lastResult);
+        const topicCounts = summary === null ? undefined : summary.primary_topic_counts;
+        const rows = Array.isArray(topicCounts) ? topicCounts : [];
         return [
             { value: '', label: this.t('crawl_report_page.filter_all') },
             ...rows.slice(0, 40).map((row: Record<string, any>) => ({
@@ -750,14 +809,16 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _countFromSummary(key: string) {
-        const summary = this._summaryOp.state.lastResult;
-        if (!summary) return 0;
-        if (key === 'domains_total') return (summary as Record<string, any>).domains_total;
-        if (key === 'domains_due') return (summary as Record<string, any>).domains_due;
-        const list = key.startsWith('url_') ? (summary as Record<string, any>).url_counts : (summary as Record<string, any>).domain_counts;
+        const summary = summaryRecord(this._summaryOp.state.lastResult);
+        if (summary === null) return 0;
+        if (key === 'domains_total') return numericCount(summary.domains_total);
+        if (key === 'domains_due') return numericCount(summary.domains_due);
+        const counts = key.startsWith('url_') ? summary.url_counts : summary.domain_counts;
+        if (!Array.isArray(counts)) return 0;
         const status = key.replace(/^(url_|domain_)/, '');
-        const found = (list as Array<Record<string, any>>).find((row) => row.status === status);
-        return found ? found.count : 0;
+        const found = counts.find((row) => isPlainRecord(row) && row.status === status);
+        if (!isPlainRecord(found)) return 0;
+        return numericCount(found.count);
     }
 
     _trackRowHighlights() {
@@ -777,7 +838,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
 
     _collectRowHighlights(scope: string, items: readonly Record<string, any>[] | undefined, idField: string, signatureFn: (row: Record<string, any>) => string, highlights: string[]) {
         if (!items) return;
-        const snapshot = this._rowSnapshots[scope] as Map<unknown, unknown> | undefined;
+        const snapshot = rowSnapshot(this._rowSnapshots, scope);
         if (!snapshot) return;
         for (const row of items) {
             const rowId = row[idField];
@@ -959,7 +1020,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                             <td>${this._statusTag(row.status)}</td>
                             <td>${this._formatDt(row.last_crawled_at)}</td>
                             <td>${this._formatDt(row.next_crawl_after)}</td>
-                            <td class="mono">${row.last_error || '—'}</td>
+                            <td class="mono">${textOrDash(row.last_error)}</td>
                             <td>
                                 ${this._renderDomainActions(row)}
                             </td>
@@ -1009,7 +1070,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                             <td>${this._enrichmentCell(row)}</td>
                             <td>${this._transportTag(row.fetch_transport as string)}</td>
                             <td>${this._formatDt(row.last_crawled_at)}</td>
-                            <td class="mono">${row.last_error || '—'}</td>
+                            <td class="mono">${textOrDash(row.last_error)}</td>
                             <td>
                                 <div class="actions-cell">
                                     <button type="button" class="btn btn-sm" @click=${() => this._openUrlDetail(row)}>
@@ -1160,14 +1221,14 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 ></crawl-report-metric-strip>
 
                 <crawl-report-running-banner
-                    .runningJob=${summary && (summary as Record<string, any>).running_job}
+                    .runningJob=${isPlainRecord(summary) ? summary.running_job : null}
                     .locale=${this._localeSel.value}
                 ></crawl-report-running-banner>
 
                 <crawl-report-charts-panel
                     .summary=${summary}
-                    .jobs=${this._jobs.items || []}
-                    .domains=${this._domains.items || []}
+                    .jobs=${this._jobs.items}
+                    .domains=${this._domains.items}
                     .locale=${this._localeSel.value}
                     .statusLabel=${(status: string) => this._statusLabel(status)}
                     .categoryLabel=${(category: string) => this._categoryLabel(category)}

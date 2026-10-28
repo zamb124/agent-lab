@@ -87,12 +87,12 @@ async def _wait_span_ops(
 ) -> None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        spans = await Span.list_by_flow_id(flow_id, limit=100)
+        spans = await Span.list_by_flow_id_desc(flow_id, limit=100)
         names = {span.operation_name for span in spans}
         if ops <= names:
             return
         await asyncio.sleep(0.2)
-    spans = await Span.list_by_flow_id(flow_id, limit=100)
+    spans = await Span.list_by_flow_id_desc(flow_id, limit=100)
     names = {span.operation_name for span in spans}
     raise AssertionError(f"missing span ops {sorted(ops - names)} in {sorted(names)}")
 
@@ -169,7 +169,7 @@ async def test_code_agent_rebuild_and_drop_write_billing_spans(
         invoke_argv=invoke_argv,
     )
     _ = digest_again
-    spans_after_skip = await Span.list_by_flow_id(
+    spans_after_skip = await Span.list_by_flow_id_desc(
         flow_id, limit=100
     )
     build_count = sum(1 for span in spans_after_skip if span.operation_name == _BUILD_OP)

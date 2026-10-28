@@ -6,7 +6,7 @@ globs:
   - "apps/flows/src/services/flow_employee_provisioning.py"
   - "apps/flows/src/services/employee_inbox_service.py"
   - "apps/flows/src/services/platform_event_consumer.py"
-  - "apps/flows/ui/modals/flows-employee-settings-modal.js"
+  - "apps/flows/ui/modals/flows-employee-settings-modal.ts"
 alwaysApply: false
 ---
 
@@ -38,7 +38,7 @@ alwaysApply: false
 ## UI
 
 - Модалка `flows.employee_settings` (switch, `display_name`, `avatar_url`, кураторы из `state.team.members`), сохранение — `flows/flow_update`.
-- Chip «AI-сотрудник» в `flows-editor-header.js`, badge в `flow-card.js`; `list_flows` отдаёт `employee`.
+- Chip «AI-сотрудник» в `flows-editor-header.ts`, badge в `flow-card.ts`; `list_flows` отдаёт `employee`.
 
 ## Запреты
 

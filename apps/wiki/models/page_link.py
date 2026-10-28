@@ -41,7 +41,7 @@ class WikiPageLink(PlatformModel):
     target_label: str = DbField(default="", db_type="TEXT")
 
     @classmethod
-    async def sync_links(
+    async def replace_outgoing(
         cls,
         *,
         company_id: str,
@@ -59,7 +59,7 @@ class WikiPageLink(PlatformModel):
                 _ = await cls.objects.create(instance=link)
 
     @classmethod
-    async def list_backlinks(
+    async def list_for_target(
         cls,
         company_id: str,
         target_kind: WikiLinkTargetKind,

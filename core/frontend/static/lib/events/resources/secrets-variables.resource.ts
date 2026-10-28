@@ -4,6 +4,14 @@
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
 import type { ResourceItem } from '../factories/resource-collection.js';
+import { isPlainRecord } from '../payload.js';
+
+function requireRecord(raw: unknown, message: string): JsonObject {
+    if (!isPlainRecord(raw)) {
+        throw new Error(message);
+    }
+    return raw;
+}
 
 type JsonObject = Record<string, unknown>;
 
@@ -46,42 +54,33 @@ function _requireString(raw: unknown, field: string): string {
 }
 
 function _mapValueSpec(raw: unknown, field: string): PlatformVariableValueSpec {
-    if (!raw || typeof raw !== 'object') {
-        throw new Error(`secrets/variables: ${field}.base required`);
-    }
-    const spec = raw as JsonObject;
+    const spec = requireRecord(raw, `secrets/variables: ${field}.base required`);
     const valueKind = spec.value_kind;
     if (valueKind !== 'static' && valueKind !== 'expression') {
         throw new Error(`secrets/variables: ${field}.base.value_kind invalid`);
     }
     return {
         value_kind: valueKind,
-        value: spec.value ?? null,
+        value: spec.value === undefined ? null : spec.value,
         expression: typeof spec.expression === 'string' ? spec.expression : null,
     };
 }
 
 function _mapScopeOverride(raw: unknown, index: number): PlatformVariableScopeOverride {
-    if (!raw || typeof raw !== 'object') {
-        throw new Error(`secrets/variables: scopes[${index}] invalid`);
-    }
-    const scope = raw as JsonObject;
+    const scope = requireRecord(raw, `secrets/variables: scopes[${index}] invalid`);
     const matchIn = Array.isArray(scope.match) ? scope.match : [];
     const match = matchIn.map((entry: unknown, matchIndex: number) => {
-        if (!entry || typeof entry !== 'object') {
-            throw new Error(`secrets/variables: scopes[${index}].match[${matchIndex}] invalid`);
-        }
-        const e = entry as JsonObject;
+        const e = requireRecord(entry, `secrets/variables: scopes[${index}].match[${matchIndex}] invalid`);
         return {
             field: _requireString(e.field, `scopes[${index}].match[${matchIndex}].field`),
             op: typeof e.op === 'string' ? e.op : 'eq',
             ref_key: typeof e.ref_key === 'string' ? e.ref_key : null,
-            value: e.value ?? null,
+            value: e.value === undefined ? null : e.value,
         };
     });
     return {
         value_kind: scope.value_kind === 'expression' ? 'expression' : 'static',
-        value: scope.value ?? null,
+        value: scope.value === undefined ? null : scope.value,
         expression: typeof scope.expression === 'string' ? scope.expression : null,
         priority: typeof scope.priority === 'number' ? scope.priority : 0,
         match,
@@ -89,16 +88,9 @@ function _mapScopeOverride(raw: unknown, index: number): PlatformVariableScopeOv
 }
 
 export function mapPlatformVariable(raw: unknown): PlatformVariable {
-    if (!raw || typeof raw !== 'object') {
-        throw new Error('secrets/variables.mapItem: payload must be object');
-    }
-    const v = raw as JsonObject;
+    const v = requireRecord(raw, 'secrets/variables.mapItem: payload must be object');
     const variableKey = _requireString(v.variable_key, 'variable_key');
-    const payloadRaw = v.payload;
-    if (!payloadRaw || typeof payloadRaw !== 'object') {
-        throw new Error(`secrets/variables: ${variableKey}.payload required`);
-    }
-    const pv = payloadRaw as JsonObject;
+    const pv = requireRecord(v.payload, `secrets/variables: ${variableKey}.payload required`);
     const scopesIn = Array.isArray(pv.scopes) ? pv.scopes : [];
     const scopes = scopesIn.map((scope: unknown, index: number) => _mapScopeOverride(scope, index));
     return {
@@ -139,3 +131,9 @@ export const secretsVariablesResource = createResourceCollection({
         remove_error: 'company_variables:toast.remove_error',
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'secrets/variables': typeof secretsVariablesResource;
+    }
+}

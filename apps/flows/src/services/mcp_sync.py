@@ -105,7 +105,7 @@ async def sync_mcp_server_tools(
     for old_tool_id in previous_cached:
         if old_tool_id not in tool_ids:
             require_not_builtin_tool_id(old_tool_id, source="mcp cached_tools")
-            _ = await ToolReference.delete_by_id(ToolReference.row_id(old_tool_id))
+            _ = await ToolReference.delete_by_id(ToolReference.row_id_for_active_company(old_tool_id))
             await flow_access_service.sync_tool_deleted(
                 old_tool_id, company_id=company.company_id
             )

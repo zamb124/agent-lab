@@ -90,8 +90,8 @@ async def op_company_storages_list(
     scope = await require_company_admin(di.authz_service)
     company_id = scope.company_id
     return CompanyStorageListResult(
-        storages=await ObjectStorage.list_for_company(company_id),
-        routes=await StorageRoute.list_for_company(company_id),
+        storages=await ObjectStorage.list_by_created_at(company_id),
+        routes=await StorageRoute.list_by_source_kind(company_id),
     )
 
 

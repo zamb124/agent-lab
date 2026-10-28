@@ -177,7 +177,7 @@ async def test_traces_search_rest_match_op(
 ) -> None:
     flow_id = f"obs_search_{unique_id}"
     now = datetime.now(timezone.utc)
-    await Span.insert_once(
+    await Span.insert_span_once(
         Span(
             span_id=f"span-{unique_id}",
             trace_id=f"trace-{unique_id}",

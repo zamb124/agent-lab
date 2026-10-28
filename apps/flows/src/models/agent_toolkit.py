@@ -52,7 +52,8 @@ class AgentToolkit(CompanyScopedModel):
     )
 
     @classmethod
-    def row_id(cls, toolkit_id: str) -> str:
+    def toolkit_row_id_for_active_company(cls, toolkit_id: str) -> str:
+        """Ключ company_id:toolkit_id из активной компании. Пустой toolkit_id или компания — ValueError. Двоеточие — ValueError."""
         company_id = require_active_company().company_id
         if toolkit_id == "" or company_id == "":
             raise ValueError("toolkit_id is required")
@@ -69,7 +70,7 @@ class AgentToolkit(CompanyScopedModel):
             self.company_id = company_id
         elif self.company_id != company_id:
             raise ValueError("company_id does not match the active company")
-        expected = type(self).row_id(self.toolkit_id)
+        expected = type(self).toolkit_row_id_for_active_company(self.toolkit_id)
         if self.agent_toolkit_id == "":
             self.agent_toolkit_id = expected
         elif self.agent_toolkit_id != expected:
@@ -79,7 +80,7 @@ class AgentToolkit(CompanyScopedModel):
     @override
     async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
         _ = is_create, update_fields
-        expected = type(self).row_id(self.toolkit_id)
+        expected = type(self).toolkit_row_id_for_active_company(self.toolkit_id)
         if self.company_id == "" or self.agent_toolkit_id != expected:
             raise ValueError("agent_toolkit_id does not match the active company")
 
@@ -91,14 +92,14 @@ class AgentToolkit(CompanyScopedModel):
 
     @classmethod
     async def by_toolkit_id(cls, toolkit_id: str) -> Self | None:
-        agent_toolkit_id = cls.row_id(toolkit_id)
+        agent_toolkit_id = cls.toolkit_row_id_for_active_company(toolkit_id)
         if agent_toolkit_id == "":
             raise ValueError("AgentToolkit agent_toolkit_id is required")
         return await cls.objects.filter(agent_toolkit_id=agent_toolkit_id).get_or_none()
 
     @classmethod
     async def delete_by_toolkit_id(cls, toolkit_id: str) -> bool:
-        agent_toolkit_id = cls.row_id(toolkit_id)
+        agent_toolkit_id = cls.toolkit_row_id_for_active_company(toolkit_id)
         if agent_toolkit_id == "":
             raise ValueError("AgentToolkit agent_toolkit_id is required")
         deleted = await cls.objects.filter(agent_toolkit_id=agent_toolkit_id).delete()
@@ -120,12 +121,12 @@ class AgentToolkit(CompanyScopedModel):
         return by_flow
 
     @classmethod
-    async def get_toolkit_ids_for_flow(cls, flow_id: str) -> list[str]:
+    async def toolkit_ids_for_flow(cls, flow_id: str) -> list[str]:
         by_flow = await cls.toolkit_ids_by_flow_ids([flow_id])
         return by_flow[flow_id]
 
     @classmethod
-    async def get_toolkit_ids_for_tool(cls, tool_id: str) -> list[str]:
+    async def toolkit_ids_for_tool(cls, tool_id: str) -> list[str]:
         toolkit_ids: list[str] = []
         for toolkit in await cls.list_agent_toolkits():
             if tool_id in toolkit.tool_ids:
@@ -133,12 +134,13 @@ class AgentToolkit(CompanyScopedModel):
         return toolkit_ids
 
     @classmethod
-    async def set_flow_toolkit_membership(
+    async def replace_flow_toolkit_membership(
         cls,
         *,
         flow_id: str,
         toolkit_ids: list[str],
     ) -> None:
+        """Приводит членство flow_id во всех наборах к toolkit_ids. Неизвестный toolkit_id игнорируется. Пустой список снимает flow со всех наборов."""
         desired = set(toolkit_ids)
         for toolkit in await cls.list_agent_toolkits():
             has_flow = flow_id in toolkit.flow_ids
@@ -154,12 +156,13 @@ class AgentToolkit(CompanyScopedModel):
             _ = await cls.set(updated)
 
     @classmethod
-    async def set_tool_toolkit_membership(
+    async def replace_tool_toolkit_membership(
         cls,
         *,
         tool_id: str,
         toolkit_ids: list[str],
     ) -> None:
+        """Приводит членство tool_id во всех наборах к toolkit_ids. Неизвестный toolkit_id игнорируется. Пустой список снимает tool со всех наборов."""
         desired = set(toolkit_ids)
         for toolkit in await cls.list_agent_toolkits():
             has_tool = tool_id in toolkit.tool_ids

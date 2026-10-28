@@ -15,3 +15,9 @@ export const dashboardStatsOp = createAsyncOp({
     commandType: 'frontend/dashboard/stats_requested',
     restMirror: { method: 'GET', path: '/frontend/api/dashboard/stats' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/dashboard_stats': typeof dashboardStatsOp;
+    }
+}

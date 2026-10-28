@@ -42,10 +42,10 @@ describe('SelectController: contract', () => {
         expect(host.controllers).toContain(ctl);
     });
 
-    it('value = undefined до hostConnected', () => {
+    it('value до hostConnected — ошибка', () => {
         const host = _buildHost();
         const ctl = new SelectController(host, (s) => s);
-        expect(ctl.value).toBeUndefined();
+        expect(() => ctl.value).toThrow(/before hostConnected/);
     });
 });
 

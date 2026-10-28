@@ -35,16 +35,17 @@ import {
     requireFunction,
 } from './_internal.js';
 import type { PlatformEvent } from '../contract.js';
-import type { PlatformFactory } from '../factory-registry.js';
+import { isPlainRecord } from '../payload.js';
+import type { ActionMap, PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 
-export interface SliceFactoryOptions {
+export interface SliceFactoryOptions<S extends object = Record<string, unknown>, A extends ActionMap = ActionMap> {
     name: string;
-    extraInitial: Record<string, unknown>;
-    extraReducer: (state: Record<string, unknown>, event: PlatformEvent, events: Readonly<Record<string, string>>) => Record<string, unknown> | null | undefined;
+    extraInitial: NoInfer<S>;
+    extraReducer: (state: S, event: PlatformEvent, events: Readonly<Record<string, string>>) => NoInfer<S> | null | undefined;
     sliceKey?: string;
     extraEvents?: Record<string, string>;
-    actions?: Record<string, string>;
+    actions?: A;
     transport?: never;
     request?: never;
     restMirror?: never;
@@ -52,18 +53,20 @@ export interface SliceFactoryOptions {
     effect?: never;
 }
 
-export interface SliceFactory extends PlatformFactory {
+export interface SliceFactory<S extends object = Record<string, unknown>, A extends ActionMap = ActionMap> extends PlatformFactory {
     kind: 'slice';
     name: string;
     sliceKey: string;
     events: Readonly<Record<string, string>>;
-    actions: Readonly<Record<string, string>>;
-    reducer: (state: Record<string, unknown> | undefined, event: PlatformEvent) => Record<string, unknown>;
-    slice: SliceDef<Record<string, unknown>>;
-    selectors: { slice: (state: Record<string, unknown>) => Record<string, unknown> };
+    actions: Readonly<A>;
+    reducer(state: S | undefined, event: PlatformEvent): S;
+    slice: SliceDef<S>;
+    selectors: { slice: (state: Record<string, unknown>) => S };
 }
 
-export function createSlice(options: SliceFactoryOptions): SliceFactory {
+export function createSlice<S extends object = Record<string, unknown>, A extends ActionMap = Record<never, string>>(
+    options: SliceFactoryOptions<S, A>,
+): SliceFactory<S, A> {
     if (!options || typeof options !== 'object') {
         throw new Error('createSlice: options object required');
     }
@@ -93,7 +96,7 @@ export function createSlice(options: SliceFactoryOptions): SliceFactory {
     if (Object.keys(extraInitial).length === 0) {
         throw new Error(`createSlice(${name}): extraInitial must have at least one key.`);
     }
-    const extraReducer = requireFunction<SliceFactoryOptions['extraReducer']>(
+    const extraReducer = requireFunction<SliceFactoryOptions<S, A>['extraReducer']>(
         requireField(options, 'extraReducer', 'createSlice'),
         `createSlice(${name}).extraReducer`,
     );
@@ -132,10 +135,33 @@ export function createSlice(options: SliceFactoryOptions): SliceFactory {
         }
     }
     const events = freeze(eventsMap);
+    // Ключи actionsMap — ключи options.actions (A); значения — полные типы событий.
+    function isBuiltActionMap(value: Record<string, string>): value is A {
+        if (actionsConfig === null) {
+            return Object.keys(value).length === 0;
+        }
+        return Object.keys(actionsConfig).every((key) => {
+            const eventType = value[key];
+            return typeof eventType === 'string' && eventType.length > 0;
+        });
+    }
+    if (!isBuiltActionMap(actionsMap)) {
+        throw new Error(`createSlice(${name}): actions map does not match options.actions`);
+    }
     const actions = freeze(actionsMap);
-    const initialSlice = freeze({ ...extraInitial });
 
-    function reducer(state: Record<string, unknown> = initialSlice, event: PlatformEvent): Record<string, unknown> {
+    function isSliceState(value: unknown): value is S {
+        if (!isPlainRecord(value)) return false;
+        return Object.keys(extraInitial).every((key) => Object.prototype.hasOwnProperty.call(value, key));
+    }
+
+    const seededSlice = { ...extraInitial };
+    if (!isSliceState(seededSlice)) {
+        throw new Error(`createSlice(${name}): extraInitial is not a slice object`);
+    }
+    const initialSlice = freeze(seededSlice);
+
+    function reducer(state: S = initialSlice, event: PlatformEvent): S {
         const next = extraReducer(state, event, events);
         if (next && next !== state) {
             return freeze(next);
@@ -143,9 +169,10 @@ export function createSlice(options: SliceFactoryOptions): SliceFactory {
         return state;
     }
 
-    function _readSlice(state: Record<string, unknown>): Record<string, unknown> {
-        const slice = state[sliceKey] as Record<string, unknown> | undefined;
-        if (slice === undefined) {
+    function _readSlice(state: Record<string, unknown>): S {
+        // Корневое состояние шины хранит slices разных фабрик; slice этой фабрики кладёт её reducer.
+        const slice = state[sliceKey];
+        if (!isSliceState(slice)) {
             throw new Error(`createSlice(${name}): slice "${sliceKey}" not registered in bus`);
         }
         return slice;

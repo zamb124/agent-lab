@@ -303,8 +303,8 @@ export class LandingFooter extends PlatformElement {
         const t = (key: string, params?: Record<string, string | number>) => this.t(key, params);
         const year = new Date().getFullYear();
         const brand = getPlatformBrandBootstrap();
-        const supportMail = brand?.supportEmail || '';
-        const platformName = brand?.platformName || '';
+        const supportMail = brand === undefined || brand === null || typeof brand.supportEmail !== 'string' ? '' : brand.supportEmail;
+        const platformName = brand === undefined || brand === null || typeof brand.platformName !== 'string' ? '' : brand.platformName;
 
         return html`
             <footer class="footer-container">

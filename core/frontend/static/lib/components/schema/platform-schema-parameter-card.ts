@@ -12,15 +12,31 @@ import '../platform-icon.js';
 import '../platform-switch.js';
 import '../tag-input.js';
 import { SCHEMA_UI_TYPES, createEmptyParameterRow } from './schema-model.js';
-import type {
-    NestedParameterRow,
-    NestedSchemaUiType,
-    ParameterRow,
-    SchemaUiType,
-} from './schema-model.js';
+import type { NestedParameterRow, NestedSchemaUiType, ParameterRow, SchemaUiType } from './schema-model.js';
 
 const NESTED_UI_TYPES = Object.freeze(['string', 'number', 'integer', 'boolean', 'enum']);
 const ITEMS_UI_TYPES = Object.freeze(['string', 'number', 'integer', 'boolean', 'enum']);
+
+function isSchemaUiType(value: string): value is SchemaUiType {
+    for (const item of SCHEMA_UI_TYPES) {
+        if (item === value) return true;
+    }
+    return false;
+}
+
+function isNestedSchemaUiType(value: string): value is NestedSchemaUiType {
+    for (const item of NESTED_UI_TYPES) {
+        if (item === value) return true;
+    }
+    return false;
+}
+
+function isItemsUiType(value: string): value is NestedSchemaUiType {
+    for (const item of ITEMS_UI_TYPES) {
+        if (item === value) return true;
+    }
+    return false;
+}
 
 export class PlatformSchemaParameterCard extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -205,10 +221,10 @@ export class PlatformSchemaParameterCard extends PlatformElement {
 
     _onTypeChange(e: CustomEvent<{ value?: unknown }>): void {
         const value = typeof e.detail?.value === 'string' ? e.detail.value : 'string';
-        if (!SCHEMA_UI_TYPES.includes(value)) {
+        if (!isSchemaUiType(value)) {
             throw new Error(`platform-schema-parameter-card: unknown uiType ${value}`);
         }
-        this._emitPatch({ uiType: value as SchemaUiType });
+        this._emitPatch({ uiType: value });
     }
 
     _onRequiredChange(e: CustomEvent<{ value?: unknown }>): void {
@@ -222,10 +238,10 @@ export class PlatformSchemaParameterCard extends PlatformElement {
 
     _onItemsTypeChange(e: CustomEvent<{ value?: unknown }>): void {
         const value = typeof e.detail?.value === 'string' ? e.detail.value : 'string';
-        if (!ITEMS_UI_TYPES.includes(value)) {
+        if (!isItemsUiType(value)) {
             throw new Error(`platform-schema-parameter-card: unknown itemsUiType ${value}`);
         }
-        this._emitPatch({ itemsUiType: value as NestedSchemaUiType });
+        this._emitPatch({ itemsUiType: value });
     }
 
     _onItemsEnumChange(e: CustomEvent<{ tags?: unknown }>): void {
@@ -336,12 +352,12 @@ export class PlatformSchemaParameterCard extends PlatformElement {
                                     @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                         const value =
                                             typeof e.detail?.value === 'string' ? e.detail.value : 'string';
-                                        if (!NESTED_UI_TYPES.includes(value)) {
+                                        if (!isNestedSchemaUiType(value)) {
                                             throw new Error(
                                                 `platform-schema-parameter-card: nested uiType ${value}`,
                                             );
                                         }
-                                        this._patchNested(nestedIndex, { uiType: value as NestedSchemaUiType });
+                                        this._patchNested(nestedIndex, { uiType: value });
                                     }}
                                 ></platform-field>
                                 <div class="nested-required-wrap">

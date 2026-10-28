@@ -10,6 +10,24 @@ declare global {
     }
 }
 
+export function finiteOrZero(value: unknown): number {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    return 0;
+}
+
+export function firstGraphText(values: readonly unknown[]): string {
+    for (const value of values) {
+        if (typeof value === 'string' && value.length > 0) return value;
+        if (typeof value === 'number' && Number.isFinite(value) && value !== 0) return String(value);
+    }
+    return '';
+}
+
+export function storedWeight(map: Map<string, number>, id: string): number {
+    const current = map.get(id);
+    return current === undefined ? 0 : current;
+}
+
 interface GraphEdgeLike {
     source_id?: unknown;
     source_entity_id?: unknown;
@@ -74,10 +92,10 @@ export function aggregateIncidentWeightsByNode(edges: unknown): Map<string, numb
         }
         const edgeWeight = typeof edge.weight === 'number' && Number.isFinite(edge.weight) ? edge.weight : 1;
         if (sourceId === targetId) {
-            map.set(sourceId, (map.get(sourceId) || 0) + edgeWeight);
+            map.set(sourceId, storedWeight(map, sourceId) + edgeWeight);
         } else {
-            map.set(sourceId, (map.get(sourceId) || 0) + edgeWeight);
-            map.set(targetId, (map.get(targetId) || 0) + edgeWeight);
+            map.set(sourceId, storedWeight(map, sourceId) + edgeWeight);
+            map.set(targetId, storedWeight(map, targetId) + edgeWeight);
         }
     }
     return map;
@@ -348,7 +366,7 @@ export function createMatteSphereNodeGroup(node: MatteSphereNodeLike, options: M
         : '';
     const sprite = subtitle
         ? createGraphNodeLabelSprite({
-            title: node.name || node.id || '',
+            title: firstGraphText([node.name, node.id]),
             subtitle,
             titleColor: labelColor,
             subtitleColor,
@@ -357,7 +375,7 @@ export function createMatteSphereNodeGroup(node: MatteSphereNodeLike, options: M
             maxTitleLength: 20,
             maxSubtitleLength: 28,
         })
-        : createGraphTextSprite(node.name || node.id || '', labelColor, labelFontSize, 20);
+        : createGraphTextSprite(firstGraphText([node.name, node.id]), labelColor, labelFontSize, 20);
     sprite.position.set(0, radius + 3, 0);
     group.add(sprite);
     return group;

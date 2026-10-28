@@ -16,7 +16,11 @@ class StyleCacheClass {
      */
     async load(path: string): Promise<CSSStyleSheet> {
         if (this.cache.has(path)) {
-            return this.cache.get(path)!;
+            const cached = this.cache.get(path);
+            if (cached === undefined) {
+                throw new Error(`style cache: ${path} missing`);
+            }
+            return cached;
         }
 
         const url = path.startsWith('/') ? path : `/ui/static/styles/${path}`;
@@ -40,7 +44,8 @@ class StyleCacheClass {
      * @returns {CSSStyleSheet|null}
      */
     get(path: string): CSSStyleSheet | null {
-        return this.cache.get(path) || null;
+        const sheet = this.cache.get(path);
+        return sheet === undefined ? null : sheet;
     }
 
     /**
@@ -51,7 +56,11 @@ class StyleCacheClass {
      */
     fromString(css: string, key?: string): CSSStyleSheet {
         if (key && this.cache.has(key)) {
-            return this.cache.get(key)!;
+            const cached = this.cache.get(key);
+            if (cached === undefined) {
+                throw new Error(`style cache: ${key} missing`);
+            }
+            return cached;
         }
 
         const sheet = new CSSStyleSheet();

@@ -50,7 +50,7 @@ async def span_billing_settlement_tick(
     settlement = SpanBillingSettlement(di.shared_storage)
 
     scoped_company_id = company_id
-    spans = await Span.list_spans_pending_billing_settlement(
+    spans = await Span.list_pending_billing_settlement(
         from_time=from_time,
         to_time=now,
         limit=cfg.batch_limit,

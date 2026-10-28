@@ -57,10 +57,10 @@ async def test_create_page_derives_markdown_from_content(page_factory, unique_id
     assert page.content.content[0].attrs["level"] == 2
 
 
-async def test_update_existing_rewrites_row_and_rejects_missing(page_factory, unique_id):
+async def test_update_in_namespace_rewrites_row_and_rejects_missing(page_factory, unique_id):
     page = await page_factory(f"Страница {unique_id}")
     page.title = f"Новое {unique_id}"
-    stored = await WikiPage.update_existing(page)
+    stored = await WikiPage.update_in_namespace(page)
     assert stored.title == f"Новое {unique_id}"
     reloaded = await WikiPage.alive_page(COMPANY, page.namespace, page.wiki_page_id)
     assert reloaded is not None
@@ -68,7 +68,7 @@ async def test_update_existing_rewrites_row_and_rejects_missing(page_factory, un
 
     missing = page.model_copy(update={"wiki_page_id": f"missing-{unique_id}"})
     with pytest.raises(ValueError, match="not found"):
-        await WikiPage.update_existing(missing)
+        await WikiPage.update_in_namespace(missing)
 
 
 async def test_root_page_points_to_itself(page_factory, unique_id):
@@ -143,7 +143,7 @@ async def test_ancestors_are_returned_from_nearest_to_root(
     middle = await page_factory(f"Средний {unique_id}", parent_page_id=root.wiki_page_id)
     leaf = await page_factory(f"Потомок {unique_id}", parent_page_id=middle.wiki_page_id)
 
-    ancestors = await WikiPage.list_ancestors(COMPANY, wiki_namespace, leaf.wiki_page_id)
+    ancestors = await WikiPage.ancestors_toward_root(COMPANY, wiki_namespace, leaf.wiki_page_id)
 
     assert [item.wiki_page_id for item in ancestors] == [middle.wiki_page_id, root.wiki_page_id]
 
@@ -321,9 +321,15 @@ async def test_public_link_token_is_stored_hashed(
     )
 
     assert raw_token is not None
-    found = await WikiPage.get_public_page(raw_token)
+    found = await WikiPage.find_published_link(raw_token)
     assert found is not None
     assert found.wiki_page_id == page.wiki_page_id
+    assert await WikiPage.find_published_link(f"missing-{unique_id}") is None
+    found.is_published = False
+    _ = await found.save()
+    assert await WikiPage.find_published_link(raw_token) is None
+    found.is_published = True
+    _ = await found.save()
 
     # В базе лежит только хеш: сырой токен восстановить нельзя.
     stored = await _stored_page(COMPANY, wiki_namespace, page.wiki_page_id)

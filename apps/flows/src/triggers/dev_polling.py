@@ -298,7 +298,7 @@ class TelegramDevPolling:
         path = f"/{svc}/api/v1/triggers/telegram/{flow_id}/{trigger_id}"
         url = f"{base}{path}"
 
-        unscoped = await FlowConfig.get_latest_by_flow_id_unscoped(flow_id)
+        unscoped = await FlowConfig.current_unscoped(flow_id)
         if unscoped is None:
             raise RuntimeError(f"Dev polling flow not found for unscoped flow_id={flow_id!r}")
 

@@ -5,6 +5,8 @@
  * который шлёт POST .../search с advanced retrieval overrides.
  */
 
+import { isPlainRecord } from '../events/payload.js';
+
 export const SEARCH_REQUEST_OPTION_KEYS: readonly string[] = Object.freeze([
     'channels',
     'rrf_k',
@@ -31,6 +33,24 @@ export function packSearchRequestOptions(payload: Record<string, unknown> | null
 
 export type RetrievalMode = 'platform' | 'hybrid' | 'semantic' | 'lexical';
 
+function retrievalModeOf(value: unknown): RetrievalMode {
+    if (value === undefined || value === null) return 'platform';
+    if (value === 'platform' || value === 'hybrid' || value === 'semantic' || value === 'lexical') return value;
+    throw new Error(`pack_search_request_options: unsupported retrievalMode ${JSON.stringify(value)}`);
+}
+
+interface ChannelFlags {
+    semantic?: boolean;
+    lexical?: boolean;
+}
+
+function isChannelFlags(value: unknown): value is ChannelFlags {
+    if (!isPlainRecord(value)) return false;
+    if (value.semantic !== undefined && typeof value.semantic !== 'boolean') return false;
+    if (value.lexical !== undefined && typeof value.lexical !== 'boolean') return false;
+    return true;
+}
+
 export function channelsFromRetrievalMode(mode: RetrievalMode): { semantic: boolean; lexical: boolean } | null {
     if (mode === 'hybrid') {
         return { semantic: true, lexical: true };
@@ -48,8 +68,7 @@ export function packAdvancedRetrievalPayload(payload: Record<string, unknown>): 
     if (payload.usePlatformDefaults === true) {
         return {};
     }
-    const mode = typeof payload.retrievalMode === 'string' ? payload.retrievalMode : 'platform';
-    const channels = channelsFromRetrievalMode(mode as RetrievalMode);
+    const channels = channelsFromRetrievalMode(retrievalModeOf(payload.retrievalMode));
     const merged: Record<string, unknown> = { ...packSearchRequestOptions(payload) };
     if (channels !== null) {
         merged.channels = channels;
@@ -102,9 +121,13 @@ export function panelValueFromSearchOptions(searchOptions: Record<string, unknow
     if (!searchOptions || typeof searchOptions !== 'object') {
         return defaultRetrievalPanelValue();
     }
-    const channels = searchOptions.channels as { semantic?: boolean; lexical?: boolean } | undefined;
+    const rawChannels = searchOptions.channels;
+    if (rawChannels !== undefined && rawChannels !== null && !isChannelFlags(rawChannels)) {
+        throw new Error('pack_search_request_options: channels must be an object');
+    }
+    const channels = rawChannels === undefined || rawChannels === null ? null : rawChannels;
     let retrievalMode = 'platform';
-    if (channels && typeof channels === 'object') {
+    if (channels !== null) {
         const semantic = channels.semantic === true;
         const lexical = channels.lexical === true;
         if (semantic && lexical) {

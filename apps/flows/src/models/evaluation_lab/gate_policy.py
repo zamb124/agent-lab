@@ -45,7 +45,8 @@ class EvaluationGatePolicy(CompanyScopedModel):
     archived_at: datetime | None = DbField(default=None)
 
     @classmethod
-    async def list_for_suite(cls, suite_id: str) -> list[Self]:
+    async def list_by_branch_id_and_name(cls, suite_id: str) -> list[Self]:
+        """Политики набора, ORDER BY branch_id, name. Предела нет. Пустой suite_id — ValueError."""
         if suite_id == "":
             raise ValueError("suite_id is required")
         return await cls.objects.filter(suite_id=suite_id).order_by("branch_id", "name").all()

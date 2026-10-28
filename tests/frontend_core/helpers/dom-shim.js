@@ -79,8 +79,17 @@ export function installDomShim(opts = {}) {
     };
 
     const eventListeners = new Map();
+    const storageEntries = new Map();
+    const localStorage = {
+        getItem: (key) => (storageEntries.has(key) ? storageEntries.get(key) : null),
+        setItem: (key, value) => { storageEntries.set(key, String(value)); },
+        removeItem: (key) => { storageEntries.delete(key); },
+        clear: () => { storageEntries.clear(); },
+    };
+
     const window = {
         document,
+        localStorage,
         location: { protocol: 'http:', host: 'localhost', hostname: 'localhost', search: '', pathname: '/', href: 'http://localhost/' },
         navigator: { onLine: true, userAgent: 'node-test', standalone: false, serviceWorker: null },
         matchMedia,
@@ -96,7 +105,7 @@ export function installDomShim(opts = {}) {
     };
 
     const prev = {};
-    for (const k of ['window', 'document', 'navigator', 'location', 'matchMedia', 'Notification']) {
+    for (const k of ['window', 'document', 'navigator', 'location', 'matchMedia', 'Notification', 'localStorage']) {
         prev[k] = globalThis[k];
     }
     globalThis.window = window;
@@ -105,6 +114,7 @@ export function installDomShim(opts = {}) {
     Object.defineProperty(globalThis, 'location', { value: window.location, configurable: true });
     globalThis.matchMedia = matchMedia;
     globalThis.Notification = window.Notification;
+    globalThis.localStorage = localStorage;
 
     return {
         window,
@@ -120,7 +130,7 @@ export function installDomShim(opts = {}) {
         },
         uninstall() {
             for (const id of intervals) clearInterval(id);
-            for (const k of ['window', 'document', 'navigator', 'location', 'matchMedia', 'Notification']) {
+            for (const k of ['window', 'document', 'navigator', 'location', 'matchMedia', 'Notification', 'localStorage']) {
                 if (prev[k] !== undefined) {
                     if (k === 'navigator' || k === 'location') {
                         Object.defineProperty(globalThis, k, { value: prev[k], configurable: true });

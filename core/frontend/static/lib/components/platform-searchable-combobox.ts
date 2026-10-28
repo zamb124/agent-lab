@@ -11,7 +11,8 @@
 import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
-import './platform-popover.js';
+import { isPlainRecord } from '../events/payload.js';
+import { PlatformPopover } from './platform-popover.js';
 import './fields/platform-field-shell.js';
 
 /**
@@ -24,12 +25,11 @@ export interface ComboboxOption {
 }
 
 function _asOption(o: unknown): ComboboxOption | null {
-    if (!o || typeof o !== 'object') {
+    if (!isPlainRecord(o)) {
         return null;
     }
-    const record = o as Record<string, unknown>;
-    const value = record.value;
-    const label = record.label;
+    const value = o.value;
+    const label = o.label;
     if (typeof value !== 'string') {
         return null;
     }
@@ -446,8 +446,11 @@ export class PlatformSearchableCombobox extends PlatformElement {
             }
         }
         if (this._open) {
-            const popover = this.renderRoot?.querySelector?.('platform-popover');
-            (popover as { reposition?: () => void } | null | undefined)?.reposition?.();
+            const popover = this.renderRoot.querySelector('platform-popover');
+            if (!(popover instanceof PlatformPopover)) {
+                throw new Error('platform-searchable-combobox: open list popover is missing');
+            }
+            popover.reposition();
         }
         if ((changed.has('value') || changed.has('options')) && !this._editing) {
             this._input = this._displayForValue(this.value);

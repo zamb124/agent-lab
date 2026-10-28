@@ -2,8 +2,7 @@
  * sync-channel-notifications-modal — настройки уведомлений канала (mute).
  */
 
-import type { SyncChannelsController } from '../events/sync.types.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
@@ -28,7 +27,7 @@ export class SyncChannelNotificationsModal extends PlatformFormModal {
     static override styles: CSSResultGroup = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
     ];
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
     private _notify: OpController;
 
     constructor() {
@@ -36,7 +35,7 @@ export class SyncChannelNotificationsModal extends PlatformFormModal {
         this.channelId = '';
         this._muted = false;
         this._hydrated = false;
-        this._channels = this.useResource('sync/channels') as SyncChannelsController;
+        this._channels = this.useResource('sync/channels');
         this._notify = this.useOp('sync/channel_notifications_update');
     }
 

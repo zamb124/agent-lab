@@ -36,8 +36,12 @@ export class PlatformFieldText extends PlatformElement {
     }
 
     _onInput(e: InputEvent): void {
+        const target = e.target;
+        if (!(target instanceof HTMLTextAreaElement)) {
+            throw new Error('platform-field-text: input target must be a textarea');
+        }
         this.dispatchEvent(new CustomEvent('change', {
-            detail: { value: (e.target as HTMLTextAreaElement).value },
+            detail: { value: target.value },
             bubbles: true,
             composed: true,
         }));
@@ -54,7 +58,7 @@ export class PlatformFieldText extends PlatformElement {
         return html`
             <textarea
                 class="field-pill-textarea"
-                .value=${this.value ?? ''}
+                .value=${this.value === null || this.value === undefined ? '' : this.value}
                 placeholder=${this.placeholder}
                 ?disabled=${this.disabled}
                 @input=${this._onInput}

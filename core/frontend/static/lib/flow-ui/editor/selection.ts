@@ -3,27 +3,35 @@
  * по ``event.composedPath()`` и поиск DOM-узлов блоков для рамки выделения.
  */
 
-function isElement(node: unknown): node is Element {
-    return node instanceof Element;
+function isHtmlElement(node: unknown): node is HTMLElement {
+    return node instanceof HTMLElement;
 }
 
 /** Ближайший к цели элемент блока (``.fu-block[data-block-id]``) в composed path. */
 export function blockElementFromPath(path: readonly EventTarget[]): HTMLElement | null {
     for (const node of path) {
-        if (isElement(node) && node.classList.contains('fu-block') && typeof (node as HTMLElement).dataset.blockId === 'string') return node as HTMLElement;
+        if (!isHtmlElement(node) || !node.classList.contains('fu-block')) continue;
+        const blockId = node.dataset.blockId;
+        if (typeof blockId !== 'string') continue;
+        return node;
     }
     return null;
 }
 
 export function blockIdFromEvent(event: Event): string | null {
     const element = blockElementFromPath(event.composedPath());
-    return element === null ? null : element.dataset.blockId ?? null;
+    if (element === null) return null;
+    const blockId = element.dataset.blockId;
+    return blockId === undefined ? null : blockId;
 }
 
 /** Ближайший контейнер (``[data-container-key]``) в composed path: ``{key, element}``. */
 export function containerFromPath(path: readonly EventTarget[]): { key: string; element: Element } | null {
     for (const node of path) {
-        if (isElement(node) && typeof (node as HTMLElement).dataset.containerKey === 'string') return { key: (node as HTMLElement).dataset.containerKey as string, element: node };
+        if (!isHtmlElement(node)) continue;
+        const key = node.dataset.containerKey;
+        if (typeof key !== 'string') continue;
+        return { key, element: node };
     }
     return null;
 }

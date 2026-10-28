@@ -25,8 +25,7 @@
 
 import { html, css } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
-import type { DocumentsOpController } from '../events/documents.types.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import {
@@ -39,7 +38,8 @@ import {
 } from '../_helpers/documents-explorer-query.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
-import '@platform/lib/components/layout/platform-service-sidebar.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
@@ -161,16 +161,16 @@ export class OfficeSidebar extends PlatformElement {
         this._namespaces = this.useResource(NAMESPACES_NAME, { autoload: true });
         this._catalogs = this.useResource(CATALOGS_NAME, { autoload: true });
         this._integration = this.useOp(INTEGRATION_OP);
-        this._documents = this.useOp(DOCUMENTS_OP) as unknown as DocumentsOpController;
+        this._documents = this.useOp(DOCUMENTS_OP);
         this._move = this.useOp('office/document_move');
-        this._routeSel = this.select((s) => (s.router as Record<string, unknown>).routeKey);
-        this._routerSearchSel = this.select((s) => (s.router as Record<string, unknown>).search);
-        this._authSel = this.select((s) => (s.auth as Record<string, unknown>).user);
+        this._routeSel = this.select((s) => s.router.routeKey);
+        this._routerSearchSel = this.select((s) => s.router.search);
+        this._authSel = this.select((s) => s.auth.user);
     }
     private _namespaces: ResourceController;
     private _catalogs: ResourceController;
     private _integration: OpController;
-    private _documents: DocumentsOpController;
+    private _documents: ControllerFor<'office/documents'>;
     private _move: OpController;
     private _routeSel: SelectController<unknown>;
     private _routerSearchSel: SelectController<unknown>;
@@ -189,12 +189,18 @@ export class OfficeSidebar extends PlatformElement {
         this.explorerNav = this._showExplorerNav();
     }
 
-    private _shell() { return this.renderRoot ? this.renderRoot.querySelector('platform-service-sidebar') : null; }
-    closeMobile() {
-        const shell = this._shell() as { closeMobile?: () => void } | null;
-        if (shell && typeof shell.closeMobile === 'function') {
-            shell.closeMobile();
+    private _shell(): PlatformServiceSidebar | null {
+        const shell = this.renderRoot.querySelector('platform-service-sidebar');
+        if (shell === null) return null;
+        if (!(shell instanceof PlatformServiceSidebar)) {
+            throw new Error('office sidebar: platform-service-sidebar required');
         }
+        return shell;
+    }
+    closeMobile() {
+        const shell = this._shell();
+        if (shell === null) return;
+        shell.closeMobile();
     }
 
     private _routeKey() {
@@ -210,19 +216,18 @@ export class OfficeSidebar extends PlatformElement {
     private _isEditor() { return this._routeKey() === 'document_editor'; }
 
     private _companyId() {
-        const u = this._authSel.value as Record<string, unknown> | null;
-        return u && typeof u.company_id === 'string' ? u.company_id.trim() : '';
+        const user = this._authSel.value;
+        if (!isPlainRecord(user) || typeof user.company_id !== 'string') return '';
+        return user.company_id.trim();
     }
 
-    private _catalogItems(): Array<Record<string, unknown>> {
-        return this._catalogs.items as Array<Record<string, unknown>>;
+    private _catalogItems(): readonly Record<string, unknown>[] {
+        return this._catalogs.items;
     }
 
     private _activeCatalogId() {
-        const state = this._documents.state as Record<string, unknown>;
-        if (typeof state.activeCatalogId === 'string' && state.activeCatalogId.length > 0) {
-            return state.activeCatalogId;
-        }
+        const catalogId = this._documents.state.activeCatalogId;
+        if (typeof catalogId === 'string' && catalogId.length > 0) return catalogId;
         return '';
     }
 
@@ -243,8 +248,8 @@ export class OfficeSidebar extends PlatformElement {
             throw new Error('OfficeSidebar._namespaceEnumConfig: items must be an array');
         }
         const values: Array<{ value: string; label: string }> = [];
-        for (const ns of items as Array<Record<string, unknown>>) {
-            if (!ns || typeof ns.name !== 'string' || ns.name.length === 0) {
+        for (const ns of items) {
+            if (!isPlainRecord(ns) || typeof ns.name !== 'string' || ns.name.length === 0) {
                 throw new Error('OfficeSidebar._namespaceEnumConfig: invalid namespace item');
             }
             values.push({ value: ns.name, label: ns.name });
@@ -353,48 +358,47 @@ export class OfficeSidebar extends PlatformElement {
     private async _onCatalogAction(e: CustomEvent<{ action?: unknown; catalog?: unknown }>) {
         const action = e.detail && e.detail.action;
         const catalog = e.detail && e.detail.catalog;
-        if (typeof action !== 'string' || !catalog || typeof catalog !== 'object') {
+        if (typeof action !== 'string' || !isPlainRecord(catalog)) {
             return;
         }
         if (action === 'edit') {
-            const c = catalog as Record<string, unknown>;
             this.openModal('office.catalog_edit', {
-                catalogId: c.catalog_id,
-                title: c.title,
-                companyVisible: Boolean(c.company_visible),
+                catalogId: catalog.catalog_id,
+                title: catalog.title,
+                companyVisible: Boolean(catalog.company_visible),
             });
             return;
         }
         if (action === 'members') {
-            const c = catalog as Record<string, unknown>;
             this.openModal('office.catalog_members', {
-                catalogId: c.catalog_id,
-                catalogTitle: c.title,
-                companyVisible: Boolean(c.company_visible),
+                catalogId: catalog.catalog_id,
+                catalogTitle: catalog.title,
+                companyVisible: Boolean(catalog.company_visible),
             });
             return;
         }
         if (action === 'access') {
-            const c = catalog as Record<string, unknown>;
             this.openModal('office.access', {
                 resourceKind: 'catalog',
-                resourceId: c.catalog_id,
-                resourceTitle: c.title,
+                resourceId: catalog.catalog_id,
+                resourceTitle: catalog.title,
             });
             return;
         }
         if (action === 'rag') {
-            const c = catalog as Record<string, unknown>;
             this.openModal('office.catalog_rag', {
-                catalogId: c.catalog_id,
-                catalogTitle: c.title,
+                catalogId: catalog.catalog_id,
+                catalogTitle: catalog.title,
             });
             return;
         }
         if (action === 'delete') {
-            const c = catalog as Record<string, unknown>;
+            const title = catalog.title;
+            if (typeof title !== 'string') {
+                throw new Error('office sidebar: catalog title required');
+            }
             const ok = await platformConfirm(
-                this.t('catalogs.deleteConfirm', { title: c.title as string }),
+                this.t('catalogs.deleteConfirm', { title }),
                 {
                     title: this.t('catalogs.deleteConfirmTitle'),
                     variant: 'danger',
@@ -406,7 +410,11 @@ export class OfficeSidebar extends PlatformElement {
             if (ok !== true) {
                 return;
             }
-            await this._catalogs.remove(c.catalog_id as string);
+            const catalogId = catalog.catalog_id;
+            if (typeof catalogId !== 'string' || catalogId.length === 0) {
+                throw new Error('office sidebar: catalog_id required');
+            }
+            await this._catalogs.remove(catalogId);
             this._documents.clearFilter(null);
         }
     }
@@ -414,7 +422,11 @@ export class OfficeSidebar extends PlatformElement {
     private _renderExplorerNav() {
         if (!this._showExplorerNav()) return '';
         const cats = this._catalogItems();
-        const state = this._documents.state as Record<string, unknown>;
+        const state = this._documents.state;
+        const expandedCatalogIds = state.expandedCatalogIds;
+        if (expandedCatalogIds !== undefined && expandedCatalogIds !== null && !Array.isArray(expandedCatalogIds)) {
+            throw new Error('office sidebar: expandedCatalogIds must be an array');
+        }
         return html`
             <div class="explorer-shell">
                 <office-explorer-nav-rail
@@ -426,7 +438,7 @@ export class OfficeSidebar extends PlatformElement {
                     data-hide-collapsed
                     .catalogs=${cats}
                     active-catalog-id=${this._activeCatalogId()}
-                    .expandedCatalogIds=${state.expandedCatalogIds || []}
+                    .expandedCatalogIds=${Array.isArray(expandedCatalogIds) ? expandedCatalogIds : []}
                     @select-catalog=${this._onCatalogSelect}
                     @toggle-catalog=${this._onToggleCatalog}
                     @create-catalog=${this._onCreateCatalog}

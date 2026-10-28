@@ -4,6 +4,7 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const providersResource = createAsyncOp({
     name: 'rag/providers',
@@ -15,13 +16,24 @@ export const providersResource = createAsyncOp({
     extraInitial: { items: [], current: null },
     extraReducer: (state, event, events) => {
         if (event.type !== events.SUCCEEDED) return state;
-        const result = (event.payload as { result?: { items?: unknown; current_provider?: unknown } } | null)?.result;
-        if (!result || !Array.isArray(result.items)) {
+        const payload = event.payload;
+        const result = isPlainRecord(payload) ? payload.result : undefined;
+        if (!isPlainRecord(result) || !Array.isArray(result.items)) {
             throw new Error('rag/providers: result.items must be array');
         }
         if (typeof result.current_provider !== 'string') {
             throw new Error('rag/providers: result.current_provider must be string');
         }
-        return { ...state, items: result.items, current: result.current_provider };
+        const items: unknown[] = [];
+        for (const entry of result.items) {
+            items.push(entry);
+        }
+        return { ...state, items, current: result.current_provider };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'rag/providers': typeof providersResource;
+    }
+}

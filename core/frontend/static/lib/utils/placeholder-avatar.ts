@@ -29,6 +29,29 @@ export const PLACEHOLDER_AVATAR_COLLECTIONS = Object.freeze({
 
 export const DEFAULT_PLACEHOLDER_AVATAR_COLLECTION = 'memo';
 
+function collectionFiles(collection: string): readonly string[] {
+    switch (collection) {
+        case 'memo':
+            return PLACEHOLDER_AVATAR_COLLECTIONS.memo;
+        case 'notion':
+            return PLACEHOLDER_AVATAR_COLLECTIONS.notion;
+        case 'vibrent':
+            return PLACEHOLDER_AVATAR_COLLECTIONS.vibrent;
+        case 'toon':
+            return PLACEHOLDER_AVATAR_COLLECTIONS.toon;
+        case '3d':
+            return PLACEHOLDER_AVATAR_COLLECTIONS['3d'];
+        case 'bluey':
+            return PLACEHOLDER_AVATAR_COLLECTIONS.bluey;
+        case 'teams':
+            return PLACEHOLDER_AVATAR_COLLECTIONS.teams;
+        case 'upstream':
+            return PLACEHOLDER_AVATAR_COLLECTIONS.upstream;
+        default:
+            throw new Error(`getPlaceholderAvatarUrl: unknown collection "${collection}"`);
+    }
+}
+
 /**
  * Плейсхолдер для сущностей вне «личного профиля» (каналы, группы и т.д.):
  * не коллекция memo с мемодзи-людьми.
@@ -60,10 +83,7 @@ export function getPlaceholderAvatarUrl(seed: string, options: { collection?: st
     const collection = options.collection !== undefined && options.collection !== ''
         ? options.collection
         : DEFAULT_PLACEHOLDER_AVATAR_COLLECTION;
-    const files = (PLACEHOLDER_AVATAR_COLLECTIONS as Record<string, readonly string[]>)[collection];
-    if (!files) {
-        throw new Error(`getPlaceholderAvatarUrl: unknown collection "${collection}"`);
-    }
+    const files = collectionFiles(collection);
     const index = placeholderAvatarIndexFromSeed(seed, files.length);
     return `${PLACEHOLDER_AVATAR_CDN_BASE}${files[index]}`;
 }

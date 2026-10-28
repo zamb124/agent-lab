@@ -16,7 +16,7 @@ Agent Skill — запись каталога с progressive disclosure для `
 
 ## Модель
 
-- `AgentSkill` (`apps/flows/src/models/agent_skill.py`, таблица `agent_skills` базы flows, PK `agent_skill_row_id` = `{company_id}:{agent_skill_id}`): body, `tool_refs`, `depends_on`, references и assets (`FileRef`); импорт — формат agentskills.io `SKILL.md`.
+- `AgentSkill` (`apps/flows/src/models/agent_skill.py`, таблица `agent_skills` базы flows, PK `agent_skill_row_id` = `{company_id}:{agent_skill_id}`. `AgentSkill.skill_row_id_for_active_company(agent_skill_id) -> str` — тот же ключ из активной компании. Пустой `agent_skill_id` или компания — `ValueError` с текстом `agent_skill_id is required`. `:` — `ValueError` с текстом `agent_skill_id and company_id must not contain ':'`.): body, `tool_refs`, `depends_on`, references и assets (`FileRef`); импорт — формат agentskills.io `SKILL.md`.
 - Привязка — `NodeConfig.agent_skills: list[agent_skill_id]`; UI copy — «Skill», API/DB — `agent_skill_id`/`agent_skills`.
 - Seed платформы — `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` (`apps/flows/src/services/platform_assistant_skills.py`), для существующих компаний — идемпотентный `ensure-seed`.
 
@@ -34,7 +34,7 @@ Agent Skill — запись каталога с progressive disclosure для `
 ## UI
 
 - Маршрут `agent_skills` (`/flows/skills`) — Skill Library; фабрики `flows/agent_skills` (`transport: 'ws'`), `flows/agent_skill_import`, `flows/agent_skills_ensure_seed`; модалки `flows.agent_skill_create`/`_edit`/`_import`/`_picker`.
-- Секция Skills в `llm_node` — только в режиме Tools; chip открывает тот же `<flows-agent-skill-editor>`; иконка везде — `AGENT_SKILL_ICON` (`apps/flows/ui/_helpers/agent-skill-map.js`).
+- Секция Skills в `llm_node` — только в режиме Tools; chip открывает тот же `<flows-agent-skill-editor>`; иконка везде — `AGENT_SKILL_ICON` (`apps/flows/ui/_helpers/agent-skill-map.ts`).
 - Загрузка skill в Flow UI — блок `FlowUISkillActivity` (`show_skill_activity`, `apps/flows/src/services/flow_ui_cards.py`) в `conversation` при `show_skill_loads`.
 
 ## Запреты

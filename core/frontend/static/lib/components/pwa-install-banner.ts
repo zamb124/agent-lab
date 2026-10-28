@@ -7,7 +7,7 @@ import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
-import type { PwaState } from '../events/reducers/pwa.js';
+import { isPlainRecord } from '../events/payload.js';
 import type { SelectController } from '../events/select-controller.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import { platformStorageKey } from '../utils/storage-keys.js';
@@ -16,9 +16,16 @@ import './platform-icon.js';
 
 const DISMISS_KEY = platformStorageKey('core', 'pwa_banner_dismissed');
 
+function iosUserAgent(ua: string): boolean {
+    if (!/iPad|iPhone|iPod/.test(ua)) return false;
+    const host: unknown = window;
+    if (!isPlainRecord(host)) return true;
+    return !host.MSStream;
+}
+
 function _detectPlatform(): 'ios' | 'android' | 'desktop' {
     const ua = navigator.userAgent;
-    if (/iPad|iPhone|iPod/.test(ua) && !(window as Window & { MSStream?: unknown }).MSStream) return 'ios';
+    if (iosUserAgent(ua)) return 'ios';
     if (/android/i.test(ua)) return 'android';
     return 'desktop';
 }
@@ -28,9 +35,15 @@ function _isIOSSafari(): boolean {
     return /Safari/.test(ua) && /iPad|iPhone|iPod/.test(ua) && !/CriOS|FxiOS/.test(ua);
 }
 
+function navigatorStandalone(): boolean {
+    const nav: unknown = window.navigator;
+    if (!isPlainRecord(nav)) return false;
+    return nav.standalone === true;
+}
+
 function _isInstalled(): boolean {
-    return window.matchMedia('(display-mode: standalone)').matches
-        || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (window.matchMedia('(display-mode: standalone)').matches) return true;
+    return navigatorStandalone();
 }
 
 export class PWAInstallBanner extends PlatformElement {
@@ -78,8 +91,7 @@ export class PWAInstallBanner extends PlatformElement {
         this.platform = _detectPlatform();
         this._dismissed = !!storageGet(DISMISS_KEY);
         this._pwaSelect = this.select((s) => {
-            const pwa = s.pwa as PwaState;
-            return { installAvailable: pwa.installAvailable, installed: pwa.installed };
+            return { installAvailable: s.pwa.installAvailable, installed: s.pwa.installed };
         });
     }
 

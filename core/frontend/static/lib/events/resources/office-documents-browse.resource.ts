@@ -31,3 +31,11 @@ export const documentsSearchOp = createAsyncOp({
     commandType: 'office/documents/search_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/documents/search' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/catalogs_list': typeof catalogsListOp;
+        'office/documents_list': typeof documentsListOp;
+        'office/documents_search': typeof documentsSearchOp;
+    }
+}

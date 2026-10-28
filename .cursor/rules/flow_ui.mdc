@@ -25,7 +25,7 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 ```
 
 - Слои (зависимость только влево): `core/a2a` ← `core/flow_ui` ← `apps/flows` (emitter, channels, `flow_ui_tools`, api) ← `core/frontend/static/lib/flow-ui` + `core/clients/flow_ui_client.py` ← `apps/flows/ui` interface-editor. `core/a2a` не импортирует Flow UI; backend не импортирует frontend.
-- Wire-константы и модели — только `core/flow_ui/protocol.py` (`FlowUIActionMessage`, `FlowUIRender`, `FlowUINavigate`, `FlowUIEvent`, media types, `STATE_ARTIFACT_ID`, `UI_ARTIFACT_ID`, `CONVERSATION_SLOT_ID`); JS-зеркало — `flow-ui/protocol/constants.js`.
+- Wire-константы и модели — только `core/flow_ui/protocol.py` (`FlowUIActionMessage`, `FlowUIRender`, `FlowUINavigate`, `FlowUIEvent`, media types, `STATE_ARTIFACT_ID`, `UI_ARTIFACT_ID`, `CONVERSATION_SLOT_ID`); JS-зеркало — `flow-ui/protocol/constants.ts`.
 - Чат — документ с блоком `conversation` (`default_chat_document`); отдельного chat-протокола нет.
 - `BranchConfig.interface` — полный документ ветки или `None` (интерфейс flow); частичного merge нет. Ветка новой сессии — `params.metadata.branch`, иначе `default`; у живого контекста ветка неизменяема (другая — `ValueError`).
 
@@ -47,7 +47,7 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 4. Эффект capability — typed `PlatformEffect` через `apply_capability_platform_effects` (`core/flow_ui/effects.py`, проверка manifest и origin); runner не знает renderer.
 5. `GET /flows/api/v1/{flow_id}/interface` и `GET /flows/api/v1/embed/{embed_id}/interface` → `FlowInterfaceResponse` (`document`, `viewer`, `capabilities`, `flow_identity`, `look`); embed переопределяет только `EmbedConfig.conversation`, `start_page_id`, `assistant_title`, `look`.
 6. Редактор: `flow-ui/schema`, `flow-ui/templates` (`OffsetPage[FlowUITemplate]`), `flow-ui/assist` — `op_flows_flow_ui_*`; невалидный `page_id`/`block_id` запроса — 422; противоречивый ответ LLM — `FlowUIAssistOutputError` → `upstream`.
-7. Publish gate — `flow_ui_problems`/`assert_flow_ui_publishable` (`core/flow_ui/problems.py`, `FlowUILimits`); JS-зеркало — `documentProblems` в `interface-editor-domain.js`.
+7. Publish gate — `flow_ui_problems`/`assert_flow_ui_publishable` (`core/flow_ui/problems.py`, `FlowUILimits`); JS-зеркало — `documentProblems` в `interface-editor-domain.ts`.
 
 ### Frontend runtime
 
@@ -61,7 +61,7 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 
 ### Голос
 
-1. Единственная точка оркестрации голоса — `flow-ui/voice/coordinator.js`: после каждого A2A-кадра — `feedStreamTtsFromA2aResult` (озвучка только speakable Parts после проекции → `voice.mdc`), цель — `setStreamTtsTarget`/`clearStreamTtsTarget`; блоки второй transport не запускают.
+1. Единственная точка оркестрации голоса — `flow-ui/voice/coordinator.ts`: после каждого A2A-кадра — `feedStreamTtsFromA2aResult` (озвучка только speakable Parts после проекции → `voice.mdc`), цель — `setStreamTtsTarget`/`clearStreamTtsTarget`; блоки второй transport не запускают.
 2. Голос включён при `FlowInterfaceResponse.capabilities.voice` (`allow_voice` ∧ не share-viewer ∧ embed `look.voice_enabled`) и `flowUIVoiceSessionReady`; микрофон — в composer `conversation` (вне HITL) и в блоке `voice_input`; реплика и ответ идут `VoiceAgentBridge` тем же A2A-потоком, `<platform-voice-dictation>` в Flow UI не используется.
 3. Параметры сессии — `GET /flows/api/v1/flows/{flow_id}/voice-session-query?branch_id=` (`fetchFlowVoiceSessionQueryDict`); embed по `embed_id` — без query.
 4. Barge-in: новый ход (`text`, `ui-action`, голос) и cancel вызывают `stopStreamTtsPlayback()` до A2A-действия; новый голосовой ход завершает предыдущий voice Task, при активном несовместимом text Task — typed busy rejection.
@@ -69,19 +69,19 @@ runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один da
 ### Редактор интерфейса
 
 1. Холст — тот же `<platform-flow-ui editing>`: production-рендер, скрытые `visible_when` блоки видны, неизвестные пути остаются `{path}`; геометрия выделения — `editor/selection.js`; отдельного редакторского рендера нет.
-2. Состояние — slice `flows/interface_editor` (`interface-editor.resource.js`: `history{present, past, future}`, страница, выбор, viewport); доменная логика — `interface-editor-domain.js`; черновики — `platformStorageKey('flows','interface_drafts')`; snapshot-история внутри Lit-элемента запрещена.
+2. Состояние — slice `flows/interface_editor` (`interface-editor.resource.ts`: `history{present, past, future}`, страница, выбор, viewport); доменная логика — `interface-editor-domain.ts`; черновики — `platformStorageKey('flows','interface_drafts')`; snapshot-история внутри Lit-элемента запрещена.
 3. Publish: `documentProblems` (severity `error` блокирует) → документ сохраняется вместе с графом; ответ помощника — одна команда истории.
 
 ### Embed, share, HITL
 
-1. Один runtime для всех хостов. Embed (`TokenType.EMBED_SESSION`) стартует новую сессию; `EmbedConfig.presentation` `drawer`/`page`; сниппет `GET /frontend/api/embed/configs/{embed_id}/code` и autoload (`embed-flow-ui/flow-ui-embed-autoload.js`) читают одни `data-*`; после mount — `window.linnexFlowUI` и событие `linnex-flow-ui-mounted`; A2A allowlist embed — `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks` (с `contextId`), `SubscribeToTask`, `CancelTask`.
-2. Live share (`TokenType.FLOW_UI_SHARE`) — `FlowUIShareGrant` (`context_id`, `permission` `viewer`/`editor`, `redacted_paths`, `expires_at`, `revoked_at`) на существующий `context_id`, без новой беседы, snapshot и ветки; Check — OpenFGA `flow_ui_share` на каждом вызове; redaction — `apps/flows/src/a2a/share_task_redaction.py` вырезает пути из артефакта `state`; `ui-action` на скрытое поле — `assert_fields_outside_redacted`; ledger и проекция владельца не меняются.
+1. Один runtime для всех хостов. Embed (`TokenType.EMBED_SESSION`) стартует новую сессию; `EmbedConfig.presentation` `drawer`/`page`; сниппет `GET /frontend/api/embed/configs/{embed_id}/code` и autoload (`embed-flow-ui/flow-ui-embed-autoload.ts`) читают одни `data-*`; после mount — `window.linnexFlowUI` и событие `linnex-flow-ui-mounted`; A2A allowlist embed — `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks` (с `contextId`), `SubscribeToTask`, `CancelTask`. `EmbedConfig.list_unordered_window_for_company(company_id, *, limit, offset) -> list[EmbedConfig]` — окно виджетов компании, порядка нет.
+2. Live share (`TokenType.FLOW_UI_SHARE`) — `FlowUIShareGrant` (`context_id`, `permission` `viewer`/`editor`, `redacted_paths`, `expires_at`, `revoked_at`) на существующий `context_id`. `active_for_grant` читает грант, у которого нет `revoked_at` и `expires_at` ещё впереди: нет строки, отзыв или срок — `None`, пустой `grant_id` — `ValueError`. `FlowUIShareGrant.revoke_by_creator(*, grant_id, company_id, created_by_user_id) -> bool` — нет гранта, чужая компания, другой автор или уже отозванный дают `False`. Иначе пишется `revoked_at` и возвращается `True`. Без новой беседы, snapshot и ветки; Check — OpenFGA `flow_ui_share` на каждом вызове; redaction — `apps/flows/src/a2a/share_task_redaction.py` вырезает пути из артефакта `state`; `ui-action` на скрытое поле — `assert_fields_outside_redacted`; ledger и проекция владельца не меняются.
 3. HITL: оператор отвечает через `runtime/hitl-transport.js` (REST worktracker), пользователь — обычным A2A-ходом; лента читает артефакт `operator_reply`; режим — из parked Task (`metadata.platform_interrupt`) → `worktracker.mdc`.
 
 ### Безопасность
 
 1. `html` — только iframe `sandbox="allow-scripts"` без `allow-same-origin`, `srcdoc` с фиксированным `FLOW_UI_HTML_CSP`, мост `postMessage` и API `window.flowUi`; константы совпадают с фикстурой `html_sandbox.json`; ошибка скрипта автора показывается в блоке.
-2. Markdown санитизируется (`utils/markdown.js`); URL и файлы — только platform download URL (`flowUIMediaSrc`); `eval` данных state запрещён.
+2. Markdown санитизируется (`utils/markdown.ts`); URL и файлы — только platform download URL (`flowUIMediaSrc`); `eval` данных state запрещён.
 3. `ui-action` принимает только поля input/html-блоков документа и `ui_slots`; лимиты — `FlowUILimits` в настройках flows; auth, company, origin и grant проверяются до чтения документа; embed CORS — `EmbedDynamicCorsMiddleware`.
 
 ## Запреты

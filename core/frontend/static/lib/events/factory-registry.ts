@@ -30,6 +30,23 @@ export interface PlatformFactory {
     [key: string]: unknown;
 }
 
+/** `actions` фабрики: имя метода контроллера → полный тип события. */
+export type ActionMap = Readonly<Record<string, string>>;
+
+/**
+ * Типовой реестр имён: каждый модуль фабрик расширяет его module augmentation
+ * `declare module '@platform/lib/events/factory-registry.js' { interface PlatformFactoryRegistry { '<svc>/<entity>': typeof factory } }`.
+ * Helpers `use*` принимают только зарегистрированное имя своего вида и выводят из него тип контроллера;
+ * повтор имени с другим типом фабрики — ошибка компиляции.
+ */
+export interface PlatformFactoryRegistry {}
+
+export type PlatformFactoryName = keyof PlatformFactoryRegistry & string;
+
+export type FactoryNameOfKind<K extends FactoryKind> = {
+    [N in PlatformFactoryName]: PlatformFactoryRegistry[N] extends { kind: K } ? N : never;
+}[PlatformFactoryName];
+
 const _registry = new Map<string, PlatformFactory>();
 
 export function registerFactory<T extends PlatformFactory>(factory: T): T {
@@ -51,7 +68,17 @@ export function registerFactory<T extends PlatformFactory>(factory: T): T {
     return factory;
 }
 
-export function getFactory<T extends PlatformFactory = PlatformFactory>(name: string, expectedKind?: FactoryKind): T {
+function isRegistryFactory<N extends PlatformFactoryName>(
+    factory: unknown,
+    name: N,
+    expectedKind: PlatformFactoryRegistry[N]['kind'],
+): factory is PlatformFactoryRegistry[N] {
+    if (!factory || typeof factory !== 'object') return false;
+    if (!('name' in factory) || !('kind' in factory)) return false;
+    return factory.name === name && factory.kind === expectedKind;
+}
+
+export function getFactory<N extends PlatformFactoryName>(name: N, expectedKind: PlatformFactoryRegistry[N]['kind']): PlatformFactoryRegistry[N] {
     if (typeof name !== 'string' || name.length === 0) {
         throw new Error('getFactory: name required');
     }
@@ -59,10 +86,13 @@ export function getFactory<T extends PlatformFactory = PlatformFactory>(name: st
     if (!factory) {
         throw new Error(`getFactory: factory "${name}" not registered. Did you add it to static factories of your PlatformApp?`);
     }
-    if (expectedKind && factory.kind !== expectedKind) {
+    if (factory.kind !== expectedKind) {
         throw new Error(`getFactory: factory "${name}" has kind "${factory.kind}", expected "${expectedKind}"`);
     }
-    return factory as T;
+    if (!isRegistryFactory(factory, name, expectedKind)) {
+        throw new Error(`getFactory: factory "${name}" is not the registered instance`);
+    }
+    return factory;
 }
 
 export function hasFactory(name: string): boolean {

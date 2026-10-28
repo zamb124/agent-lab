@@ -59,7 +59,7 @@ async def design_system_preview(
     html_out = build_design_system_preview_html(
         component=trimmed,
         variant_id=resolved.id,
-        import_path=manifest.import_path,
+        import_url=manifest.import_url,
         props=resolved.props,
         title=manifest.title_ru,
     )

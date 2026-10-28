@@ -5,7 +5,6 @@
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import type { PwaState } from '../events/reducers/pwa.js';
 import type { SelectController } from '../events/select-controller.js';
 
 export class PlatformDeploymentVersion extends PlatformElement {
@@ -39,7 +38,7 @@ export class PlatformDeploymentVersion extends PlatformElement {
         super();
         this.baseUrl = '';
         this.footer = false;
-        this._versionSel = this.select((s) => (s.pwa as PwaState).deploymentVersion);
+        this._versionSel = this.select((s) => s.pwa.deploymentVersion);
     }
 
     override render(): TemplateResult {

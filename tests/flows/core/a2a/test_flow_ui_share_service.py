@@ -248,4 +248,6 @@ async def test_expired_grant_is_inactive_via_repository(
             flow_id=flow_id,
             context_id=context_id,
         )
-    assert await FlowUIShareGrant.get_active(expired.grant_id) is None
+    assert await FlowUIShareGrant.active_for_grant(expired.grant_id) is None
+    with pytest.raises(ValueError, match="grant_id is required"):
+        _ = await FlowUIShareGrant.active_for_grant("")

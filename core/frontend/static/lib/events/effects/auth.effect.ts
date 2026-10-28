@@ -19,6 +19,7 @@ import { CoreEvents } from '../contract.js';
 import { httpRequest, HttpError } from '../http.js';
 import { getPlatformApexOriginUrl } from '../../utils/company-url.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
+import { isPlainRecord, payloadFields, stringField } from '../payload.js';
 import type { AuthUser } from '../reducers/auth.js';
 
 export const CoreAuthEvents = Object.freeze({
@@ -45,18 +46,71 @@ export const CoreAuthEvents = Object.freeze({
     SERVICE_ATTRS_UPDATED:         'auth/service_attrs/updated',
 });
 
+function errorMessage(err: unknown): string {
+    if (err instanceof Error && err.message.length > 0) {
+        return err.message;
+    }
+    if (isPlainRecord(err) && typeof err.message === 'string' && err.message.length > 0) {
+        return err.message;
+    }
+    return String(err);
+}
+
+function isAuthMeResponse(value: unknown): value is AuthMeResponse {
+    if (!isPlainRecord(value) || typeof value.can_admin !== 'boolean') {
+        return false;
+    }
+    for (const key of ['user_id', 'name', 'email', 'avatar_url', 'company_id'] as const) {
+        const field = value[key];
+        if (field !== undefined && typeof field !== 'string') {
+            return false;
+        }
+    }
+    if (value.roles !== undefined && (!Array.isArray(value.roles) || value.roles.some((role) => typeof role !== 'string'))) {
+        return false;
+    }
+    return true;
+}
+
+function requireAuthUrl(value: unknown, field: 'auth_url' | 'redirect_url'): string {
+    const url = isPlainRecord(value) ? value[field] : undefined;
+    if (typeof url !== 'string' || url.length === 0) {
+        throw new Error(`no ${field}`);
+    }
+    return url;
+}
+
+function providerItems(value: unknown): { name: string; display_name: string; auth_url: string }[] {
+    if (!isPlainRecord(value) || !Array.isArray(value.providers) || value.providers.length === 0) {
+        throw new Error('empty providers list');
+    }
+    return value.providers.map((raw) => {
+        if (!isPlainRecord(raw) || typeof raw.name !== 'string' || raw.name.length === 0) {
+            throw new Error('provider item.name must be a non-empty string');
+        }
+        return {
+            name: raw.name,
+            display_name: typeof raw.display_name === 'string' ? raw.display_name : raw.name,
+            auth_url: typeof raw.auth_url === 'string' ? raw.auth_url : '',
+        };
+    });
+}
+
 interface AuthMeResponse extends Record<string, unknown> {
     user_id?: string; name?: string; email?: string; avatar_url?: string;
     company_id?: string; roles?: string[]; can_admin?: boolean;
 }
 
 export function createAuthEffect({ baseUrl }: { baseUrl?: string }): (event: PlatformEvent, ctx: EffectCtx) => Promise<void> {
-    const base = baseUrl || '';
+    const base = baseUrl === undefined ? '' : baseUrl;
 
     async function fetchCurrentUser(): Promise<AuthUser> {
-        const data = await httpRequest({ method: 'GET', url: `${base}/api/auth/me` }) as AuthMeResponse;
-        if (typeof data.can_admin !== 'boolean') {
+        const data = await httpRequest({ method: 'GET', url: `${base}/api/auth/me` });
+        if (!isPlainRecord(data) || typeof data.can_admin !== 'boolean') {
             throw new Error('auth/me: can_admin must be a boolean');
+        }
+        if (!isAuthMeResponse(data)) {
+            throw new Error('auth/me: response fields must be strings');
         }
         return {
             id: data.user_id,
@@ -65,10 +119,10 @@ export function createAuthEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             email: data.email,
             avatar_url: data.avatar_url,
             company_id: data.company_id,
-            roles: data.roles || [],
+            roles: Array.isArray(data.roles) ? data.roles : [],
             canAdmin: data.can_admin,
             raw: data,
-        } as unknown as AuthUser;
+        };
     }
 
     return async function authEffect(event: PlatformEvent, ctx: EffectCtx): Promise<void> {
@@ -82,7 +136,7 @@ export function createAuthEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                         ctx.dispatch(CoreEvents.AUTH_UNAUTHORIZED, { reason: 'me_returned_401' }, { causation_id: event.id, source: 'http' });
                         return;
                     }
-                    ctx.dispatch(CoreEvents.AUTH_USER_FAILED, { message: String((err as Error).message || err) }, { causation_id: event.id, source: 'http' });
+                    ctx.dispatch(CoreEvents.AUTH_USER_FAILED, { message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }
@@ -99,18 +153,13 @@ export function createAuthEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                         ctx.dispatch(CoreEvents.AUTH_ASSUMED_ANONYMOUS, null, { causation_id: event.id, source: 'http' });
                         return;
                     }
-                    console.warn('[auth.effect] silent session probe failed', err);
-                    ctx.dispatch(CoreEvents.AUTH_ASSUMED_ANONYMOUS, null, { causation_id: event.id, source: 'http' });
+                    throw err;
                 }
                 return;
             }
 
             case CoreEvents.AUTH_LOGOUT_REQUESTED: {
-                try {
-                    await httpRequest({ method: 'POST', url: `${base}/api/auth/logout` });
-                } catch (err) {
-                    console.warn('[auth.effect] logout HTTP failed', err);
-                }
+                await httpRequest({ method: 'POST', url: `${base}/api/auth/logout` });
                 ctx.dispatch(CoreEvents.AUTH_LOGGED_OUT, null, { causation_id: event.id, source: 'http' });
                 if (typeof globalThis.window !== 'undefined' && globalThis.window.location) {
                     globalThis.window.location.href = getPlatformApexOriginUrl();
@@ -119,53 +168,37 @@ export function createAuthEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
 
             case CoreEvents.AUTH_COMPANY_SWITCH_REQUESTED: {
-                const companyId = ((event.payload ?? {}) as { company_id?: unknown }).company_id;
-                if (typeof companyId !== 'string' || !companyId) throw new Error('auth.effect: company_id required');
+                const companyId = stringField(payloadFields(event).company_id);
+                if (companyId === null) throw new Error('auth.effect: company_id required');
                 await httpRequest({ method: 'POST', url: `${base}/api/auth/switch-company`, body: { company_id: companyId } });
                 ctx.dispatch(CoreEvents.AUTH_COMPANY_SWITCHED, { company_id: companyId }, { causation_id: event.id, source: 'http' });
                 return;
             }
 
             case CoreAuthEvents.OAUTH_START_REQUESTED: {
-                const { provider, return_path: returnPath } = (event.payload ?? {}) as { provider?: unknown; return_path?: unknown };
-                if (typeof provider !== 'string' || !provider) throw new Error('auth.effect: provider required');
-                const path = typeof returnPath === 'string' && returnPath
+                const fields = payloadFields(event);
+                const provider = stringField(fields.provider);
+                const returnPath = stringField(fields.return_path);
+                if (provider === null) throw new Error('auth.effect: provider required');
+                const path = returnPath !== null
                     ? `${base}/api/auth/login/${encodeURIComponent(provider)}?return_path=${encodeURIComponent(returnPath)}`
                     : `${base}/api/auth/login/${encodeURIComponent(provider)}`;
                 try {
-                    const r = await httpRequest({ method: 'GET', url: path }) as { auth_url?: string };
-                    if (!r.auth_url) throw new Error('no auth_url');
-                    ctx.dispatch(CoreAuthEvents.OAUTH_REDIRECTED, { provider, auth_url: r.auth_url }, { causation_id: event.id, source: 'http' });
-                    window.location.href = r.auth_url!;
+                    const authUrl = requireAuthUrl(await httpRequest({ method: 'GET', url: path }), 'auth_url');
+                    ctx.dispatch(CoreAuthEvents.OAUTH_REDIRECTED, { provider, auth_url: authUrl }, { causation_id: event.id, source: 'http' });
+                    window.location.href = authUrl;
                 } catch (err) {
-                    ctx.dispatch(CoreAuthEvents.OAUTH_FAILED, { provider, message: String(err && (err as Error).message ? (err as Error).message : err) }, { causation_id: event.id, source: 'http' });
+                    ctx.dispatch(CoreAuthEvents.OAUTH_FAILED, { provider, message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }
 
             case CoreAuthEvents.PROVIDERS_LOAD_REQUESTED: {
                 try {
-                    const r = await httpRequest({ method: 'GET', url: `${base}/api/auth/providers` }) as { providers?: unknown };
-                    if (!Array.isArray(r.providers) || r.providers.length === 0) {
-                        throw new Error('empty providers list');
-                    }
-                    const items = (r.providers as unknown[]).map((raw) => {
-                        if (!raw || typeof raw !== 'object') {
-                            throw new Error('provider item must be an object');
-                        }
-                        const item = raw as { name?: unknown; display_name?: unknown; auth_url?: unknown };
-                        if (typeof item.name !== 'string' || item.name.length === 0) {
-                            throw new Error('provider item.name must be a non-empty string');
-                        }
-                        return {
-                            name: item.name,
-                            display_name: typeof item.display_name === 'string' ? item.display_name : item.name,
-                            auth_url: typeof item.auth_url === 'string' ? item.auth_url : '',
-                        };
-                    });
+                    const items = providerItems(await httpRequest({ method: 'GET', url: `${base}/api/auth/providers` }));
                     ctx.dispatch(CoreAuthEvents.PROVIDERS_LOADED, { items }, { causation_id: event.id, source: 'http' });
                 } catch (err) {
-                    ctx.dispatch(CoreAuthEvents.PROVIDERS_LOAD_FAILED, { message: String(err && (err as Error).message ? (err as Error).message : err) }, { causation_id: event.id, source: 'http' });
+                    ctx.dispatch(CoreAuthEvents.PROVIDERS_LOAD_FAILED, { message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }
@@ -177,48 +210,54 @@ export function createAuthEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
 
             case CoreAuthEvents.DEMO_LOGIN_REQUESTED: {
-                const { email, password } = (event.payload ?? {}) as { email?: unknown; password?: unknown };
-                if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) throw new Error('auth.effect: email and password required');
+                const fields = payloadFields(event);
+                const email = stringField(fields.email);
+                const password = stringField(fields.password);
+                if (email === null || password === null) throw new Error('auth.effect: email and password required');
                 try {
-                    const r = await httpRequest({ method: 'POST', url: `${base}/api/auth/login/demo`, body: { email, password } }) as { redirect_url?: string };
-                    if (!r.redirect_url) throw new Error('no redirect_url');
-                    ctx.dispatch(CoreAuthEvents.DEMO_LOGIN_SUCCEEDED, { redirect_url: r.redirect_url }, { causation_id: event.id, source: 'http' });
-                    window.location.href = r.redirect_url!;
+                    const redirectUrl = requireAuthUrl(
+                        await httpRequest({ method: 'POST', url: `${base}/api/auth/login/demo`, body: { email, password } }),
+                        'redirect_url',
+                    );
+                    ctx.dispatch(CoreAuthEvents.DEMO_LOGIN_SUCCEEDED, { redirect_url: redirectUrl }, { causation_id: event.id, source: 'http' });
+                    window.location.href = redirectUrl;
                 } catch (err) {
-                    ctx.dispatch(CoreAuthEvents.DEMO_LOGIN_FAILED, { message: String(err && (err as Error).message ? (err as Error).message : err) }, { causation_id: event.id, source: 'http' });
+                    ctx.dispatch(CoreAuthEvents.DEMO_LOGIN_FAILED, { message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }
 
             case CoreAuthEvents.PROFILE_UPDATE_REQUESTED: {
-                const updates = ((event.payload ?? {}) as { updates?: unknown }).updates;
-                if (!updates || typeof updates !== 'object') throw new Error('auth.effect: updates required');
+                const updates = payloadFields(event).updates;
+                if (!isPlainRecord(updates)) throw new Error('auth.effect: updates required');
                 try {
-                    const r = await httpRequest({ method: 'PUT', url: `${base}/api/auth/me`, body: updates as Record<string, unknown> });
+                    const r = await httpRequest({ method: 'PUT', url: `${base}/api/auth/me`, body: updates });
                     ctx.dispatch(CoreAuthEvents.PROFILE_UPDATED, { user: r }, { causation_id: event.id, source: 'http' });
                     ctx.dispatch(CoreAuthEvents.USER_LOAD_REQUESTED, null, { causation_id: event.id });
                 } catch (err) {
-                    ctx.dispatch(CoreAuthEvents.PROFILE_UPDATE_FAILED, { message: String(err && (err as Error).message ? (err as Error).message : err) }, { causation_id: event.id, source: 'http' });
+                    ctx.dispatch(CoreAuthEvents.PROFILE_UPDATE_FAILED, { message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }
 
             case CoreAuthEvents.SERVICE_ATTRS_LOAD_REQUESTED: {
-                const service = ((event.payload ?? {}) as { service?: unknown }).service;
-                if (typeof service !== 'string' || !service) throw new Error('auth.effect: service required');
+                const service = stringField(payloadFields(event).service);
+                if (service === null) throw new Error('auth.effect: service required');
                 try {
                     const attrs = await httpRequest({ method: 'GET', url: `${base}/api/auth/me/attrs/${encodeURIComponent(service)}` });
                     ctx.dispatch(CoreAuthEvents.SERVICE_ATTRS_LOADED, { service, attrs }, { causation_id: event.id, source: 'http' });
                 } catch (err) {
-                    ctx.dispatch(CoreAuthEvents.SERVICE_ATTRS_LOAD_FAILED, { service, message: String(err && (err as Error).message ? (err as Error).message : err) }, { causation_id: event.id, source: 'http' });
+                    ctx.dispatch(CoreAuthEvents.SERVICE_ATTRS_LOAD_FAILED, { service, message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }
 
             case CoreAuthEvents.SERVICE_ATTRS_UPDATE_REQUESTED: {
-                const { service, attrs } = (event.payload ?? {}) as { service?: unknown; attrs?: unknown };
-                if (typeof service !== 'string' || !service || !attrs || typeof attrs !== 'object') throw new Error('auth.effect: service and attrs required');
-                const r = await httpRequest({ method: 'PUT', url: `${base}/api/auth/me/attrs/${encodeURIComponent(service)}`, body: attrs as Record<string, unknown> });
+                const fields = payloadFields(event);
+                const service = stringField(fields.service);
+                const attrs = fields.attrs;
+                if (service === null || !isPlainRecord(attrs)) throw new Error('auth.effect: service and attrs required');
+                const r = await httpRequest({ method: 'PUT', url: `${base}/api/auth/me/attrs/${encodeURIComponent(service)}`, body: attrs });
                 ctx.dispatch(CoreAuthEvents.SERVICE_ATTRS_UPDATED, { service, attrs: r }, { causation_id: event.id, source: 'http' });
                 return;
             }

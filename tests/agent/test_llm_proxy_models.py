@@ -84,7 +84,7 @@ async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service(
     try:
         model_ids = await read_agent_llm_model_ids(di.llm_models_service)
     finally:
-        stored = await AIModelRecord.get_provider_model("openrouter", model_id)
+        stored = await AIModelRecord.by_provider_and_model_id("openrouter", model_id)
         if stored is not None:
             _ = await stored.delete()
 

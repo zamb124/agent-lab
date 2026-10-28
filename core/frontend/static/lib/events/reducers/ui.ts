@@ -9,6 +9,7 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent } from '../contract.js';
+import { payloadFields } from '../payload.js';
 
 export interface UiState {
     sidebar: { mobileOpen: boolean; collapsed: boolean };
@@ -29,17 +30,17 @@ export function uiReducer(state: UiState = initialUiState, event: PlatformEvent)
         case CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED:
             return { ...state, sidebar: { ...state.sidebar, mobileOpen: false } };
         case CoreEvents.UI_SIDEBAR_MOBILE_CHANGED: {
-            const open = !!((event.payload || {}) as { open?: unknown }).open;
+            const open = !!(payloadFields(event)).open;
             if (state.sidebar.mobileOpen === open) return state;
             return { ...state, sidebar: { ...state.sidebar, mobileOpen: open } };
         }
         case CoreEvents.UI_SIDEBAR_COLLAPSE_CHANGED: {
-            const collapsed = !!((event.payload || {}) as { collapsed?: unknown }).collapsed;
+            const collapsed = !!(payloadFields(event)).collapsed;
             if (state.sidebar.collapsed === collapsed) return state;
             return { ...state, sidebar: { ...state.sidebar, collapsed } };
         }
         case CoreEvents.UI_NAMESPACE_CHANGED: {
-            const p = (event.payload || {}) as { company_id?: unknown; selection?: unknown };
+            const p = payloadFields(event);
             const cid = p.company_id;
             const selection = p.selection;
             if (typeof cid !== 'string' || !cid || (selection !== 'all' && typeof selection !== 'string')) return state;

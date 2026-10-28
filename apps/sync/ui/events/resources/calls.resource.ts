@@ -18,6 +18,19 @@ import {
 import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { SyncCallUiSlice } from '../sync.types.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function callRecord(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
+
+function mergeCall(base: Record<string, any> | null, patch: Record<string, unknown>): Record<string, any> {
+    const next: Record<string, any> = base === null ? {} : { ...base };
+    for (const [key, value] of Object.entries(patch)) {
+        next[key] = value;
+    }
+    return next;
+}
 
 /**
  * У `silent: true` фабрика не шлёт errorToastKey; показываем текст ошибки
@@ -194,19 +207,19 @@ export const callLinksScheduledOp = createAsyncOp({
     extraEvents: {
         ITEM_REMOVED: 'item_removed',
     },
-    extraReducer: (state, event, events) => {
-        const s = state as AsyncOpSlice;
-        const page = s.lastResult as Record<string, any> | Record<string, any>[] | null;
+    extraReducer: (state: AsyncOpSlice, event, events) => {
+        const page = state.lastResult;
         const items = Array.isArray(page)
             ? page
-            : (page && Array.isArray(page.items) ? page.items : null);
+            : (isPlainRecord(page) && Array.isArray(page.items) ? page.items : null);
         if (items === null) {
             return state;
         }
 
         if (event.type === events.ITEM_REMOVED) {
-            const linkToken = event.payload && typeof (event.payload as Record<string, any>).link_token === 'string'
-                ? (event.payload as Record<string, any>).link_token
+            const removed = callRecord(event.payload);
+            const linkToken = removed !== null && typeof removed.link_token === 'string'
+                ? removed.link_token
                 : null;
             if (linkToken === null) {
                 return state;
@@ -217,6 +230,9 @@ export const callLinksScheduledOp = createAsyncOp({
             }
             if (Array.isArray(page)) {
                 return { ...state, lastResult: nextItems };
+            }
+            if (!isPlainRecord(page)) {
+                return state;
             }
             return {
                 ...state,
@@ -230,8 +246,9 @@ export const callLinksScheduledOp = createAsyncOp({
         ) {
             return state;
         }
-        const result = (event.payload as Record<string, any> | null)?.result;
-        if (!result || typeof result !== 'object' || typeof result.link_token !== 'string') {
+        const payload = callRecord(event.payload);
+        const result = payload !== null ? payload.result : null;
+        if (!isPlainRecord(result) || typeof result.link_token !== 'string') {
             return state;
         }
         const idx = items.findIndex((row) => row && row.link_token === result.link_token);
@@ -240,6 +257,9 @@ export const callLinksScheduledOp = createAsyncOp({
             : items.map((row, i) => (i === idx ? result : row));
         if (Array.isArray(page)) {
             return { ...state, lastResult: nextItems };
+        }
+        if (!isPlainRecord(page)) {
+            return state;
         }
         return {
             ...state,
@@ -277,8 +297,9 @@ export const callLinkRemoveOp = createAsyncOp({
     commandType: 'sync/calls/links_remove_requested',
     restMirror: { method: 'DELETE', path: '/sync/api/v1/calls/links/:link_token' },
     onSuccess: (ctx, _result, event) => {
-        const linkToken = event.payload && typeof (event.payload as Record<string, any>).link_token === 'string'
-            ? (event.payload as Record<string, any>).link_token
+        const removed = callRecord(event.payload);
+        const linkToken = removed !== null && typeof removed.link_token === 'string'
+            ? removed.link_token
             : null;
         if (linkToken === null) {
             throw new Error('callLinkRemoveOp.onSuccess: payload.link_token required');
@@ -337,11 +358,11 @@ export const callUiResource = createSlice({
         dismissIncoming: 'incoming_dismissed',
         setRecordingStatus: 'recording_status_set',
     },
-    extraReducer: (state, event) => {
-        const s = state as SyncCallUiSlice;
+    extraReducer: (state: SyncCallUiSlice, event) => {
+        const s = state;
         switch (event.type) {
             case 'sync/call/incoming': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.call_id !== 'string') return state;
                 const callType = typeof p.call_type === 'string' ? p.call_type : 'video';
                 const channelId = typeof p.channel_id === 'string' ? p.channel_id : null;
@@ -368,7 +389,7 @@ export const callUiResource = createSlice({
                 };
             }
             case 'sync/call_ui/overlay_opened': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.call_id !== 'string') return state;
                 const tracker = { ...s.activeCallChannels };
                 const ch = typeof p.channel_id === 'string' ? p.channel_id : '';
@@ -383,10 +404,9 @@ export const callUiResource = createSlice({
                     && typeof s.activeCall.call_id === 'string'
                     && s.activeCall.call_id === p.call_id;
                 const overlayMinimized = isSameCallId ? s.overlayMinimized : false;
-                const activeCall =
-                    isSameCallId && s.activeCall
-                        ? { ...s.activeCall, ...p }
-                        : { ...p };
+                const activeCall = isSameCallId && s.activeCall
+                    ? mergeCall(s.activeCall, p)
+                    : mergeCall(null, p);
                 return {
                     ...s,
                     activeCall,
@@ -399,7 +419,7 @@ export const callUiResource = createSlice({
                 };
             }
             case 'sync/call_ui/overlay_minimized': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 let guard = 0;
                 if (p !== null && typeof p === 'object' && typeof p.banner_hangup_guard_until === 'number') {
                     guard = p.banner_hangup_guard_until;
@@ -419,14 +439,14 @@ export const callUiResource = createSlice({
                     recordingError: null,
                 };
             case 'sync/call_ui/overlay_chat_set': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.open !== 'boolean') return state;
                 return { ...s, overlayChatOpen: p.open };
             }
             case 'sync/call_ui/incoming_dismissed':
                 return { ...s, incomingCall: null };
             case 'sync/call_ui/recording_status_set': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.status !== 'string') return state;
                 return {
                     ...s,
@@ -435,7 +455,7 @@ export const callUiResource = createSlice({
                 };
             }
             case 'sync/call/accepted': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.call_id !== 'string') return state;
                 const clearIncoming =
                     s.incomingCall && s.incomingCall.call_id === p.call_id
@@ -444,7 +464,7 @@ export const callUiResource = createSlice({
                 return { ...s, incomingCall: clearIncoming };
             }
             case 'sync/call/declined': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.call_id !== 'string') return state;
                 const clearIncoming =
                     s.incomingCall && s.incomingCall.call_id === p.call_id
@@ -453,7 +473,7 @@ export const callUiResource = createSlice({
                 return { ...s, incomingCall: clearIncoming };
             }
             case 'sync/call/participant_joined': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.call_id !== 'string' || typeof p.user_id !== 'string') {
                     return state;
                 }
@@ -470,7 +490,7 @@ export const callUiResource = createSlice({
                 };
             }
             case 'sync/call/participant_left': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.call_id !== 'string' || typeof p.user_id !== 'string') {
                     return state;
                 }
@@ -488,7 +508,7 @@ export const callUiResource = createSlice({
                 return { ...s, callParticipants: Object.freeze(nextMap) };
             }
             case 'sync/call/signaled': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.call_id !== 'string') return state;
                 return {
                     ...s,
@@ -503,7 +523,7 @@ export const callUiResource = createSlice({
                 };
             }
             case 'sync/call/ended': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || typeof p.call_id !== 'string') return state;
                 const tracker = { ...s.activeCallChannels };
                 if (typeof p.channel_id === 'string') delete tracker[p.channel_id];
@@ -520,7 +540,7 @@ export const callUiResource = createSlice({
                     activeCallChannels: Object.freeze(tracker),
                     callParticipants: Object.freeze(participants),
                     lastSignal:
-                        s.lastSignal && (s.lastSignal as Record<string, unknown>).call_id === p.call_id
+                        isPlainRecord(s.lastSignal) && s.lastSignal.call_id === p.call_id
                             ? null
                             : s.lastSignal,
                 };
@@ -530,7 +550,7 @@ export const callUiResource = createSlice({
             case 'sync/call/recording_stopped':
                 return { ...s, recordingStatus: 'idle', recordingError: null };
             case 'sync/call/recording_failed': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 return {
                     ...s,
                     recordingStatus: 'failed',
@@ -538,7 +558,7 @@ export const callUiResource = createSlice({
                 };
             }
             case 'sync/call/admin_changed': {
-                const p = event.payload as Record<string, any> | null;
+                const p = callRecord(event.payload);
                 if (!p || !s.activeCall || s.activeCall.call_id !== p.call_id) return state;
                 const newAdmin = (typeof p.created_by_user_id === 'string' && p.created_by_user_id !== '')
                     ? p.created_by_user_id
@@ -566,8 +586,8 @@ export const callJoinInfoOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/join/:link_token' },
     request: async ({ payload }) => {
         const { httpRequest } = await import('@platform/lib/events/http.js');
-        const pl = payload as Record<string, any> | null;
-        if (!pl || typeof pl.link_token !== 'string' || pl.link_token === '') {
+        const pl = callRecord(payload);
+        if (pl === null || typeof pl.link_token !== 'string' || pl.link_token === '') {
             throw new Error('callJoinInfoOp: payload.link_token (non-empty string) required');
         }
         const token = encodeURIComponent(pl.link_token);
@@ -586,15 +606,13 @@ export const callJoinAcceptOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/join/:link_token' },
     request: async ({ payload }) => {
         const { httpRequest } = await import('@platform/lib/events/http.js');
-        const pl = payload as Record<string, any> | null;
-        if (!pl || typeof pl.link_token !== 'string' || pl.link_token === '') {
+        const pl = callRecord(payload);
+        if (pl === null || typeof pl.link_token !== 'string' || pl.link_token === '') {
             throw new Error('callJoinAcceptOp: payload.link_token (non-empty string) required');
         }
         const token = encodeURIComponent(pl.link_token);
-        const body = pl.body !== null && pl.body !== undefined && typeof pl.body === 'object'
-            ? pl.body
-            : null;
-        if (body !== null) {
+        const body = pl.body;
+        if (isPlainRecord(body) || Array.isArray(body)) {
             return httpRequest({
                 method: 'POST',
                 url: `/sync/api/v1/calls/join/${token}`,
@@ -607,3 +625,28 @@ export const callJoinAcceptOp = createAsyncOp({
         });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/call_token': typeof callTokenOp;
+        'sync/call_status': typeof callStatusOp;
+        'sync/call_turn': typeof callTurnOp;
+        'sync/call_recordings_list': typeof callRecordingsListOp;
+        'sync/calls_invite': typeof callInviteOp;
+        'sync/calls_accept': typeof callAcceptOp;
+        'sync/calls_decline': typeof callDeclineOp;
+        'sync/calls_hangup': typeof callHangupOp;
+        'sync/calls_recording_start': typeof callRecordingStartOp;
+        'sync/calls_recording_stop': typeof callRecordingStopOp;
+        'sync/calls_admin_transfer': typeof callAdminTransferOp;
+        'sync/calls_signal': typeof callSignalOp;
+        'sync/channel_create_adhoc_call': typeof channelCreateAdhocCallOp;
+        'sync/call_links_scheduled': typeof callLinksScheduledOp;
+        'sync/call_link_create': typeof callLinkCreateOp;
+        'sync/call_link_update': typeof callLinkUpdateOp;
+        'sync/call_link_remove': typeof callLinkRemoveOp;
+        'sync/call_ui': typeof callUiResource;
+        'sync/call_join_info': typeof callJoinInfoOp;
+        'sync/call_join_accept': typeof callJoinAcceptOp;
+    }
+}

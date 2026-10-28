@@ -32,7 +32,8 @@ export const CONTENT_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Obj
     image(block, ctx) {
         const src = mediaSrc(ctx, block.url);
         if (src === null) return nothing;
-        return html`<img class="fu-media" src=${src} alt=${text(ctx, block.alt) ?? ''} loading="lazy">`;
+        const alt = text(ctx, block.alt);
+        return html`<img class="fu-media" src=${src} alt=${alt === null ? '' : alt} loading="lazy">`;
     },
 
     video(block, ctx) {

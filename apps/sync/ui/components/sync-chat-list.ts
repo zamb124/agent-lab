@@ -23,8 +23,7 @@
  *   - `'page'`: полноэкранный мобильный режим.
  */
 
-import type { SyncCallUiController, SyncChatUiController, SyncChannelsController} from '../events/sync.types.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -234,20 +233,20 @@ export class SyncChatList extends PlatformElement {
             }
         `,
     ];
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
     private _members: ResourceController;
-    private _chatUi: SyncChatUiController;
-    private _callUi: SyncCallUiController;
+    private _chatUi: ControllerFor<'sync/chat_ui'>;
+    private _callUi: ControllerFor<'sync/call_ui'>;
     private _adhoc: OpController;
     private _callInvite: OpController;
 
     constructor() {
         super();
         this.mode = 'sidebar';
-        this._channels = this.useResource('sync/channels', { autoload: true }) as SyncChannelsController;
+        this._channels = this.useResource('sync/channels', { autoload: true });
         this._members = this.useResource('sync/company_members', { autoload: true });
-        this._chatUi = this.useSlice('sync/chat_ui') as SyncChatUiController;
-        this._callUi = this.useSlice('sync/call_ui') as SyncCallUiController;
+        this._chatUi = this.useSlice('sync/chat_ui');
+        this._callUi = this.useSlice('sync/call_ui');
         this._adhoc = this.useOp('sync/channel_create_adhoc_call');
         this._callInvite = this.useOp('sync/calls_invite');
     }

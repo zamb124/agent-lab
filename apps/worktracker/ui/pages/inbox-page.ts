@@ -8,6 +8,8 @@ import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { WorktrackerUiEvents } from '../events/types.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
@@ -17,6 +19,35 @@ import '../components/worktracker-icon-action.js';
 import '../components/worktracker-list-section.js';
 import '../components/worktracker-page-header.js';
 import '@platform/lib/components/platform-icon.js';
+
+function eventRecord(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
+
+function workItemLike(value: unknown): WorkItemLike | null {
+    if (!isPlainRecord(value)) return null;
+    const workItemId = value.work_item_id;
+    if (typeof workItemId !== 'string' || workItemId.length === 0) return null;
+    const item: WorkItemLike = {};
+    for (const [key, field] of Object.entries(value)) item[key] = field;
+    item.work_item_id = workItemId;
+    return item;
+}
+
+function workItemList(value: unknown): WorkItemLike[] {
+    if (!Array.isArray(value)) {
+        throw new Error('WorktrackerInboxPage: list_loaded payload.items required');
+    }
+    const items: WorkItemLike[] = [];
+    for (const entry of value) {
+        const item = workItemLike(entry);
+        if (item === null) {
+            throw new Error('WorktrackerInboxPage: list item work_item_id required');
+        }
+        items.push(item);
+    }
+    return items;
+}
 
 export class WorktrackerInboxPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
@@ -28,7 +59,7 @@ export class WorktrackerInboxPage extends PlatformPage {
     private _reloadGeneration: number;
     private _workItems: ResourceController;
     private _countsOp: OpController;
-    private _userSel: SelectController<unknown>;
+    private _userSel: SelectController<AuthUser | null>;
 
 
     static override properties = {
@@ -67,31 +98,33 @@ export class WorktrackerInboxPage extends PlatformPage {
         this._reloadGeneration = 0;
         this._workItems = this.useResource('worktracker/work_items');
         this._countsOp = this.useOp('worktracker/work_item_counts');
-        this._userSel = this.select((s) => (s.auth as Record<string, unknown>).user);
+        this._userSel = this.select((s) => s.auth.user);
         this.useEvent(CoreEvents.AUTH_USER_LOADED, () => {
             this._reload();
         });
         this.useEvent(WorktrackerUiEvents.DETAIL_OPEN, (event: PlatformEvent) => {
-            const payload = event.payload as { work_item_id?: unknown } | null;
-            if (!payload || typeof payload.work_item_id !== 'string') {
+            const payload = eventRecord(event.payload);
+            const workItemId = payload === null ? undefined : payload.work_item_id;
+            if (typeof workItemId !== 'string') {
                 throw new Error('WorktrackerInboxPage: detail_open requires work_item_id');
             }
-            this._selectedWorkItemId = payload.work_item_id;
+            this._selectedWorkItemId = workItemId;
         });
         this.useEvent(CoreEvents.PLATFORM_WORK_ITEM_DETAIL_OPEN_REQUESTED, (event: PlatformEvent) => {
-            const payload = event.payload as { work_item_id?: unknown } | null;
-            if (!payload || typeof payload.work_item_id !== 'string') {
+            const payload = eventRecord(event.payload);
+            const workItemId = payload === null ? undefined : payload.work_item_id;
+            if (typeof workItemId !== 'string') {
                 throw new Error('WorktrackerInboxPage: work_item_detail_open requires work_item_id');
             }
-            this._selectedWorkItemId = payload.work_item_id;
+            this._selectedWorkItemId = workItemId;
         });
         this.useEvent(WorktrackerUiEvents.DETAIL_CLOSE, () => {
             this._selectedWorkItemId = '';
         });
         this.useEvent(this._workItems.resource.events.CREATED, (event: PlatformEvent) => {
-            const payload = event.payload as { item?: WorkItemLike } | null;
-            const item = payload && payload.item;
-            if (!item || typeof item.work_item_id !== 'string') {
+            const payload = eventRecord(event.payload);
+            const item = payload === null ? null : workItemLike(payload.item);
+            if (item === null) {
                 throw new Error('WorktrackerInboxPage: CREATED payload.item.work_item_id required');
             }
             this._mergeCreatedItem(item);
@@ -100,8 +133,7 @@ export class WorktrackerInboxPage extends PlatformPage {
 
     override connectedCallback() {
         super.connectedCallback();
-        const user = this._userSel.value as { user_id?: unknown } | null;
-        if (user && typeof user.user_id === 'string' && user.user_id.length > 0) {
+        if (this._currentUserId().length > 0) {
             void this._reload();
         }
     }
@@ -120,39 +152,46 @@ export class WorktrackerInboxPage extends PlatformPage {
                     return;
                 }
                 cleanup();
-                const payload = event.payload as { items?: WorkItemLike[] } | null;
-                if (!payload || !Array.isArray(payload.items)) {
+                const payload = eventRecord(event.payload);
+                if (payload === null || !Array.isArray(payload.items)) {
                     reject(new Error('WorktrackerInboxPage: list_loaded payload.items required'));
                     return;
                 }
-                resolve(payload.items);
+                resolve(workItemList(payload.items));
             });
             unsubFailed = this.bus.subscribeType(events.LIST_FAILED, (event: PlatformEvent) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) {
                     return;
                 }
                 cleanup();
-                const payload = event.payload as { message?: unknown } | null;
-                const message = payload && typeof payload.message === 'string' ? payload.message : 'work items list failed';
+                const payload = eventRecord(event.payload);
+                const message = payload !== null && typeof payload.message === 'string' ? payload.message : 'work items list failed';
                 reject(new Error(message));
             });
         });
     }
 
     private _memberQueueIdsFromSummary(summary: unknown): string[] {
-        if (!summary || typeof summary !== 'object') {
+        if (!isPlainRecord(summary)) {
             throw new Error('WorktrackerInboxPage: mine summary result required');
         }
-        const ids = (summary as { work_queue_ids?: unknown }).work_queue_ids;
+        const ids = summary.work_queue_ids;
         if (!Array.isArray(ids)) {
             throw new Error('WorktrackerInboxPage: mine summary.work_queue_ids required');
         }
         return ids.filter((id) => typeof id === 'string' && id.length > 0);
     }
 
+    private _currentUserId(): string {
+        const user = this._userSel.value;
+        if (user === null) return '';
+        const userId = user.user_id;
+        return typeof userId === 'string' ? userId : '';
+    }
+
     private _mergeCreatedItem(item: WorkItemLike) {
-        const user = this._userSel.value as { user_id?: unknown } | null;
-        if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
+        const userId = this._currentUserId();
+        if (userId.length === 0) {
             return;
         }
         const assignment = item.assignment && typeof item.assignment === 'object' ? item.assignment : null;
@@ -161,7 +200,7 @@ export class WorktrackerInboxPage extends PlatformPage {
         }
         if (assignment.assignee_kind === 'users') {
             const userIds = Array.isArray(assignment.user_ids) ? assignment.user_ids : [];
-            if (userIds.includes(user.user_id)) {
+            if (userIds.includes(userId)) {
                 if (!this._assignedItems.some((row) => row && row.work_item_id === item.work_item_id)) {
                     this._assignedItems = [item, ...this._assignedItems];
                 }
@@ -186,8 +225,8 @@ export class WorktrackerInboxPage extends PlatformPage {
     }
 
     private async _reload(): Promise<void> {
-        const user = this._userSel.value as { user_id?: unknown } | null;
-        if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
+        const userId = this._currentUserId();
+        if (userId.length === 0) {
             return;
         }
         const generation = this._reloadGeneration + 1;
@@ -197,7 +236,7 @@ export class WorktrackerInboxPage extends PlatformPage {
         this._queuesLoaded = false;
 
         const assignedRequested = this._workItems.load({
-            assignee_user_id: user.user_id,
+            assignee_user_id: userId,
             exclude_terminal: true,
         });
         if (!assignedRequested || typeof assignedRequested.id !== 'string') {

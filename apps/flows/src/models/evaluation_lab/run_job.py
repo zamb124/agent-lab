@@ -45,7 +45,8 @@ class EvaluationRunJob(CompanyScopedModel):
     enqueued_at: datetime | None = DbField(default=None)
 
     @classmethod
-    async def for_run(cls, run_id: str) -> Self | None:
+    async def any_for_run(cls, run_id: str) -> Self | None:
+        """Первая попавшаяся задача запуска. Порядка нет. Несколько строк — какая именно, не задано. Нет строки — None. Пустой run_id — ValueError."""
         if run_id == "":
             raise ValueError("run_id is required")
         return await cls.objects.filter(run_id=run_id).first()
@@ -65,13 +66,13 @@ class EvaluationRunJob(CompanyScopedModel):
     async def insert_for_run(cls, job: Self) -> Self:
         if job.run_id == "":
             raise ValueError("run_id is required")
-        existing = await cls.for_run(job.run_id)
+        existing = await cls.any_for_run(job.run_id)
         if existing is not None:
             return existing
         try:
             _ = await cls.set(job)
         except IntegrityError:
-            stored = await cls.for_run(job.run_id)
+            stored = await cls.any_for_run(job.run_id)
             if stored is None:
                 raise
             return stored

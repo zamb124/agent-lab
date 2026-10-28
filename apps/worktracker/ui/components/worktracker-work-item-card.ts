@@ -147,7 +147,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         this._claimOp = this.useOp('worktracker/work_item_claim');
         this._completeOp = this.useOp('worktracker/work_item_complete');
         this._cancelOp = this.useOp('worktracker/work_item_cancel');
-        this._routeSel = this.select((state) => (state.router as Record<string, unknown>).routeKey);
+        this._routeSel = this.select((state) => state.router.routeKey);
         this._onDocClick = this._onDocClick.bind(this);
         this._onWindowReposition = this._onWindowReposition.bind(this);
     }

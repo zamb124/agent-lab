@@ -164,7 +164,7 @@ class TestFlowFactory:
         assert flow is not None
 
         # Проверяем что сохранилось в БД
-        loaded = await FlowConfig.get_latest("created_flow")
+        loaded = await FlowConfig.current_for_flow("created_flow")
         assert loaded is not None
 
         # Cleanup
@@ -198,17 +198,17 @@ class TestFlowsLoader:
 
         # Проверяем что flows доступны в БД
         for flow_id in loaded_flows[:3]:  # Проверяем первые 3
-            flow_config = await FlowConfig.get_latest(flow_id)
+            flow_config = await FlowConfig.current_for_flow(flow_id)
             assert flow_config is not None
 
         # Проверяем что nodes загружены (если есть nodes.json)
         if loaded_nodes:
             for node_id in loaded_nodes[:3]:
-                node_config = await NodeConfig.get(NodeConfig.row_id(node_id))
+                node_config = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(node_id))
                 assert node_config is not None
 
         if "telegram_demo" in loaded_flows:
-            tg_flow = await FlowConfig.get_latest("telegram_demo")
+            tg_flow = await FlowConfig.current_for_flow("telegram_demo")
             assert tg_flow is not None
             assert "tg_react" in tg_flow.triggers
             assert "tg_echo" in tg_flow.triggers
@@ -231,7 +231,7 @@ class TestFlowsLoader:
 
         # Проверяем calculator
         if "calculator" in loaded:
-            tool = await ToolReference.get(ToolReference.row_id("calculator"))
+            tool = await ToolReference.get(ToolReference.row_id_for_active_company("calculator"))
             assert tool is not None
             assert isinstance(tool.code, str) and "async def calculator" in tool.code
             assert tool.parameters_schema is not None
@@ -239,7 +239,7 @@ class TestFlowsLoader:
             assert "properties" in tool.parameters_schema
 
         if "crm_search_entities" in loaded:
-            crm_tool = await ToolReference.get(ToolReference.row_id("crm_search_entities"))
+            crm_tool = await ToolReference.get(ToolReference.row_id_for_active_company("crm_search_entities"))
             assert crm_tool is not None
             assert isinstance(crm_tool.code, str) and "async def crm_search_entities" in crm_tool.code
             assert crm_tool.parameters_schema is not None
@@ -361,7 +361,7 @@ class TestFlowDiscoveryService:
         result = await discovery_service.unregister_agent(flow_id)
         assert result is True
 
-        deleted = await FlowConfig.get_latest(flow_id)
+        deleted = await FlowConfig.current_for_flow(flow_id)
         assert deleted is None
 
     @pytest.mark.asyncio
@@ -476,7 +476,7 @@ class TestFlowDiscoveryService:
 
         assert result is True
 
-        updated = await FlowConfig.get_latest(flow_id)
+        updated = await FlowConfig.current_for_flow(flow_id)
         assert updated is not None
         assert updated.status == ExternalAgentStatus.ACTIVE
         assert updated.agent_card is not None
@@ -499,7 +499,7 @@ class TestFlowDiscoveryService:
 
         assert result is False
 
-        updated = await FlowConfig.get_latest(flow_id)
+        updated = await FlowConfig.current_for_flow(flow_id)
         assert updated is not None
         assert updated.status == ExternalAgentStatus.UNHEALTHY
 
@@ -536,8 +536,8 @@ class TestFlowDiscoveryService:
 
         async def _list_only_test_flows(*, limit: int, offset: int = 0) -> list[FlowConfig]:
             _ = limit, offset
-            persisted_a = await FlowConfig.get_latest(ext_id_a)
-            persisted_b = await FlowConfig.get_latest(ext_id_b)
+            persisted_a = await FlowConfig.current_for_flow(ext_id_a)
+            persisted_b = await FlowConfig.current_for_flow(ext_id_b)
             if persisted_a is None or persisted_b is None:
                 raise AssertionError("тестовые external flow не найдены")
             return [persisted_a, persisted_b]

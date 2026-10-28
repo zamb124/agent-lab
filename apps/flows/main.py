@@ -67,7 +67,7 @@ from apps.flows.src.tools.authz_gate import bound_tool_authz_gate  # noqa: E402
 from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_polling  # noqa: E402
 from core.api.integrations import set_flow_resume_handler  # noqa: E402
 from core.app import create_service_app  # noqa: E402
-from core.app.spa import resolve_ui_static_dir  # noqa: E402
+from core.app.spa import mount_core_frontend, resolve_ui_static_dir  # noqa: E402
 from core.authz.service import AuthzService  # noqa: E402
 from core.clients.llm.mock import (  # noqa: E402
     configure_mock_llm_redis,
@@ -353,13 +353,7 @@ app = create_service_app(
 
 # Core frontend — раньше общего /static: иначе Mount("/static") забирает /static/core/... и ищет
 # core/... внутри apps/flows/static (404 на tokens.css, import map и т.д.).
-core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
-if core_frontend_path.exists():
-    app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
-    logger.info(
-        "flows.static.core_mounted",
-        path=str(core_frontend_path),
-    )
+mount_core_frontend(app)
 
 # Статические файлы для чата (остальное под /static, кроме уже смонтированного /static/core)
 static_path = Path(__file__).parent / "static"

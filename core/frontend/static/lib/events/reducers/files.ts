@@ -9,9 +9,14 @@
 import { buildPlatformFileDownloadUrl } from '../../utils/platform-files-url.js';
 
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, payloadFields } from '../payload.js';
 
 export interface PlatformFileRecord extends Record<string, unknown> {
     id?: string;
+}
+
+function isPlatformFileRecord(value: unknown): value is PlatformFileRecord {
+    return isPlainRecord(value) && (value.id === undefined || typeof value.id === 'string');
 }
 
 export interface FileUploadEntry {
@@ -49,25 +54,30 @@ export function filesReducer(state: FilesState = initialFilesState, event: Platf
     switch (event.type) {
         case FILES_EVENTS.UPLOAD_REQUESTED: {
             const cid = event.meta.correlation_id || event.id;
-            const name = ((event.payload || {}) as { name?: unknown }).name;
+            const name = (payloadFields(event)).name;
             return {
                 ...state,
                 uploads: { ...state.uploads, [cid]: { name: typeof name === 'string' ? name : undefined, status: 'pending' } },
             };
         }
         case FILES_EVENTS.UPLOAD_COMPLETED: {
-            const p = (event.payload || {}) as { correlation_id?: unknown; file?: PlatformFileRecord; message?: unknown };
-            const cid = event.meta.correlation_id || p.correlation_id;
-            if (typeof cid !== 'string' || !cid) return state;
-            const file = p.file;
+            const p = payloadFields(event);
+            const correlationId = typeof p.correlation_id === 'string' && p.correlation_id.length > 0
+                ? p.correlation_id
+                : null;
+            const cid = event.meta.correlation_id || correlationId;
+            if (typeof cid !== 'string' || cid.length === 0) return state;
+            const file = isPlatformFileRecord(p.file) ? p.file : null;
             const next = { ...state.uploads };
             const cur = next[cid];
-            if (cur) next[cid] = { ...cur, status: 'completed', fileId: file && file.id };
-            const byId = file && file.id ? { ...state.byId, [file.id]: file } : state.byId;
+            const fileId = file !== null && typeof file.id === 'string' && file.id.length > 0 ? file.id : null;
+            if (cur && fileId !== null) next[cid] = { ...cur, status: 'completed', fileId };
+            if (cur && fileId === null) next[cid] = { ...cur, status: 'completed' };
+            const byId = file !== null && fileId !== null ? { ...state.byId, [fileId]: file } : state.byId;
             return { ...state, uploads: next, byId };
         }
         case FILES_EVENTS.UPLOAD_FAILED: {
-            const p = (event.payload || {}) as { correlation_id?: unknown; message?: unknown };
+            const p = payloadFields(event);
             const cid = event.meta.correlation_id || p.correlation_id;
             if (typeof cid !== 'string' || !cid) return state;
             const next = { ...state.uploads };
@@ -76,8 +86,8 @@ export function filesReducer(state: FilesState = initialFilesState, event: Platf
             return { ...state, uploads: next };
         }
         case FILES_EVENTS.LOADED: {
-            const file = ((event.payload || {}) as { file?: PlatformFileRecord }).file;
-            if (!file || typeof file.id !== 'string' || !file.id) return state;
+            const file = payloadFields(event).file;
+            if (!isPlatformFileRecord(file) || typeof file.id !== 'string' || file.id.length === 0) return state;
             return { ...state, byId: { ...state.byId, [file.id]: file } };
         }
         default:

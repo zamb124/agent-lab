@@ -29,6 +29,12 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 /**
  * Построчный дифф: строки, которых нет во второй версии, помечаются как
  * удалённые, новые — как добавленные. Порядок сохраняется по текущей версии.
@@ -37,31 +43,36 @@ import '@platform/lib/components/platform-user-chip.js';
  * @param {string} after
  * @returns {{ kind: 'same' | 'added' | 'removed', text: string }[]}
  */
+function storedCount(counts: Map<string, number>, line: string): number {
+    const current = counts.get(line);
+    return current === undefined ? 0 : current;
+}
+
 export function buildLineDiff(before: string, after: string): WikiLineDiffRow[] {
     const beforeLines = before.split('\n');
     const afterLines = after.split('\n');
     const beforeCounts = new Map<string, number>();
     for (const line of beforeLines) {
-        beforeCounts.set(line, (beforeCounts.get(line) ?? 0) + 1);
+        beforeCounts.set(line, storedCount(beforeCounts, line) + 1);
     }
     const afterCounts = new Map<string, number>();
     for (const line of afterLines) {
-        afterCounts.set(line, (afterCounts.get(line) ?? 0) + 1);
+        afterCounts.set(line, storedCount(afterCounts, line) + 1);
     }
 
     const rows: WikiLineDiffRow[] = [];
     for (const line of beforeLines) {
-        const inAfter = (afterCounts.get(line) ?? 0) > 0;
+        const inAfter = storedCount(afterCounts, line) > 0;
         if (inAfter) {
-            afterCounts.set(line, (afterCounts.get(line) ?? 0) - 1);
+            afterCounts.set(line, storedCount(afterCounts, line) - 1);
             rows.push({ kind: 'same', text: line });
         } else {
             rows.push({ kind: 'removed', text: line });
         }
     }
     for (const line of afterLines) {
-        if ((beforeCounts.get(line) ?? 0) > 0) {
-            beforeCounts.set(line, (beforeCounts.get(line) ?? 0) - 1);
+        if (storedCount(beforeCounts, line) > 0) {
+            beforeCounts.set(line, storedCount(beforeCounts, line) - 1);
             continue;
         }
         rows.push({ kind: 'added', text: line });
@@ -197,7 +208,7 @@ export class WikiHistoryPage extends PlatformPage {
         this._revisionRead = this.useOp('wiki/revision_read');
         this._revisionRestore = this.useOp('wiki/revision_restore');
         this._markdown = this.useOp('wiki/page_markdown');
-        this._locale = this.select((state) => (state.i18n as Record<string, unknown>).locale);
+        this._locale = this.select((state) => state.i18n.locale);
     }
 
     override updated(changed: PropertyValues<this>) {
@@ -262,13 +273,13 @@ export class WikiHistoryPage extends PlatformPage {
                                   class="revision ${revision.wiki_revision_id === this._selectedRevisionId ? 'is-selected' : ''}"
                                   type="button"
                                   data-wiki-revision=${revision.wiki_revision_id}
-                                  @click=${() => this._selectRevision(String(revision.wiki_revision_id ?? ''))}
+                                  @click=${() => this._selectRevision(missingAsEmpty(revision.wiki_revision_id))}
                               >
                                   <div class="revision-title">
                                       ${revision.title === '' ? this.t('page.untitled') : revision.title}
                                   </div>
                                   <div class="revision-meta">
-                                      ${formatPlatformDateTime(new Date(revision.created_at ?? ''), String(this._locale.value ?? ''))}
+                                      ${formatPlatformDateTime(new Date(revision.created_at === undefined || revision.created_at === null ? '' : revision.created_at), missingAsEmpty(this._locale.value))}
                                   </div>
                               </button>
                           `)}

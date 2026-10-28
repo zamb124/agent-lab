@@ -28,7 +28,8 @@ class OfficeDocumentEvent(CompanyScopedModel):
     created_at: datetime = DbField()
 
     @classmethod
-    async def list_for_file(cls, file_id: str, *, limit: int) -> list[Self]:
+    async def list_by_created_at_desc_for_file(cls, file_id: str, *, limit: int) -> list[Self]:
+        """События файла, ORDER BY created_at DESC, не больше limit."""
         return await (
             cls.objects.filter(file_id=file_id)
             .order_by("-created_at")
@@ -37,7 +38,7 @@ class OfficeDocumentEvent(CompanyScopedModel):
         )
 
     @classmethod
-    async def record_document_event(
+    async def append_new_event(
         cls,
         *,
         file_id: str,
@@ -46,6 +47,7 @@ class OfficeDocumentEvent(CompanyScopedModel):
         user_id: str,
         payload: JsonObject,
     ) -> None:
+        """Добавляет строку журнала. Новый event_id на каждый вызов. payload пишется JSON-текстом. Строка не возвращается."""
         _ = await cls.objects.create(
             instance=cls(
                 event_id=uuid.uuid4().hex,

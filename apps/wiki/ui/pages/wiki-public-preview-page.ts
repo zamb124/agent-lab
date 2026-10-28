@@ -46,6 +46,12 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-rich-editor.js';
 import '@platform/lib/components/platform-tree.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 export class WikiPublicPreviewPage extends PlatformPage {
     static i18nNamespace = 'wiki';
 
@@ -224,30 +230,54 @@ export class WikiPublicPreviewPage extends PlatformPage {
         }
     }
 
+    /** 404 публичного чтения — отключённая ссылка, черновик или страница вне раздела. */
+    private _publicReadMissed(op: OpController): boolean {
+        if (op.error === null) {
+            return false;
+        }
+        if (op.failureStatus === 404) {
+            this._failed = true;
+            this._tree = null;
+            return true;
+        }
+        throw new Error(`wiki public read failed: ${op.error}`);
+    }
+
     private async _load(): Promise<void> {
         this._failed = false;
         this._page = null;
-        try {
-            this._page = (this.pageId === ''
-                ? await this._publicPage.run({ link_token: this.token })
-                : await this._publicSitePage.run({
-                    link_token: this.token,
-                    wiki_page_id: this.pageId,
-                })) as WikiPublicPage | null;
-            this._tree = await this._publicTree.run({ link_token: this.token }) as WikiPublicTree | null;
-        } catch {
-            // Отключённая ссылка, черновик или страница вне раздела — обычный
-            // сценарий чтения, а не сбой: объясняем вместо тоста ошибки.
-            this._failed = true;
+        const pageOp = this.pageId === '' ? this._publicPage : this._publicSitePage;
+        const page = this.pageId === ''
+            ? await this._publicPage.run({ link_token: this.token })
+            : await this._publicSitePage.run({
+                link_token: this.token,
+                wiki_page_id: this.pageId,
+            });
+        if (this._publicReadMissed(pageOp)) {
+            document.title = this.t('public.not_found');
+            return;
         }
-        document.title = this._failed ? this.t('public.not_found') : this._pageTitle();
+        if (page === null || typeof page !== 'object') {
+            throw new Error('wiki public read: page response is empty');
+        }
+        this._page = page as WikiPublicPage;
+        const tree = await this._publicTree.run({ link_token: this.token });
+        if (this._publicReadMissed(this._publicTree)) {
+            document.title = this.t('public.not_found');
+            return;
+        }
+        if (tree === null || typeof tree !== 'object') {
+            throw new Error('wiki public read: tree response is empty');
+        }
+        this._tree = tree as WikiPublicTree;
+        document.title = this._pageTitle();
     }
 
     private _pageTitle() {
         if (this._page === null || this._page.title === '') {
             return this.t('page.untitled');
         }
-        return String(this._page.title ?? '');
+        return missingAsEmpty(this._page.title);
     }
 
     private _treeItems(): WikiPublicTreeItem[] {
@@ -278,7 +308,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
     }
 
     private _onTreeSelect(event: CustomEvent<{ id?: unknown }>) {
-        this._openPage(String(event.detail.id ?? ''));
+        this._openPage(missingAsEmpty(event.detail.id));
     }
 
     private _openTreeSheet() {
@@ -293,7 +323,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
         if (this.pageId !== '') {
             return this.pageId;
         }
-        return this._tree === null ? '' : String(this._tree.root_page_id ?? '');
+        return this._tree === null ? '' : missingAsEmpty(this._tree.root_page_id);
     }
 
     private _breadcrumbTrail() {
@@ -317,7 +347,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
             routeKey: item.wiki_page_id === rootPageId ? 'wiki_public_preview' : 'wiki_public_page',
             params: item.wiki_page_id === rootPageId
                 ? { token: this.token }
-                : { token: this.token, pageId: String(item.wiki_page_id ?? '') },
+                : { token: this.token, pageId: missingAsEmpty(item.wiki_page_id) },
         }));
     }
 

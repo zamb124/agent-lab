@@ -58,9 +58,10 @@ class SyncMessage(PlatformModel):
     forwarded_from_channel_name: str | None = DbField(default=None, max_length=255)
 
     @classmethod
-    async def find_in_company(
+    async def by_message_id(
         cls, company_id: str, message_id: str
     ) -> SyncMessage | None:
+        """Строка компании по message_id. Нет строки — None. Пустые company_id и message_id — ValueError."""
         if company_id == "":
             raise ValueError("company_id cannot be empty.")
         if message_id == "":
@@ -102,7 +103,7 @@ class SyncMessage(PlatformModel):
         ).order_by("sent_at", "message_id").all()
 
     @classmethod
-    async def list_by_thread(
+    async def list_alive_by_sent_at(
         cls,
         thread_id: str,
         *,
@@ -110,6 +111,7 @@ class SyncMessage(PlatformModel):
         limit: int = 50,
         offset: int = 0,
     ) -> list[Self]:
+        """Живые сообщения треда компании, deleted_at пустой, ORDER BY sent_at. limit по умолчанию 50, offset по умолчанию 0."""
         return await cls.objects.filter(
             company_id=company_id,
             thread_id=thread_id,
@@ -279,7 +281,8 @@ class SyncMessage(PlatformModel):
         )
 
     @classmethod
-    async def set_reactions(cls, message_id: str, reactions: list[ReactionEntry]) -> None:
+    async def update_reactions(cls, message_id: str, reactions: list[ReactionEntry]) -> None:
+        """Пишет reactions сообщения целиком. Нет message_id — ничего не меняет."""
         payload = [
             parse_json_object(reaction.model_dump_json(), "ReactionEntry")
             for reaction in reactions

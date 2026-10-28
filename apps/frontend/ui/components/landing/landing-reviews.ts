@@ -196,7 +196,7 @@ export class LandingReviews extends PlatformElement {
         this.currentReview = 0;
         this._intervalId = null;
     }
-    private _intervalId: number | null = null;
+    private _intervalId: ReturnType<typeof setInterval> | null = null;
 
 
     override connectedCallback(): void {
@@ -260,6 +260,9 @@ export class LandingReviews extends PlatformElement {
     override render(): TemplateResult {
         const reviews = this._getReviews();
         const review = reviews[this.currentReview];
+        if (review === undefined) {
+            throw new Error('landing-reviews: review missing');
+        }
 
         return html`
             <div class="reviews-container">
@@ -269,13 +272,13 @@ export class LandingReviews extends PlatformElement {
                 
                 <div class="review-card">
                     <div class="review-header">
-                        <div class="review-avatar">${review!.avatar}</div>
+                        <div class="review-avatar">${review.avatar}</div>
                         <div class="review-author">
-                            <h3 class="review-name">${review!.name}</h3>
-                            <p class="review-position">${review!.position}</p>
+                            <h3 class="review-name">${review.name}</h3>
+                            <p class="review-position">${review.position}</p>
                         </div>
                     </div>
-                    <p class="review-text">${review!.text}</p>
+                    <p class="review-text">${review.text}</p>
                 </div>
                 
                 <div class="review-dots">

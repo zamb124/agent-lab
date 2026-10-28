@@ -173,11 +173,11 @@ async def test_picker_category_code_total_ignores_mcp_batch(
 
     exclude_ids = {
         row.tool_id
-        for row in await ToolReference.list_index(mcp="exclude")
+        for row in await ToolReference.list_tool_index(mcp="exclude")
     }
     only_ids = {
         row.tool_id
-        for row in await ToolReference.list_index(mcp="only")
+        for row in await ToolReference.list_tool_index(mcp="only")
     }
     mcp_tool_id = mcp_tool_reference_id(server_id, "bulk_tool_0")
     assert mcp_tool_id in only_ids
@@ -230,11 +230,11 @@ async def test_picker_category_all_skips_agent_toolkit_lookup(
         raise AssertionError("picker endpoint must not resolve agent_toolkit_ids")
 
     monkeypatch.setattr(
-        "apps.flows.src.models.agent_toolkit.AgentToolkit.get_toolkit_ids_for_tool",
+        "apps.flows.src.models.agent_toolkit.AgentToolkit.toolkit_ids_for_tool",
         _fail_toolkit_lookup,
     )
     monkeypatch.setattr(
-        "apps.flows.src.models.agent_toolkit.AgentToolkit.get_toolkit_ids_for_flow",
+        "apps.flows.src.models.agent_toolkit.AgentToolkit.toolkit_ids_for_flow",
         _fail_toolkit_lookup,
     )
 

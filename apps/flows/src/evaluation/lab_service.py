@@ -346,7 +346,7 @@ class EvaluationLabService:
         self._event_locks: dict[str, asyncio.Lock] = {}
 
     async def create_suite(self, request: EvaluationSuiteCreateRequest) -> EvaluationSuite:
-        flow = await FlowConfig.get_latest(request.flow_id)
+        flow = await FlowConfig.current_for_flow(request.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {request.flow_id}")
         now = _utc_now()
@@ -393,7 +393,7 @@ class EvaluationLabService:
         return await self._require_suite(suite_id)
 
     async def list_suites(self, flow_id: str) -> list[EvaluationSuite]:
-        return await EvaluationSuite.list_for_flow(flow_id)
+        return await EvaluationSuite.list_by_updated_at_and_suite_id(flow_id)
 
     def list_builtin_evaluators(self) -> EvaluationBuiltinEvaluatorCatalog:
         return EvaluationBuiltinEvaluatorCatalog(
@@ -651,7 +651,7 @@ class EvaluationLabService:
 
     async def list_cases(self, suite_id: str) -> list[EvaluationCase]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationCase.list_for_suite(suite_id)
+        return await EvaluationCase.list_by_sort_order_created_at_and_case_id(suite_id)
 
     async def import_cases(
         self,
@@ -774,7 +774,7 @@ class EvaluationLabService:
         self,
         request: EvaluationRubricCreateRequest,
     ) -> tuple[EvaluationRubric, EvaluationRubricVersion]:
-        flow = await FlowConfig.get_latest(request.flow_id)
+        flow = await FlowConfig.current_for_flow(request.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {request.flow_id}")
         now = _utc_now()
@@ -830,7 +830,7 @@ class EvaluationLabService:
         return await self._require_rubric(rubric_id)
 
     async def list_rubrics(self, flow_id: str) -> list[EvaluationRubric]:
-        return await EvaluationRubric.list_for_flow(flow_id)
+        return await EvaluationRubric.list_by_updated_at_and_rubric_id(flow_id)
 
     async def create_rubric_version(
         self,
@@ -858,7 +858,7 @@ class EvaluationLabService:
     async def create_run(self, request: EvaluationRunCreateRequest) -> EvaluationRunWithCases:
         suite = await self._require_suite(request.suite_id)
         if request.idempotency_key is not None:
-            existing_run = await EvaluationRun.for_idempotency(
+            existing_run = await EvaluationRun.any_for_idempotency(
                 suite_id=suite.suite_id,
                 branch_id=request.branch_id,
                 idempotency_key=request.idempotency_key,
@@ -873,7 +873,7 @@ class EvaluationLabService:
         if not selected_cases:
             raise EvaluationLabValidationError("No enabled evaluation cases selected")
 
-        flow = await FlowConfig.get_latest(suite.flow_id)
+        flow = await FlowConfig.current_for_flow(suite.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {suite.flow_id}")
         flow_config_version = flow.version.strip()
@@ -968,7 +968,7 @@ class EvaluationLabService:
         return await EvaluationRunJob.insert_for_run(job)
 
     async def get_run_job(self, run_id: str) -> EvaluationRunJob:
-        job = await EvaluationRunJob.for_run(run_id)
+        job = await EvaluationRunJob.any_for_run(run_id)
         if job is None:
             raise PlatformNotFoundError(f"Evaluation run job not found: {run_id}")
         return job
@@ -1126,7 +1126,7 @@ class EvaluationLabService:
         run = await EvaluationRun.get(run_id)
         if run is None:
             return None
-        case_runs = await EvaluationCaseRun.list_for_run(run_id)
+        case_runs = await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at(run_id)
         gate_result = await EvaluationGateResult.for_run(run_id)
         return EvaluationRunWithCases(run=run, case_runs=case_runs, gate_result=gate_result)
 
@@ -1138,11 +1138,11 @@ class EvaluationLabService:
 
     async def list_runs(self, suite_id: str, limit: int) -> list[EvaluationRun]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationRun.list_for_suite(suite_id, limit)
+        return await EvaluationRun.list_by_created_at_and_run_id_desc(suite_id, limit)
 
     async def list_events(self, run_id: str) -> list[EvaluationRunEvent]:
         _ = await self.get_run(run_id)
-        return await EvaluationRunEvent.list_for_run(run_id)
+        return await EvaluationRunEvent.list_by_sequence(run_id)
 
     async def list_events_page(
         self,
@@ -1168,7 +1168,7 @@ class EvaluationLabService:
 
     async def list_case_runs(self, run_id: str) -> list[EvaluationCaseRun]:
         _ = await self.get_run(run_id)
-        return await EvaluationCaseRun.list_for_run(run_id)
+        return await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at(run_id)
 
     async def cancel_run(self, run_id: str) -> EvaluationRunWithCases:
         run_with_cases = await self.get_run(run_id)
@@ -1258,7 +1258,7 @@ class EvaluationLabService:
 
     async def list_annotations(self, run_id: str) -> list[EvaluationAnnotation]:
         _ = await self.get_run(run_id)
-        return await EvaluationAnnotation.list_for_run(run_id)
+        return await EvaluationAnnotation.list_by_created_at_and_annotation_id(run_id)
 
     async def update_annotation(
         self,
@@ -1318,7 +1318,7 @@ class EvaluationLabService:
 
     async def list_baselines(self, suite_id: str) -> list[EvaluationBaseline]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationBaseline.list_for_suite(suite_id)
+        return await EvaluationBaseline.list_by_branch_id(suite_id)
 
     async def create_gate_policy(
         self,
@@ -1386,7 +1386,7 @@ class EvaluationLabService:
 
     async def list_gate_policies(self, suite_id: str) -> list[EvaluationGatePolicy]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationGatePolicy.list_for_suite(suite_id)
+        return await EvaluationGatePolicy.list_by_branch_id_and_name(suite_id)
 
     async def create_gate_policy_run(
         self,
@@ -1462,7 +1462,7 @@ class EvaluationLabService:
         limit: int,
     ) -> EvaluationResultsMatrix:
         _ = await self._require_suite(suite_id)
-        all_cases = await EvaluationCase.list_for_suite(suite_id)
+        all_cases = await EvaluationCase.list_by_sort_order_created_at_and_case_id(suite_id)
         cases = [
             EvaluationMatrixCase(
                 case_id=case.case_id,
@@ -1476,7 +1476,7 @@ class EvaluationLabService:
         ]
         runs = [
             run
-            for run in await EvaluationRun.list_for_suite(suite_id, limit)
+            for run in await EvaluationRun.list_by_created_at_and_run_id_desc(suite_id, limit)
             if run.branch_id == branch_id
         ]
         matrix_runs = [
@@ -1499,7 +1499,7 @@ class EvaluationLabService:
         ]
         cells: list[EvaluationMatrixCell] = []
         for run in runs:
-            for case_run in await EvaluationCaseRun.list_for_run(run.run_id):
+            for case_run in await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at(run.run_id):
                 cells.append(
                     EvaluationMatrixCell(
                         run_id=run.run_id,
@@ -1618,7 +1618,7 @@ class EvaluationLabService:
 
     async def list_monitors(self, suite_id: str) -> list[EvaluationMonitor]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationMonitor.list_for_suite(suite_id)
+        return await EvaluationMonitor.list_by_updated_at_and_monitor_id(suite_id)
 
     async def get_monitor(self, monitor_id: str) -> EvaluationMonitor:
         return await self._require_monitor(monitor_id)
@@ -1632,7 +1632,7 @@ class EvaluationLabService:
         if monitor.state != EvaluationMonitorState.ACTIVE:
             raise EvaluationMonitorNotActive(str(monitor.state))
         limit = min(request.limit, monitor.max_traces_per_sample)
-        traces, _ = await Span.search_traces(
+        traces, _ = await Span.trace_group_page_and_span_count(
             user_id=monitor.filter.user_id,
             session_id=monitor.filter.session_id,
             flow_id=monitor.flow_id,
@@ -2700,7 +2700,7 @@ class EvaluationLabService:
             )
             target_flow_config_version = flow_config_version
             if target_flow_id != case.flow_id:
-                target_flow = await FlowConfig.get_latest(target_flow_id)
+                target_flow = await FlowConfig.current_for_flow(target_flow_id)
                 if target_flow is None:
                     raise PlatformNotFoundError(f"Flow not found: {target_flow_id}")
                 target_flow_config_version = target_flow.version.strip()
@@ -2864,7 +2864,7 @@ class EvaluationLabService:
         branch_id: str,
         scope: EvaluationRunScope,
     ) -> list[EvaluationCase]:
-        cases = await EvaluationCase.list_for_suite(suite_id)
+        cases = await EvaluationCase.list_by_sort_order_created_at_and_case_id(suite_id)
         matching_cases = [case for case in cases if self._case_matches_branch(case, branch_id)]
         if isinstance(scope, EvaluationRunSuiteScope):
             return [case for case in matching_cases if case.enabled]
@@ -3818,7 +3818,7 @@ class EvaluationLabService:
                 "You are a strict pairwise evaluator. Choose left, right, or tie under "
                 + "the rubric and return structured scores."
             )
-        flow = await FlowConfig.get_latest(left.flow_id)
+        flow = await FlowConfig.current_for_flow(left.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {left.flow_id}")
         state = self._case_run_resolution_state(left, flow.version)
@@ -3867,7 +3867,7 @@ class EvaluationLabService:
             node_payload = dict(payload)
             node_payload["node_id"] = node_id
             return NodeConfig.model_validate(node_payload)
-        node_config = await NodeConfig.get(NodeConfig.row_id(node_id))
+        node_config = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(node_id))
         if node_config is not None:
             return node_config
         raise PlatformNotFoundError(f"Evaluation node not found: {node_id}")
@@ -3911,7 +3911,7 @@ class EvaluationLabService:
                 "LLM pairwise judgment requires left case run context_id"
             )
         prompt = await self._pairwise_prompt(request, left)
-        flow = await FlowConfig.get_latest(left.flow_id)
+        flow = await FlowConfig.current_for_flow(left.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {left.flow_id}")
         resolution_state = self._case_run_resolution_state(left, flow.version)

@@ -23,6 +23,21 @@
 
 import { getUserMediaCompat, hasGetUserMediaApi } from '../utils/voice-recording.js';
 
+declare global {
+    interface Window {
+        webkitAudioContext?: typeof AudioContext;
+    }
+}
+import { devtoolsLog, isPlatformDevtoolsEnabled } from '../events/devtools.js';
+
+function sampleAt(values: ArrayLike<number>, index: number): number {
+    const value = values[index];
+    if (value === undefined) {
+        throw new Error(`voice sample ${index} missing`);
+    }
+    return value;
+}
+
 /**
  * Один JSON `speak` с текстом длиннее лимита часто рвётся на прокси/WebSocket (типично 64k–1M).
  * A2A SSE шлёт серию коротких апдейтов — там проблема не проявляется; один финальный длинный кадр — да.
@@ -53,100 +68,20 @@ function isDevVoiceInsecureHost(hostname: string): boolean {
     return false;
 }
 
-/**
- * Query-фрагменты из `location.search` и из `location.hash` (после `?`), если SPA
- * держит параметры в hash.
- *
- * @returns {string[]}
- */
-function voiceClientUrlQuerySlices(): string[] {
-    if (typeof window === 'undefined') {
-        return [];
-    }
-    const out: string[] = [];
-    const search = window.location.search;
-    if (typeof search === 'string' && search.length > 0) {
-        out.push(search);
-    }
-    const hash = window.location.hash;
-    if (typeof hash === 'string' && hash.includes('?')) {
-        const i = hash.indexOf('?');
-        out.push(hash.slice(i));
-    }
-    return out;
-}
-
-/**
- * Диагностика в консоли: **`?voice_debug=1`** или **`?voice_debug=true`** в URL
- * (в т.ч. в части hash после `?`), либо **`sessionStorage.setItem('voice_debug','1')`**,
- * затем перезагрузите вкладку. Сообщения `[voice-media]` после **`connect()`** —
- * включите голосовой ввод (микрофон на чате flows).
- *
- * @returns {boolean}
- */
-export function isVoiceClientDebugEnabled(): boolean {
-    if (typeof window === 'undefined') {
-        return false;
-    }
-    try {
-        for (const qs of voiceClientUrlQuerySlices()) {
-            if (/[?&]voice_debug=(?:1|true)(?:&|$)/i.test(qs)) {
-                return true;
-            }
-        }
-        if (typeof window.sessionStorage?.getItem === 'function') {
-            const v = window.sessionStorage.getItem('voice_debug');
-            if (v === '1' || (typeof v === 'string' && v.toLowerCase() === 'true')) {
-                return true;
-            }
-        }
-    } catch {
-        /* storage / доступ к location */
-    }
-    return false;
-}
-
-/**
- * @param {string} message
- * @param {Record<string, unknown>} [payload]
- */
+/** Диагностика сессии идёт через общий флаг `?platform_devtools=1`. */
 function _voiceClientDebug(message: string, payload?: unknown): void {
-    if (!isVoiceClientDebugEnabled()) {
-        return;
-    }
-    if (payload !== undefined) {
-        console.info('[voice-media]', message, payload);
-        return;
-    }
-    console.info('[voice-media]', message);
+    devtoolsLog('voice-media', message, payload);
 }
-
-/**
- * Одноразовое сообщение при загрузке модуля: иначе кажется, что флаг не работает
- * (WS/PCM-логи идут только после `connect()` / кнопки микрофона).
- */
-function _scheduleVoiceDebugBootstrapNotice(): void {
-    if (typeof window === 'undefined') {
-        return;
-    }
-    const run = () => {
-        if (!isVoiceClientDebugEnabled()) {
-            return;
-        }
-        console.info('[voice-media]', 'voice_debug_active', {
-            query_slices: voiceClientUrlQuerySlices(),
-            next: 'Включите голосовой ввод на чате (микрофон); затем появятся ws_connecting, ws_open, pcm_uplink_tick, …',
-        });
-    };
-    if (typeof queueMicrotask === 'function') {
-        queueMicrotask(run);
-    } else {
-        window.setTimeout(run, 0);
-    }
-}
-_scheduleVoiceDebugBootstrapNotice();
 
 export const VOICE_CAPTURE_SAMPLE_RATE = 16000;
+
+/** `resume()` нужен только остановленному контексту: у закрытого он отклоняется. */
+async function resumeIfNotRunning(ctx: AudioContext): Promise<void> {
+    if (ctx.state === 'running' || ctx.state === 'closed') {
+        return;
+    }
+    await ctx.resume();
+}
 
 /** WS-кадр uplink: PCM s16le mono, 320 сэмплов = 640 байт = 20 ms @ 16 kHz.
  *  Совпадает с серверным `_FRAME_DURATION_S = 0.02` в `apps/voice/workers/stt_worker.py`. */
@@ -195,10 +130,10 @@ export function designFirLowpassHamming(numTaps: number, fcNorm: number): Float3
         taps[n] = h * w;
     }
     let sum = 0;
-    for (let i = 0; i < N; i++) sum += taps[i] || 0;
+    for (let i = 0; i < N; i++) sum += sampleAt(taps, i);
     if (sum !== 0) {
         const inv = 1 / sum;
-        for (let i = 0; i < N; i++) taps[i] = (taps[i] || 0) * inv;
+        for (let i = 0; i < N; i++) taps[i] = sampleAt(taps, i) * inv;
     }
     return taps;
 }
@@ -228,7 +163,7 @@ export function applyFirToFloat(chunk: Float32Array, firTaps: Float32Array, firH
         let acc = 0;
         const base = i + (M - 1);
         for (let k = 0; k < M; k++) {
-            acc += (firTaps[k] || 0) * (ext[base - k] || 0);
+            acc += sampleAt(firTaps, k) * sampleAt(ext, base - k);
         }
         out[i] = acc;
     }
@@ -249,7 +184,7 @@ function floatSampleToInt16(sample: number): number {
 function floatMonoToPcm16ArrayBufferDirect(channel: Float32Array): ArrayBuffer {
     const pcm = new Int16Array(channel.length);
     for (let i = 0; i < channel.length; i++) {
-        pcm[i] = floatSampleToInt16(channel[i] || 0);
+        pcm[i] = floatSampleToInt16(sampleAt(channel, i));
     }
     return pcm.buffer;
 }
@@ -365,7 +300,7 @@ export function resampleMonoToPcm16ArrayBuffer(channel: Float32Array, inRate: nu
             break;
         }
         const frac = fp - i0;
-        const s = (merged[i0] || 0) * (1 - frac) + (merged[i1] || 0) * frac;
+        const s = sampleAt(merged, i0) * (1 - frac) + sampleAt(merged, i1) * frac;
         pcmParts.push(floatSampleToInt16(s));
         state.nextOutSampleIndex += 1;
     }
@@ -388,7 +323,7 @@ export function resampleMonoToPcm16ArrayBuffer(channel: Float32Array, inRate: nu
     }
     const pcm = new Int16Array(totalLen);
     for (let i = 0; i < totalLen; i++) {
-        pcm[i] = pcmParts[i] || 0;
+        pcm[i] = sampleAt(pcmParts, i);
     }
     return pcm.buffer;
 }
@@ -484,9 +419,9 @@ export class VoiceMediaSession extends EventTarget {
     /** Живой путь uplink (только диагностика). */
     private _voiceUplinkPath: VoiceUplinkPath;
     private _pcmUplinkDebugCount: number;
-    /** только voice_debug — сколько раз worklet прислал полный Float32-батч. */
+    /** только при platform_devtools — сколько раз worklet прислал полный Float32-батч. */
     private _captureWorkletBatchRecv: number;
-    /** voice_debug — encode вернул не ArrayBuffer после worklet-батча. */
+    /** platform_devtools — encode вернул не ArrayBuffer после worklet-батча. */
     private _pcmEncodeMissCount: number;
     private _wsJsonDebugSeq: number;
     private _wsInBinaryDebugSeq: number;
@@ -563,9 +498,9 @@ export class VoiceMediaSession extends EventTarget {
         /** Живой путь uplink (только диагностика). */
         this._voiceUplinkPath = /** @type {'none'|'ac_worklet'|'ac_script'|'ac_analyser'} */ ('none');
         this._pcmUplinkDebugCount = 0;
-        /** @type {number} только voice_debug — сколько раз worklet прислал полный Float32-батч. */
+        /** @type {number} только при platform_devtools — сколько раз worklet прислал полный Float32-батч. */
         this._captureWorkletBatchRecv = 0;
-        /** @type {number} voice_debug — encode вернул не ArrayBuffer после worklet-батча. */
+        /** @type {number} platform_devtools — encode вернул не ArrayBuffer после worklet-батча. */
         this._pcmEncodeMissCount = 0;
         this._wsJsonDebugSeq = 0;
         this._wsInBinaryDebugSeq = 0;
@@ -649,7 +584,7 @@ export class VoiceMediaSession extends EventTarget {
                         detail,
                     });
                 }
-                try { ws.close(); } catch { /* noop */ }
+                ws.close();
                 this._ws = null;
                 throw err;
             }
@@ -683,11 +618,7 @@ export class VoiceMediaSession extends EventTarget {
                     : 'none',
         });
         if (this._autoRecord && this._captureCtx !== null && !this._closed) {
-            try {
-                await this._captureCtx.resume();
-            } catch {
-                /* второй resume после OPEN: не рвём сессию, см. pump */
-            }
+            await resumeIfNotRunning(this._captureCtx);
         }
     }
 
@@ -721,11 +652,11 @@ export class VoiceMediaSession extends EventTarget {
     }
 
     /**
-     * После фактической отправки PCM по WS (диагностика: `voice_debug`).
+     * После фактической отправки PCM по WS (диагностика: `platform_devtools`).
      * @param {ArrayBuffer} buffer
      */
     _debugAfterPcmSent(buffer: ArrayBuffer): void {
-        if (!isVoiceClientDebugEnabled()) {
+        if (!isPlatformDevtoolsEnabled()) {
             return;
         }
         this._pcmUplinkDebugCount += 1;
@@ -857,45 +788,21 @@ export class VoiceMediaSession extends EventTarget {
                 'VoiceMediaSession: getUserMedia not available (нет navigator.mediaDevices; часто встроенный превью-браузер, нестандартный WebView или политика безопасности).',
             );
         }
-        /** Сначала ужесточаем acoustic echo / noise suppression / AGC до `exact` —
-         *  без AEC=exact браузер часто оставляет лёгкий duplex-tap, и аудио ответа TTS
-         *  возвращается обратно через микрофон → STT транскрибирует «свой собственный»
-         *  голос как пользовательский запрос. На WebView/iOS Safari `exact` иногда
-         *  не поддержан — fallback к `ideal`, затем к голому `audio: true`. */
-        let stream;
-        try {
-            stream = await getUserMediaCompat({
-                audio: {
-                    channelCount: { exact: 1 },
-                    sampleRate: { ideal: VOICE_CAPTURE_SAMPLE_RATE },
-                    echoCancellation: { exact: true },
-                    noiseSuppression: { exact: true },
-                    autoGainControl: { exact: true },
-                },
-                video: false,
-            });
-            _voiceClientDebug('mic_constraints_applied', { mode: 'exact' });
-        } catch (errExact) {
-            _voiceClientDebug('mic_constraints_exact_failed', {
-                detail: errExact instanceof Error ? errExact.message : String(errExact),
-            });
-            try {
-                stream = await getUserMediaCompat({
-                    audio: {
-                        channelCount: { ideal: 1 },
-                        sampleRate: { ideal: VOICE_CAPTURE_SAMPLE_RATE },
-                        echoCancellation: { ideal: true },
-                        noiseSuppression: { ideal: true },
-                        autoGainControl: { ideal: true },
-                    },
-                    video: false,
-                });
-                _voiceClientDebug('mic_constraints_applied', { mode: 'ideal' });
-            } catch {
-                stream = await getUserMediaCompat({ audio: true, video: false });
-                _voiceClientDebug('mic_constraints_applied', { mode: 'fallback_audio_true' });
-            }
-        }
+        /** Эхоподавление, шумоподавление и AGC запрашиваются как `exact`: без AEC браузер оставляет
+         *  duplex-tap, и аудио ответа TTS возвращается через микрофон — STT транскрибирует «свой»
+         *  голос как запрос пользователя. Браузер без поддержки `exact` отказывает, отказ уходит
+         *  в `voice/client/microphone_denied`. */
+        const stream = await getUserMediaCompat({
+            audio: {
+                channelCount: { exact: 1 },
+                sampleRate: { ideal: VOICE_CAPTURE_SAMPLE_RATE },
+                echoCancellation: { exact: true },
+                noiseSuppression: { exact: true },
+                autoGainControl: { exact: true },
+            },
+            video: false,
+        });
+        _voiceClientDebug('mic_constraints_applied', { mode: 'exact' });
         this._mediaStream = stream;
         this._recording = true;
         try {
@@ -939,33 +846,20 @@ export class VoiceMediaSession extends EventTarget {
         if (this._captureCtx !== null || this._mediaStream === null) {
             return;
         }
-        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const Ctx = window.AudioContext || window.webkitAudioContext;
         if (typeof Ctx !== 'function') {
             throw new Error('VoiceMediaSession: AudioContext not available');
         }
-        /** Пробуем сразу 16 kHz: тогда нативный graph совпадает с целевой частотой
-         *  WS, ресемплер работает «1:1» (FIR не активируется, линейная интерполяция
-         *  не нужна). Часть браузеров (Safari ≤16) фиксирует sampleRate AudioContext
-         *  на устройстве — в этом случае ловим DOMException и создаём дефолтный. */
-        let captureCtx;
-        try {
-            captureCtx = new Ctx({
-                latencyHint: 'interactive',
-                sampleRate: VOICE_CAPTURE_SAMPLE_RATE,
-            });
-            _voiceClientDebug('capture_ctx_sample_rate', {
-                requested: VOICE_CAPTURE_SAMPLE_RATE,
-                actual: captureCtx.sampleRate,
-            });
-        } catch (errCtxRate) {
-            _voiceClientDebug('capture_ctx_explicit_rate_failed', {
-                detail:
-                    errCtxRate instanceof Error
-                        ? errCtxRate.message
-                        : String(errCtxRate),
-            });
-            captureCtx = new Ctx({ latencyHint: 'interactive' });
-        }
+        /** Просим 16 kHz: тогда граф совпадает с частотой WS и ресемплер работает «1:1».
+         *  Браузер, который выбрал другую частоту, не ошибка: ресемплер берёт `captureCtx.sampleRate`. */
+        const captureCtx = new Ctx({
+            latencyHint: 'interactive',
+            sampleRate: VOICE_CAPTURE_SAMPLE_RATE,
+        });
+        _voiceClientDebug('capture_ctx_sample_rate', {
+            requested: VOICE_CAPTURE_SAMPLE_RATE,
+            actual: captureCtx.sampleRate,
+        });
         this._captureCtx = captureCtx;
 
         const source = this._captureCtx.createMediaStreamSource(this._mediaStream);
@@ -987,34 +881,30 @@ export class VoiceMediaSession extends EventTarget {
         this._captureKeepAliveGain = keepGain;
 
         const ctx = this._captureCtx;
-        /** @type {boolean} */
         let usedMicWorklet = false;
         const hasAudioWorklet = typeof ctx.audioWorklet?.addModule === 'function';
 
         if (hasAudioWorklet) {
-            try {
-                const workletUrl = new URL(
-                    './worklets/voice-mic-capture.processor.js',
-                    import.meta.url,
-                ).href;
-                await ctx.audioWorklet.addModule(workletUrl);
-                const wNode = new AudioWorkletNode(ctx, 'voice-mic-capture', {
-                    numberOfInputs: 1,
-                    numberOfOutputs: 1,
-                    channelCount: 1,
-                    outputChannelCount: [1],
-                });
-                this._captureWorkletNode = wNode;
-                wNode.port.onmessage = (event) => {
-                    void this._handleMicWorkletFrameAsync(event.data);
-                };
-                source.connect(wNode);
-                wNode.connect(sinkGain);
-                usedMicWorklet = true;
-            } catch {
-                this._captureWorkletNode = null;
-                usedMicWorklet = false;
-            }
+            // Worklet не входит в бандл: сборка кладёт его в embed-dist, который отдаётся по /static/core/lib.
+            // Путь от origin бандла одинаково работает в SPA сервисов и во встраивании на чужой сайт.
+            const workletUrl = new URL(
+                '/static/core/lib/voice/worklets/voice-mic-capture.processor.js',
+                import.meta.url,
+            ).href;
+            await ctx.audioWorklet.addModule(workletUrl);
+            const wNode = new AudioWorkletNode(ctx, 'voice-mic-capture', {
+                numberOfInputs: 1,
+                numberOfOutputs: 1,
+                channelCount: 1,
+                outputChannelCount: [1],
+            });
+            this._captureWorkletNode = wNode;
+            wNode.port.onmessage = (event) => {
+                void this._handleMicWorkletFrameAsync(event.data);
+            };
+            source.connect(wNode);
+            wNode.connect(sinkGain);
+            usedMicWorklet = true;
         }
 
         if (!usedMicWorklet && typeof ctx.createScriptProcessor === 'function') {
@@ -1049,21 +939,15 @@ export class VoiceMediaSession extends EventTarget {
                 ctxRef !== null
                 && (ctxRef.state === 'suspended' || ctxRef.state === 'interrupted')
             ) {
-                void (async () => {
-                    try {
-                        await ctxRef.resume();
-                    } catch {
-                        /* noop */
-                    }
-                })();
+                this._resumeInBackground(ctxRef);
             }
         };
 
         if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
             if (this._captureResumeWatchdog !== null) {
-                window.clearInterval(this._captureResumeWatchdog);
+                clearInterval(this._captureResumeWatchdog);
             }
-            this._captureResumeWatchdog = window.setInterval(() => {
+            this._captureResumeWatchdog = setInterval(() => {
                 if (this._closed || !this._recording || !this._captureCtx) {
                     return;
                 }
@@ -1071,7 +955,7 @@ export class VoiceMediaSession extends EventTarget {
                 if (c.state === 'closed') {
                     return;
                 }
-                void c.resume().catch(() => {});
+                this._resumeInBackground(c);
             }, 140);
         }
 
@@ -1107,13 +991,7 @@ export class VoiceMediaSession extends EventTarget {
                     ctxRef !== null
                     && (ctxRef.state === 'suspended' || ctxRef.state === 'interrupted')
                 ) {
-                    void (async () => {
-                        try {
-                            await ctxRef.resume();
-                        } catch {
-                            /* noop */
-                        }
-                    })();
+                    this._resumeInBackground(ctxRef);
                 }
             };
             this._captureVisibilityHandler = onVis;
@@ -1134,7 +1012,7 @@ export class VoiceMediaSession extends EventTarget {
         if (!(data instanceof Float32Array) || data.length === 0) {
             return;
         }
-        if (isVoiceClientDebugEnabled()) {
+        if (isPlatformDevtoolsEnabled()) {
             this._captureWorkletBatchRecv += 1;
             const r = this._captureWorkletBatchRecv;
             if (r <= 8 || r % 25 === 0) {
@@ -1147,15 +1025,9 @@ export class VoiceMediaSession extends EventTarget {
         }
         try {
             const c = this._captureCtx;
+            await resumeIfNotRunning(c);
             if (c.state !== 'running') {
-                try {
-                    await c.resume();
-                } catch {
-                    /* noop */
-                }
-            }
-            if (c.state !== 'running') {
-                if (isVoiceClientDebugEnabled()) {
+                if (isPlatformDevtoolsEnabled()) {
                     _voiceClientDebug('worklet_capture_ctx_not_running', {
                         batch_n: this._captureWorkletBatchRecv,
                         state: c.state,
@@ -1165,7 +1037,7 @@ export class VoiceMediaSession extends EventTarget {
             }
             const buf = this._encodeMonoFloatToOutboundPcm16(data, c.sampleRate);
             if (!(buf instanceof ArrayBuffer)) {
-                if (isVoiceClientDebugEnabled()) {
+                if (isPlatformDevtoolsEnabled()) {
                     this._pcmEncodeMissCount += 1;
                     const m = this._pcmEncodeMissCount;
                     if (m <= 8 || m % 40 === 0) {
@@ -1250,7 +1122,7 @@ export class VoiceMediaSession extends EventTarget {
         ) {
             return;
         }
-        this._mutedTrackDiagnosticTimer = window.setTimeout(() => {
+        this._mutedTrackDiagnosticTimer = setTimeout(() => {
             this._mutedTrackDiagnosticTimer = null;
             if (this._closed || !this._recording) {
                 return;
@@ -1279,11 +1151,11 @@ export class VoiceMediaSession extends EventTarget {
                     detail: err instanceof Error ? err.message : String(err),
                 });
             }
-            this._capturePumpTimer = window.setTimeout(() => {
+            this._capturePumpTimer = setTimeout(() => {
                 void run();
             }, MIC_CAPTURE_PUMP_MS);
         };
-        this._capturePumpTimer = window.setTimeout(() => {
+        this._capturePumpTimer = setTimeout(() => {
             void run();
         }, 0);
     }
@@ -1301,13 +1173,7 @@ export class VoiceMediaSession extends EventTarget {
             return;
         }
         const ctx = this._captureCtx;
-        if (ctx.state !== 'running') {
-            try {
-                await ctx.resume();
-            } catch {
-                /* noop */
-            }
-        }
+        await resumeIfNotRunning(ctx);
         if (ctx.state !== 'running') {
             return;
         }
@@ -1360,7 +1226,10 @@ export class VoiceMediaSession extends EventTarget {
                 const minSepIdx = Math.floor(VOICE_WS_SPEAK_TEXT_CHUNK_MAX * 0.35);
                 const seps = ['\n\n', '\n', '. ', '。', '! ', '? ', '; ', ', '];
                 for (let s = 0; s < seps.length; s += 1) {
-                    const sep = seps[s] || '';
+                    const sep = seps[s];
+                    if (sep === undefined) {
+                        throw new Error('voice speak separator missing');
+                    }
                     const idx = win.lastIndexOf(sep);
                     if (idx >= minSepIdx) {
                         cutRel = Math.max(cutRel, idx + sep.length);
@@ -1384,7 +1253,11 @@ export class VoiceMediaSession extends EventTarget {
         }
         for (let i = 0; i < pieces.length; i += 1) {
             const last = i === pieces.length - 1;
-            this._sendSpeakCommand(pieces[i] || '', isFinal && last);
+            const piece = pieces[i];
+            if (piece === undefined) {
+                throw new Error('voice speak piece missing');
+            }
+            this._sendSpeakCommand(piece, isFinal && last);
         }
     }
 
@@ -1446,7 +1319,7 @@ export class VoiceMediaSession extends EventTarget {
         if (c.state === 'running') {
             return;
         }
-        void c.resume().catch(() => {});
+        this._resumeInBackground(c);
     }
 
     /**
@@ -1480,7 +1353,7 @@ export class VoiceMediaSession extends EventTarget {
      */
     _handleWsMessage(event: MessageEvent): void {
         if (event.data instanceof ArrayBuffer) {
-            if (isVoiceClientDebugEnabled()) {
+            if (isPlatformDevtoolsEnabled()) {
                 this._wsInBinaryDebugSeq += 1;
                 if (this._wsInBinaryDebugSeq <= 12) {
                     _voiceClientDebug('ws_in_binary', {
@@ -1498,11 +1371,12 @@ export class VoiceMediaSession extends EventTarget {
         let payload;
         try {
             payload = JSON.parse(event.data);
-        } catch {
+        } catch (err) {
+            this._dispatchFailure('voice/client/ws_frame_invalid', err);
             return;
         }
         if (!payload || typeof payload !== 'object') return;
-        if (isVoiceClientDebugEnabled()) {
+        if (isPlatformDevtoolsEnabled()) {
             const t = typeof payload.type === 'string' ? payload.type : '?';
             this._wsJsonDebugSeq += 1;
             if (this._wsJsonDebugSeq <= 60) {
@@ -1587,67 +1461,55 @@ export class VoiceMediaSession extends EventTarget {
             this._captureVisibilityHandler = null;
         }
         if (this._capturePumpTimer !== null) {
-            window.clearTimeout(this._capturePumpTimer);
+            clearTimeout(this._capturePumpTimer);
             this._capturePumpTimer = null;
         }
         if (this._mutedTrackDiagnosticTimer !== null) {
-            window.clearTimeout(this._mutedTrackDiagnosticTimer);
+            clearTimeout(this._mutedTrackDiagnosticTimer);
             this._mutedTrackDiagnosticTimer = null;
         }
         if (this._captureResumeWatchdog !== null) {
-            window.clearInterval(this._captureResumeWatchdog);
+            clearInterval(this._captureResumeWatchdog);
             this._captureResumeWatchdog = null;
         }
         if (this._captureCtx !== null) {
             this._captureCtx.onstatechange = null;
         }
         if (this._captureWorkletNode !== null) {
-            try {
-                this._captureWorkletNode.port.onmessage = null;
-                this._captureWorkletNode.port.close();
-            } catch {
-                /* noop */
-            }
-            try {
-                this._captureWorkletNode.disconnect();
-            } catch {
-                /* noop */
-            }
+            this._captureWorkletNode.port.onmessage = null;
+            this._captureWorkletNode.port.close();
+            this._captureWorkletNode.disconnect();
             this._captureWorkletNode = null;
         }
         if (this._captureScriptProcessor) {
-            try {
-                this._captureScriptProcessor.onaudioprocess = null;
-                this._captureScriptProcessor.disconnect();
-            } catch {
-                /* noop */
-            }
+            this._captureScriptProcessor.onaudioprocess = null;
+            this._captureScriptProcessor.disconnect();
             this._captureScriptProcessor = null;
         }
         if (this._captureKeepAliveOsc) {
-            try { this._captureKeepAliveOsc.stop(); } catch { /* noop */ }
-            try { this._captureKeepAliveOsc.disconnect(); } catch { /* noop */ }
+            this._captureKeepAliveOsc.stop();
+            this._captureKeepAliveOsc.disconnect();
             this._captureKeepAliveOsc = null;
         }
         if (this._captureKeepAliveGain) {
-            try { this._captureKeepAliveGain.disconnect(); } catch { /* noop */ }
+            this._captureKeepAliveGain.disconnect();
             this._captureKeepAliveGain = null;
         }
         if (this._captureAnalyser) {
-            try { this._captureAnalyser.disconnect(); } catch { /* noop */ }
+            this._captureAnalyser.disconnect();
             this._captureAnalyser = null;
         }
         if (this._captureSinkGain) {
-            try { this._captureSinkGain.disconnect(); } catch { /* noop */ }
+            this._captureSinkGain.disconnect();
             this._captureSinkGain = null;
         }
         if (this._captureCtx) {
-            try { this._captureCtx.close(); } catch { /* noop */ }
+            this._closeAudioContext(this._captureCtx);
             this._captureCtx = null;
         }
         if (this._mediaStream) {
             for (const track of this._mediaStream.getTracks()) {
-                try { track.stop(); } catch { /* noop */ }
+                track.stop();
             }
             this._mediaStream = null;
         }
@@ -1657,7 +1519,7 @@ export class VoiceMediaSession extends EventTarget {
         this._playbackQueue = Promise.resolve();
         this._playbackChunksInFlight = 0;
         if (this._playbackCtx !== null) {
-            try { this._playbackCtx.close(); } catch { /* noop */ }
+            this._closeAudioContext(this._playbackCtx);
             this._playbackCtx = null;
         }
         this._playbackCursor = 0;
@@ -1681,7 +1543,7 @@ export class VoiceMediaSession extends EventTarget {
      */
     async _playAudioChunkSequential(buffer: ArrayBuffer): Promise<void> {
         const ctx = await this._ensurePlaybackContext();
-        const mime = (this._mediaConfig.mime || '').toLowerCase();
+        const mime = this._mediaConfig.mime.toLowerCase();
         if (mime === 'audio/l16' || mime === 'audio/pcm') {
             await this._playRawPcm(ctx, buffer);
             return;
@@ -1699,24 +1561,12 @@ export class VoiceMediaSession extends EventTarget {
 
     async _ensurePlaybackContext() {
         if (this._playbackCtx !== null && this._playbackCtx.state !== 'closed') {
-            if (this._playbackCtx.state !== 'running') {
-                try {
-                    await this._playbackCtx.resume();
-                } catch (_resumeErr) {
-                    /* noop */
-                }
-            }
+            await resumeIfNotRunning(this._playbackCtx);
             return this._playbackCtx;
         }
-        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const Ctx = window.AudioContext || window.webkitAudioContext;
         this._playbackCtx = new Ctx({ sampleRate: this._mediaConfig.sampleRate });
-        if (this._playbackCtx.state !== 'running') {
-            try {
-                await this._playbackCtx.resume();
-            } catch (_resumeErr) {
-                /* noop */
-            }
-        }
+        await resumeIfNotRunning(this._playbackCtx);
         this._playbackCursor = this._playbackCtx.currentTime;
         return this._playbackCtx;
     }
@@ -1729,23 +1579,13 @@ export class VoiceMediaSession extends EventTarget {
         if (this._closed) {
             return;
         }
-        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const Ctx = window.AudioContext || window.webkitAudioContext;
         if (this._playbackCtx === null || this._playbackCtx.state === 'closed') {
             this._playbackCtx = new Ctx({ sampleRate: this._mediaConfig.sampleRate });
             this._playbackCursor = this._playbackCtx.currentTime;
         }
         if (this._playbackCtx.state === 'suspended') {
-            try {
-                const pr = this._playbackCtx.resume();
-                if (pr !== undefined && typeof pr.then === 'function') {
-                    pr.then(
-                        () => {},
-                        () => {},
-                    );
-                }
-            } catch (_resumeErr) {
-                /* noop */
-            }
+            this._resumeInBackground(this._playbackCtx);
         }
     }
 
@@ -1758,7 +1598,7 @@ export class VoiceMediaSession extends EventTarget {
         if (int16.length === 0) return;
         const float32 = new Float32Array(int16.length);
         for (let i = 0; i < int16.length; i++) {
-            float32[i] = (int16[i] || 0) / 0x8000;
+            float32[i] = sampleAt(int16, i) / 0x8000;
         }
         const audioBuffer = ctx.createBuffer(1, float32.length, this._mediaConfig.sampleRate);
         audioBuffer.copyToChannel(float32, 0);
@@ -1770,13 +1610,7 @@ export class VoiceMediaSession extends EventTarget {
      * @param {AudioBuffer} audioBuffer
      */
     async _scheduleAudioBuffer(ctx: AudioContext, audioBuffer: AudioBuffer): Promise<void> {
-        if (ctx.state !== 'closed' && ctx.state !== 'running') {
-            try {
-                await ctx.resume();
-            } catch (_resumeErr) {
-                /* noop */
-            }
-        }
+        await resumeIfNotRunning(ctx);
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(ctx.destination);
@@ -1793,6 +1627,22 @@ export class VoiceMediaSession extends EventTarget {
         this.dispatchEvent(new CustomEvent(type, { detail }));
     }
 
+    _dispatchFailure(code: string, err: unknown): void {
+        this._dispatch('error', { code, detail: err instanceof Error ? err.message : String(err) });
+    }
+
+    /** Возобновление без ожидания (обработчики состояния и жеста): отказ уходит событием `error`. */
+    _resumeInBackground(ctx: AudioContext): void {
+        resumeIfNotRunning(ctx).catch((err: unknown) => this._dispatchFailure('voice/client/audio_resume_failed', err));
+    }
+
+    _closeAudioContext(ctx: AudioContext): void {
+        if (ctx.state === 'closed') {
+            return;
+        }
+        ctx.close().catch((err: unknown) => this._dispatchFailure('voice/client/audio_close_failed', err));
+    }
+
     /**
      * Запросить на сервере немедленный flush STT по текущему сегменту (WS ``end_recording``)
      * и дождаться ответа ``finalize_done`` или таймаута. Вызывать **до** bridge.stop() / close(),
@@ -1806,20 +1656,20 @@ export class VoiceMediaSession extends EventTarget {
         }
         return new Promise((resolve) => {
             let settled = false;
-            let timer = 0;
+            let timer: ReturnType<typeof setTimeout> | null = null;
             const finish = () => {
                 if (settled) {
                     return;
                 }
                 settled = true;
-                if (timer !== 0) {
-                    window.clearTimeout(timer);
+                if (timer !== null) {
+                    clearTimeout(timer);
                 }
                 this.removeEventListener('recordingFinalized', onDone);
                 resolve();
             };
             const onDone = () => finish();
-            timer = window.setTimeout(finish, timeoutMs);
+            timer = setTimeout(finish, timeoutMs);
             this.addEventListener('recordingFinalized', onDone, { once: true });
             this._sendText({ type: 'end_recording' });
         });
@@ -1836,7 +1686,7 @@ export class VoiceMediaSession extends EventTarget {
         this._teardownCapture();
         this._resetPlayback();
         if (this._ws !== null) {
-            try { this._ws.close(1000, 'client_close'); } catch { /* noop */ }
+            this._ws.close(1000, 'client_close');
             this._ws = null;
         }
     }

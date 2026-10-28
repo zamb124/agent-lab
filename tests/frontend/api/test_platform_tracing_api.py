@@ -97,7 +97,7 @@ async def test_platform_tracing_spans_system_filters_and_cursor(
     tid = f"tr_{unique_id}"
     base = datetime.now(timezone.utc)
     op = f"op.admin.{unique_id}"
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_s1",
             trace_id=tid,
@@ -106,7 +106,7 @@ async def test_platform_tracing_spans_system_filters_and_cursor(
             start_time=base + timedelta(seconds=2),
         )
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_s2",
             trace_id=tid,
@@ -155,7 +155,7 @@ async def test_platform_tracing_trace_tree(
 ):
     tid = f"tree_{unique_id}"
     t0 = datetime.now(timezone.utc)
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_root",
             trace_id=tid,
@@ -164,7 +164,7 @@ async def test_platform_tracing_trace_tree(
             start_time=t0,
         )
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_child",
             trace_id=tid,
@@ -197,7 +197,7 @@ async def test_platform_tracing_facet_users_scoped_by_company(
     base = datetime.now(timezone.utc)
     co_x = f"api_co_x_{unique_id}"
     uid_x = f"api_user_{unique_id}"
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_fx",
             trace_id=f"{unique_id}_tfx",
@@ -207,7 +207,7 @@ async def test_platform_tracing_facet_users_scoped_by_company(
             company_id=co_x,
         ).model_copy(update={"user_id": uid_x}),
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_fy",
             trace_id=f"{unique_id}_tfy",
@@ -252,7 +252,7 @@ async def test_platform_tracing_facet_users_finds_by_email_and_label(
     )
     await User.set(user)
     base = datetime.now(timezone.utc)
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_em",
             trace_id=f"{unique_id}_tem",
@@ -291,7 +291,7 @@ async def test_platform_tracing_spans_resolve_user_id_query_email(
     )
     base = datetime.now(timezone.utc)
     sid = f"{unique_id}_uresem"
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=sid,
             trace_id=f"{unique_id}_turesem",
@@ -318,7 +318,7 @@ async def test_platform_tracing_spans_namespace_and_service_query(
     base = datetime.now(timezone.utc)
     ns = f"api_ns_{unique_id}"
     svc = f"api_svc_{unique_id}_z"
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_nq",
             trace_id=f"{unique_id}_tnq",
@@ -365,7 +365,7 @@ async def test_platform_tracing_facet_companies_by_subdomain(
     await Company.set(co)
 
     base = datetime.now(timezone.utc)
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=f"{unique_id}_sub",
             trace_id=f"{unique_id}_tsub",
@@ -407,7 +407,7 @@ async def test_platform_tracing_spans_resolve_company_id_query_subdomain(
 
     base = datetime.now(timezone.utc)
     sid = f"{unique_id}_sp_res"
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_payload(
             span_id=sid,
             trace_id=f"{unique_id}_tres",

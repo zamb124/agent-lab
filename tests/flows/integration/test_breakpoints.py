@@ -52,7 +52,7 @@ class TestBreakpointsReactAgent:
     @pytest_asyncio.fixture
     async def flow_config(self, app, di) -> FlowConfig:
         """Загружает конфиг example_react из БД."""
-        config = await FlowConfig.get_latest("example_react")
+        config = await FlowConfig.current_for_flow("example_react")
         assert config is not None, "Agent example_react не найден в БД"
         return config
 
@@ -213,7 +213,7 @@ class TestBreakpointsGraphAgent:
     @pytest_asyncio.fixture
     async def flow_config(self, app, di) -> FlowConfig:
         """Загружает конфиг example_graph из БД."""
-        config = await FlowConfig.get_latest("example_graph")
+        config = await FlowConfig.current_for_flow("example_graph")
         assert config is not None, "Agent example_graph не найден в БД"
         return config
 

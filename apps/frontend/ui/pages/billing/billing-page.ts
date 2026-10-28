@@ -31,6 +31,12 @@ function _planTranslationKey(plan: Record<string, any>) {
     return `tariff_plans.${p.toLowerCase()}.name`;
 }
 
+function shownCount(value: unknown): number | string {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.length > 0) return value;
+    return 0;
+}
+
 function _percent(spent: number | string | null | undefined, budget: number | string | null | undefined): number | null {
     if (!budget || Number(budget) <= 0) return null;
     return Math.min(100, Math.round((Number(spent) / Number(budget)) * 100));
@@ -214,7 +220,8 @@ export class FrontendBillingPage extends PlatformPage {
         const budget = subscription && subscription.monthly_budget;
         const spent = subscription && subscription.current_month_spent;
         const periodStart = subscription && subscription.billing_period_start;
-        const pct = _percent(spent, budget);
+        const rawPct = _percent(spent, budget);
+        const pct = rawPct === null ? 0 : rawPct;
         const planName = plan ? this.t(_planTranslationKey(plan)) : '—';
         return html`
             <div class="grid">
@@ -233,11 +240,11 @@ export class FrontendBillingPage extends PlatformPage {
                     <div class="stat-value">${this._formatCurrency(spent)} ${this.t('frontend_console.currency_rub')}</div>
                     ${budget && budget > 0
                         ? html`
-                            <div class="progress ${(pct ?? 0) >= 100 ? 'over' : ''}">
-                                <div style="width: ${pct ?? 0}%"></div>
+                            <div class="progress ${pct >= 100 ? 'over' : ''}">
+                                <div style="width: ${pct}%"></div>
                             </div>
                             <div class="stat-meta">
-                                ${pct ?? 0}% ${this.t('budget_usage.used')} · ${this.t('current_plan.monthly_limit')}: ${this._formatCurrency(budget)}
+                                ${pct}% ${this.t('budget_usage.used')} · ${this.t('current_plan.monthly_limit')}: ${this._formatCurrency(budget)}
                             </div>
                         `
                         : html`<div class="stat-meta">${this.t('current_plan.no_limit')}</div>`
@@ -280,7 +287,7 @@ export class FrontendBillingPage extends PlatformPage {
                     </div></glass-card>
                     <glass-card><div class="stat">
                         <div class="stat-label">${this.t('usage_stats.total_calls')}</div>
-                        <div class="stat-value">${usage.total_calls || 0}</div>
+                        <div class="stat-value">${shownCount(usage.total_calls)}</div>
                     </div></glass-card>
                 </div>
             </section>
@@ -300,7 +307,7 @@ export class FrontendBillingPage extends PlatformPage {
                                 ${resourceRows.map(([resource, info]) => html`
                                     <tr>
                                         <td>${resource}</td>
-                                        <td class="num">${info.calls || 0}</td>
+                                        <td class="num">${shownCount(info.calls)}</td>
                                         <td class="num">${this._formatCurrency(info.cost)}</td>
                                     </tr>
                                 `)}
@@ -325,7 +332,7 @@ export class FrontendBillingPage extends PlatformPage {
                                 ${userRows.map(([user, info]) => html`
                                     <tr>
                                         <td><platform-user-chip user-id=${user}></platform-user-chip></td>
-                                        <td class="num">${info.calls || 0}</td>
+                                        <td class="num">${shownCount(info.calls)}</td>
                                         <td class="num">${this._formatCurrency(info.cost)}</td>
                                     </tr>
                                 `)}

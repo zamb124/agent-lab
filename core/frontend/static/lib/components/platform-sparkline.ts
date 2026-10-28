@@ -75,8 +75,11 @@ export class PlatformSparkline extends PlatformElement {
             return { x, y };
         });
         const linePath = coords.map((coord, index) => `${index === 0 ? 'M' : 'L'} ${coord.x} ${coord.y}`).join(' ');
-        const last = coords[coords.length - 1]!;
-        const first = coords[0]!;
+        const last = coords[coords.length - 1];
+        const first = coords[0];
+        if (last === undefined || first === undefined) {
+            throw new Error('platform-sparkline: path coordinates missing');
+        }
         const areaPath = `${linePath} L ${last.x} ${SVG_HEIGHT - SVG_PADDING} L ${first.x} ${SVG_HEIGHT - SVG_PADDING} Z`;
         return { linePath, areaPath };
     }

@@ -90,3 +90,13 @@ export const catalogRagSettingsOp = createAsyncOp({
         );
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/catalog_rag_status': typeof catalogRagStatusOp;
+        'office/catalog_rag_enable': typeof catalogRagEnableOp;
+        'office/catalog_rag_disable': typeof catalogRagDisableOp;
+        'office/catalog_rag_rebuild': typeof catalogRagRebuildOp;
+        'office/catalog_rag_settings': typeof catalogRagSettingsOp;
+    }
+}

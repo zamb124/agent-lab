@@ -93,14 +93,15 @@ class EntityType(PlatformModel):
     auto_resolve_suggests: bool = DbField(default=False)
 
     @classmethod
-    def row_id(cls, company_id: str, namespace: str, type_id: str) -> str:
+    def row_id_by_company_namespace_and_type(cls, company_id: str, namespace: str, type_id: str) -> str:
+        """Ключ из company_id, namespace и type_id. Пустой company_id, namespace или type_id — ValueError."""
         if company_id == "" or namespace == "" or type_id == "":
             raise ValueError("entity type row requires company_id, namespace and type_id")
         return f"{len(company_id)}:{company_id}:{len(namespace)}:{namespace}:{type_id}"
 
     @model_validator(mode="after")
     def bind_row_id(self) -> Self:
-        expected = type(self).row_id(self.company_id, self.namespace, self.type_id)
+        expected = type(self).row_id_by_company_namespace_and_type(self.company_id, self.namespace, self.type_id)
         if self.entity_type_row_id == "":
             self.entity_type_row_id = expected
         elif self.entity_type_row_id != expected:
@@ -108,13 +109,14 @@ class EntityType(PlatformModel):
         return self
 
     @classmethod
-    def in_company(
+    def query_by_namespace_in_company(
         cls,
         company_id: str,
         *,
         namespace: str | None = None,
         include_system: bool = True,
     ) -> Query[Self]:
+        """Запрос типов компании. namespace is None не фильтрует. include_system=False оставляет только несистемные. Порядка нет."""
         rows = cls.objects.filter(company_id=company_id)
         if namespace is not None:
             rows = rows.filter(namespace=namespace)
@@ -149,7 +151,7 @@ class EntityType(PlatformModel):
         if cached is not None and cached[0] == revision_before:
             return list(cached[1])
         items = await (
-            cls.in_company(resolved_company_id, namespace=namespace)
+            cls.query_by_namespace_in_company(resolved_company_id, namespace=namespace)
             .order_by("-is_system", "type_id")
             .limit(CATALOG_MAX_ROWS + 1)
             .all()
@@ -177,7 +179,7 @@ class EntityType(PlatformModel):
         return created
 
     @classmethod
-    async def update_fields(
+    async def update_field_patch(
         cls,
         type_id: str,
         *,
@@ -185,6 +187,7 @@ class EntityType(PlatformModel):
         company_id: str | None = None,
         patch: EntityTypeFieldUpdate,
     ) -> None:
+        """Пишет непустой патч одной строки и поднимает ревизию каталога. Пустой патч или не одна строка — ValueError."""
         if len(patch) == 0:
             raise ValueError("entity type update requires fields")
         resolved_company_id = resolve_entity_type_company(company_id)

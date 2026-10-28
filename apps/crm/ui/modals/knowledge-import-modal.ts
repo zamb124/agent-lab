@@ -42,6 +42,21 @@ import type {
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function anyRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
+
+function dragEvent(event: Event): DragEvent {
+    if (!(event instanceof DragEvent)) {
+        throw new Error('knowledge-import-modal: drag event required');
+    }
+    return event;
+}
 
 const MAX_INLINE_TEXT = 100000;
 const CHUNK_MIN = 2000;
@@ -345,7 +360,15 @@ export class CRMKnowledgeImportModal extends PlatformModal {
     }
 
     _allowedTypes(): Record<string, any>[] {
-        return (this._entityTypes.items ?? []) as Record<string, any>[];
+        const items: Record<string, any>[] = [];
+        for (const item of this._entityTypes.items) {
+            const row = anyRecord(item);
+            if (row === null) {
+                throw new Error('knowledge-import-modal: entity type must be an object');
+            }
+            items.push(row);
+        }
+        return items;
     }
 
     _toggleType(typeId: unknown): void {
@@ -370,8 +393,11 @@ export class CRMKnowledgeImportModal extends PlatformModal {
     }
 
     async _onFileInputChange(ev: Event): Promise<void> {
-        const input = ev.target as HTMLInputElement;
-        const files = input.files ? Array.from(input.files) : [];
+        const input = ev.target;
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('knowledge-import-modal: file input required');
+        }
+        const files = input.files === null ? [] : Array.from(input.files);
         input.value = '';
         await this._uploadFilesArray(files);
     }
@@ -382,11 +408,14 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         }
         this._uploading = true;
         const next = [...this._files];
-        for (const file of rawFiles as File[]) {
+        for (const file of rawFiles) {
+            if (!(file instanceof File)) {
+                throw new Error('knowledge-import-modal: file required');
+            }
             const spec = buildPlatformAuxiliaryFileCreateSpecJson({
                 retentionKind: 'crm_knowledge_import',
             });
-            const result = await this._fileUpload.run({ file, spec }) as Record<string, any> | null;
+            const result = anyRecord(await this._fileUpload.run({ file, spec }));
             if (!result || typeof result.file_id !== 'string') {
                 this._uploading = false;
                 throw new Error('CRMKnowledgeImportModal: upload returned no file_id');
@@ -418,8 +447,8 @@ export class CRMKnowledgeImportModal extends PlatformModal {
 
     _onDragOver(ev: Event) {
         ev.preventDefault();
-        const dt = (ev as DragEvent).dataTransfer;
-        if (dt) {
+        const dt = dragEvent(ev).dataTransfer;
+        if (dt !== null) {
             dt.dropEffect = 'copy';
         }
     }
@@ -427,7 +456,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
     _onDragLeave(ev: Event) {
         ev.preventDefault();
         const zone = ev.currentTarget;
-        const rel = (ev as DragEvent).relatedTarget;
+        const rel = dragEvent(ev).relatedTarget;
         if (rel instanceof Node && zone instanceof HTMLElement && zone.contains(rel)) return;
         this._dropzoneActive = false;
     }
@@ -435,8 +464,8 @@ export class CRMKnowledgeImportModal extends PlatformModal {
     async _onDrop(ev: Event): Promise<void> {
         ev.preventDefault();
         this._dropzoneActive = false;
-        const dt = (ev as DragEvent).dataTransfer;
-        const raw = dt && dt.files ? Array.from(dt.files) : [];
+        const dt = dragEvent(ev).dataTransfer;
+        const raw = dt === null ? [] : Array.from(dt.files);
         await this._uploadFilesArray(raw);
     }
 
@@ -674,7 +703,12 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                     </div>
                     <platform-switch
                         .checked=${this._splitByHeadings}
-                        @change=${(e: Event) => this._setSplitByHeadings((e.target as HTMLInputElement).checked)}
+                        @change=${(e: Event) => {
+                            if (!(e instanceof CustomEvent) || !isPlainRecord(e.detail) || typeof e.detail.value !== 'boolean') {
+                                throw new Error('knowledge-import-modal: split switch expects detail.value boolean');
+                            }
+                            this._setSplitByHeadings(e.detail.value);
+                        }}
                     ></platform-switch>
                 </div>
                 <div class="ki-row">

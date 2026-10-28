@@ -71,7 +71,7 @@ class SyncCallLinkService:
             u = await User.get(uid)
             out[uid] = u.name if u is not None else uid
 
-        for participant_row in await SyncCallParticipant.list_for_call(call.call_id):
+        for participant_row in await SyncCallParticipant.list_unordered_for_call(call.call_id):
             uid = participant_row.user_id
             if uid in out:
                 continue
@@ -101,7 +101,7 @@ class SyncCallLinkService:
             uid for uid in calendar_member_user_ids if uid and uid != link_creator_user_id
         }
         for uid in sorted(desired_guests):
-            await SyncChannelMember.ensure_channel_member_row(
+            await SyncChannelMember.ensure_member(
                 channel_id, uid, company_id=company_id
             )
             await access.set_member(channel_id, user_id=uid, relation="member")
@@ -109,7 +109,7 @@ class SyncCallLinkService:
         desired = {link_creator_user_id} | desired_guests
         for uid in current:
             if uid not in desired:
-                _ = await SyncChannelMember.delete_channel_member(
+                _ = await SyncChannelMember.delete_by_user(
                     channel_id, uid, company_id=company_id
                 )
                 await access.remove_member(channel_id, user_id=uid)
@@ -120,7 +120,7 @@ class SyncCallLinkService:
         user: User,
         company_id: str,
     ) -> OffsetPage[CallScheduledLinkRead]:
-        rows = await SyncCallLink.list_scheduled_calendar_links_for_user(
+        rows = await SyncCallLink.list_unordered_scheduled_calendar_links_for_user(
             company_id,
             user.user_id,
             range_start=payload.start_at,
@@ -211,11 +211,11 @@ class SyncCallLinkService:
             )
             _ = await SyncChannel.set(ch)
             member_ids = [uid for uid in calendar_member_user_ids if uid and uid != actor_id]
-            await SyncChannelMember.ensure_channel_member_row(
+            await SyncChannelMember.ensure_member(
                 channel_id, actor_id, company_id=company_id
             )
             for uid in member_ids:
-                await SyncChannelMember.ensure_channel_member_row(
+                await SyncChannelMember.ensure_member(
                     channel_id, uid, company_id=company_id
                 )
             try:
@@ -284,7 +284,7 @@ class SyncCallLinkService:
                 )
                 if body.reuse_channel_link:
                     if existing_p is not None:
-                        await SyncCallLink.set_expires_at(existing_p.link_token, expires_at)
+                        await SyncCallLink.update_expires_at_by_link_token(existing_p.link_token, expires_at)
                         join_url = await self._mint_join_short_url(
                             existing_p.link_token, expires_at, company_id
                         )
@@ -387,7 +387,7 @@ class SyncCallLinkService:
             name = body.scheduled_title.strip()
             if name == "":
                 raise WsCommandError("ws_invalid_payload", "scheduled_title must not be empty.", error_code='ws_invalid_payload')
-            _ = await SyncChannel.rename_channel(ch, name)
+            _ = await SyncChannel.update_name(ch, name)
         if body.calendar_member_user_ids is not None:
             await self._reconcile_calendar_meeting_channel_members(
                         channel_id=link.channel_id,

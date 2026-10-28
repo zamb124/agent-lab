@@ -5,6 +5,7 @@
 import { html, css, nothing } from '../lit-shim.js';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
 import './platform-icon.js';
 import './fields/platform-field.js';
 
@@ -20,17 +21,23 @@ function _normalizeEntry(raw: unknown): VariableMapEntry {
     if (raw === null || raw === undefined) {
         return { value: '', secret: false };
     }
-    if (typeof raw === 'object' && !Array.isArray(raw) && 'value' in raw) {
-        const record = raw as Record<string, unknown>;
+    if (isPlainRecord(raw) && 'value' in raw) {
         return {
-            value: record.value,
-            secret: Boolean(record.secret),
-            public: Boolean(record.public),
-            title: typeof record.title === 'string' ? record.title : undefined,
-            description: typeof record.description === 'string' ? record.description : undefined,
+            value: raw.value,
+            secret: Boolean(raw.secret),
+            public: Boolean(raw.public),
+            title: typeof raw.title === 'string' ? raw.title : undefined,
+            description: typeof raw.description === 'string' ? raw.description : undefined,
         };
     }
     return { value: raw, secret: false };
+}
+
+function fieldString(detail: unknown): string {
+    if (!isPlainRecord(detail) || typeof detail.value !== 'string') {
+        throw new Error('platform-variables-panel: field change value must be a string');
+    }
+    return detail.value;
 }
 
 function _stringifyValue(entry: VariableMapEntry | null | undefined): string {
@@ -283,10 +290,11 @@ export class PlatformVariablesPanel extends PlatformElement {
         if (!this.variables || typeof this.variables !== 'object' || Array.isArray(this.variables)) {
             return [];
         }
-        return Object.entries(this.variables).map(([key, raw]) => ({
-            key,
-            entry: _normalizeEntry(raw),
-        })) as Array<{ key: string; entry: VariableMapEntry }>;
+        const entries: Array<{ key: string; entry: VariableMapEntry }> = [];
+        for (const [key, raw] of Object.entries(this.variables)) {
+            entries.push({ key, entry: _normalizeEntry(raw) });
+        }
+        return entries;
     }
 
     _updateKey(oldKey: string, newKey: string): void {
@@ -400,9 +408,7 @@ export class PlatformVariablesPanel extends PlatformElement {
                                     .placeholder=${this.t('variables_panel.key_placeholder')}
                                     ?disabled=${this.readonly}
                                     @change=${(e: CustomEvent) => {
-                                        const detail = e.detail as { value?: unknown } | undefined;
-                                        const value = detail && typeof detail.value === 'string' ? detail.value : '';
-                                        this._setKeyDraft(key, value);
+                                        this._setKeyDraft(key, fieldString(e.detail));
                                     }}
                                 ></platform-field>
                             </div>
@@ -420,9 +426,7 @@ export class PlatformVariablesPanel extends PlatformElement {
                                     input-type=${entry.secret ? 'password' : 'text'}
                                     ?disabled=${this.readonly}
                                     @change=${(e: CustomEvent) => {
-                                        const detail = e.detail as { value?: unknown } | undefined;
-                                        const value = detail && typeof detail.value === 'string' ? detail.value : '';
-                                        this._setValueDraft(key, value);
+                                        this._setValueDraft(key, fieldString(e.detail));
                                     }}
                                 ></platform-field>
                             </div>

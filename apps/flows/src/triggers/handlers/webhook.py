@@ -80,7 +80,7 @@ class WebhookTriggerHandler(BaseTriggerHandler):
         trigger_id: str,
         payload: JsonObject,
     ) -> JsonObject:
-        flow_config = await FlowConfig.get_latest(flow_id)
+        flow_config = await FlowConfig.current_for_flow(flow_id)
         if flow_config is None:
             raise TriggerRegistrationError(
                 trigger_type="webhook",

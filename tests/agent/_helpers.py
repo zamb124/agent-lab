@@ -181,7 +181,7 @@ async def ensure_company_public_flows(company_id: str, di) -> None:
         )
     )
     try:
-        existing_lara = await FlowConfig.get_latest("lara")
+        existing_lara = await FlowConfig.current_for_flow("lara")
         if existing_lara is not None:
             return
         _ = await load_tools_to_db(
@@ -197,7 +197,7 @@ async def ensure_company_public_flows(company_id: str, di) -> None:
             raise AssertionError(
                 f"ожидали reload lara, получили {loaded_flow_id!r} для company {company_id}"
             )
-        lara_after = await FlowConfig.get_latest("lara")
+        lara_after = await FlowConfig.current_for_flow("lara")
         if lara_after is None:
             raise AssertionError(f"flow lara отсутствует в company {company_id} после seed")
     finally:

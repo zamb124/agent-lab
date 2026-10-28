@@ -18,6 +18,7 @@ from core.crawl.models.contracts import (
     CrawlStatusCount,
     normalize_domain,
 )
+from core.errors.boundary import PlatformNotFoundError
 from core.models.platform_model import PlatformModel
 from core.pagination import OffsetPage
 from core.types import JsonValue, parse_json_object, require_json_object
@@ -139,7 +140,7 @@ class CrawlDomain(PlatformModel):
     async def patch(cls, crawl_domain_id: str, body: CrawlDomainPatchRequest) -> Self:
         row = await cls.objects.filter(crawl_domain_id=crawl_domain_id).get_or_none()
         if row is None:
-            raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
         if body.status is not None:
             row.status = body.status
         if body.refresh_interval_seconds is not None:
@@ -255,7 +256,7 @@ class CrawlDomain(PlatformModel):
         )
 
     @classmethod
-    async def list_page(
+    async def page_by_domain(
         cls,
         *,
         crawl_profile_id: str,
@@ -263,6 +264,7 @@ class CrawlDomain(PlatformModel):
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlDomain]:
+        """Страница доменов профиля, ORDER BY domain. status равный None не фильтрует. total — COUNT этого фильтра."""
         rows = cls.objects.filter(crawl_profile_id=crawl_profile_id)
         if status is not None:
             rows = rows.filter(status=status)

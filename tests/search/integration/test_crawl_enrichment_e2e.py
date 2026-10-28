@@ -70,7 +70,7 @@ async def test_crawl_enrichment_indexes_example_com_with_page_summary(
             browser_fallback_enabled=False,
         )
     )
-    await CrawlProfile.set_llm_enrichment(
+    await CrawlProfile.update_llm_enrichment_enabled_and_model(
         crawl_profile_id,
         llm_enrichment_enabled=True,
         enrichment_model=CRAWL_STRICT_ENRICHMENT_MODEL,

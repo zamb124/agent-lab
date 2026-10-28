@@ -420,7 +420,7 @@ class CodeAgentSourceService:
         )
 
     async def _require_flow(self, flow_id: str) -> FlowConfig:
-        flow = await FlowConfig.get_latest(flow_id)
+        flow = await FlowConfig.current_for_flow(flow_id)
         if flow is None:
             raise LookupError(f"flow not found: {flow_id}")
         return flow

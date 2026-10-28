@@ -6,6 +6,7 @@ import { createAsyncOp } from '../index.js';
 import { httpRequest } from '../http.js';
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 
 export const platformAgentDevicesLoadOp = createAsyncOp({
     name: 'platform/agent_devices_load',
@@ -20,18 +21,30 @@ export const platformAgentDevicesLoadOp = createAsyncOp({
         url: '/frontend/api/agent/devices?mine=true',
     }),
     extraReducer: (state, event, events) => {
-        if (event.type !== events.SUCCEEDED || !event.payload || !('result' in (event.payload as object))) {
+        if (event.type !== events.SUCCEEDED || !isPlainRecord(event.payload)) {
             return state;
         }
-        const result = (event.payload as { result?: unknown }).result as { items?: unknown } | null;
-        if (!result || typeof result !== 'object') {
+        const result = event.payload.result;
+        if (result == null) {
             return state;
         }
-        const items = Array.isArray(result.items) ? result.items : [];
+        if (!isPlainRecord(result)) {
+            throw new Error(`${event.type}: result must be an object`);
+        }
+        const rawItems = result.items;
+        if (rawItems != null && !Array.isArray(rawItems)) {
+            throw new Error(`${event.type}: items must be an array`);
+        }
+        const items: unknown[] = [];
+        if (Array.isArray(rawItems)) {
+            for (const entry of rawItems) {
+                items.push(entry);
+            }
+        }
         const online: Array<{ device_id: string; device_name: string; last_seen_at: string | null }> = [];
         for (const item of items) {
-            if (!item || typeof item !== 'object') {
-                continue;
+            if (!isPlainRecord(item)) {
+                throw new Error(`${event.type}: device must be an object`);
             }
             if (item.is_active !== true || item.is_tunnel_online !== true) {
                 continue;
@@ -49,8 +62,8 @@ export const platformAgentDevicesLoadOp = createAsyncOp({
             });
         }
         online.sort((left, right) => {
-            const leftSeen = left.last_seen_at || '';
-            const rightSeen = right.last_seen_at || '';
+            const leftSeen = left.last_seen_at === null ? '' : left.last_seen_at;
+            const rightSeen = right.last_seen_at === null ? '' : right.last_seen_at;
             if (leftSeen === rightSeen) {
                 return 0;
             }
@@ -73,4 +86,10 @@ export function createPlatformAgentDevicesAuthEffect(): (event: PlatformEvent, c
             platformAgentDevicesLoadOp.run({}, ctx);
         }
     };
+}
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'platform/agent_devices_load': typeof platformAgentDevicesLoadOp;
+    }
 }

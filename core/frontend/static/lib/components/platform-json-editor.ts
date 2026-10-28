@@ -189,10 +189,7 @@ export class PlatformJsonEditor extends PlatformElement {
         this._readonlyCompartment = null;
         this._themeCompartment = null;
         this._initInFlight = null;
-        this._themeSel = this.select((s) => {
-            const theme = s.theme as { mode?: string } | undefined;
-            return theme && theme.mode ? theme.mode : 'dark';
-        });
+        this._themeSel = this.select((s) => s.theme.mode);
         this._lastTheme = undefined;
         this._themeObserver = null;
         this._onWindowKeydown = (e: KeyboardEvent) => {
@@ -313,7 +310,8 @@ export class PlatformJsonEditor extends PlatformElement {
             {
                 key: 'Mod-s',
                 run: () => {
-                    this.emit('save', { value: this._editorView?.state.doc.toString() ?? '' });
+                    const view = this._editorView;
+                    this.emit('save', { value: view === undefined || view === null ? '' : view.state.doc.toString() });
                     return true;
                 },
             },

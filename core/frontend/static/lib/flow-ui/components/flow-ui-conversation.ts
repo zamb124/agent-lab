@@ -8,11 +8,12 @@ import { LitElement, html, nothing, type PropertyValues } from '../../lit-shim.j
 import { formatFileSize } from '../../utils/format-file-size.js';
 import { blockStyles, renderBlocks } from '../blocks/registry.js';
 import { activityChips } from '../blocks/platform.js';
-import type { FlowUiBlock, FlowUiRecord, FlowUiRenderContext } from '../runtime/flow-ui-store.js';
+import type { FlowUiRecord, FlowUiRenderContext } from '../runtime/flow-ui-store.js';
 import type { FlowUIStore } from '../runtime/flow-ui-store.js';
 import type { ConversationTurn, ConversationTurnDialogueItem, FlowUiSettings } from '../runtime/conversation.js';
 import { conversationTurns } from '../runtime/conversation.js';
 import { resolveAgentIdentityImageSrc } from '../runtime/agent-identity-image.js';
+import { isPlainRecord } from '../../events/payload.js';
 import { resolvedText } from '../runtime/templating.js';
 import { flowUIGlyph } from '../utils/glyph.js';
 import { markdownToHtml } from '../../utils/markdown.js';
@@ -20,6 +21,58 @@ import { flowUIText, hitlComposerSendLabel } from '../utils/text.js';
 import { conversationStyles } from './flow-ui-conversation.styles.js';
 
 const COMPOSER_MAX_PX = 200;
+
+function presentText(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+function recordField(value: unknown, label: string): FlowUiRecord | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (!isPlainRecord(value)) {
+        throw new Error(`flow-ui conversation: ${label} must be an object`);
+    }
+    return value;
+}
+
+function fileRecords(value: unknown): FlowUiRecord[] {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value)) {
+        throw new Error('flow-ui conversation: files must be an array');
+    }
+    const files: FlowUiRecord[] = [];
+    for (const file of value) {
+        if (!isPlainRecord(file)) {
+            throw new Error('flow-ui conversation: file must be an object');
+        }
+        files.push(file);
+    }
+    return files;
+}
+
+function feedElement(event: Event): HTMLElement {
+    const feed = event.target;
+    if (!(feed instanceof HTMLElement)) {
+        throw new Error('flow-ui conversation: feed scroll target must be an element');
+    }
+    return feed;
+}
+
+function composerField(event: Event): HTMLTextAreaElement {
+    const target = event.target;
+    if (!(target instanceof HTMLTextAreaElement)) {
+        throw new Error('flow-ui conversation: composer target must be a textarea');
+    }
+    return target;
+}
+
+function fileInput(event: Event): HTMLInputElement {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        throw new Error('flow-ui conversation: file input required');
+    }
+    return input;
+}
 
 /** Поверхность ``<platform-flow-ui>``, нужная ленте и композеру. */
 export interface FlowUiConversationHost {
@@ -107,7 +160,7 @@ export class FlowUIConversation extends LitElement {
     }
 
     private _onFeedScroll(event: Event) {
-        const feed = event.target as HTMLElement;
+        const feed = feedElement(event);
         this._stickToBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 48;
     }
 
@@ -116,7 +169,10 @@ export class FlowUIConversation extends LitElement {
     }
 
     private _label(template: unknown): string {
-        return this.host ? (resolvedText(template, this.host.store.state as FlowUiRecord) ?? '') : '';
+        if (this.host === null) return '';
+        const source = template === undefined || template === null ? '' : template;
+        const text = resolvedText(source, this.host.store.state);
+        return text === null ? '' : text;
     }
 
     private _identitySrc(): string {
@@ -124,7 +180,7 @@ export class FlowUIConversation extends LitElement {
         if (!host) return '';
         return resolveAgentIdentityImageSrc({
             document: host.store.document,
-            flowIdentity: (host.interface?.flow_identity as FlowUiRecord | null | undefined) ?? null,
+            flowIdentity: isPlainRecord(host.interface?.flow_identity) ? host.interface.flow_identity : null,
             platformUiOrigin: host.platformUiOrigin,
         });
     }
@@ -134,9 +190,10 @@ export class FlowUIConversation extends LitElement {
         if (!host) return '';
         const override = typeof host.assistantTitle === 'string' ? host.assistantTitle.trim() : '';
         if (override !== '') return override;
-        const look = host.interface?.look as FlowUiRecord | undefined;
+        const face = host.interface;
+        const look = face === null ? undefined : recordField(face.look, 'look');
         if (look && typeof look.assistant_title === 'string' && look.assistant_title.trim() !== '') return look.assistant_title.trim();
-        const identity = host.interface?.flow_identity as FlowUiRecord | undefined;
+        const identity = face === null ? undefined : recordField(face.flow_identity, 'flow_identity');
         if (identity && typeof identity.title === 'string' && identity.title.trim() !== '') return identity.title.trim();
         return '';
     }
@@ -158,7 +215,7 @@ export class FlowUIConversation extends LitElement {
     }
 
     private _growComposer(event: Event) {
-        const target = event.target as HTMLTextAreaElement;
+        const target = composerField(event);
         this._text = target.value;
         target.style.height = 'auto';
         target.style.height = `${Math.min(target.scrollHeight, COMPOSER_MAX_PX)}px`;
@@ -173,7 +230,7 @@ export class FlowUIConversation extends LitElement {
     private _userFiles(files: FlowUiRecord[], extraClass: string) {
         if (files.length === 0) return nothing;
         return html`<div class="files ${extraClass}">${files.map((file) => html`<span class="composer-file-chip">
-            ${flowUIGlyph('file-text', 12, this.host?.platformUiOrigin ?? '')}${String(file.original_name ?? '')}
+            ${flowUIGlyph('file-text', 12, this.host === null ? '' : this.host.platformUiOrigin)}${presentText(file.original_name)}
         </span>`)}</div>`;
     }
 
@@ -190,7 +247,7 @@ export class FlowUIConversation extends LitElement {
     }
 
     private _actionButton(className: string, label: string, glyph: string, onClick: () => void, extra: ActionButtonExtra = {}) {
-        const origin = this.host?.platformUiOrigin ?? '';
+        const origin = this.host === null ? '' : this.host.platformUiOrigin;
         return html`<button type="button" class="msg-action ${className}" title=${label} aria-label=${label}
             data-kind=${extra.kind ?? nothing} ?data-copied=${extra.copied === true} @click=${onClick}>
             ${flowUIGlyph(glyph, 18, origin)}
@@ -200,7 +257,7 @@ export class FlowUIConversation extends LitElement {
     private _observabilityButtons(turn: ConversationTurn) {
         if (this.settings.show_trace_actions !== true) return nothing;
         const open = (kind: string) => this.host?.dispatchEvent(new CustomEvent('flow-ui-open-observability', {
-            bubbles: true, composed: true, detail: { kind, taskId: turn.taskId, contextId: this.host?.contextId ?? null },
+            bubbles: true, composed: true, detail: { kind, taskId: turn.taskId, contextId: this.host === null ? null : this.host.contextId },
         }));
         return html`${this._actionButton('tracing-btn', flowUIText(this._locale, 'open_tracing'), 'git-branch', () => open('tracing'), { kind: 'tracing' })}
             ${this._actionButton('tracing-btn', flowUIText(this._locale, 'open_logs'), 'list', () => open('logs'), { kind: 'logs' })}`;
@@ -235,7 +292,7 @@ export class FlowUIConversation extends LitElement {
 
     private _turn(turn: ConversationTurn) {
         const host = this.host;
-        const cards = turn.cards.length > 0 && host ? html`<div class="cards">${renderBlocks(turn.cards as FlowUiBlock[], host.blockContext())}</div>` : nothing;
+        const cards = turn.cards.length > 0 && host ? html`<div class="cards">${renderBlocks(turn.cards, host.blockContext())}</div>` : nothing;
         return html`<article class="task" data-task-id=${turn.taskId} data-state=${turn.state}>
             ${turn.user ? html`${turn.user.text !== '' ? html`<div class="bubble user">${turn.user.text}</div>` : ''}${this._userFiles(turn.user.files, 'user')}` : ''}
             ${turn.activity.length > 0 ? activityChips(turn.activity) : ''}
@@ -250,17 +307,17 @@ export class FlowUIConversation extends LitElement {
     }
 
     private _pending() {
-        const pending = this.host?.store.pending as FlowUiRecord | null;
-        if (!pending) return nothing;
+        const pending = this.host === null ? null : this.host.store.pending;
+        if (pending === null) return nothing;
         return html`<article class="task" data-pending="true">
             ${pending.text !== '' ? html`<div class="bubble user">${pending.text}</div>` : ''}
-            ${this._userFiles(Array.isArray(pending.files) ? pending.files as FlowUiRecord[] : [], 'user')}
+            ${this._userFiles(fileRecords(pending.files), 'user')}
             <div class="typing"><i></i><i></i><i></i></div>
         </article>`;
     }
 
     private _greeting() {
-        const greeting = this._label(this.settings.greeting ?? '');
+        const greeting = this._label(this.settings.greeting);
         const prompts = (Array.isArray(this.settings.suggested_prompts) ? this.settings.suggested_prompts : [])
             .map((item) => this._label(item))
             .filter((item) => item !== '');
@@ -286,7 +343,8 @@ export class FlowUIConversation extends LitElement {
         const streaming = !editing && host.store.streaming;
         const canStop = !editing && host.store.taskRunning && this.settings.allow_cancel !== false && host.capabilities.cancel === true && host.hitlMode === null;
         const sendLabel = hitlComposerSendLabel(locale, host.hitlMode) ?? flowUIText(locale, 'composer_send');
-        const placeholder = this._label(this.settings.placeholder ?? '') || flowUIText(locale, 'composer_placeholder');
+        const placeholderLabel = this._label(this.settings.placeholder);
+        const placeholder = placeholderLabel !== '' ? placeholderLabel : flowUIText(locale, 'composer_placeholder');
         const filesAllowed = editing || (!waitingOperator && host.capabilities.files === true);
         const voiceAllowed = this.settings.allow_voice !== false && !waitingOperator
             && (editing || (host.capabilities.voice === true && host.hitlMode === null && host.voiceSessionReady()));
@@ -306,8 +364,9 @@ export class FlowUIConversation extends LitElement {
                 ${filesAllowed ? html`<label class="icon-btn" title=${flowUIText(locale, 'attach_files')}>
                     ${flowUIGlyph('paperclip', 16, host.platformUiOrigin)}
                     <input type="file" multiple hidden @change=${(event: Event) => {
-                        const input = event.target as HTMLInputElement;
-                        this._files = [...this._files, ...Array.from(input.files ?? [])];
+                        const input = fileInput(event);
+                        const picked = input.files;
+                        this._files = [...this._files, ...(picked === null ? [] : Array.from(picked))];
                         input.value = '';
                     }}>
                 </label>` : ''}

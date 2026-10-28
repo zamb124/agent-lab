@@ -12,7 +12,7 @@
 ## Продуктовый тон
 
 - Платформа — рабочий SaaS: первый экран страницы — workspace (списки, карточки, редактор, фильтры, таблицы, панель действий). Hero, декоративные блоки, маркетинговые карточные секции и пустые «объясняющие» экраны вместо workflow не делаем.
-- Публичный маркетинг (`/`, `/products/*`) — та же DS: `tokens.css` (`--marketing-*`, `--glass-*`, `--text-*`, `--space-*`), `marketing-section.styles.js`, `<platform-button variant="primary">` (текст — `--platform-btn-primary-text`), карточки `.glass-medium.glass-interactive`, страницы продуктов — `ProductLandingPage` + декларативный config в `apps/frontend/ui/pages/products/`. Параллельный `--landing-*` и локальные brand hex не создаются; пробел в визуале маркетинга — токен или shared style в `core/frontend/`.
+- Публичный маркетинг (`/`, `/products/*`) — та же DS: `tokens.css` (`--marketing-*`, `--glass-*`, `--text-*`, `--space-*`), `core/frontend/static/lib/styles/shared/marketing-section.styles.ts`, `<platform-button variant="primary">` (текст — `--platform-btn-primary-text`), карточки `.glass-medium.glass-interactive`, страницы продуктов — `ProductLandingPage` + декларативный config в `apps/frontend/ui/pages/products/`. Параллельный `--landing-*` и локальные brand hex не создаются; пробел в визуале маркетинга — токен или shared style в `core/frontend/`.
 
 ## Ритм макета
 
@@ -51,7 +51,7 @@
 - `static styles` в `apps/<svc>/ui/**` описывает только layout текущего компонента и composition. Общие button, input, modal, card, list, chip — в `core/frontend/static/lib/**` или `tokens.css`.
 - Не пишем локальные hex/rgb/rgba для brand, accent, surface, text; локальные `box-shadow`, `backdrop-filter`, `border-radius` shared-примитивов; копию классов из `apps/crm/design/design.css`.
 - Примитив повторился второй раз в сервисе — semantic token или компонент сервиса; нужен в двух сервисах — core UI Kit.
-- Shadow reset `PlatformElement` ([`core/frontend/static/lib/platform-element/styles.js`](core/frontend/static/lib/platform-element/styles.js)): `:host { font-family: var(--font-sans) }`, `:host button { font: inherit }`, `:host input, textarea, select { font: inherit; color: inherit }`. `color: inherit` на `:host button` не ставим: специфичность `(0,1,1)` перебивает `.btn-primary`/`.cta-btn`, и в light theme CTA получает тёмный `--text-primary`. Локальный размер `input` пишем как `:host input.<class>`, иначе `font: inherit` съедает кегль.
+- Shadow reset `PlatformElement` (`core/frontend/static/lib/platform-element/styles.ts`): `:host { font-family: var(--font-sans) }`, `:host button { font: inherit }`, `:host input, textarea, select { font: inherit; color: inherit }`. `color: inherit` на `:host button` не ставим: специфичность `(0,1,1)` перебивает `.btn-primary`/`.cta-btn`, и в light theme CTA получает тёмный `--text-primary`. Локальный размер `input` пишем как `:host input.<class>`, иначе `font: inherit` съедает кегль.
 - Текст на solid primary/accent — `--platform-btn-primary-text`, `--platform-btn-accent-text`, `--text-on-accent`; `--text-inverse` — контраст к фону поверхности, не on-accent.
 - Display-типографика — `--text-display-*`, `--tracking-tight`, `--font-semibold`, не отдельная font-family. Смена шрифта — manifest `core/frontend/static/assets/fonts/platform-typography.json` + woff2 в `core/frontend/static/assets/fonts/<family>/` + `@font-face` в `platform-fonts.css` (проверяет `scripts/check_platform_typography.py`).
 

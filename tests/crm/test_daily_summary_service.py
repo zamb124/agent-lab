@@ -127,7 +127,7 @@ async def _cleanup_summary_enqueue(
     _ = await redis.delete(
         DailySummaryCacheService._state_key(company_id, None, _SUMMARY_DATE)
     )
-    _ = await CRMEntity.take_by_id(entity_id)
+    _ = await CRMEntity.delete_returning(entity_id)
     tasks = await CRMTask.namespace_tasks(
         company_id,
         SUMMARY_ALL_NAMESPACES_TASK_KEY,
@@ -619,7 +619,7 @@ async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss(
             assert stored["summary"] == "from s3"
         finally:
             await _clear_summary_state(cache, company_id, None, _SUMMARY_DATE)
-            _ = await CRMEntity.take_by_id(entity_id)
+            _ = await CRMEntity.delete_returning(entity_id)
 
 
 @pytest.mark.asyncio
@@ -721,7 +721,7 @@ async def test_compute_daily_summary_uses_structured_data_summary(
         assert payload["summary"] == "Structured summary from artifact"
         assert payload["entities"] == ["Yandex", "Sber"]
     finally:
-        _ = await CRMEntity.take_by_id(entity_id)
+        _ = await CRMEntity.delete_returning(entity_id)
 
 
 @pytest.mark.asyncio
@@ -791,8 +791,8 @@ async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph(
             company_id,
             f"rel-{unique_id}",
         )
-        _ = await CRMEntity.take_by_id(note_id)
-        _ = await CRMEntity.take_by_id(org_id)
+        _ = await CRMEntity.delete_returning(note_id)
+        _ = await CRMEntity.delete_returning(org_id)
 
 
 @pytest.mark.asyncio
@@ -819,7 +819,7 @@ async def test_compute_daily_summary_uses_nested_structured_output_summary(
         assert payload["summary"] == "Nested structured summary"
         assert payload["entities"] == ["Ozon"]
     finally:
-        _ = await CRMEntity.take_by_id(entity_id)
+        _ = await CRMEntity.delete_returning(entity_id)
 
 
 @pytest.mark.asyncio
@@ -847,7 +847,7 @@ async def test_compute_daily_summary_uses_entities_from_notes_when_payload_entit
         assert payload["summary"] == "Итог дня без списка сущностей"
         assert payload["entities"] == ["Альфа Банк", "Yandex", "Sber"]
     finally:
-        _ = await CRMEntity.take_by_id(entity_id)
+        _ = await CRMEntity.delete_returning(entity_id)
 
 
 @pytest.mark.asyncio
@@ -874,7 +874,7 @@ async def test_compute_daily_summary_raises_when_summary_empty(
             with pytest.raises(ValueError, match="empty summary"):
                 await service.compute_daily_summary(date_str=_SUMMARY_DATE, namespace=None)
     finally:
-        _ = await CRMEntity.take_by_id(entity_id)
+        _ = await CRMEntity.delete_returning(entity_id)
 
 
 @pytest.mark.asyncio
@@ -1032,7 +1032,7 @@ async def test_update_entity_note_date_triggers_both_dates(
         finally:
             await _clear_summary_state(cache, company_id, "sales", "2026-03-27")
             await _clear_summary_state(cache, company_id, "support", "2026-03-28")
-            _ = await CRMEntity.take_by_id(entity_id)
+            _ = await CRMEntity.delete_returning(entity_id)
             tasks = await CRMTask.namespace_tasks(
                 company_id,
                 "support",
@@ -1070,4 +1070,4 @@ async def test_delete_entity_note_triggers_rebuild(unique_id: str) -> None:
             assert emptied["summary"] == "За 2026-03-28 заметок не найдено."
         finally:
             await _clear_summary_state(cache, company_id, "sales", "2026-03-28")
-            _ = await CRMEntity.take_by_id(entity_id)
+            _ = await CRMEntity.delete_returning(entity_id)

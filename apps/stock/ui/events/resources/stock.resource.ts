@@ -380,3 +380,42 @@ export const stockUomsListOp = createAsyncOp({
     wsTimeoutMs: 8_000,
     restMirror: { method: 'GET', path: '/stock/api/v1/uoms' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'stock/products': typeof stockProductsResource;
+        'stock/locations': typeof stockLocationsResource;
+        'stock/warehouses': typeof stockWarehousesResource;
+        'stock/transfers': typeof stockTransfersResource;
+        'stock/quants': typeof stockQuantsResource;
+        'stock/queue': typeof stockQueueResource;
+        'stock/waves': typeof stockWavesResource;
+        'stock/valuation': typeof stockValuationResource;
+        'stock/product_create': typeof stockProductCreateOp;
+        'stock/product_update': typeof stockProductUpdateOp;
+        'stock/location_create': typeof stockLocationCreateOp;
+        'stock/location_update': typeof stockLocationUpdateOp;
+        'stock/warehouse_create': typeof stockWarehouseCreateOp;
+        'stock/warehouse_pulse': typeof stockWarehousePulseOp;
+        'stock/operation_types_list': typeof stockOperationTypesListOp;
+        'stock/operation_type_update': typeof stockOperationTypeUpdateOp;
+        'stock/transfer_create': typeof stockTransferCreateOp;
+        'stock/transfer_item': typeof stockTransferItemOp;
+        'stock/transfer_confirm': typeof stockTransferConfirmOp;
+        'stock/transfer_assign': typeof stockTransferAssignOp;
+        'stock/transfer_validate': typeof stockTransferValidateOp;
+        'stock/transfer_cancel': typeof stockTransferCancelOp;
+        'stock/transfer_return': typeof stockTransferReturnOp;
+        'stock/move_line_update': typeof stockMoveLineUpdateOp;
+        'stock/move_apply_decision': typeof stockMoveApplyDecisionOp;
+        'stock/quant_inventory_set': typeof stockQuantInventorySetOp;
+        'stock/quant_inventory_apply': typeof stockQuantInventoryApplyOp;
+        'stock/valuation_product_value': typeof stockValuationProductValueOp;
+        'stock/valuation_revalue': typeof stockValuationRevalueOp;
+        'stock/valuation_correction': typeof stockValuationCorrectionOp;
+        'stock/barcode_resolve': typeof stockBarcodeResolveOp;
+        'stock/lots_list': typeof stockLotsListOp;
+        'stock/lot_create': typeof stockLotCreateOp;
+        'stock/uoms_list': typeof stockUomsListOp;
+    }
+}

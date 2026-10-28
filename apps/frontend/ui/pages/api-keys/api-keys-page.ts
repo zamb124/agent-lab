@@ -16,7 +16,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import { FrontendCreateApiKeyModal } from '../../modals/create-api-key-modal.js';
 import { FrontendEditApiKeyModal } from '../../modals/edit-api-key-modal.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ControllerFor } from '@platform/lib/base/use-resource.js';
 
 export class FrontendApiKeysPage extends PlatformPage {
     static override styles: CSSResultGroup = [
@@ -108,7 +108,7 @@ export class FrontendApiKeysPage extends PlatformPage {
         super();
         this._keys = this.useResource('frontend/api_keys', { autoload: true });
     }
-    private _keys: ResourceController;
+    private _keys: ControllerFor<'frontend/api_keys'>;
 
 
     _create() {
@@ -142,7 +142,7 @@ export class FrontendApiKeysPage extends PlatformPage {
     }
 
     _dismissSecret() {
-        (this._keys.dismissSecret as (...args: any[]) => any)();
+        this._keys.dismissSecret(null);
     }
 
     _renderInfoBanner() {
@@ -193,7 +193,7 @@ export class FrontendApiKeysPage extends PlatformPage {
                 <td><code>${k.key_prefix || k.key_id}</code></td>
                 <td>
                     <div class="scopes-cell">
-                        ${(k.scopes || []).map((s: string) => html`<span class="scope-tag">${s}</span>`)}
+                        ${(Array.isArray(k.scopes) ? k.scopes : []).map((s: string) => html`<span class="scope-tag">${s}</span>`)}
                     </div>
                 </td>
                 <td>${k.created_at ? new Date(k.created_at).toLocaleDateString() : ''}</td>

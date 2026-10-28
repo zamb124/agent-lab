@@ -60,7 +60,7 @@ class A2ATaskProjectionService:
             event_identity=identity,
         )
         await self._publish_stored(appended.event)
-        await A2ATaskEvent.mark_published(
+        await A2ATaskEvent.mark_published_by_event_identity(
             company_id=company_id,
             task_id=appended.event.task_id,
             event_identity=identity,
@@ -69,10 +69,10 @@ class A2ATaskProjectionService:
 
     async def recover_unpublished(self, *, limit: int = 100) -> int:
         """Republish committed outbox rows after a Redis/process failure."""
-        pending = await A2ATaskEvent.list_unpublished(limit=limit)
+        pending = await A2ATaskEvent.pending_events_by_created_at(limit=limit)
         for item in pending:
             await self._publish_stored(item.event)
-            await A2ATaskEvent.mark_published(
+            await A2ATaskEvent.mark_published_by_event_identity(
                 company_id=item.company_id,
                 task_id=item.task_id,
                 event_identity=item.event_identity,

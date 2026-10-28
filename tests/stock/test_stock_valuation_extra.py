@@ -565,7 +565,7 @@ class TestRunningBalance:
         # + дооценка 10 = 25.
         assert layers[-1].qty_after == Decimal("5")
         assert layers[-1].value_after == Decimal("25")
-        quants = await StockQuant.list_for_warehouse(
+        quants = await StockQuant.list_unordered_for_warehouse(
             env.company_id, env.warehouse.warehouse_id
         )
         on_hand = sum(

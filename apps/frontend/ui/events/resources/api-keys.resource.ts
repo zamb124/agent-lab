@@ -60,3 +60,9 @@ export const apiKeysResource = createResourceCollection({
         return state;
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/api_keys': typeof apiKeysResource;
+    }
+}

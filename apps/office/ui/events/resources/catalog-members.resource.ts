@@ -73,3 +73,11 @@ export const catalogMemberRemoveOp = createAsyncOp({
         );
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/catalog_members': typeof catalogMembersOp;
+        'office/catalog_member_add': typeof catalogMemberAddOp;
+        'office/catalog_member_remove': typeof catalogMemberRemoveOp;
+    }
+}

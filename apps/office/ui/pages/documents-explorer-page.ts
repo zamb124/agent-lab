@@ -6,13 +6,38 @@
 
 import { html } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
-import type { DocumentsOpController, OfficeDocumentItem } from '../events/documents.types.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
+import type { OfficeDocumentItem } from '../events/documents.types.js';
+
+function documentFileId(doc: OfficeDocumentItem): string {
+    const fileId = doc.file_id;
+    if (fileId === undefined || fileId.length === 0) {
+        throw new Error('documents explorer: file_id required');
+    }
+    return fileId;
+}
+
+function uploadJobEvent(events: Readonly<Record<string, string>>, name: string): string {
+    const eventName = events[name];
+    if (eventName === undefined || eventName.length === 0) {
+        throw new Error(`documents explorer: ${name} missing`);
+    }
+    return eventName;
+}
+
+function recentOrderIndex(order: ReadonlyMap<string, number>, fileId: string): number {
+    const index = order.get(fileId);
+    if (index === undefined) {
+        throw new Error('documents explorer: recent file index missing');
+    }
+    return index;
+}
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { documentsExplorerStyles } from '../styles/documents-explorer.styles.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import {
     getActivePlatformNamespaceName,
     setPlatformNamespaceSelection,
@@ -43,6 +68,30 @@ const VIEW_MODE_STORAGE_KEY = 'documents_explorer_view_mode';
 const SEARCH_DEBOUNCE_MS = 300;
 const RAG_INDEX_STATUS_VALUES = new Set(['ready', 'pending', 'failed', 'absent']);
 
+function stringList(value: string[] | null | undefined): string[] {
+    if (value === undefined || value === null) return [];
+    return value;
+}
+
+function documentItems(value: OfficeDocumentItem[] | null | undefined): OfficeDocumentItem[] {
+    if (value === undefined || value === null) return [];
+    return value;
+}
+
+function officeDocumentList(value: unknown): OfficeDocumentItem[] {
+    if (!isPlainRecord(value) || !Array.isArray(value.items)) return [];
+    const items: OfficeDocumentItem[] = [];
+    for (const item of value.items) {
+        if (!isPlainRecord(item)) {
+            throw new Error('documents explorer: document item must be an object');
+        }
+        const row: OfficeDocumentItem = {};
+        for (const [key, field] of Object.entries(item)) row[key] = field;
+        items.push(row);
+    }
+    return items;
+}
+
 export class OfficeDocumentsExplorerPage extends PlatformPage {
     static i18nNamespace = 'documents';
 
@@ -68,7 +117,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._searchDebounceTimer = false;
         this._integration = this.useOp('office/integration_status');
         this._catalogs = this.useResource('office/catalogs', { autoload: true });
-        this._documents = this.useOp('office/documents') as unknown as DocumentsOpController;
+        this._documents = this.useOp('office/documents');
         this._deleted = this.useOp('office/documents_deleted');
         this._upload = this.useOp('office/document_upload');
         this._remove = this.useOp('office/document_remove');
@@ -79,16 +128,16 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._move = this.useOp('office/document_move');
         this._lastLoadKey = '';
         this._lastSemanticSearchKey = '';
-        this._localeSel = this.select((s) => (s.i18n as Record<string, unknown>).locale);
-        this._routerSearchSel = this.select((s) => (s.router as Record<string, unknown>).search);
-        this._authSel = this.select((s) => (s.auth as Record<string, unknown>).user);
+        this._localeSel = this.select((s) => s.i18n.locale);
+        this._routerSearchSel = this.select((s) => s.router.search);
+        this._authSel = this.select((s) => s.auth.user);
         this._accessModalOpened = false;
         this._deepLinkApplied = '';
         this._deepLinkMissing = '';
     }
     private _integration: OpController;
     private _catalogs: ResourceController;
-    private _documents: DocumentsOpController;
+    private _documents: ControllerFor<'office/documents'>;
     private _deleted: OpController;
     private _upload: OpController;
     private _remove: OpController;
@@ -151,8 +200,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     }
 
     private _companyId() {
-        const user = this._authSel.value as Record<string, unknown> | null;
-        return user && typeof user.company_id === 'string' ? user.company_id.trim() : '';
+        const user = this._authSel.value;
+        if (!isPlainRecord(user) || typeof user.company_id !== 'string') return '';
+        return user.company_id.trim();
     }
 
     private _explorerQuery() {
@@ -280,18 +330,14 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         }
         const catalogs = this._catalogItems();
         const active = catalogs.find((item: Record<string, unknown>) => item.catalog_id === catalogId);
-        if (!active || !active.rag_index_search_options || typeof active.rag_index_search_options !== 'object') {
-            return {};
-        }
-        return active.rag_index_search_options as Record<string, unknown>;
+        if (active === undefined) return {};
+        const options = active.rag_index_search_options;
+        if (!isPlainRecord(options)) return {};
+        return options;
     }
 
     private _semanticSearchItems(): OfficeDocumentItem[] {
-        const result = this._catalogRagSearch.lastResult as { items?: unknown } | null;
-        if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
-            return [];
-        }
-        return result.items as OfficeDocumentItem[];
+        return officeDocumentList(this._catalogRagSearch.lastResult);
     }
 
     private _showSemanticResults() {
@@ -301,8 +347,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         return typeof state.searchQuery === 'string' && state.searchQuery.trim().length > 0;
     }
 
-    private _catalogItems(): Array<Record<string, unknown>> {
-        return this._catalogs.items as Array<Record<string, unknown>>;
+    private _catalogItems(): readonly Record<string, unknown>[] {
+        return this._catalogs.items;
     }
 
     private _activeCatalogId() {
@@ -458,8 +504,13 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             });
         }
         if (crumbs.length > 1) {
-            crumbs[crumbs.length - 1]!.current = true;
-            crumbs[0]!.current = false;
+            const lastCrumb = crumbs[crumbs.length - 1];
+            const firstCrumb = crumbs[0];
+            if (lastCrumb === undefined || firstCrumb === undefined) {
+                throw new Error('documents explorer: breadcrumb missing');
+            }
+            lastCrumb.current = true;
+            firstCrumb.current = false;
         }
         return crumbs;
     }
@@ -494,7 +545,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             const catalogIds = this._catalogItems()
                 .map((catalog: Record<string, unknown>) => catalog.catalog_id)
                 .filter((id): id is string => typeof id === 'string' && id.length > 0);
-            const key = `${explorerView}|${(ids || []).join(',')}|${catalogIds.join(',')}|${this._documents.state.searchQuery}`;
+            const key = `${explorerView}|${stringList(ids).join(',')}|${catalogIds.join(',')}|${this._documents.state.searchQuery}`;
             if (key === this._lastLoadKey) return;
             this._lastLoadKey = key;
             if (catalogIds.length === 0) return;
@@ -529,26 +580,22 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     private _visibleDocuments(): OfficeDocumentItem[] {
         const state = this._documents.state;
         if (state.explorerView === 'deleted') {
-            const last = this._deleted.lastResult as { items?: unknown } | null;
-            const deletedItems = last && Array.isArray(last.items)
-                ? last.items as OfficeDocumentItem[]
-                : [];
-            return deletedItems;
+            return officeDocumentList(this._deleted.lastResult);
         }
         if (this._isNamespaceRoot()) {
             return [];
         }
-        let docs = state.items || [];
+        let docs = documentItems(state.items);
         if (state.explorerView === 'recent') {
             const order = new Map(
-                (state.recentFileIds || []).map((id: string, index: number) => [id, index]),
+                stringList(state.recentFileIds).map((id, index) => [id, index]),
             );
-            docs = docs.filter((doc: OfficeDocumentItem) => order.has(doc.file_id!));
-            docs.sort((a: OfficeDocumentItem, b: OfficeDocumentItem) => order.get(a.file_id!)! - order.get(b.file_id!)!);
+            docs = docs.filter((doc: OfficeDocumentItem) => order.has(documentFileId(doc)));
+            docs.sort((a: OfficeDocumentItem, b: OfficeDocumentItem) => recentOrderIndex(order, documentFileId(a)) - recentOrderIndex(order, documentFileId(b)));
         }
         if (state.explorerView === 'starred') {
-            const starred = new Set(state.starredFileIds || []);
-            docs = docs.filter((doc: OfficeDocumentItem) => starred.has(doc.file_id!));
+            const starred = new Set(stringList(state.starredFileIds));
+            docs = docs.filter((doc: OfficeDocumentItem) => starred.has(documentFileId(doc)));
         }
         return docs;
     }
@@ -580,14 +627,13 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     private _onBreadcrumbNavigate(e: CustomEvent<{ crumb?: unknown }>) {
         const crumb = e.detail && e.detail.crumb;
-        if (!crumb || typeof crumb !== 'object') return;
-        if ((crumb as Record<string, unknown>).type === 'root') {
+        if (!isPlainRecord(crumb)) return;
+        if (crumb.type === 'root') {
             this._goToNamespaceRoot();
             return;
         }
-        const c = crumb as Record<string, unknown>;
-        if (c.type === 'catalog') {
-            this._onCatalogSelect({ detail: { catalogId: c.catalogId } });
+        if (crumb.type === 'catalog') {
+            this._onCatalogSelect({ detail: { catalogId: crumb.catalogId } });
         }
     }
 
@@ -719,7 +765,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         }
         const localId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         this.dispatch(
-            this._documents.op.events.UPLOAD_JOB_ADD!,
+            uploadJobEvent(this._documents.op.events, 'UPLOAD_JOB_ADD'),
             { job: { localId, fileName: file.name, status: 'uploading', progress: 0 } },
         );
         this._upload.run({ file, catalog_id: catalogId, openAfterUpload, localId });
@@ -727,7 +773,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     private _onFileDragStart(e: DragEvent, doc: OfficeDocumentItem) {
         if (!e.dataTransfer) return;
-        e.dataTransfer.setData('application/x-office-file-id', doc.file_id!);
+        e.dataTransfer.setData('application/x-office-file-id', documentFileId(doc));
         e.dataTransfer.effectAllowed = 'move';
     }
 
@@ -779,13 +825,10 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     }
 
     private _docByFileId(fileId: string): OfficeDocumentItem | undefined {
-        const fromList = (this._documents.state.items || []).find((d: OfficeDocumentItem) => d.file_id === fileId);
+        const fromList = documentItems(this._documents.state.items).find((d) => d.file_id === fileId);
         if (fromList) return fromList;
-        if (this._documents.state.explorerView === 'deleted' && this._deleted.lastResult) {
-            const deletedItems = (this._deleted.lastResult as { items?: unknown }).items;
-            if (Array.isArray(deletedItems)) {
-                return (deletedItems as OfficeDocumentItem[]).find((d: OfficeDocumentItem) => d.file_id === fileId);
-            }
+        if (this._documents.state.explorerView === 'deleted') {
+            return officeDocumentList(this._deleted.lastResult).find((d) => d.file_id === fileId);
         }
         return undefined;
     }
@@ -838,7 +881,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     private _onSelectAllToggle(e: CustomEvent<{ selected?: unknown }>) {
         const selected = e.detail && e.detail.selected === true;
         if (selected) {
-            const ids = (this._documents.state.items || []).map((d: OfficeDocumentItem) => d.file_id!);
+            const ids = documentItems(this._documents.state.items).map((d) => documentFileId(d));
             this._documents.setFileSelection({ fileIds: ids });
         } else {
             this._documents.clearFileSelection(null);
@@ -858,8 +901,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const isDeletedView = this._documents.state.explorerView === 'deleted';
         const ok = await platformConfirm(
             isDeletedView
-                ? this.t('trash.permanentConfirm', { title: doc.title ?? '' })
-                : this.t('list.deleteConfirm', { title: doc.title ?? '' }),
+                ? this.t('trash.permanentConfirm', { title: doc.title === undefined || doc.title === null ? '' : doc.title })
+                : this.t('list.deleteConfirm', { title: doc.title === undefined || doc.title === null ? '' : doc.title }),
             {
                 title: isDeletedView ? this.t('trash.permanentConfirmTitle') : this.t('list.deleteConfirmTitle'),
                 variant: 'danger',
@@ -914,7 +957,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         if (!catalog || typeof action !== 'string') {
             return;
         }
-        if (action === 'open') this._onSubcatalogOpen(catalog!.catalog_id as string);
+        if (action === 'open') this._onSubcatalogOpen(catalog.catalog_id as string);
         if (action === 'edit') this._onCatalogEdit(catalog);
         if (action === 'access') this._onCatalogAccess(catalog);
         if (action === 'members') this._onCatalogMembers(catalog);
@@ -931,7 +974,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     private _onFileAction(e: CustomEvent<{ action?: unknown }>, doc: OfficeDocumentItem) {
         const action = e.detail && e.detail.action;
         if (action === 'open') {
-            this._onOpenDocument(doc.file_id!);
+            this._onOpenDocument(documentFileId(doc));
         } else if (action === 'rename') {
             void this._onRenameDocument(doc);
         } else if (action === 'delete') {
@@ -991,7 +1034,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const action = e.detail && e.detail.action;
         const doc = this._selectedDocument();
         if (doc) {
-            if (action === 'open') this._onOpenDocument(doc.file_id!);
+            if (action === 'open') this._onOpenDocument(documentFileId(doc));
             if (action === 'rename' && !this._isFileMissing(doc)) this._onRenameDocument(doc);
             if (action === 'delete') this._onDeleteDocument(doc);
             if (action === 'restore') this._onRestoreDocument(doc);
@@ -1096,7 +1139,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     private _renderList(docs: OfficeDocumentItem[]) {
         const state = this._documents.state;
         const selectedIds = new Set(Array.isArray(state.selectedFileIds) ? state.selectedFileIds : []);
-        const allSelected = docs.length > 0 && docs.every((d: OfficeDocumentItem) => selectedIds.has(d.file_id!));
+        const allSelected = docs.length > 0 && docs.every((d: OfficeDocumentItem) => selectedIds.has(documentFileId(d)));
         const childCatalogs = this._visibleChildCatalogs();
         return html`
             <platform-file-table
@@ -1121,12 +1164,18 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         author-user-id=${doc.created_by_user_id}
                         index-status=${typeof doc.rag_index_status === 'string' ? doc.rag_index_status : ''}
                         index-status-label=${this._ragIndexStatusLabel(doc.rag_index_status)}
-                        ?selected=${state.selectedFileId === doc.file_id || selectedIds.has(doc.file_id!)}
+                        ?selected=${state.selectedFileId === doc.file_id || selectedIds.has(documentFileId(doc))}
                         selectable
                         ?draggable=${!this._isFileMissing(doc)}
-                        @row-dragstart=${(e: CustomEvent<{ nativeEvent?: DragEvent }>) => this._onFileDragStart(e.detail.nativeEvent!, doc)}
-                        @open=${() => this._onSelectDocument(doc.file_id!)}
-                        @activate=${() => this._onOpenDocument(doc.file_id!)}
+                        @row-dragstart=${(e: CustomEvent<{ nativeEvent?: DragEvent }>) => {
+                            const nativeEvent = e.detail.nativeEvent;
+                            if (nativeEvent === undefined) {
+                                throw new Error('documents explorer: drag event missing');
+                            }
+                            this._onFileDragStart(nativeEvent, doc);
+                        }}
+                        @open=${() => this._onSelectDocument(documentFileId(doc))}
+                        @activate=${() => this._onOpenDocument(documentFileId(doc))}
                         @select-toggle=${this._onRowSelectToggle}
                     >
                         <office-file-actions-menu
@@ -1157,8 +1206,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         index-status=${typeof doc.rag_index_status === 'string' ? doc.rag_index_status : ''}
                         index-status-label=${this._ragIndexStatusLabel(doc.rag_index_status)}
                         ?selected=${state.selectedFileId === doc.file_id}
-                        @open=${() => this._onSelectDocument(doc.file_id!)}
-                        @activate=${() => this._onOpenDocument(doc.file_id!)}
+                        @open=${() => this._onSelectDocument(documentFileId(doc))}
+                        @activate=${() => this._onOpenDocument(documentFileId(doc))}
                     >
                         <office-file-actions-menu
                             slot="actions"
@@ -1209,9 +1258,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     }
 
     private _actionsDisabled() {
-        const integrationConfigured = this._integration.lastResult
-            ? Boolean((this._integration.lastResult as Record<string, unknown>).configured)
-            : true;
+        const status = this._integration.lastResult;
+        const integrationConfigured = isPlainRecord(status) ? status.configured === true : status == null;
         return !integrationConfigured || !this._activeCatalogId();
     }
 
@@ -1354,7 +1402,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                                     subcatalog-count=${subcatalogCount}
                                     explorer-view=${state.explorerView}
                                     ?namespace-root=${atRoot && !selectedCatalog}
-                                    ?starred=${Boolean(selectedDoc && selectedDoc.file_id && (state.starredFileIds || []).includes(selectedDoc.file_id))}
+                                    ?starred=${Boolean(selectedDoc && selectedDoc.file_id && stringList(state.starredFileIds).includes(selectedDoc.file_id))}
                                     @close=${() => this._documents.clearFileSelection(null)}
                                     @action=${this._onDetailsAction}
                                 ></office-file-details-panel>

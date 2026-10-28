@@ -6,6 +6,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import type { CrmGraphViewSlice } from '../crm.types.js';
 
 const DEFAULT_SEARCH_INPUT = Object.freeze({
     query: '',
@@ -43,7 +44,7 @@ export const graphViewSlice = createSlice({
         setSelection: 'selection_updated',
         setSearchInput: 'search_input_updated',
     },
-    extraReducer: (state, event) => {
+    extraReducer: (state: CrmGraphViewSlice, event) => {
         switch (event.type) {
             case 'crm/graph_view/hydrated': {
                 const p = (event.payload as Record<string, any>);
@@ -192,3 +193,9 @@ export const graphViewSlice = createSlice({
         }
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/graph_view': typeof graphViewSlice;
+    }
+}

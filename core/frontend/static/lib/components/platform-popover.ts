@@ -208,7 +208,10 @@ export class PlatformPopover extends PlatformElement {
 
     override willUpdate(changed: PropertyValues<this>): void {
         if (changed.has('anchor')) {
-            this._detachAnchorListeners(changed.get('anchor') as PopoverAnchor);
+            const previous = changed.get('anchor');
+            if (previous !== undefined) {
+                this._detachAnchorListeners(previous);
+            }
             this._attachAnchorListeners(this.anchor);
         }
     }
@@ -451,8 +454,10 @@ export class PlatformPopover extends PlatformElement {
 
     _onAnchorContextMenu(event: Event): void {
         event.preventDefault();
-        const mouse = event as MouseEvent;
-        this.show({ x: mouse.clientX, y: mouse.clientY });
+        if (!(event instanceof MouseEvent)) {
+            throw new Error('platform-popover: context menu must be a mouse event');
+        }
+        this.show({ x: event.clientX, y: event.clientY });
     }
 
     _onAnchorPointerEnter(): void {

@@ -209,7 +209,7 @@ async def op_api_keys_list(
     _ = user
     _ = di
     scope = require_company()
-    records = await ApiKeyRecord.list_by_company(
+    records = await ApiKeyRecord.list_active_by_created_at_desc(
         scope.company_id, limit=payload.limit, offset=payload.offset
     )
     return OffsetPage[ApiKeyRecord](
@@ -251,7 +251,7 @@ async def op_api_keys_rename(
 ) -> ApiKeyRenamed:
     _ = user
     scope = await require_company_admin(di.authz_service)
-    updated = await ApiKeyRecord.update_name(payload.key_id, scope.company_id, payload.name)
+    updated = await ApiKeyRecord.update_name_by_key_id(payload.key_id, scope.company_id, payload.name)
     if not updated:
         raise PlatformNotFoundError("Key not found", error_code='not_found')
     return ApiKeyRenamed(key_id=payload.key_id, name=payload.name)

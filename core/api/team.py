@@ -46,7 +46,7 @@ async def search_users(
     if ctx is None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    users = await User.search_by_query(q, limit=20)
+    users = await User.list_by_query(q, limit=20)
 
     return ListResponse[UserSearchResult](items=[
         UserSearchResult(

@@ -14,12 +14,7 @@ function _handleDeepLink(urlString: string | null | undefined): void {
     if (!urlString) {
         return;
     }
-    let parsed;
-    try {
-        parsed = new URL(urlString);
-    } catch {
-        return;
-    }
+    const parsed = new URL(urlString);
     if (!isInternalProductNavigationUrl(parsed)) {
         return;
     }

@@ -27,3 +27,9 @@ export const documentEditorConfigOp = createAsyncOp({
         });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/document_editor_config': typeof documentEditorConfigOp;
+    }
+}

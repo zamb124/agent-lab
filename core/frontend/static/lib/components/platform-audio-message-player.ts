@@ -250,7 +250,10 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
     }
 
     _audioEl(): HTMLAudioElement | null {
-        return this.renderRoot?.querySelector('audio') ?? null;
+        const root = this.renderRoot;
+        if (root === undefined || root === null) return null;
+        const audio = root.querySelector('audio');
+        return audio instanceof HTMLAudioElement ? audio : null;
     }
 
     _bindAudioListeners() {
@@ -360,7 +363,11 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         if (!audio) {
             throw new Error('Audio element not found.');
         }
-        const value = Number((e.target as HTMLInputElement).value);
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('platform-audio-message-player: seek target must be an input');
+        }
+        const value = Number(target.value);
         if (!Number.isFinite(value) || value < 0) {
             return;
         }
@@ -423,7 +430,8 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
             throw new Error('src обязателен для audio player.');
         }
         const duration = this._effectiveDuration();
-        const current = Math.min(this._currentTime, duration || 0);
+        const limit = duration > 0 ? duration : 0;
+        const current = Math.min(this._currentTime, limit);
         const bars = this._bars();
         const activeRatio = duration > 0 ? current / duration : 0;
         const activeBarsCount = Math.floor(activeRatio * bars.length);

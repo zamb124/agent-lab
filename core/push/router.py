@@ -95,7 +95,7 @@ async def test_send_push(
     if (not web_push or not web_push.is_configured) and (not apns or not apns.is_configured):
         raise HTTPException(status_code=503, detail="Push not configured")
 
-    subscriptions = await PushSubscription.list_for_user(user_id)
+    subscriptions = await PushSubscription.list_by_last_used_at_desc(user_id)
     if not subscriptions:
         raise HTTPException(
             status_code=404,

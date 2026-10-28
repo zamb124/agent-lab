@@ -10,13 +10,14 @@ import type { SelectController } from '../events/select-controller.js';
 import { hasGetUserMediaApi } from '../utils/voice-recording.js';
 import { VoiceMediaSession } from '../voice/voice-media-session.js';
 import type { VoiceTranscriptDetail } from '../voice/voice-media-session.js';
+import { isPlainRecord } from '../events/payload.js';
 import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
 import './platform-icon.js';
 
 type VoiceDictationPhase = 'idle' | 'recording' | 'processing';
 
-interface AuthStateSlice {
-    activeCompanyId?: string;
+function isTranscriptDetail(value: unknown): value is VoiceTranscriptDetail {
+    return isPlainRecord(value);
 }
 
 export class PlatformVoiceDictation extends PlatformElement {
@@ -37,7 +38,7 @@ export class PlatformVoiceDictation extends PlatformElement {
 
     private _heardFinalText = false;
     private _media: VoiceMediaSession | null = null;
-    private _companyIdSel: SelectController<string | undefined>;
+    private _companyIdSel: SelectController<string | null>;
     private _onTranscriptBound: (event: Event) => void;
     private _onErrorBound: (event: Event) => void;
 
@@ -101,7 +102,7 @@ export class PlatformVoiceDictation extends PlatformElement {
         this._phase = 'idle';
         this._heardFinalText = false;
         this._media = null;
-        this._companyIdSel = this.select((s) => (s.auth as AuthStateSlice | undefined)?.activeCompanyId);
+        this._companyIdSel = this.select((s) => s.auth.activeCompanyId);
         this._onTranscriptBound = (event: Event) => this._onMediaTranscript(event);
         this._onErrorBound = () => this._onMediaError();
     }
@@ -144,10 +145,10 @@ export class PlatformVoiceDictation extends PlatformElement {
         if (!(event instanceof Event)) {
             throw new Error('platform-voice-dictation: transcript event required');
         }
-        const detail = 'detail' in event ? (event as CustomEvent<VoiceTranscriptDetail>).detail : null;
-        if (!detail || typeof detail !== 'object') {
+        if (!(event instanceof CustomEvent) || !isTranscriptDetail(event.detail)) {
             throw new Error('platform-voice-dictation: transcript detail required');
         }
+        const detail = event.detail;
         if (detail.final !== true) {
             return;
         }

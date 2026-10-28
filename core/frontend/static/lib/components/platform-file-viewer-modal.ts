@@ -4,6 +4,7 @@ import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
 import type { PlatformEvent } from '../events/contract.js';
+import { isPlainRecord } from '../events/payload.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-icon.js';
 import './platform-document-viewer-host.js';
@@ -442,9 +443,7 @@ export class PlatformFileViewerModal extends PlatformModal {
 
     _textPresentation(): string {
         const config = this.config;
-        const text = config && typeof config.text === 'object' && config.text !== null
-            ? config.text as Record<string, unknown>
-            : null;
+        const text = config !== null && isPlainRecord(config.text) ? config.text : null;
         if (!config || config.handler !== 'text' || !text) {
             return '';
         }
@@ -457,9 +456,7 @@ export class PlatformFileViewerModal extends PlatformModal {
 
     _defaultViewModeFromConfig(): 'preview' | 'source' {
         const config = this.config;
-        const text = config && typeof config.text === 'object' && config.text !== null
-            ? config.text as Record<string, unknown>
-            : null;
+        const text = config !== null && isPlainRecord(config.text) ? config.text : null;
         if (!text) {
             return 'source';
         }
@@ -506,10 +503,10 @@ export class PlatformFileViewerModal extends PlatformModal {
     }
 
     _fileName(): string {
-        const file = this.file || {};
-        return _asNonEmptyString(file.original_name)
-            || _asNonEmptyString(file.filename)
-            || _asNonEmptyString(file.name)
+        const file = this.file;
+        return _asNonEmptyString(file === null ? undefined : file.original_name)
+            || _asNonEmptyString(file === null ? undefined : file.filename)
+            || _asNonEmptyString(file === null ? undefined : file.name)
             || _asNonEmptyString(this.title)
             || 'file';
     }
@@ -624,15 +621,17 @@ export class PlatformFileViewerModal extends PlatformModal {
     }
 
     _onEditorError(event: CustomEvent<{ detail?: unknown; code?: unknown }>): void {
-        const detail = event.detail || {};
-        const message = _asNonEmptyString(detail.detail) || _asNonEmptyString(detail.code) || this.t('file_viewer.close_failed');
+        const detail = event.detail;
+        const message = detail === undefined || detail === null
+            ? this.t('file_viewer.close_failed')
+            : (_asNonEmptyString(detail.detail) || _asNonEmptyString(detail.code) || this.t('file_viewer.close_failed'));
         this._error = message;
         this.toast('file_viewer.open_failed', { type: 'error', namespace: 'platform', vars: { message } });
     }
 
     _onDocumentState(event: CustomEvent<{ dirty?: unknown }>): void {
-        const detail = event.detail || {};
-        this._dirty = Boolean(detail.dirty);
+        const detail = event.detail;
+        this._dirty = detail !== undefined && detail !== null && Boolean(detail.dirty);
     }
 
     _requestEditorSync({ close, settleMs }: { close?: boolean; settleMs?: number }): Promise<unknown> {
@@ -653,14 +652,15 @@ export class PlatformFileViewerModal extends PlatformModal {
             doneUnsub = this.bus.subscribeType(FILES_EVENTS.EDITOR_SYNC_COMPLETED, (event: PlatformEvent) => {
                 if (event.meta?.correlation_id !== correlation) return;
                 cleanup();
-                const payload = event.payload as { result?: unknown } | null;
-                resolve(payload?.result || null);
+                const payload = event.payload;
+                const result = isPlainRecord(payload) ? payload.result : null;
+                resolve(result === undefined || result === null ? null : result);
             });
             failUnsub = this.bus.subscribeType(FILES_EVENTS.EDITOR_SYNC_FAILED, (event: PlatformEvent) => {
                 if (event.meta?.correlation_id !== correlation) return;
                 cleanup();
-                const payload = event.payload as { message?: string } | null;
-                reject(new Error(payload?.message || this.t('file_viewer.close_failed')));
+                const message = isPlainRecord(event.payload) ? event.payload.message : undefined;
+                reject(new Error(typeof message === 'string' && message.length > 0 ? message : this.t('file_viewer.close_failed')));
             });
             timer = window.setTimeout(() => {
                 cleanup();
@@ -681,7 +681,7 @@ export class PlatformFileViewerModal extends PlatformModal {
 
     async _syncBeforeClose(): Promise<void> {
         if (this._closeSyncComplete || !this.config) return;
-        const capabilities = this.config.capabilities as { sync_on_close?: unknown } | undefined;
+        const capabilities = isPlainRecord(this.config.capabilities) ? this.config.capabilities : null;
         if (!capabilities || capabilities.sync_on_close !== true) {
             this._closeSyncComplete = true;
             return;
@@ -747,7 +747,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         if (typeof config.download_url === 'string' && config.download_url.length > 0) {
             return config.download_url;
         }
-        const binary = config.binary as { download_url?: unknown } | undefined;
+        const binary = isPlainRecord(config.binary) ? config.binary : null;
         if (binary && typeof binary.download_url === 'string' && binary.download_url.length > 0) {
             return binary.download_url;
         }

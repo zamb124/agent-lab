@@ -53,3 +53,11 @@ export const publicBlogPostOp = createAsyncOp({
         });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/public_site_bundle': typeof publicSiteBundleOp;
+        'frontend/public_blog_list': typeof publicBlogListOp;
+        'frontend/public_blog_post': typeof publicBlogPostOp;
+    }
+}

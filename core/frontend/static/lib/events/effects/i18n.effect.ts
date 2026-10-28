@@ -8,6 +8,7 @@
 import { CoreEvents } from '../contract.js';
 import type { EffectCtx, PlatformEvent } from '../contract.js';
 import { httpRequest } from '../http.js';
+import { isPlainRecord } from '../payload.js';
 import { PLATFORM_LOCALE_STORAGE_KEY, resolveInitialUiLocale } from '../../utils/i18n-initial-locale.js';
 import { storageSet } from '../../utils/platform-storage.js';
 import { i18nDefaultNamespaceForBaseUrl } from '../../utils/i18n-namespace.js';
@@ -22,7 +23,7 @@ function _writeLocaleCookie(locale: string): void {
 }
 
 export function createI18nEffect({ baseUrl, platformApexOrigin }: { baseUrl?: string; platformApexOrigin?: string } = {}) {
-    const defaultNamespace = i18nDefaultNamespaceForBaseUrl(baseUrl || '');
+    const defaultNamespace = i18nDefaultNamespaceForBaseUrl(baseUrl === undefined ? '' : baseUrl);
     const apex = typeof platformApexOrigin === 'string' ? platformApexOrigin.trim() : '';
     return async function i18nEffect(event: PlatformEvent, ctx: EffectCtx): Promise<void> {
         switch (event.type) {
@@ -32,11 +33,11 @@ export function createI18nEffect({ baseUrl, platformApexOrigin }: { baseUrl?: st
                 return;
             }
             case CoreEvents.I18N_LOCALE_REQUESTED: {
-                const payload = event.payload as { locale?: string } | null;
-                const locale = payload && payload.locale;
-                if (!locale) {
+                const payload = event.payload;
+                if (!isPlainRecord(payload) || typeof payload.locale !== 'string' || payload.locale.length === 0) {
                     throw new Error('i18n.effect: locale required');
                 }
+                const locale = payload.locale;
                 try {
                     const bundleUrl = platformAbsoluteUrl(
                         `/api/i18n/${encodeURIComponent(locale)}`,
@@ -52,7 +53,7 @@ export function createI18nEffect({ baseUrl, platformApexOrigin }: { baseUrl?: st
                     _writeLocaleCookie(locale);
                     ctx.dispatch(
                         CoreEvents.I18N_LOCALE_CHANGED,
-                        { locale, default_namespace: defaultNamespace || null },
+                        { locale, default_namespace: defaultNamespace.length === 0 ? null : defaultNamespace },
                         { causation_id: event.id },
                     );
                 } catch (err) {
@@ -97,8 +98,8 @@ function _interpolate(str: string, vars: Record<string, unknown> | null | undefi
 function _lookupPath(root: unknown, path: string[]): string | undefined {
     let cur = root;
     for (const segment of path) {
-        if (cur === null || cur === undefined || typeof cur !== 'object') return undefined;
-        cur = (cur as Record<string, unknown>)[segment];
+        if (!isPlainRecord(cur)) return undefined;
+        cur = cur[segment];
     }
     return typeof cur === 'string' ? cur : undefined;
 }
@@ -110,7 +111,7 @@ function _lookupPath(root: unknown, path: string[]): string | undefined {
 export interface I18nStateLike {
     loading?: boolean;
     locale?: string;
-    defaultNamespace?: string;
+    defaultNamespace?: string | null;
     translations?: Record<string, Record<string, unknown>>;
 }
 

@@ -14,3 +14,9 @@ export const companyMembersOp = createAsyncOp({
     commandType: 'office/company_members/list_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/company-members' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/company_members': typeof companyMembersOp;
+    }
+}

@@ -25,7 +25,7 @@ alwaysApply: false
 
 1. Платная операция — `traced_operation(..., billing_usage_type=..., billing_resource_name=..., billing_quantity=..., billing_pending_settlement=True)`; `operation_name` обязан совпасть с правилом `default_settlement_rules`, у `resource_name` есть цена.
 2. `record_usage` вызывает только settlement (`core/billing/service.py`); ключ идемпотентности — `billing:settled:{span_id}:{rule_id}`, один `rule_id` на span — один usage.
-3. `span_billing_settlement_tick` (idle, `billing.span_settlement`: `lookback_minutes`, `batch_limit`, `cron`, `fallback_user_id`) читает `list_spans_pending_billing_settlement`, правила компании кэшируются на тик; `settle_pending_span_in_job` списывает по совпавшим правилам, без совпадения — warning без списания; пустые правила — `ValueError`; span без `company_id` — ошибка в лог и пропуск.
+3. `span_billing_settlement_tick` (idle, `billing.span_settlement`: `lookback_minutes`, `batch_limit`, `cron`, `fallback_user_id`) читает `list_pending_billing_settlement`, правила компании кэшируются на тик; `settle_pending_span_in_job` списывает по совпавшим правилам, без совпадения — warning без списания; пустые правила — `ValueError`; span без `company_id` — ошибка в лог и пропуск.
 4. Правила компании материализует `load_settlement_rules_document_for_company` (нет ключа — пишет дефолт); старт frontend — `ensure_settlement_rules_materialized_for_all_companies`.
 5. Pre-flight перед платной операцией — `BillingService.require_balance_for_billable_operation(company_id, user_id, operation_code=BALANCE_BLOCK_OPERATION_*, ...)`: `balance <= 0` → `notify_user` + `BillingBalanceBlockedError` (403 `billing_balance_blocked`). Флаги — `billing.balance_enforcement_enabled`, `billing.balance_enforcement_exempt_company_ids` (по умолчанию `system`).
 6. LLM (включая vision и image gen) — только `LLMClient.prepare_billing()` + `record_llm_client_response` (`core/clients/llm/billing.py`); call-site pre-flight и span не пишет; HTTP streaming proxy вызывает `prepare_billing()` до `StreamingResponse`; BYOK (`cost_origin=company`) pre-flight не делает.
@@ -37,7 +37,7 @@ alwaysApply: false
 
 ### Админка
 
-- `/frontend/api/platform-billing/*` (цены глобальные и компании, правила компании, `usage-report`, фасеты, `default-settlement-rules`) — только для активной компании `system`; UI `/platform-billing` через фабрики `billing-admin.resource.js`; i18n — `frontend.json` § `platform_billing_page`.
+- `/frontend/api/platform-billing/*` (цены глобальные и компании, правила компании, `usage-report`, фасеты, `default-settlement-rules`) — только для активной компании `system`; UI `/platform-billing` через фабрики `billing-admin.resource.ts`; i18n — `frontend.json` § `platform_billing_page`.
 
 ### Платежи Т-Банк
 

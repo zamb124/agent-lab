@@ -96,7 +96,7 @@ def _required_str(body: JsonObject, key: str) -> str:
 
 @pytest.mark.asyncio
 async def test_universal_agent_loaded_in_database(di) -> None:
-    config = await FlowConfig.get_latest(FLOW_ID)
+    config = await FlowConfig.current_for_flow(FLOW_ID)
     assert config is not None
     assert config.flow_id == FLOW_ID
     assert "code_focus" in config.branches

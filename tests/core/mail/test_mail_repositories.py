@@ -226,7 +226,7 @@ async def test_mailbox_binding_upsert_list_delete(
     stored = await MailboxBinding.upsert_by_email(binding)
     assert stored.email_address == email_address
 
-    listed = await MailboxBinding.list_by_company(company_id)
+    listed = await MailboxBinding.list_by_email_address_for_company(company_id)
     assert len(listed) == 1
     assert listed[0].mailbox_binding_id == f"mailbind_{unique_id}"
 
@@ -236,7 +236,7 @@ async def test_mailbox_binding_upsert_list_delete(
 
     deleted = await MailboxBinding.delete_in_company(company_id, f"mailbind_{unique_id}")
     assert deleted is True
-    assert await MailboxBinding.find_in_company(company_id, f"mailbind_{unique_id}") is None
+    assert await MailboxBinding.by_mailbox_binding_id(company_id, f"mailbind_{unique_id}") is None
 
 
 @pytest.mark.asyncio
@@ -271,4 +271,93 @@ async def test_upsert_by_email_updates_fields_and_can_replace_id(unique_id: str)
     assert replaced.mailbox_binding_id == f"new_{unique_id}"
     assert replaced.created_at == created.created_at
     assert await MailboxBinding.by_email(company_id, email_address) is not None
-    assert await MailboxBinding.find_in_company(company_id, f"old_{unique_id}") is None
+    assert await MailboxBinding.by_mailbox_binding_id(company_id, f"old_{unique_id}") is None
+
+
+@pytest.mark.asyncio
+async def test_list_query_page_matches_text_and_keeps_extra_row(unique_id: str) -> None:
+    binding_id = f"mailbind_q_{unique_id}"
+    other_binding_id = f"mailbind_q_other_{unique_id}"
+    token = f"qtok{unique_id}"
+    newer = datetime(2026, 3, 2, tzinfo=timezone.utc)
+    older = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    newest = datetime(2026, 3, 3, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    inbox_new = await StoredMailMessage.upsert_by_binding_folder_uid(
+        StoredMailMessage(
+            mail_message_id=f"mm_new_{unique_id}",
+            company_id=f"mailco_{unique_id}",
+            mailbox_binding_id=binding_id,
+            folder="INBOX",
+            uid=1,
+            thread_id=f"th_new_{unique_id}",
+            subject=f"Hello {token}",
+            date_at=newer,
+            synced_at=now,
+            created_at=now,
+        )
+    )
+    inbox_old = await StoredMailMessage.upsert_by_binding_folder_uid(
+        StoredMailMessage(
+            mail_message_id=f"mm_old_{unique_id}",
+            company_id=f"mailco_{unique_id}",
+            mailbox_binding_id=binding_id,
+            folder="INBOX",
+            uid=9,
+            thread_id=f"th_old_{unique_id}",
+            subject=f"Older {token}",
+            date_at=older,
+            synced_at=now,
+            created_at=now,
+        )
+    )
+    sent = await StoredMailMessage.upsert_by_binding_folder_uid(
+        StoredMailMessage(
+            mail_message_id=f"mm_sent_{unique_id}",
+            company_id=f"mailco_{unique_id}",
+            mailbox_binding_id=binding_id,
+            folder="Sent",
+            uid=1,
+            thread_id=f"th_sent_{unique_id}",
+            subject=f"Sent {token}",
+            date_at=newest,
+            synced_at=now,
+            created_at=now,
+        )
+    )
+    _ = await StoredMailMessage.upsert_by_binding_folder_uid(
+        StoredMailMessage(
+            mail_message_id=f"mm_foreign_{unique_id}",
+            company_id=f"mailco_{unique_id}",
+            mailbox_binding_id=other_binding_id,
+            folder="INBOX",
+            uid=1,
+            thread_id=f"th_foreign_{unique_id}",
+            subject=f"Foreign {token}",
+            date_at=newest,
+            synced_at=now,
+            created_at=now,
+        )
+    )
+
+    inbox = await StoredMailMessage.list_query_page(binding_id, q=token, folder="INBOX", limit=10)
+    assert [row.mail_message_id for row in inbox] == [inbox_new.mail_message_id, inbox_old.mail_message_id]
+    window = await StoredMailMessage.list_query_page(binding_id, q=token, limit=1)
+    assert [row.mail_message_id for row in window] == [sent.mail_message_id, inbox_new.mail_message_id]
+    older_only = await StoredMailMessage.list_query_page(
+        binding_id,
+        q=token,
+        folder="INBOX",
+        limit=10,
+        before_date=newer,
+        before_uid=1,
+    )
+    assert [row.mail_message_id for row in older_only] == [inbox_old.mail_message_id]
+    with pytest.raises(ValueError, match="q is required"):
+        _ = await StoredMailMessage.list_query_page(binding_id, q="  ", folder="INBOX", limit=10)
+    with pytest.raises(ValueError, match="limit must be >= 1"):
+        _ = await StoredMailMessage.list_query_page(binding_id, q=token, folder="INBOX", limit=0)
+    with pytest.raises(ValueError, match="before_date and before_uid must be provided together"):
+        _ = await StoredMailMessage.list_query_page(
+            binding_id, q=token, folder="INBOX", limit=10, before_date=newer
+        )

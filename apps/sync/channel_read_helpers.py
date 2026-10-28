@@ -46,12 +46,12 @@ async def channel_read_from_entity(
         others = [uid for uid in member_ids if uid != viewer_user_id]
         if len(others) >= 1:
             peer = await _user_brief(others[0], resolve_user=resolve_user)
-            peer_last_read_at = await SyncChannelMember.peer_channel_member_last_read_at(
+            peer_last_read_at = await SyncChannelMember.peer_last_read_at(
                 entity.channel_id,
                 viewer_user_id,
                 company_id=company_id,
             )
-    notifications_muted = await SyncChannelMember.channel_member_notifications_muted(
+    notifications_muted = await SyncChannelMember.is_notifications_muted(
         entity.channel_id,
         viewer_user_id,
         company_id=company_id,

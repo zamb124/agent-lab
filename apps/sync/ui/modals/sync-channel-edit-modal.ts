@@ -6,8 +6,7 @@
  * сгенерированного плейсхолдера (alohe).
  */
 
-import type { SyncChannelsController } from '../events/sync.types.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
@@ -214,7 +213,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
             }
         `,
     ];
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
     private _channelUpdate: OpController;
     private _membersOp: OpController;
     private _notificationsOp: OpController;
@@ -235,7 +234,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
         this._hydrated = false;
         this._members = [];
         this._placeholderVariantNonce = 0;
-        this._channels = this.useResource('sync/channels') as SyncChannelsController;
+        this._channels = this.useResource('sync/channels');
         this._channelUpdate = this.useOp('sync/channel_update');
         this._membersOp = this.useOp('sync/channel_members_list');
         this._notificationsOp = this.useOp('sync/channel_notifications_update');
@@ -316,32 +315,30 @@ export class SyncChannelEditModal extends PlatformFormModal {
         const file = files[0];
         const item = this._channels.items.find((c: Record<string, any>) => c.channel_id === this.channelId);
         if (!item || item.type === 'direct') return;
-        try {
-            const compressed = await compressImageFileToJpeg(file);
-            const spec = buildSyncChannelAssetFileCreateSpecJson({
-                channelId: this.channelId,
-                purpose: 'channel_avatar',
-            });
-            const result = await this._fileUpload.run({
-                file: compressed,
-                spec,
-            });
-            if (
-                result === null
-                || typeof result !== 'object'
-                || typeof (result as Record<string, unknown>).file_id !== 'string'
-                || (result as Record<string, string>).file_id === ''
-            ) {
-                this.toast('sync:channel_settings.err_upload_response', { type: 'error' });
-                return;
-            }
-            const url = buildPlatformFileDownloadUrl((result as { file_id: string }).file_id);
-            this._avatarDraftUrl = url;
-            this._avatarIntent = 'replaced';
-            this.isDirty = true;
-        } catch {
-            this.toast('sync:channel_settings.err_avatar_compress', { type: 'error' });
+        const compressed = await compressImageFileToJpeg(file);
+        const spec = buildSyncChannelAssetFileCreateSpecJson({
+            channelId: this.channelId,
+            purpose: 'channel_avatar',
+        });
+        const result = await this._fileUpload.run({
+            file: compressed,
+            spec,
+        });
+        if (this._fileUpload.error !== null) {
+            throw new Error(`sync channel avatar upload failed: ${this._fileUpload.error}`);
         }
+        if (
+            result === null
+            || typeof result !== 'object'
+            || typeof (result as Record<string, unknown>).file_id !== 'string'
+            || (result as Record<string, string>).file_id === ''
+        ) {
+            throw new Error('sync channel avatar: platform/file_create must return result.file_id');
+        }
+        const url = buildPlatformFileDownloadUrl((result as { file_id: string }).file_id);
+        this._avatarDraftUrl = url;
+        this._avatarIntent = 'replaced';
+        this.isDirty = true;
     }
 
     _clearAvatar() {

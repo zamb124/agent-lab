@@ -131,7 +131,7 @@ class NamespaceTemplateService:
                 if raced is None:
                     raise
                 row = raced
-        await EntityType.update_fields(
+        await EntityType.update_field_patch(
             item.type_id,
             namespace=target_namespace,
             company_id=company_id,
@@ -315,7 +315,7 @@ class NamespaceTemplateService:
             namespace_name,
             exclude_entity_types=ENTITY_TYPES_EXCLUDED_FROM_NAMESPACE_EDITABILITY_COUNTS,
         )
-        used_type_ids = await CRMEntity.used_entity_types_for_namespace(
+        used_type_ids = await CRMEntity.list_entity_type_ids_for_namespace(
             namespace_name,
             exclude_entity_types=ENTITY_TYPES_EXCLUDED_FROM_NAMESPACE_EDITABILITY_COUNTS,
         )

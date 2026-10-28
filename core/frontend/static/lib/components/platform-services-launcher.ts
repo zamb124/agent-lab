@@ -11,7 +11,7 @@ import type { PlatformServiceEntry } from '../utils/platform-services-catalog.js
 import type { SelectController } from '../events/select-controller.js';
 import { buildServiceEntryUrl, isStandalonePwaMode } from '../utils/build-service-entry-url.js';
 
-const HEALTH_DOT = {
+const HEALTH_DOT: Readonly<Record<string, string>> = {
     healthy: 'var(--success)',
     unhealthy: 'var(--error)',
     loading: 'var(--text-tertiary)',
@@ -37,7 +37,7 @@ export class PlatformServicesLauncher extends PlatformElement {
     declare disabledById: Record<string, boolean> | null;
     declare includeServiceIds: string[] | null;
 
-    private _activeCompanyId: SelectController<string | undefined>;
+    private _activeCompanyId: SelectController<string | null>;
 
     static override styles: CSSResultGroup = [
         PlatformElement.styles,
@@ -208,7 +208,7 @@ export class PlatformServicesLauncher extends PlatformElement {
         this.healthByServiceId = null;
         this.disabledById = null;
         this.includeServiceIds = null;
-        this._activeCompanyId = this.select((s) => (s.auth as { activeCompanyId?: string } | undefined)?.activeCompanyId);
+        this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
     }
 
     _servicesToRender(): readonly PlatformServiceEntry[] {
@@ -272,7 +272,8 @@ export class PlatformServicesLauncher extends PlatformElement {
         const id = svc.id;
         const disabled = this._disabledForItem(id);
         const healthState = this._healthForItem(id);
-        const dotColor = (HEALTH_DOT as Record<string, string | undefined>)[healthState] || 'var(--text-tertiary)';
+        const mapped = HEALTH_DOT[healthState];
+        const dotColor = mapped === undefined ? 'var(--text-tertiary)' : mapped;
         const brandStyle = `--brand-from: ${svc.brandFrom}; --brand-to: ${svc.brandTo}; --health-dot-color: ${dotColor};`;
         const title = this.t(svc.nameKey, null, 'platform');
         const iconBlock = html`

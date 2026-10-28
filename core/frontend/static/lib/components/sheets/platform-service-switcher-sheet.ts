@@ -62,9 +62,9 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
 
     private _companiesBootstrapDispatched: boolean;
     private _authSelect: SelectController<AuthSliceView>;
-    private _companiesSelect: SelectController<CompanyRecord[] | undefined>;
-    private _themeSelect: SelectController<string | undefined>;
-    private _localeSelect: SelectController<string | undefined>;
+    private _companiesSelect: SelectController<CompanyRecord[]>;
+    private _themeSelect: SelectController<'dark' | 'light'>;
+    private _localeSelect: SelectController<string>;
 
     static override styles: CSSResultGroup = [
         PlatformBottomSheet.styles,
@@ -339,17 +339,14 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         this.snap = 'full';
         this._companyPickerOpen = false;
         this._companiesBootstrapDispatched = false;
-        this._authSelect = this.select((s): AuthSliceView => {
-            const auth = s.auth as AuthSliceView;
-            return {
-                status: auth.status,
-                user: auth.user,
-                activeCompanyId: auth.activeCompanyId,
-            };
-        });
-        this._companiesSelect = this.select((s) => (s.companies as { list?: CompanyRecord[] }).list);
-        this._themeSelect = this.select((s) => (s.theme as { mode?: string }).mode);
-        this._localeSelect = this.select((s) => (s.i18n as { locale?: string }).locale);
+        this._authSelect = this.select((s): AuthSliceView => ({
+            status: s.auth.status,
+            user: s.auth.user === null ? undefined : s.auth.user,
+            activeCompanyId: s.auth.activeCompanyId,
+        }));
+        this._companiesSelect = this.select((s) => s.companies.list);
+        this._themeSelect = this.select((s) => s.theme.mode);
+        this._localeSelect = this.select((s) => s.i18n.locale);
     }
 
     override connectedCallback(): void {
@@ -366,7 +363,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
             this._companyPickerOpen = false;
             return;
         }
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         if (auth.status === 'authenticated' && auth.user && !this._companiesBootstrapDispatched) {
             this._companiesBootstrapDispatched = true;
             this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
@@ -440,7 +437,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
 
     _openUserProfile() {
         this._requestClose();
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         const user = auth.user;
         if (!user) return;
         const rawId =
@@ -470,7 +467,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
 
     _companyRecordById(companyId: string | null | undefined): CompanyRecord | undefined {
         if (!companyId) return undefined;
-        const companies = this._companiesSelect.value || [];
+        const companies = this._companiesSelect.value;
         return companies.find((c) => c && c.company_id === companyId);
     }
 
@@ -505,7 +502,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
     }
 
     _resolveCompanyName() {
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         const currentId = this._currentCompanyId(auth);
         const name = this._companyNameForId(currentId);
         return typeof name === 'string' ? name : '';
@@ -518,7 +515,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
 
     _switchCompanyFromPicker(companyId: string | undefined, e: Event): void {
         e.stopPropagation();
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         const currentId = this._currentCompanyId(auth);
         if (companyId === currentId || typeof companyId !== 'string') {
             this._companyPickerOpen = false;
@@ -535,10 +532,10 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
     }
 
     override renderBody(): TemplateResult {
-        const auth = this._authSelect.value || {};
-        const user = auth.user || null;
+        const auth = this._authSelect.value;
+        const user = auth.user === undefined ? null : auth.user;
         const themeMode = this._themeSelect.value || 'dark';
-        const companies = this._companiesSelect.value || [];
+        const companies = this._companiesSelect.value;
         const cardTitle = this._resolveSwitchCardTitle(user);
         const companyName = this._resolveCompanyName();
         const currentCompanyId = this._currentCompanyId(auth);

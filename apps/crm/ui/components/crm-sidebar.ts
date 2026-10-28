@@ -22,7 +22,8 @@ import {
     getPlatformNamespaceSidebarSelection,
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
-import '@platform/lib/components/layout/platform-service-sidebar.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/layout/platform-sidebar-nav-tree.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -77,7 +78,10 @@ function resolveCrmSidebarNamespaceSelection(user: { company_id?: unknown } | nu
         return 'all';
     }
     if (selectionByCompany != null && Object.prototype.hasOwnProperty.call(selectionByCompany, companyId)) {
-        const entry = selectionByCompany[companyId]!;
+        const entry = selectionByCompany[companyId];
+        if (entry === undefined) {
+            throw new Error('crm sidebar: namespace selection missing');
+        }
         return entry === 'all' ? 'all' : entry;
     }
     return getPlatformNamespaceSidebarSelection(companyId);
@@ -95,14 +99,13 @@ function allowedTypeIdsForNamespace(namespaceName: unknown, entityTypesItems: un
     const items = Array.isArray(entityTypesItems) ? entityTypesItems : [];
     const out: string[] = [];
     for (const t of items) {
-        if (!t || typeof (t as Record<string, unknown>).type_id !== 'string' || (t as Record<string, any>).type_id.length === 0) {
+        if (!isPlainRecord(t) || typeof t.type_id !== 'string' || t.type_id.length === 0) {
             continue;
         }
-        const tr = t as Record<string, any>;
-        if (tr.namespace !== namespaceName) {
+        if (t.namespace !== namespaceName) {
             continue;
         }
-        out.push(tr.type_id);
+        out.push(t.type_id);
     }
     return out;
 }
@@ -138,7 +141,10 @@ function crmNavActiveTail(routeKey: unknown, locationSearch: unknown): string {
 function findNavLeafId(nodes: unknown, routeKey: string, searchNormalized: string): string {
     const list = Array.isArray(nodes) ? nodes : [];
     for (const n of list) {
-        const ch = (n as Record<string, unknown>).children;
+        if (!isPlainRecord(n)) {
+            continue;
+        }
+        const ch = n.children;
         if (Array.isArray(ch) && ch.length > 0) {
             const id = findNavLeafId(ch, routeKey, searchNormalized);
             if (typeof id === 'string' && id.length > 0) {
@@ -308,13 +314,22 @@ export class CRMSidebar extends PlatformElement {
         super.disconnectedCallback();
     }
 
+    _closeMobileNav() {
+        const shell = this.renderRoot.querySelector('platform-service-sidebar');
+        if (shell === null) return;
+        if (!(shell instanceof PlatformServiceSidebar)) {
+            throw new Error('crm sidebar: platform-service-sidebar required');
+        }
+        shell.closeMobile();
+    }
+
     _navigate(routeKey: string, navigationOptions?: { search?: string }) {
         this.navigate(routeKey, {}, navigationOptions);
-        (this.renderRoot?.querySelector('platform-service-sidebar') as { closeMobile?: () => void } | null)?.closeMobile?.();
+        this._closeMobileNav();
     }
 
     _onNavTreePick(e: CustomEvent) {
-        const d = e.detail as { routeKey?: unknown; search?: unknown } | null;
+        const d = isPlainRecord(e.detail) ? e.detail : null;
         if (!d || typeof d.routeKey !== 'string' || d.routeKey.length === 0) {
             throw new Error('CRMSidebar: pick requires routeKey');
         }
@@ -327,7 +342,7 @@ export class CRMSidebar extends PlatformElement {
             opts.search = rawSearch;
         }
         this.navigate(d.routeKey, {}, Object.keys(opts).length > 0 ? opts : undefined);
-        (this.renderRoot?.querySelector('platform-service-sidebar') as { closeMobile?: () => void } | null)?.closeMobile?.();
+        this._closeMobileNav();
     }
 
     _namespaceDropdownConfig(items: unknown): { values: { value: string; label: string }[] } {
@@ -335,8 +350,8 @@ export class CRMSidebar extends PlatformElement {
             throw new Error('CRMSidebar._namespaceDropdownConfig: items must be an array');
         }
         const values = [{ value: '', label: this.t('sidebar.all_namespaces') }];
-        for (const ns of items as Record<string, any>[]) {
-            if (!ns || typeof ns.name !== 'string' || ns.name.length === 0) {
+        for (const ns of items) {
+            if (!isPlainRecord(ns) || typeof ns.name !== 'string' || ns.name.length === 0) {
                 throw new Error('CRMSidebar._namespaceDropdownConfig: namespace name required');
             }
             const title = typeof ns.title === 'string' && ns.title.length > 0 ? ns.title : ns.name;
@@ -411,12 +426,9 @@ export class CRMSidebar extends PlatformElement {
     _sidebarTreeNodesForNamespace(namespaceName: string): Record<string, any>[] {
         const items = this._namespaces.items;
         const nsRow = items.find((row: Record<string, any> | null) => row && row.name === namespaceName);
-        const rawSettings = nsRow && nsRow.crm_settings && typeof nsRow.crm_settings === 'object'
-            ? nsRow.crm_settings
-            : null;
-        const rawNav = rawSettings && Array.isArray((rawSettings as Record<string, unknown>).sidebar_navigation)
-            ? (rawSettings as Record<string, any>).sidebar_navigation
-            : null;
+        const settings = nsRow && isPlainRecord(nsRow.crm_settings) ? nsRow.crm_settings : null;
+        const navigation = settings === null ? undefined : settings.sidebar_navigation;
+        const rawNav = Array.isArray(navigation) ? navigation : null;
         const fromApi = mapSidebarNavFromApi(rawNav);
         const allowed = allowedTypeIdsForNamespace(namespaceName, this._entityTypes.items);
         const labels = {

@@ -304,7 +304,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
             }
         ]
     )
-    search_mcp_server = await MCPServerConfig.get(MCPServerConfig.row_id("search"))
+    search_mcp_server = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company("search"))
     assert search_mcp_server is not None
     synced_tool_ids, _ = await sync_mcp_server_tools(
         di=di,

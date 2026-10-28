@@ -90,7 +90,7 @@ class TestPushSubscriptionModel:
             )
 
         # Получаем все подписки
-        subscriptions = await PushSubscription.list_for_user(user_id)
+        subscriptions = await PushSubscription.list_by_last_used_at_desc(user_id)
 
         assert len(subscriptions) == 3
 
@@ -120,7 +120,7 @@ class TestPushSubscriptionModel:
         assert deleted is True
 
         # Проверяем что удалено
-        subs = await PushSubscription.list_for_user(user_id)
+        subs = await PushSubscription.list_by_last_used_at_desc(user_id)
         assert len(subs) == 0
 
 

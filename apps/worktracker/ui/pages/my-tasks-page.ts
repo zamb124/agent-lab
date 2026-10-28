@@ -36,7 +36,7 @@ export class WorktrackerMyTasksPage extends PlatformPage {
     constructor() {
         super();
         this._workItems = this.useResource('worktracker/work_items');
-        this._userSel = this.select((s) => (s.auth as Record<string, unknown>).user);
+        this._userSel = this.select((s) => s.auth.user);
     }
 
     override connectedCallback() {
@@ -53,7 +53,7 @@ export class WorktrackerMyTasksPage extends PlatformPage {
     }
 
     override render() {
-        const items = this._workItems.items || [];
+        const items = this._workItems.items;
         return html`
             <worktracker-page-header
                 title=${this.t('my_page.title')}

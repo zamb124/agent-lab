@@ -144,9 +144,9 @@ function _buildEntityQueryFilters(filters: Record<string, any>, dateField: strin
     if (typeof filters.date_to === 'string' && filters.date_to.length > 0) {
         leaves.push({ field: dateField, op: '$lte', value: filters.date_to });
     }
-    if (leaves.length === 0) return null;
-    if (leaves.length === 1) return leaves[0] ?? null;
-    return { $and: leaves };
+    const [first, ...rest] = leaves;
+    if (first === undefined) return null;
+    return rest.length === 0 ? first : { $and: leaves };
 }
 
 export const entitiesListResource = createCursorList({
@@ -442,3 +442,20 @@ export const entityEditForm = createForm({
         };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/entities': typeof entitiesResource;
+        'crm/entity_card': typeof entityCardOp;
+        'crm/entity_update': typeof entityUpdateOp;
+        'crm/entities_list': typeof entitiesListResource;
+        'crm/entity_merge': typeof entityMergeOp;
+        'crm/entity_bulk_delete': typeof entityBulkDeleteOp;
+        'crm/entity_bulk_update': typeof entityBulkUpdateOp;
+        'crm/entities_lookup': typeof entitiesLookupOp;
+        'crm/entity_search': typeof entitySearchOp;
+        'crm/entity_aggregate': typeof entityAggregateOp;
+        'crm/entity_create_form': typeof entityCreateForm;
+        'crm/entity_edit_form': typeof entityEditForm;
+    }
+}

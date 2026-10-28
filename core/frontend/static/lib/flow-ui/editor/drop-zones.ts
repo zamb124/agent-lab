@@ -9,9 +9,31 @@ import { containerFromPath, relativeRect } from './selection.js';
 export const BLOCK_TYPE_MIME = 'application/x-flow-ui-block';
 export const BLOCK_ID_MIME = 'application/x-flow-ui-block-id';
 
+function htmlBlock(child: Element): HTMLElement | null {
+    if (!child.classList.contains('fu-block')) return null;
+    if (!(child instanceof HTMLElement)) {
+        throw new Error('flow-ui editor: block child must be an HTMLElement');
+    }
+    return child;
+}
+
+function requireChild(children: readonly Element[], index: number): Element {
+    const child = children[index];
+    if (child === undefined) {
+        throw new Error(`flow-ui editor: container child ${index} is missing`);
+    }
+    return child;
+}
+
 /** Прямые дети-блоки контейнера; перетаскиваемый блок исключается из расчёта позиции. */
-function containerChildren(element: Element, excludeBlockId: string | null): Element[] {
-    return [...element.children].filter((child) => child.classList.contains('fu-block') && (child as HTMLElement).dataset.blockId !== excludeBlockId);
+function containerChildren(element: Element, excludeBlockId: string | null): HTMLElement[] {
+    const blocks: HTMLElement[] = [];
+    for (const child of element.children) {
+        const block = htmlBlock(child);
+        if (block === null || block.dataset.blockId === excludeBlockId) continue;
+        blocks.push(block);
+    }
+    return blocks;
 }
 
 function insideBlock(element: Element, blockId: string | null): boolean {
@@ -36,11 +58,11 @@ export function dropTargetFromEvent(event: { composedPath(): EventTarget[]; clie
     if (children.length === 0) {
         lineTop = containerRect.top + Math.min(12, containerRect.height / 2);
     } else if (index < children.length) {
-        const rect = (children[index] as Element).getBoundingClientRect();
-        const previous = index > 0 ? (children[index - 1] as Element).getBoundingClientRect().bottom : rect.top;
+        const rect = requireChild(children, index).getBoundingClientRect();
+        const previous = index > 0 ? requireChild(children, index - 1).getBoundingClientRect().bottom : rect.top;
         lineTop = (previous + rect.top) / 2;
     } else {
-        lineTop = (children[children.length - 1] as Element).getBoundingClientRect().bottom + 4;
+        lineTop = requireChild(children, children.length - 1).getBoundingClientRect().bottom + 4;
     }
     const line = relativeRect({ top: lineTop, left: containerRect.left, width: containerRect.width, height: 0 }, origin);
     return {
@@ -52,9 +74,12 @@ export function dropTargetFromEvent(event: { composedPath(): EventTarget[]; clie
 
 /** Индекс в реальном массиве контейнера, где перетаскиваемый блок ещё присутствует. */
 function indexIncludingExcluded(element: Element, visibleChildren: Element[], index: number, excludeBlockId: string | null): number {
-    const all = [...element.children].filter((child) => child.classList.contains('fu-block'));
+    const all: Element[] = [];
+    for (const child of element.children) {
+        if (htmlBlock(child) !== null) all.push(child);
+    }
     if (index >= visibleChildren.length) return all.length;
-    return all.indexOf(visibleChildren[index] as Element);
+    return all.indexOf(requireChild(visibleChildren, index));
 }
 
 export function readDragPayload(dataTransfer: DataTransfer): { kind: 'move'; blockId: string } | { kind: 'insert'; type: string; columns: number | null } | null {

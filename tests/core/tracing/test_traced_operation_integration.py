@@ -45,7 +45,7 @@ async def test_traced_operation_persists_company_id_from_span_attributes(
     ):
         pass
 
-    rows, _ = await Span.list_spans_for_service(
+    rows, _ = await Span.span_page_and_cursor_for_service(
         service_name=svc,
         operation_name=op,
         limit=10,

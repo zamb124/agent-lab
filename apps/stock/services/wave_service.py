@@ -30,7 +30,7 @@ class WaveService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[StockWave]:
-        return await StockWave.list_for_warehouse(
+        return await StockWave.list_by_created_at_desc_for_warehouse(
             company_id,
             warehouse_id,
             state=state,
@@ -66,7 +66,7 @@ class WaveService:
                     "Wave stop is duplicated",
                     error_code="wave_stop_duplicate",
                 )
-            transfers = await StockTransfer.by_ids(
+            transfers = await StockTransfer.found_in_company_by_ids(
                 company_id, stop_transfer_ids
             )
             for tid in stop_transfer_ids:

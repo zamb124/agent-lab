@@ -11,9 +11,8 @@
  * канала, авто-транскрипция голосовых и речь звонка в ленту.
  */
 
-import type { SyncChannelsController } from '../events/sync.types.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations} from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
@@ -111,7 +110,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
             }
         `,
     ];
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
     private _teamMembersSel: SelectController<Record<string, any> | undefined>;
     private _teamLoadingSel: SelectController<Record<string, any> | undefined>;
     private _authSel: SelectController<Record<string, any> | undefined>;
@@ -125,7 +124,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
         this._transcribe = false;
         this._speechToChat = false;
         this._membersFilter = '';
-        this._channels = this.useResource('sync/channels') as SyncChannelsController;
+        this._channels = this.useResource('sync/channels');
         this._teamMembersSel = this.select((s) => (s.team as Record<string, any> | undefined)?.members);
         this._teamLoadingSel = this.select((s) => (s.team as Record<string, any> | undefined)?.loading);
         this._authSel = this.select((s) => (s.auth as Record<string, any> | undefined)?.user);
@@ -150,8 +149,10 @@ export class SyncChannelCreateModal extends PlatformFormModal {
             .filter((m: Record<string, any>) => m && m.user_id !== myId)
             .filter((m: Record<string, any>) => {
                 if (q.length === 0) return true;
-                const name = ((m.name as string | undefined) || '').toLowerCase();
-                const email = ((m.email as string | undefined) || '').toLowerCase();
+                const rawName = m.name as string | undefined;
+                const rawEmail = m.email as string | undefined;
+                const name = (rawName === undefined ? '' : rawName).toLowerCase();
+                const email = (rawEmail === undefined ? '' : rawEmail).toLowerCase();
                 return name.includes(q) || email.includes(q);
             });
     }

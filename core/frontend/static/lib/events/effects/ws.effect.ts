@@ -17,6 +17,7 @@
  */
 
 import { CoreEvents, assertEventType } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 import { getActivePlatformNamespaceName } from '../../utils/platform-namespace.js';
 import { formatPlatformError } from '../../utils/platform-error-message.js';
 import { Centrifuge, UnauthorizedError } from 'centrifuge';
@@ -25,7 +26,7 @@ import type { PlatformEvent, EffectCtx } from '../contract.js';
 const BASE_DELAY_MS = 600;
 const MAX_DELAY_MS = 60_000;
 
-type CentrifugeCtor = new (url: string, opts: Record<string, unknown>) => CentrifugeLike;
+type CentrifugeCtor = typeof Centrifuge;
 
 interface CentrifugeLike {
     state: string;
@@ -56,8 +57,8 @@ interface PendingEntry {
     expectedFailed: string;
 }
 
-let _CentrifugeCtor: CentrifugeCtor = Centrifuge as unknown as CentrifugeCtor;
-let _UnauthorizedError: new () => Error = UnauthorizedError as unknown as new () => Error;
+let _CentrifugeCtor: CentrifugeCtor = Centrifuge;
+let _UnauthorizedError: typeof UnauthorizedError = UnauthorizedError;
 
 let _client: CentrifugeLike | null = null;
 let _connected = false;
@@ -86,7 +87,11 @@ function _hostname(): string {
     if (typeof host !== 'string' || host.length === 0) {
         throw new Error('location.host is required for Centrifugo URL');
     }
-    return host.split(':')[0]!;
+    const hostname = host.split(':')[0];
+    if (hostname === undefined || hostname.length === 0) {
+        throw new Error('location.host is required for Centrifugo URL');
+    }
+    return hostname;
 }
 
 function _centrifugeUrl(): string {
@@ -118,15 +123,19 @@ function _decodeJwtPayload(token: string): Record<string, unknown> {
     if (parts.length !== 3) {
         throw new Error('auth_token is not a JWT');
     }
-    const normalized = parts[1]!.replace(/-/g, '+').replace(/_/g, '/');
+    const segment = parts[1];
+    if (segment === undefined) {
+        throw new Error('auth_token is not a JWT');
+    }
+    const normalized = segment.replace(/-/g, '+').replace(/_/g, '/');
     const pad = normalized.length % 4;
     const padded = pad === 0 ? normalized : normalized + '='.repeat(4 - pad);
     const json = atob(padded);
-    const payload = JSON.parse(json) as Record<string, unknown> | null;
-    if (!payload || typeof payload !== 'object') {
+    const payload: unknown = JSON.parse(json);
+    if (!isPlainRecord(payload)) {
         throw new Error('JWT payload is required');
     }
-    return payload!;
+    return payload;
 }
 
 function _sessionCompanyId(token: string): string {
@@ -140,10 +149,10 @@ function _sessionCompanyId(token: string): string {
 
 async function _getToken(): Promise<string> {
     if (typeof document === 'undefined' || typeof document.cookie !== 'string') {
-        throw new _UnauthorizedError();
+        throw new _UnauthorizedError('auth_token cookie is required');
     }
     if (!document.cookie.split(';').some((part) => part.trim().startsWith('auth_token='))) {
-        throw new _UnauthorizedError();
+        throw new _UnauthorizedError('auth_token cookie is required');
     }
     return _cookieValue('auth_token');
 }
@@ -162,6 +171,53 @@ interface WsFrame {
     meta?: { correlation_id?: string; causation_id?: string; trace_id?: string };
 }
 
+function frameMeta(value: unknown): WsFrame['meta'] {
+    if (!isPlainRecord(value)) return undefined;
+    const meta: NonNullable<WsFrame['meta']> = {};
+    if (typeof value.correlation_id === 'string') meta.correlation_id = value.correlation_id;
+    if (typeof value.causation_id === 'string') meta.causation_id = value.causation_id;
+    if (typeof value.trace_id === 'string') meta.trace_id = value.trace_id;
+    return meta;
+}
+
+function wsFrame(value: unknown): WsFrame | null {
+    if (!isPlainRecord(value) || typeof value.type !== 'string' || value.type.length === 0) return null;
+    return { type: value.type, payload: value.payload, meta: frameMeta(value.meta) };
+}
+
+function publicationFrame(ctx: unknown): WsFrame | null {
+    if (!isPlainRecord(ctx)) return null;
+    return wsFrame(ctx.data);
+}
+
+function scalarErrorParams(value: unknown): Record<string, string | number | boolean> | null {
+    if (value === undefined || value === null) return null;
+    if (!isPlainRecord(value)) {
+        throw new Error('ws: error_params must be an object');
+    }
+    const params: Record<string, string | number | boolean> = {};
+    for (const [key, field] of Object.entries(value)) {
+        if (typeof field !== 'string' && typeof field !== 'number' && typeof field !== 'boolean') {
+            throw new Error(`ws: error_params.${key} must be a scalar`);
+        }
+        params[key] = field;
+    }
+    return params;
+}
+
+function disconnectReason(ctx: unknown): string {
+    if (!isPlainRecord(ctx) || typeof ctx.reason !== 'string' || ctx.reason.length === 0) {
+        return 'disconnected';
+    }
+    return ctx.reason;
+}
+
+function rpcErrorMessage(err: unknown): string {
+    if (err instanceof Error && err.message.length > 0) return err.message;
+    if (isPlainRecord(err) && typeof err.message === 'string' && err.message.length > 0) return err.message;
+    return 'Centrifugo rpc platform.event failed';
+}
+
 function _dispatchPlatformEvent(frame: WsFrame | null | undefined): void {
     if (!frame || typeof frame.type !== 'string') {
         return;
@@ -172,17 +228,13 @@ function _dispatchPlatformEvent(frame: WsFrame | null | undefined): void {
     if (frame.type.endsWith('_requested')) {
         return;
     }
-    try {
-        assertEventType(frame.type);
-        _ctxRef?.dispatch(frame.type, frame.payload === undefined ? null : frame.payload, {
-            source: 'ws',
-            correlation_id: frame.meta?.correlation_id,
-            causation_id: frame.meta?.causation_id,
-            trace_id: frame.meta?.trace_id,
-        });
-    } catch (err) {
-        console.warn('[ws.effect] dropped frame: invalid event type', frame.type, err);
-    }
+    assertEventType(frame.type);
+    _ctxRef?.dispatch(frame.type, frame.payload === undefined ? null : frame.payload, {
+        source: 'ws',
+        correlation_id: frame.meta?.correlation_id,
+        causation_id: frame.meta?.causation_id,
+        trace_id: frame.meta?.trace_id,
+    });
 }
 
 function _matchPending(frame: WsFrame | null | undefined): boolean {
@@ -195,7 +247,10 @@ function _matchPending(frame: WsFrame | null | undefined): boolean {
     if (causationId === null || !_pending.has(causationId)) {
         return false;
     }
-    const entry = _pending.get(causationId)!;
+    const entry = _pending.get(causationId);
+    if (entry === undefined) {
+        throw new Error(`ws: pending command ${causationId} missing`);
+    }
     if (entry.expectedSucceeded === frame.type) {
         _pending.delete(causationId);
         clearTimeout(entry.timeoutHandle);
@@ -205,15 +260,10 @@ function _matchPending(frame: WsFrame | null | undefined): boolean {
     if (entry.expectedFailed === frame.type) {
         _pending.delete(causationId);
         clearTimeout(entry.timeoutHandle);
-        const failurePayload = frame.payload && typeof frame.payload === 'object' ? frame.payload as { error_code?: unknown; error_params?: unknown } : {};
-        const code = typeof failurePayload.error_code === 'string' && failurePayload.error_code.length > 0
-            ? failurePayload.error_code
-            : 'unknown';
-        const errorParams = failurePayload.error_params
-            && typeof failurePayload.error_params === 'object'
-            && !Array.isArray(failurePayload.error_params)
-            ? failurePayload.error_params as Record<string, string | number | boolean>
-            : null;
+        const failurePayload = isPlainRecord(frame.payload) ? frame.payload : null;
+        const errorCode = failurePayload === null ? undefined : failurePayload.error_code;
+        const code = typeof errorCode === 'string' && errorCode.length > 0 ? errorCode : 'unknown';
+        const errorParams = failurePayload === null ? null : scalarErrorParams(failurePayload.error_params);
         const message = formatPlatformError(code, errorParams);
         entry.reject(new WsTransportError(message, code));
         return true;
@@ -222,7 +272,7 @@ function _matchPending(frame: WsFrame | null | undefined): boolean {
 }
 
 function _onPublication(ctx: unknown): void {
-    const frame = (ctx as { data?: WsFrame } | null | undefined)?.data;
+    const frame = publicationFrame(ctx);
     _ctxRef?.dispatch(CoreEvents.WS_FRAME_RECEIVED, { frame }, { source: 'ws' });
     if (_matchPending(frame)) {
         return;
@@ -249,8 +299,7 @@ function _open(): void {
     });
     _client.on('disconnected', (ctxRaw) => {
         _connected = false;
-        const ctx = ctxRaw as { reason?: string } | undefined;
-        const reason = ctx && ctx.reason ? ctx.reason : 'disconnected';
+        const reason = disconnectReason(ctxRaw);
         _ctxRef?.dispatch(CoreEvents.WS_DISCONNECTED, { reason }, { source: 'ws' });
         if (!_intentionalClose) {
             _rejectAllPending(new WsTransportError('WebSocket disconnected', 'ws_disconnected'));
@@ -281,16 +330,22 @@ function _rejectAllPending(error: WsTransportError): void {
 
 function _flushPreConnectQueue(): void {
     while (_preConnectQueue.length > 0) {
-        const queued = _preConnectQueue.shift()!;
-        clearTimeout(queued.preTimeoutHandle ?? undefined);
+        const queued = _preConnectQueue.shift();
+        if (queued === undefined) {
+            throw new Error('ws: pre-connect queue item missing');
+        }
+        if (queued.preTimeoutHandle !== null) clearTimeout(queued.preTimeoutHandle);
         _sendRpcNow(queued);
     }
 }
 
 function _rejectAllPreConnect(error: WsTransportError): void {
     while (_preConnectQueue.length > 0) {
-        const queued = _preConnectQueue.shift()!;
-        clearTimeout(queued.preTimeoutHandle ?? undefined);
+        const queued = _preConnectQueue.shift();
+        if (queued === undefined) {
+            throw new Error('ws: pre-connect queue item missing');
+        }
+        if (queued.preTimeoutHandle !== null) clearTimeout(queued.preTimeoutHandle);
         queued.reject(error);
     }
 }
@@ -335,12 +390,13 @@ function _sendRpcNow(queued: QueuedCommand): void {
         if (!_pending.has(eventId)) {
             return;
         }
-        const entry = _pending.get(eventId)!;
+        const entry = _pending.get(eventId);
+        if (entry === undefined) {
+            throw new Error(`ws: pending command ${eventId} missing`);
+        }
         _pending.delete(eventId);
         clearTimeout(entry.timeoutHandle);
-        const message = err && typeof (err as Error).message === 'string' && (err as Error).message.length > 0
-            ? (err as Error).message
-            : 'Centrifugo rpc platform.event failed';
+        const message = rpcErrorMessage(err);
         entry.reject(new WsTransportError(message, 'ws_disconnected'));
     });
 }
@@ -355,7 +411,10 @@ async function _onCommandTimeout(eventId: string, queued: QueuedCommand): Promis
             { credentials: 'include' },
         );
         if (response.ok) {
-            const frame = await response.json() as WsFrame;
+            const frame = wsFrame(await response.json());
+            if (frame === null) {
+                throw new Error('ws: terminal event is not a frame');
+            }
             if (_matchPending(frame)) {
                 return;
             }
@@ -440,7 +499,9 @@ export const platformWs = {
                 timeoutMs: opts.timeoutMs,
                 expectedSucceeded: opts.expectedSucceeded,
                 expectedFailed: opts.expectedFailed,
-                causationEventId: opts.causationEventId || null,
+                causationEventId: opts.causationEventId === undefined || opts.causationEventId === null || opts.causationEventId.length === 0
+                    ? null
+                    : opts.causationEventId,
                 resolve,
                 reject,
                 preTimeoutHandle: null,
@@ -491,7 +552,7 @@ export function createPlatformWsEffect(): (event: PlatformEvent, ctx: EffectCtx)
     };
 }
 
-export function _setCentrifugeForTests(ctor: CentrifugeCtor, unauthorizedError: new () => Error): void {
+export function _setCentrifugeForTests(ctor: CentrifugeCtor, unauthorizedError: typeof UnauthorizedError): void {
     _CentrifugeCtor = ctor;
     _UnauthorizedError = unauthorizedError;
 }
@@ -506,5 +567,5 @@ export function _resetPlatformWsForTests(): void {
     _pending.clear();
     _preConnectQueue.length = 0;
     _CentrifugeCtor = Centrifuge;
-    _UnauthorizedError = UnauthorizedError as unknown as new () => Error;
+    _UnauthorizedError = UnauthorizedError;
 }

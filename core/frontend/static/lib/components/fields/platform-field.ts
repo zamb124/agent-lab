@@ -36,6 +36,10 @@ const FIELD_TYPE_MAP: Record<string, string> = {
     external_refs: 'platform-field-external-refs',
 };
 
+function presentValue(value: unknown): unknown {
+    return value === undefined || value === null ? '' : value;
+}
+
 export class PlatformField extends PlatformElement {
     static override properties: PropertyDeclarations = {
         type: { type: String },
@@ -77,7 +81,7 @@ export class PlatformField extends PlatformElement {
     declare error: string;
     declare _focused: boolean;
 
-    private _focusOutTimer: number | undefined;
+    private _focusOutTimer: ReturnType<typeof setTimeout> | undefined;
     private _onFocusIn: () => void;
     private _onFocusOut: () => void;
 
@@ -213,7 +217,7 @@ export class PlatformField extends PlatformElement {
         switch (this.type) {
             case 'string':
                 return html`<platform-field-string
-                    .value=${this.value ?? ''}
+                    .value=${presentValue(this.value)}
                     .mode=${this.mode}
                     .placeholder=${ph}
                     .inputType=${this.inputType}
@@ -224,7 +228,7 @@ export class PlatformField extends PlatformElement {
 
             case 'text':
                 return html`<platform-field-text
-                    .value=${this.value ?? ''}
+                    .value=${presentValue(this.value)}
                     .mode=${this.mode}
                     .placeholder=${ph}
                     ?disabled=${this.disabled}
@@ -279,7 +283,7 @@ export class PlatformField extends PlatformElement {
 
             case 'enum':
                 return html`<platform-field-enum
-                    .value=${this.value ?? ''}
+                    .value=${presentValue(this.value)}
                     .mode=${this.mode}
                     .config=${this.config}
                     .placeholder=${ph}

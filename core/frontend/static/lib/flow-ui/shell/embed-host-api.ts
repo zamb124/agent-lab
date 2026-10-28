@@ -1,3 +1,5 @@
+import { isPlainRecord } from '../../events/payload.js';
+
 const THEMES = new Set(['light', 'dark', 'auto']);
 const LOCALES = new Set(['ru', 'en', 'auto']);
 
@@ -34,11 +36,21 @@ declare global {
     var linnexFlowUI: LinnexFlowUIApi | undefined;
 }
 
+function isEmbedHost(element: HTMLElement): element is FlowUiEmbedHost {
+    const host: unknown = element;
+    if (!isPlainRecord(host)) return false;
+    return isPlainRecord(host.config);
+}
+
+function isFlowUiElement(element: Element): element is FlowUiElementLike {
+    return element instanceof HTMLElement;
+}
+
 function requireHost(element: unknown): FlowUiEmbedHost {
-    if (!(element instanceof HTMLElement)) {
+    if (!(element instanceof HTMLElement) || !isEmbedHost(element)) {
         throw new Error('linnexFlowUI: host element is required');
     }
-    return element as FlowUiEmbedHost;
+    return element;
 }
 
 function flowUiElement(host: HTMLElement): FlowUiElementLike {
@@ -47,10 +59,10 @@ function flowUiElement(host: HTMLElement): FlowUiElementLike {
         throw new Error('linnexFlowUI: host shadowRoot is required');
     }
     const el = root.querySelector('platform-flow-ui');
-    if (!el) {
+    if (el === null || !isFlowUiElement(el)) {
         throw new Error('linnexFlowUI: platform-flow-ui is required');
     }
-    return el as FlowUiElementLike;
+    return el;
 }
 
 function patchHostConfig(host: FlowUiEmbedHost, patch: Record<string, unknown>) {

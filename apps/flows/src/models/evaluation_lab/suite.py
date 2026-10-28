@@ -47,7 +47,8 @@ class EvaluationSuite(CompanyScopedModel):
         return self
 
     @classmethod
-    async def list_for_flow(cls, flow_id: str) -> list[Self]:
+    async def list_by_updated_at_and_suite_id(cls, flow_id: str) -> list[Self]:
+        """Наборы flow, ORDER BY updated_at DESC, suite_id. Предела нет. Пустой flow_id — ValueError."""
         if flow_id == "":
             raise ValueError("flow_id is required")
         return await cls.objects.filter(flow_id=flow_id).order_by("-updated_at", "suite_id").all()

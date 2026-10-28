@@ -14,6 +14,12 @@
  * ``flow-ui-open-observability``/``browser-preview-open``.
  */
 
+import { isPlainRecord, recordField } from '../../events/payload.js';
+
+function presentText(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
 import { LitElement, html, nothing, type PropertyValues } from '../../lit-shim.js';
 import { buildFlowSessionFileCreateSpecJson } from '../../utils/file-create-spec.js';
 import { resolvePlatformFileRefs } from '../../utils/platform-file-upload.js';
@@ -57,6 +63,42 @@ type FlowUiStatus = 'idle' | 'loading' | 'ready' | 'error';
 type HitlMode = 'takeover' | 'single_reply';
 
 /** Политика взаимодействия профиля ``operator_handoff`` (настройки embed от бэкенда). */
+function flowRecord(value: unknown): FlowUiRecord | undefined {
+    if (value === undefined || value === null) {
+        return undefined;
+    }
+    if (!isPlainRecord(value)) {
+        throw new Error('platform-flow-ui: object required');
+    }
+    return value;
+}
+
+function requireHitlConversation(policy: FlowUiInteractionPolicy | null): HitlConversation {
+    const conversation = policy === null ? undefined : policy.conversation;
+    if (conversation === undefined) {
+        throw new Error('platform-flow-ui: interactionPolicy.conversation required');
+    }
+    return conversation;
+}
+
+function fileSources(refs: readonly Record<string, unknown>[]): A2aFileSource[] {
+    return refs.map((ref) => {
+        const source: A2aFileSource = {};
+        if ('url' in ref) source.url = ref.url;
+        if ('content_type' in ref) source.content_type = ref.content_type;
+        if ('original_name' in ref) source.original_name = ref.original_name;
+        return source;
+    });
+}
+
+function formControlValue(event: Event): string {
+    const target = event.target;
+    if (!(target instanceof HTMLTextAreaElement) && !(target instanceof HTMLInputElement)) {
+        throw new Error('platform-flow-ui: form control required');
+    }
+    return target.value;
+}
+
 export interface FlowUiInteractionPolicy {
     mode?: string;
     conversation?: HitlConversation;
@@ -208,7 +250,7 @@ export class PlatformFlowUI extends LitElement {
         if (!this.isConnected) return;
         if (this.editing) {
             if (changed.has('initialDocument') && this.initialDocument !== null) this.store.setDocument(this.initialDocument);
-            if (changed.has('sampleState')) this.store.setState(this.sampleState ?? {});
+            if (changed.has('sampleState')) this.store.setState(this.sampleState === null ? {} : this.sampleState);
             this._syncHostPage();
             return;
         }
@@ -219,8 +261,8 @@ export class PlatformFlowUI extends LitElement {
         if (changed.has('pageId')) this._syncHostPage();
         const target = this.client.target;
         const hostContextId = typeof this.contextId === 'string' ? this.contextId.trim() : '';
-        const drift = (changed.has('flowId') && (this.flowId || '') !== (target.flowId || ''))
-            || (changed.has('embedId') && (this.embedId || '') !== (target.embedId || ''))
+        const drift = (changed.has('flowId') && this.flowId !== target.flowId)
+            || (changed.has('embedId') && this.embedId !== target.embedId)
             || (changed.has('branchId') && normalizeFlowUIBranchId(this.branchId) !== target.branchId)
             || (changed.has('contextId') && hostContextId !== '' && hostContextId !== this.client.contextId);
         if (drift) void this._restart();
@@ -255,7 +297,7 @@ export class PlatformFlowUI extends LitElement {
     /** Холст редактора: документ и тестовый state приходят от хоста, сети и Tasks нет. */
     _startEditing() {
         if (this.initialDocument === null) throw new Error('platform-flow-ui: editing requires initialDocument');
-        this.store.setState(this.sampleState ?? {});
+        this.store.setState(this.sampleState === null ? {} : this.sampleState);
         this.store.setDocument(this.initialDocument);
         this._syncHostPage();
         this._status = 'ready';
@@ -284,7 +326,7 @@ export class PlatformFlowUI extends LitElement {
         try {
             if (hitl) {
                 this._assertHitlConfig();
-                const conversation = this.interactionPolicy?.conversation as HitlConversation;
+                const conversation = requireHitlConversation(this.interactionPolicy);
                 this.flowId = conversation.flow_id;
                 this.contextId = conversation.context_id;
                 if (typeof conversation.branch_id === 'string' && conversation.branch_id.trim() !== '') this.branchId = conversation.branch_id;
@@ -306,7 +348,7 @@ export class PlatformFlowUI extends LitElement {
             if (hitl) {
                 this._hitl = new FlowUIHitlTransport({
                     workItemId: this.workItemId,
-                    conversation: this.interactionPolicy?.conversation as HitlConversation,
+                    conversation: requireHitlConversation(this.interactionPolicy),
                     mode: this.interactionPolicy?.mode,
                     baseUrl: this.baseUrl,
                     credentials: this.credentials === 'omit' ? 'omit' : 'include',
@@ -314,10 +356,11 @@ export class PlatformFlowUI extends LitElement {
                 });
                 await this._hitl.attach(client);
             } else {
-                await client.open({ contextId: this.contextId.trim() || null, document: this.initialDocument });
+                const trimmedContextId = this.contextId.trim();
+                await client.open({ contextId: trimmedContextId.length === 0 ? null : trimmedContextId, document: this.initialDocument });
             }
             if (generation !== this._generation || this.client !== client) return;
-            this.contextId = client.contextId ?? '';
+            this.contextId = client.contextId === null ? '' : client.contextId;
             this._syncHostPage();
             this._status = 'ready';
             this._emit('flow-ui-ready', { contextId: client.contextId });
@@ -358,7 +401,7 @@ export class PlatformFlowUI extends LitElement {
 
     get capabilities(): FlowUiRecord {
         if (this.editing) return EDITING_CAPABILITIES;
-        const capabilities = this.interface?.capabilities as FlowUiRecord | undefined;
+        const capabilities = flowRecord(this.interface === null ? undefined : this.interface.capabilities);
         if (!capabilities) throw new Error('platform-flow-ui: capabilities require interface');
         return capabilities;
     }
@@ -379,14 +422,15 @@ export class PlatformFlowUI extends LitElement {
     get effectiveReadonly() {
         if (this.readonly || this.editing) return true;
         if (this.profile === 'operator_handoff') return this.interactionPolicy?.can_send !== true;
-        if ((this.interface?.viewer as FlowUiRecord | undefined)?.can_interact === false) return true;
+        const viewer = flowRecord(this.interface === null ? undefined : this.interface.viewer);
+        if (viewer?.can_interact === false) return true;
         return this.userHandoff?.mode === 'single_reply';
     }
 
     _identityImageUrl() {
         return resolveAgentIdentityImageSrc({
             document: this.store.document,
-            flowIdentity: (this.interface?.flow_identity as FlowUiRecord | null | undefined) ?? null,
+            flowIdentity: isPlainRecord(this.interface?.flow_identity) ? this.interface.flow_identity : null,
             platformUiOrigin: this.platformUiOrigin,
         });
     }
@@ -394,7 +438,7 @@ export class PlatformFlowUI extends LitElement {
     /** Контекст рендера блоков страницы и карточек ленты. */
     blockContext(): FlowUiRenderContext {
         return {
-            host: this as unknown as FlowUiHostLike,
+            host: this,
             store: this.store,
             state: this.store.state,
             slots: this.store.slots,
@@ -403,16 +447,22 @@ export class PlatformFlowUI extends LitElement {
             editing: this.editing,
             selectedBlockId: this.editing && this.selectedBlockId !== '' ? this.selectedBlockId : null,
             platformUiOrigin: this.platformUiOrigin,
-            flowIdentity: (this.interface?.flow_identity as FlowUiRecord | null | undefined) ?? null,
+            flowIdentity: isPlainRecord(this.interface?.flow_identity) ? this.interface.flow_identity : null,
             pending: this.store.turnActive || this.store.streaming,
             fieldErrors: this.store.fieldErrors,
             uploading: this.store.uploading,
             // Страница и лента перерисовываются по подписке на store, а не по requestUpdate хоста
             requestUpdate: () => this.store.emitChange(),
-            fieldValue: (field: unknown) => this.store.fieldValue(String(field ?? '')),
-            onFieldChange: (field: unknown, value: unknown) => this.setFieldValue(String(field ?? ''), value),
-            onAction: (block: FlowUiBlock, action: unknown) => { void this.submitAction(block, action as FlowUiRecord); },
-            onNavigate: (pageId: unknown) => this.navigate(String(pageId ?? '')),
+            fieldValue: (field: unknown) => this.store.fieldValue(presentText(field)),
+            onFieldChange: (field: unknown, value: unknown) => this.setFieldValue(presentText(field), value),
+            onAction: (block: FlowUiBlock, action: unknown) => {
+                const record = flowRecord(action);
+                if (record === undefined) {
+                    throw new Error('platform-flow-ui: action required');
+                }
+                void this.submitAction(block, record);
+            },
+            onNavigate: (pageId: unknown) => this.navigate(presentText(pageId)),
             onOpenUrl: (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); },
             onPrompt: (text: string) => { void this.sendText(text, []); },
             onFilesSelected: (block: FlowUiBlock, files: unknown) => { void this.uploadFieldFiles(block, files); },
@@ -438,7 +488,7 @@ export class PlatformFlowUI extends LitElement {
             this.store.clearEdits(Object.keys(fields));
             return;
         }
-        await this._submit({ action: { action: action.name, source: block.block_id, fields, payload: action.payload ?? {} } });
+        await this._submit({ action: { action: action.name, source: block.block_id, fields, payload: recordField(action.payload, 'flow-ui action payload') } });
     }
 
     async sendText(text: string, files: File[] | FlowUiRecord[]) {
@@ -448,7 +498,7 @@ export class PlatformFlowUI extends LitElement {
             return;
         }
         const refs = await this._uploadFiles(files, '');
-        await this._submit({ text, files: refs as A2aFileSource[] });
+        await this._submit({ text, files: fileSources(refs) });
     }
 
     private async _submit(message: FlowUiSendInput) {
@@ -474,13 +524,19 @@ export class PlatformFlowUI extends LitElement {
             credentials: this.credentials === 'omit' ? 'omit' : 'include',
             headers,
             filesApiBase: `${this.baseUrl.replace(/\/+$/, '')}/api/v1/files`,
-            buildSpec: () => buildFlowSessionFileCreateSpecJson({ flowId, sessionId: `${flowId}:${this.client?.contextId ?? ''}` }),
-            onProgress: (progress) => this._emit('flow-ui-file-progress', { ...(progress as FlowUiRecord), field }),
+            buildSpec: () => buildFlowSessionFileCreateSpecJson({ flowId, sessionId: `${flowId}:${this.client === null || this.client.contextId === null ? '' : this.client.contextId}` }),
+            onProgress: (progress) => {
+                const record = flowRecord(progress);
+                if (record === undefined) {
+                    throw new Error('platform-flow-ui: file progress required');
+                }
+                this._emit('flow-ui-file-progress', { ...record, field });
+            },
         });
     }
 
     async uploadFieldFiles(block: FlowUiBlock, files: unknown) {
-        const field = String(block.field ?? '');
+        const field = presentText(block.field);
         this.store.setUploading(field, true);
         try {
             const refs = await this._uploadFiles(files, field);
@@ -502,7 +558,7 @@ export class PlatformFlowUI extends LitElement {
         if (!this.client) throw new Error('platform-flow-ui: client is not ready');
         stopStreamTtsPlayback();
         const contextId = this.client.newContext();
-        this.contextId = contextId ?? '';
+        this.contextId = contextId === null ? '' : contextId;
         this._emit('flow-ui-ready', { contextId });
         return contextId;
     }
@@ -513,7 +569,14 @@ export class PlatformFlowUI extends LitElement {
     }
 
     applyA2AFrame(frame: unknown) {
-        return this.client?.applyFrame(frame as FlowUiRecord);
+        if (!this.client) {
+            return undefined;
+        }
+        const record = flowRecord(frame);
+        if (record === undefined) {
+            throw new Error('platform-flow-ui: A2A frame required');
+        }
+        return this.client.applyFrame(record);
     }
 
     createShare(options?: { permission?: string; redactedPaths?: string[]; expiresInSeconds?: number }) {
@@ -545,28 +608,33 @@ export class PlatformFlowUI extends LitElement {
 
     _chromeMode() {
         if (this.editing || this.initialDocument !== null || this.profile === 'editor_test' || this.profile === 'operator_handoff') return 'none';
-        if ((this.store.document?.pages.length ?? 0) > 1) return 'full';
+        const document = this.store.document;
+        if (document !== null && document.pages.length > 1) return 'full';
         if (this.display === 'drawer') return 'minimal';
-        if (this.profile === 'spa' || this.display === 'panel') return (this.interface?.viewer as FlowUiRecord | undefined)?.can_share === true ? 'minimal' : 'none';
+        if (this.profile === 'spa' || this.display === 'panel') {
+            const viewer = flowRecord(this.interface === null ? undefined : this.interface.viewer);
+            return viewer?.can_share === true ? 'minimal' : 'none';
+        }
         return 'full';
     }
 
     private _brandTitle(page: FlowUiPage) {
         const override = typeof this.assistantTitle === 'string' ? this.assistantTitle.trim() : '';
         if (override !== '') return override;
-        const look = this.interface?.look as FlowUiRecord | undefined;
+        const look = flowRecord(this.interface === null ? undefined : this.interface.look);
         if (look && typeof look.assistant_title === 'string' && look.assistant_title.trim() !== '') return look.assistant_title;
-        const identity = this.interface?.flow_identity as FlowUiRecord | undefined;
+        const identity = flowRecord(this.interface === null ? undefined : this.interface.flow_identity);
         if (identity && typeof identity.title === 'string' && identity.title.trim() !== '') return identity.title;
-        const pageTitle = resolvedText(page.title, this.store.state) ?? '';
-        return pageTitle !== '' ? pageTitle : 'Linnex';
+        const pageTitle = resolvedText(page.title, this.store.state);
+        return pageTitle !== null && pageTitle !== '' ? pageTitle : 'Linnex';
     }
 
     private _topActions(chromeMode: string, locale: string) {
         if (chromeMode === 'none') return nothing;
         const settings = this.store.conversationSettings();
         const files = settings.show_files_panel === false || this.capabilities.files === false ? [] : sessionFiles(this.store);
-        const share = html`<flow-ui-share-menu .host=${this} locale=${locale} ?can-share=${(this.interface?.viewer as FlowUiRecord | undefined)?.can_share === true} embed-page-url=${this._embedPageUrl()}></flow-ui-share-menu>`;
+        const viewer = flowRecord(this.interface === null ? undefined : this.interface.viewer);
+        const share = html`<flow-ui-share-menu .host=${this} locale=${locale} ?can-share=${viewer?.can_share === true} embed-page-url=${this._embedPageUrl()}></flow-ui-share-menu>`;
         return html`<div class="top-actions">
             ${files.length > 0 ? html`<flow-ui-files-panel .files=${files} locale=${locale}></flow-ui-files-panel>` : nothing}
             ${this.effectiveReadonly && chromeMode === 'full' ? html`<span class="readonly-pill">${flowUIText(locale, 'read_only')}</span>` : nothing}
@@ -597,11 +665,15 @@ export class PlatformFlowUI extends LitElement {
         const canSend = this._hostComposerText.trim() !== '' || this._hostComposerFiles.length > 0;
         return html`<div class="hitl-host-composer">
             <textarea data-canon="composer" .value=${this._hostComposerText} placeholder=${flowUIText(locale, 'composer_placeholder')}
-                @input=${(event: Event) => { this._hostComposerText = (event.target as HTMLTextAreaElement).value; }}></textarea>
+                @input=${(event: Event) => { this._hostComposerText = formControlValue(event); }}></textarea>
             <div class="hitl-host-composer-row">
                 <input type="file" multiple @change=${(event: Event) => {
-                    const input = event.target as HTMLInputElement;
-                    this._hostComposerFiles = [...this._hostComposerFiles, ...Array.from(input.files ?? [])];
+                    const input = event.target;
+                    if (!(input instanceof HTMLInputElement)) {
+                        throw new Error('platform-flow-ui: file input required');
+                    }
+                    const picked = input.files;
+                    this._hostComposerFiles = [...this._hostComposerFiles, ...(picked === null ? [] : Array.from(picked))];
                     input.value = '';
                 }}>
                 <button type="button" class="hitl-host-send" ?disabled=${!canSend} aria-label=${sendLabel}
@@ -627,7 +699,10 @@ export class PlatformFlowUI extends LitElement {
         if (this._status !== 'ready' || !this.store.document) {
             return html`<div class="skeleton" aria-busy="true" aria-label=${flowUIText(locale, 'loading_interface')}><div class="shimmer"></div><div class="shimmer"></div><div class="shimmer"></div></div>`;
         }
-        const page = this.store.page(this.store.pageId) as FlowUiPage;
+        const page = this.store.page(this.store.pageId);
+        if (page === null) {
+            throw new Error('platform-flow-ui: current page is missing');
+        }
         const chromeMode = this._chromeMode();
         const fitDocument = this._fitsDocument();
         this.setAttribute('data-chrome', chromeMode);

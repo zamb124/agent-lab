@@ -170,7 +170,7 @@ class TopologyService:
                 "Container location requires container_type_id",
                 "container_type_missing",
             )
-        location = await StockLocation.create_child(
+        location = await StockLocation.create_with_parent_path(
             company_id=company_id,
             warehouse_id=warehouse_id,
             parent=parent,
@@ -241,7 +241,7 @@ class TopologyService:
     async def list_locations(
         self, *, company_id: str, warehouse_id: str | None
     ) -> list[StockLocation]:
-        rows = await StockLocation.list_for_company(company_id)
+        rows = await StockLocation.list_by_usage_and_name(company_id)
         if warehouse_id is not None:
             rows = [r for r in rows if r.warehouse_id == warehouse_id]
         return rows
@@ -259,7 +259,7 @@ class TopologyService:
     async def list_storage_types(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockStorageType]:
-        return await StockStorageType.list_for_warehouse(company_id, warehouse_id)
+        return await StockStorageType.list_by_name_for_warehouse(company_id, warehouse_id)
 
     async def create_storage_type(
         self,
@@ -321,7 +321,7 @@ class TopologyService:
     async def list_container_types(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockContainerType]:
-        return await StockContainerType.list_for_warehouse(company_id, warehouse_id)
+        return await StockContainerType.list_by_name_for_warehouse(company_id, warehouse_id)
 
     async def create_container_type(
         self,
@@ -377,7 +377,7 @@ class TopologyService:
     async def list_resource_types(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockResourceType]:
-        return await StockResourceType.list_for_warehouse(company_id, warehouse_id)
+        return await StockResourceType.list_by_name_for_warehouse(company_id, warehouse_id)
 
     async def create_resource_type(
         self,
@@ -423,7 +423,7 @@ class TopologyService:
     async def list_resources(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockResource]:
-        return await StockResource.list_for_warehouse(company_id, warehouse_id)
+        return await StockResource.list_by_code_for_warehouse(company_id, warehouse_id)
 
     async def create_resource(
         self,
@@ -577,7 +577,7 @@ class TopologyService:
                 "Container type is not allowed inside this parent",
                 "container_parent_denied",
             )
-        container = await StockLocation.create_child(
+        container = await StockLocation.create_with_parent_path(
             company_id=company_id,
             warehouse_id=warehouse_id,
             parent=parent,

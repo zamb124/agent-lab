@@ -48,7 +48,8 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/fields/platform-field-shell.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
-import '@platform/lib/components/platform-markdown-editor.js';
+import { PlatformMarkdownEditor } from '@platform/lib/components/platform-markdown-editor.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { markdownToHtml } from '@platform/lib/utils/markdown.js';
 import './entity-hover-preview.js';
 import './crm-related-neighbor-rows.js';
@@ -77,15 +78,8 @@ import type {
     PropertyValues,
     TemplateResult,
 } from 'lit';
-import type {
-    OpController,
-    ResourceController,
-} from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type {
-    CrmGraphViewController,
-    CrmNoteComposeController,
-} from '../events/crm.types.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 
 const ENTITIES_NAME = 'crm/entities';
@@ -1415,11 +1409,11 @@ export class CRMNoteCardView extends PlatformElement {
     private _attachmentUpload: OpController;
     private _attachmentDelete: OpController;
     private _entitySearch: OpController;
-    private _graphView: CrmGraphViewController;
-    private _noteCompose: CrmNoteComposeController;
+    private _graphView: ControllerFor<'crm/graph_view'>;
+    private _noteCompose: ControllerFor<'crm/note_compose'>;
     private _crmSidebarDefaultNsSel: SelectController<string>;
     private _localeSel: SelectController<string>;
-    private _lastMobileToolbarPortHost: Element | null;
+    private _lastMobileToolbarPortHost: HTMLElement | null;
     private _onMobileToolbarPortResize: () => void;
     private _editAttachmentsMeta: Record<string, unknown>;
     private _mentionedEntityIds: Set<string>;
@@ -1430,7 +1424,7 @@ export class CRMNoteCardView extends PlatformElement {
     private _entitySearchPurpose: string;
     private _voiceSearchRequestId: string | null;
     private _contextSearchRequestId: string | null;
-    private _mentionPreviewCloseTimer: number | null;
+    private _mentionPreviewCloseTimer: ReturnType<typeof setTimeout> | null;
     private _mentionPreviewPinned: boolean;
     private _attachmentsPopoverCloseTimer: ReturnType<typeof setTimeout> | null;
     private _attachmentInputId: string;
@@ -1515,8 +1509,8 @@ export class CRMNoteCardView extends PlatformElement {
         this._attachmentUpload = this.useOp(ATTACHMENT_UPLOAD_OP);
         this._attachmentDelete = this.useOp(ATTACHMENT_DELETE_OP);
         this._entitySearch = this.useOp(ENTITY_SEARCH_OP);
-        this._graphView = this.useSlice('crm/graph_view') as CrmGraphViewController;
-        this._noteCompose = this.useSlice('crm/note_compose') as CrmNoteComposeController;
+        this._graphView = this.useSlice('crm/graph_view');
+        this._noteCompose = this.useSlice('crm/note_compose');
         this._draftEditHydrated = false;
         this._uploadTargetMode = 'edit';
 
@@ -1536,47 +1530,57 @@ export class CRMNoteCardView extends PlatformElement {
         this._hydrateEditFromNote();
 
         this.useEvent(this._entities.resource.events.CREATED, (event) => {
-            const created = event.payload && (event.payload as Record<string, any>).item;
-            if (!created || typeof created !== 'object') return;
+            const payload = event.payload;
+            if (!isPlainRecord(payload) || !isPlainRecord(payload.item)) return;
+            const created = payload.item;
             if (created.entity_type !== NOTE_ROOT_ENTITY_TYPE_ID) return;
             if (this.note !== null) return;
             this.emit('created', { entity: created });
         });
 
         this.useEvent(this._updateOp.op.events.SUCCEEDED, (event) => {
-            const result = event && event.payload && (event.payload as Record<string, any>).result;
-            if (!result || typeof result !== 'object') return;
+            const payload = event.payload;
+            if (!isPlainRecord(payload) || !isPlainRecord(payload.result)) return;
+            const result = payload.result;
             if (this.note === null || result.entity_id !== this.note.entity_id) return;
             this.emit('saved', { entity: result });
         });
 
         this.useEvent(this._entities.resource.events.CREATE_FAILED, (event) => {
-            const message = event && event.payload && typeof (event.payload as Record<string, any>).message === 'string'
-                ? (event.payload as Record<string, any>).message
+            const payload = event.payload;
+            const message = isPlainRecord(payload) && typeof payload.message === 'string'
+                ? payload.message
                 : this.t('note_edit.err_save');
             this._formError = message;
         });
         this.useEvent(this._updateOp.op.events.FAILED, (event) => {
-            const message = event && event.payload && typeof (event.payload as Record<string, any>).message === 'string'
-                ? (event.payload as Record<string, any>).message
+            const payload = event.payload;
+            const message = isPlainRecord(payload) && typeof payload.message === 'string'
+                ? payload.message
                 : this.t('note_edit.err_save');
             this._formError = message;
         });
 
         this.useEvent(this._fileUpload.op.events.SUCCEEDED, (event) => {
-            const result = event && event.payload && (event.payload as Record<string, any>).result;
-            if (!result || typeof result.file_id !== 'string') return;
+            const payload = event.payload;
+            if (!isPlainRecord(payload) || !isPlainRecord(payload.result)) return;
+            const result = payload.result;
+            if (typeof result.file_id !== 'string') return;
             const uploadedSize = typeof result.file_size === 'number'
                 ? result.file_size
                 : (typeof result.size_bytes === 'number' ? result.size_bytes : 0);
             const uploadedUrl = typeof result.url === 'string' && result.url.length > 0
                 ? result.url
                 : (typeof result.download_url === 'string' ? result.download_url : '');
-            this._editAttachmentIds = [...this._editAttachmentIds, result.file_id];
+            const fileId = result.file_id;
+            const uploadedName = typeof result.original_name === 'string' && result.original_name.length > 0
+                ? result.original_name
+                : fileId;
+            this._editAttachmentIds = [...this._editAttachmentIds, fileId];
             this._editAttachmentsMeta = {
                 ...this._editAttachmentsMeta,
-                [result.file_id]: {
-                    name: result.original_name || result.file_id,
+                [fileId]: {
+                    name: uploadedName,
                     size: uploadedSize,
                     content_type: result.content_type,
                     download_url: uploadedUrl,
@@ -1588,10 +1592,11 @@ export class CRMNoteCardView extends PlatformElement {
             if (this.mode !== 'view') {
                 return;
             }
-            const result = event && event.payload && (event.payload as Record<string, any>).result;
-            if (!result || typeof result !== 'object') {
+            const payload = event.payload;
+            if (!isPlainRecord(payload) || !isPlainRecord(payload.result)) {
                 return;
             }
+            const result = payload.result;
             if (result.markdown_format_queued !== true) {
                 return;
             }
@@ -1602,8 +1607,9 @@ export class CRMNoteCardView extends PlatformElement {
             const meta = event && event.meta;
             const cid = meta && typeof meta.causation_id === 'string' ? meta.causation_id : null;
             const purpose = this._entitySearchPurpose;
-            const result = event && event.payload && (event.payload as Record<string, any>).result;
-            const rawItems = result && Array.isArray(result.items) ? result.items : [];
+            const payload = event.payload;
+            const result = isPlainRecord(payload) && isPlainRecord(payload.result) ? payload.result : null;
+            const rawItems = result !== null && Array.isArray(result.items) ? result.items : [];
 
             if (purpose === 'mention') {
                 if (this._mentionRequestId === null || cid !== this._mentionRequestId) return;
@@ -1741,16 +1747,16 @@ export class CRMNoteCardView extends PlatformElement {
         return res.byId[ns];
     }
 
-    _namespaceCrmSettings(): Record<string, any> | null {
+    _namespaceCrmSettings(): Record<string, unknown> | null {
         const row = this._namespaceRecord();
         if (row === undefined || row === null) {
             return null;
         }
         const cs = row.crm_settings;
-        if (cs === undefined || cs === null || typeof cs !== 'object') {
+        if (!isPlainRecord(cs)) {
             return null;
         }
-        return cs as Record<string, any>;
+        return cs;
     }
 
     _showNoteVoiceAuthorUi() {
@@ -1886,11 +1892,16 @@ export class CRMNoteCardView extends PlatformElement {
         return typeId;
     }
 
-    _pickerIconNameForItem(item: Record<string, any>): string {
-        if (!item || typeof item !== 'object') {
+    _pickerIconNameForItem(item: { entity_type?: unknown; entity_subtype?: unknown; namespace?: unknown } | null): string {
+        if (item === null) {
             return fallbackEntityGlyph();
         }
-        return entityDisplayIconName(item, this._entityTypeItems());
+        const record: Record<string, any> = {
+            entity_type: item.entity_type,
+            entity_subtype: item.entity_subtype,
+            namespace: item.namespace,
+        };
+        return entityDisplayIconName(record, this._entityTypeItems());
     }
 
     _pickerTypeLabelForItem(item: Record<string, any>): string {
@@ -2211,7 +2222,7 @@ export class CRMNoteCardView extends PlatformElement {
         if (this._mentionPreviewCloseTimer !== null) {
             clearTimeout(this._mentionPreviewCloseTimer);
         }
-        this._mentionPreviewCloseTimer = window.setTimeout(() => {
+        this._mentionPreviewCloseTimer = setTimeout(() => {
             this._mentionPreviewCloseTimer = null;
             if (!this._mentionPreviewPinned) {
                 this._closeMentionPreviewNow();
@@ -2297,7 +2308,13 @@ export class CRMNoteCardView extends PlatformElement {
         this._emitEntityOpen(entityId);
     }
 
-    _onNameInput(e: Event): void { this._editName = (e.target as HTMLInputElement).value; }
+    _onNameInput(e: Event): void {
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('note-card: name input required');
+        }
+        this._editName = target.value;
+    }
     _onDescriptionChange(e: CustomEvent) {
         const detail = e && e.detail;
         const value = detail && typeof detail.value === 'string' ? detail.value : '';
@@ -2351,7 +2368,11 @@ export class CRMNoteCardView extends PlatformElement {
         let match: RegExpExecArray | null;
         const re = new RegExp(MENTION_REGEX.source, 'g');
         while ((match = re.exec(text)) !== null) {
-            ids.add(match[2]!);
+            const entityId = match[2];
+            if (entityId === undefined) {
+                throw new Error('note-card: mention id missing');
+            }
+            ids.add(entityId);
         }
         return ids;
     }
@@ -2380,8 +2401,8 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _dispatchEntitySearchRequested(payload: Record<string, unknown>): string {
-        const ev = this.dispatch(this._entitySearch.op.events.REQUESTED, payload, { source: 'local' }) as { id?: unknown } | null;
-        if (!ev || typeof ev.id !== 'string') {
+        const ev = this.dispatch(this._entitySearch.op.events.REQUESTED, payload, { source: 'local' });
+        if (ev === null || ev.id.length === 0) {
             throw new Error('CRMNoteCardView: entity search REQUESTED did not return event id');
         }
         return ev.id;
@@ -2475,28 +2496,28 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _onVoiceSearchInput(e: Event): void {
-        const value = e.target instanceof HTMLInputElement ? (e.target as HTMLInputElement).value : '';
+        const value = e.target instanceof HTMLInputElement ? e.target.value : '';
         this._voiceSearchQuery = value;
         this._voiceSearchOpen = true;
         if (this._voiceSearchDeb !== null) {
             clearTimeout(this._voiceSearchDeb);
             this._voiceSearchDeb = null;
         }
-        this._voiceSearchDeb = window.setTimeout(() => {
+        this._voiceSearchDeb = setTimeout(() => {
             this._voiceSearchDeb = null;
             this._runVoiceEntitySearch();
         }, 220);
     }
 
     _onContextSearchInput(e: Event): void {
-        const value = e.target instanceof HTMLInputElement ? (e.target as HTMLInputElement).value : '';
+        const value = e.target instanceof HTMLInputElement ? e.target.value : '';
         this._contextSearchQuery = value;
         this._contextSearchOpen = true;
         if (this._contextSearchDeb !== null) {
             clearTimeout(this._contextSearchDeb);
             this._contextSearchDeb = null;
         }
-        this._contextSearchDeb = window.setTimeout(() => {
+        this._contextSearchDeb = setTimeout(() => {
             this._contextSearchDeb = null;
             this._runContextEntitySearch();
         }, 220);
@@ -2693,15 +2714,14 @@ export class CRMNoteCardView extends PlatformElement {
 
     _renderViewNoteMetaRibbon() {
         const chipsData = this._voiceContextChips();
+        const voice = chipsData.voice;
+        const contextChip = chipsData.context;
         const subtypeId =
             this.note !== null && typeof this.note.entity_subtype === 'string' && this.note.entity_subtype.length > 0
                 ? this.note.entity_subtype
                 : '';
         const subtypeReadable = subtypeId.length > 0 ? this._subtypeNameByTypeId(subtypeId) : '';
-        const hasChips =
-            chipsData.voice !== null
-            || chipsData.context !== null
-            || subtypeReadable.length > 0;
+        const hasChips = voice !== null || contextChip !== null || subtypeReadable.length > 0;
         if (!hasChips) {
             return html``;
         }
@@ -2710,35 +2730,35 @@ export class CRMNoteCardView extends PlatformElement {
                 ${subtypeReadable.length > 0
                     ? html`<span class="meta-pill kind-pill">${subtypeReadable}</span>`
                     : ''}
-                ${chipsData.voice !== null
+                ${voice !== null
                     ? html`
                         <button
                             type="button"
                             class="meta-pill"
-                            @click=${() => this._emitEntityOpen((chipsData.voice as Record<string, any>).entity_id)}
+                            @click=${() => this._emitEntityOpen(voice.entity_id)}
                             title=${this.t('note_edit.field_voice_author')}
                         >
                             <platform-icon
-                                name=${this._pickerIconNameForItem(chipsData.voice as Record<string, any>)}
+                                name=${this._pickerIconNameForItem(voice)}
                                 size="12"
                             ></platform-icon>
-                            ${chipsData.voice.label}
+                            ${voice.label}
                         </button>
                     `
                     : ''}
-                ${chipsData.context !== null
+                ${contextChip !== null
                     ? html`
                         <button
                             type="button"
                             class="meta-pill context-pill"
-                            @click=${() => this._emitEntityOpen((chipsData.context as Record<string, any>).entity_id)}
+                            @click=${() => this._emitEntityOpen(contextChip.entity_id)}
                             title=${this.t('note_edit.field_context_anchor')}
                         >
                             <platform-icon
-                                name=${this._pickerIconNameForItem(chipsData.context as Record<string, any>)}
+                                name=${this._pickerIconNameForItem(contextChip)}
                                 size="12"
                             ></platform-icon>
-                            ${chipsData.context.label}
+                            ${contextChip.label}
                         </button>
                     `
                     : ''}
@@ -2803,10 +2823,11 @@ export class CRMNoteCardView extends PlatformElement {
         this._mentionedEntityIds = new Set(this._mentionedEntityIds);
         this._mentionedEntityIds.add(item.entity_id);
         this._closeMention();
-        const editor = this.renderRoot.querySelector('platform-markdown-editor.description-md-editor') as { setValue(v: string): void } | null;
-        if (editor && typeof editor.setValue === 'function') {
-            editor.setValue(next);
+        const editor = this.renderRoot.querySelector('platform-markdown-editor.description-md-editor');
+        if (!(editor instanceof PlatformMarkdownEditor)) {
+            throw new Error('note-card: markdown editor required');
         }
+        editor.setValue(next);
     }
 
     _onTagsChange(e: CustomEvent) {
@@ -2830,7 +2851,11 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _onUploadFiles(e: Event): void {
-        const fileList = (e.target as HTMLInputElement | null)?.files;
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('note-card: attachment input required');
+        }
+        const fileList = target.files;
         if (fileList === null || fileList === undefined) return;
         const files = Array.from(fileList);
         const targetMode = this._uploadTargetMode;
@@ -2858,7 +2883,7 @@ export class CRMNoteCardView extends PlatformElement {
             }
         }
         this._uploadTargetMode = 'edit';
-        (e.target as HTMLInputElement).value = '';
+        target.value = '';
     }
     _onRemoveAttachment(fileId: unknown): void {
         this._editAttachmentIds = this._editAttachmentIds.filter((id) => id !== fileId);
@@ -2903,7 +2928,8 @@ export class CRMNoteCardView extends PlatformElement {
             }
         }
         return this._editAttachmentIds.map((fileId) => {
-            const localMeta = this._editAttachmentsMeta[fileId] as Record<string, any> | undefined;
+            const stored = this._editAttachmentsMeta[fileId];
+            const localMeta = isPlainRecord(stored) ? stored : null;
             const cardItem = viewMap.get(fileId);
             const filename = localMeta && typeof localMeta.name === 'string' && localMeta.name.length > 0
                 ? localMeta.name
@@ -2969,7 +2995,8 @@ export class CRMNoteCardView extends PlatformElement {
 
     _onAttachmentsFocusOut(event: FocusEvent): void {
         const next = event.relatedTarget;
-        if (next instanceof Node && (event.currentTarget as HTMLElement | null)?.contains(next)) {
+        const current = event.currentTarget;
+        if (next instanceof Node && current instanceof HTMLElement && current.contains(next)) {
             return;
         }
         this._closeAttachmentsPopover();
@@ -3238,7 +3265,11 @@ export class CRMNoteCardView extends PlatformElement {
             typeof this.note.namespace === 'string' && this.note.namespace.length > 0
                 ? this.note.namespace
                 : '';
-        const vm = this._graphView.value!.viewMode;
+        const graphState = this._graphView.value;
+        if (graphState === null || graphState === undefined) {
+            throw new Error('note-card: graph view missing');
+        }
+        const vm = graphState.viewMode;
         return html`
             <div class="note-graph-preview-host">
                 <crm-mini-graph
@@ -3304,11 +3335,12 @@ export class CRMNoteCardView extends PlatformElement {
 
     _onTaskAddKeydown(event: KeyboardEvent): void {
         if (event.key !== 'Enter' || event.shiftKey) return;
-        const input = event.target as HTMLInputElement | null;
-        const value = input && typeof input.value === 'string' ? input.value.trim() : '';
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) return;
+        const value = input.value.trim();
         if (value.length === 0) return;
         event.preventDefault();
-        input!.value = '';
+        input.value = '';
         this.emit('task-add', { text: value });
     }
 
@@ -3399,7 +3431,7 @@ export class CRMNoteCardView extends PlatformElement {
 
     _teardownMobileToolbarPortRendering() {
         if (this._lastMobileToolbarPortHost !== null) {
-            render(nothing, this._lastMobileToolbarPortHost as HTMLElement);
+            render(nothing, this._lastMobileToolbarPortHost);
             this._lastMobileToolbarPortHost = null;
         }
     }
@@ -3414,7 +3446,7 @@ export class CRMNoteCardView extends PlatformElement {
         }
 
         if (this._lastMobileToolbarPortHost !== null && this._lastMobileToolbarPortHost !== host) {
-            render(nothing, this._lastMobileToolbarPortHost as HTMLElement);
+            render(nothing, this._lastMobileToolbarPortHost);
             this._lastMobileToolbarPortHost = null;
         }
 
@@ -3501,7 +3533,10 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _renderView() {
-        const note = this.note as Record<string, any>;
+        const note = this.note;
+        if (note === null) {
+            throw new Error('CRMNoteCardView: .note is required for view mode');
+        }
         const title = typeof note.name === 'string' && note.name.length > 0
             ? note.name
             : this.t('note_view.untitled');

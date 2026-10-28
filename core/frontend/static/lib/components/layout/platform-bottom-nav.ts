@@ -30,7 +30,7 @@ import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import { CoreEvents } from '../../events/contract.js';
-import type { RouterRoute, RouterState } from '../../events/reducers/router.js';
+import type { RouterRoute } from '../../events/reducers/router.js';
 import type { SelectController } from '../../events/select-controller.js';
 import '../platform-icon.js';
 
@@ -220,13 +220,10 @@ export class PlatformBottomNav extends PlatformElement {
         this.hideOnRoutes = [];
         this._routeKey = null;
         this._routes = [];
-        this._routerSelect = this.select((s) => {
-            const router = s.router as RouterState;
-            return {
-                routeKey: router.routeKey,
-                routes: router.routes,
-            };
-        });
+        this._routerSelect = this.select((s) => ({
+            routeKey: s.router.routeKey,
+            routes: s.router.routes,
+        }));
     }
 
     /**
@@ -278,7 +275,7 @@ export class PlatformBottomNav extends PlatformElement {
             }
         }
         if (navRouteKeys.size === 0) return null;
-        const chain = routeAncestorKeys(this._routes || [], cur);
+        const chain = routeAncestorKeys(this._routes, cur);
         for (const k of chain) {
             if (navRouteKeys.has(k)) return k;
         }

@@ -3,6 +3,7 @@
  * ``data-container-key`` (``<block_id>`` | ``<block_id>/<index>``) — адрес контейнера для drop-зон редактора.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
 import { html } from '../../lit-shim.js';
 import { blockText as text } from '../runtime/templating.js';
 import { flowUIText } from '../utils/text.js';
@@ -15,20 +16,53 @@ function containerChildren(ctx: FlowUiRenderContext, blocks: unknown) {
     return ctx.renderBlocks?.(blocks);
 }
 
-interface FlowUiColumn extends FlowUiBlock {
+interface FlowUiColumn {
     width?: unknown;
+    blocks?: unknown;
 }
 
-interface FlowUiTab extends FlowUiBlock {
+interface FlowUiTab {
     title?: unknown;
+    blocks?: unknown;
+}
+
+function unknownItems(value: unknown, label: string): unknown[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`flow-ui: ${label} must be an array`);
+    }
+    const items: unknown[] = [];
+    for (const item of value) items.push(item);
+    return items;
+}
+
+function isColumn(value: unknown): value is FlowUiColumn {
+    return isPlainRecord(value);
+}
+
+function isTab(value: unknown): value is FlowUiTab {
+    return isPlainRecord(value);
 }
 
 function columnsOf(block: FlowUiBlock): FlowUiColumn[] {
-    return Array.isArray(block.columns) ? block.columns as FlowUiColumn[] : [];
+    const columns: FlowUiColumn[] = [];
+    for (const item of unknownItems(block.columns, 'columns')) {
+        if (!isColumn(item)) {
+            throw new Error('flow-ui: columns item must be an object');
+        }
+        columns.push(item);
+    }
+    return columns;
 }
 
 function tabsOf(block: FlowUiBlock): FlowUiTab[] {
-    return Array.isArray(block.tabs) ? block.tabs as FlowUiTab[] : [];
+    const tabs: FlowUiTab[] = [];
+    for (const item of unknownItems(block.tabs, 'tabs')) {
+        if (!isTab(item)) {
+            throw new Error('flow-ui: tabs item must be an object');
+        }
+        tabs.push(item);
+    }
+    return tabs;
 }
 
 export const LAYOUT_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Object.freeze({
@@ -58,12 +92,15 @@ export const LAYOUT_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Obje
         };
         return html`<div class="fu-tabs">
             <nav role="tablist">
-                ${tabs.map((tab, index) => html`<button
-                    type="button" role="tab"
-                    aria-selected=${index === active ? 'true' : 'false'}
-                    data-tab-index=${index}
-                    @click=${() => select(index)}
-                >${text(ctx, tab.title) ?? ''}</button>`)}
+                ${tabs.map((tab, index) => {
+                    const title = text(ctx, tab.title);
+                    return html`<button
+                        type="button" role="tab"
+                        aria-selected=${index === active ? 'true' : 'false'}
+                        data-tab-index=${index}
+                        @click=${() => select(index)}
+                    >${title === null ? '' : title}</button>`;
+                })}
             </nav>
             ${tabs.length > 0
                 ? html`<div class="fu-tab-panel" role="tabpanel" data-container-key=${`${block.block_id}/${active}`}>${containerChildren(ctx, tabs[active]?.blocks)}</div>`

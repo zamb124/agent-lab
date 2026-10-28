@@ -19,6 +19,14 @@ import { repeat } from 'lit/directives/repeat.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
+function queryText(event: Event): string {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-command-palette: query target must be an input');
+    }
+    return target.value;
+}
+
 export interface PaletteItem {
     id: string;
     label: string;
@@ -273,7 +281,7 @@ export class PlatformCommandPalette extends PlatformElement {
     }
 
     _onInput(event: Event) {
-        this._query = (event.target as HTMLInputElement).value;
+        this._query = queryText(event);
         this._clearSearchTimer();
         this._searchTimer = window.setTimeout(() => {
             this._searchTimer = null;
@@ -309,7 +317,10 @@ export class PlatformCommandPalette extends PlatformElement {
 
     _scrollActiveIntoView() {
         void this.updateComplete.then(() => {
-            (this.renderRoot?.querySelector('.item.is-active') as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
+            const active = this.renderRoot.querySelector('.item.is-active');
+            if (active instanceof HTMLElement) {
+                active.scrollIntoView({ block: 'nearest' });
+            }
         });
     }
 

@@ -41,15 +41,15 @@ async def test_list_by_namespace_and_list_for_user_with_namespace_filter(
     )
     _ = await SyncChannel.objects.create(instance=ch1_obj)
     _ = await SyncChannel.objects.create(instance=ch2_obj)
-    await SyncChannelMember.ensure_channel_member_row(ch1, "alice", company_id=company_id)
-    await SyncChannelMember.ensure_channel_member_row(ch2, "alice", company_id=company_id)
+    await SyncChannelMember.ensure_member(ch1, "alice", company_id=company_id)
+    await SyncChannelMember.ensure_member(ch2, "alice", company_id=company_id)
 
-    by_ns = await SyncChannel.list_channels_in_namespace(
+    by_ns = await SyncChannel.list_by_name_in_namespace(
         namespace, company_id=company_id, limit=100, offset=0
     )
     assert {c.channel_id for c in by_ns} == {ch1, ch2}
 
-    for_user = await SyncChannel.list_channels_for_user(
+    for_user = await SyncChannel.list_member_channels_by_type_and_name(
         "alice",
         namespace=namespace,
         company_id=company_id,
@@ -77,13 +77,13 @@ async def test_ensure_member_row_and_list_user_ids_explicit_company(
         created_by_user_id="u1",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    await SyncChannelMember.ensure_channel_member_row(ch_m, "bob", company_id=company_id)
-    ids = await SyncChannelMember.list_channel_member_user_ids(ch_m, company_id=company_id)
+    await SyncChannelMember.ensure_member(ch_m, "bob", company_id=company_id)
+    ids = await SyncChannelMember.list_user_ids(ch_m, company_id=company_id)
     assert ids == ["bob"]
 
 
 @pytest.mark.asyncio
-async def test_set_member_last_read_at_errors(
+async def test_update_last_read_at_missing_member(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -102,13 +102,13 @@ async def test_set_member_last_read_at_errors(
     _ = await SyncChannel.objects.create(instance=ch)
     at = datetime.now(tz=UTC)
     with pytest.raises(ValueError, match="Channel member not found"):
-        await SyncChannelMember.set_channel_member_last_read_at(
+        await SyncChannelMember.update_last_read_at(
             ch_lr, "ghost", at, company_id=company_id
         )
 
 
 @pytest.mark.asyncio
-async def test_set_pinned_message_ids(
+async def test_update_pinned_message_ids(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -127,12 +127,18 @@ async def test_set_pinned_message_ids(
         created_by_user_id="u1",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    await SyncChannel.set_channel_pinned_message_ids(
+    await SyncChannel.update_pinned_message_ids(
         ch_pin, [m1, m2], company_id=company_id
     )
     loaded = await SyncChannel.get(ch_pin)
     assert loaded is not None
     assert loaded.pinned_message_ids == [m1, m2]
+    await SyncChannel.update_pinned_message_ids(
+        ch_pin, [m1], company_id=f"other_{unique_id}"
+    )
+    untouched = await SyncChannel.get(ch_pin)
+    assert untouched is not None
+    assert untouched.pinned_message_ids == [m1, m2]
 
 
 @pytest.mark.asyncio
@@ -153,7 +159,7 @@ async def test_list_settings_user_ids(
         created_by_user_id="u1",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    await SyncChannelMember.ensure_channel_member_row(ch_mem, "a", company_id=company_id)
-    await SyncChannelMember.ensure_channel_member_row(ch_mem, "b", company_id=company_id)
-    ids = await SyncChannelMember.list_channel_member_user_ids(ch_mem, company_id=company_id)
+    await SyncChannelMember.ensure_member(ch_mem, "a", company_id=company_id)
+    await SyncChannelMember.ensure_member(ch_mem, "b", company_id=company_id)
+    ids = await SyncChannelMember.list_user_ids(ch_mem, company_id=company_id)
     assert set(ids) == {"a", "b"}

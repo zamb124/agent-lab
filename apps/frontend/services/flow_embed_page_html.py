@@ -10,16 +10,6 @@ from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 
 def build_flow_embed_page_html(*, embed_id: str) -> str:
     safe_embed = json.dumps(embed_id, ensure_ascii=False)
-    import_map = json.dumps(
-        {
-            "imports": {
-                "lit": "/static/core/assets/js/lit/lit.min.js",
-                "lit/": "/static/core/assets/js/lit/",
-                "@platform/lib/": "/static/core/lib/",
-            }
-        },
-        separators=(",", ":"),
-    )
     viewport = html.escape(PLATFORM_MOBILE_VIEWPORT_CONTENT, quote=True)
     return f"""<!doctype html>
 <html lang="ru" data-theme="dark">
@@ -28,7 +18,6 @@ def build_flow_embed_page_html(*, embed_id: str) -> str:
   <meta name="viewport" content="{viewport}">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>Flow UI · Linnex</title>
-  <script type="importmap">{import_map}</script>
   <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
   <link rel="stylesheet" href="/static/core/lib/flow-ui/shell/tokens.css">
   <style>

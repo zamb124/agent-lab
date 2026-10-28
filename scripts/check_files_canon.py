@@ -3,12 +3,6 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path as _Path
-
-sys.path.insert(0, str(_Path(__file__).resolve().parent))
-from _paths import js_or_ts
-
 import re
 import sys
 from pathlib import Path
@@ -64,7 +58,7 @@ def _scan_for_legacy() -> list[str]:
         for path in base.rglob("*"):
             if not path.is_file():
                 continue
-            if path.suffix not in {".py", ".js", ".md", ".mdc"}:
+            if path.suffix not in {".py", ".js", ".ts", ".md", ".mdc"}:
                 continue
             if _is_allowlisted(path):
                 continue
@@ -76,7 +70,7 @@ def _scan_for_legacy() -> list[str]:
             for pattern, label in LEGACY_SYMBOLS:
                 if re.search(pattern, text):
                     errors.append(f"{rel}: forbidden legacy symbol {label}")
-            if path.suffix == ".js":
+            if path.suffix in {".js", ".ts"}:
                 for factory_name in FORBIDDEN_FACTORY_NAMES:
                     if f"name: '{factory_name}'" in text or f'name: "{factory_name}"' in text:
                         errors.append(f"{rel}: forbidden factory {factory_name}")
@@ -101,9 +95,8 @@ def _check_files_router_mount() -> list[str]:
 
 def _check_docs_placement_coverage() -> list[str]:
     """Every FileSourceKind must be auto-placement or explicit exempt."""
-    from core.files.create_spec import FileSourceKind
     from core.documents.paths import source_catalog_path
-    from core.files.create_spec import FileSourceRef
+    from core.files.create_spec import FileSourceKind, FileSourceRef
     from core.files.registry import DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS, PLACED_SOURCE_KINDS
 
     errors: list[str] = []
@@ -125,7 +118,7 @@ def _check_docs_placement_coverage() -> list[str]:
     return errors
 
 
-FLOW_UI_HOST = js_or_ts(
+FLOW_UI_HOST = (
     REPO_ROOT
     / "core"
     / "frontend"
@@ -133,7 +126,7 @@ FLOW_UI_HOST = js_or_ts(
     / "lib"
     / "flow-ui"
     / "components"
-    / "platform-flow-ui.js"
+    / "platform-flow-ui.ts"
 )
 
 
@@ -142,18 +135,18 @@ def _check_flow_ui_no_base64_upload() -> list[str]:
     errors: list[str] = []
     text = FLOW_UI_HOST.read_text(encoding="utf-8")
     if "_fileToBase64Part" in text:
-        errors.append("platform-flow-ui.js: _fileToBase64Part must be removed")
+        errors.append("platform-flow-ui.ts: _fileToBase64Part must be removed")
     if "readAsDataURL" in text:
-        errors.append("platform-flow-ui.js: readAsDataURL file upload path forbidden")
+        errors.append("platform-flow-ui.ts: readAsDataURL file upload path forbidden")
     if "resolvePlatformFileRefs" not in text:
-        errors.append("platform-flow-ui.js: must use resolvePlatformFileRefs for outbound files")
+        errors.append("platform-flow-ui.ts: must use resolvePlatformFileRefs for outbound files")
     return errors
 
 
 def _check_a2a_stream_url_only() -> list[str]:
     """Platform A2A builder accepts only url/file_id file parts."""
     errors: list[str] = []
-    path = js_or_ts(
+    path = (
         REPO_ROOT
         / "core"
         / "frontend"
@@ -161,17 +154,17 @@ def _check_a2a_stream_url_only() -> list[str]:
         / "lib"
         / "flow-ui"
         / "protocol"
-        / "a2a-codec.js"
+        / "a2a-codec.ts"
 )
     text = path.read_text(encoding="utf-8")
     if "typeof f.raw === 'string'" in text:
-        errors.append("a2a-codec.js: buildA2aFileParts must not accept f.raw")
+        errors.append("a2a-codec.ts: buildA2aFileParts must not accept f.raw")
     if "fw.bytes" in text:
-        errors.append("a2a-codec.js: buildA2aFileParts must not accept file.bytes")
+        errors.append("a2a-codec.ts: buildA2aFileParts must not accept file.bytes")
     if "f.data != null" in text or "f && f.data" in text:
-        errors.append("a2a-codec.js: buildA2aFileParts must not accept f.data fallback")
+        errors.append("a2a-codec.ts: buildA2aFileParts must not accept f.data fallback")
     if "file part requires url" not in text:
-        errors.append("a2a-codec.js: buildA2aFileParts must require url for file parts")
+        errors.append("a2a-codec.ts: buildA2aFileParts must require url for file parts")
     return errors
 
 
@@ -186,20 +179,20 @@ def _check_mail_no_content_base64() -> list[str]:
         errors.append("core/mail/models: content_base64 must be removed")
     if "attachment.file_id required" not in models_text:
         errors.append("core/mail/models: MailSendPayload must require attachment.file_id")
-    modal = js_or_ts(
+    modal = (
         REPO_ROOT
         / "core"
         / "frontend"
         / "static"
         / "lib"
         / "components"
-        / "platform-mail-modal.js"
+        / "platform-mail-modal.ts"
 )
     modal_text = modal.read_text(encoding="utf-8")
     if "content_base64" in modal_text:
-        errors.append("platform-mail-modal.js: content_base64 download path forbidden")
+        errors.append("platform-mail-modal.ts: content_base64 download path forbidden")
     if "atob(" in modal_text:
-        errors.append("platform-mail-modal.js: atob attachment download forbidden")
+        errors.append("platform-mail-modal.ts: atob attachment download forbidden")
     service = REPO_ROOT / "core" / "mail" / "service.py"
     service_text = service.read_text(encoding="utf-8")
     if "to_public_inbound" in service_text:
@@ -212,62 +205,62 @@ def _check_mail_no_content_base64() -> list[str]:
 def _check_public_search_no_base64_upload() -> list[str]:
     """Public search: browser files → chunked upload + Part.url, not base64."""
     errors: list[str] = []
-    path = js_or_ts(
+    path = (
         REPO_ROOT
         / "apps"
         / "frontend"
         / "ui"
         / "_helpers"
-        / "public-search-files.js"
+        / "public-search-files.ts"
 )
     text = path.read_text(encoding="utf-8")
     if "readAsDataURL" in text:
-        errors.append("public-search-files.js: readAsDataURL forbidden")
+        errors.append("public-search-files.ts: readAsDataURL forbidden")
     if "fileToPublicSearchA2aPart" in text or "filesToPublicSearchA2aParts" in text:
-        errors.append("public-search-files.js: base64 A2A part helpers must be removed")
+        errors.append("public-search-files.ts: base64 A2A part helpers must be removed")
     if "uploadPlatformFile" not in text:
-        errors.append("public-search-files.js: must use uploadPlatformFile")
+        errors.append("public-search-files.ts: must use uploadPlatformFile")
     if "uploadPublicSearchFilesForA2a" not in text:
-        errors.append("public-search-files.js: uploadPublicSearchFilesForA2a required")
-    resource = js_or_ts(
+        errors.append("public-search-files.ts: uploadPublicSearchFilesForA2a required")
+    resource = (
         REPO_ROOT
         / "apps"
         / "frontend"
         / "ui"
         / "events"
         / "resources"
-        / "public-search.resource.js"
+        / "public-search.resource.ts"
 )
     resource_text = resource.read_text(encoding="utf-8")
     if "uploadPublicSearchFilesForA2a" not in resource_text:
-        errors.append("public-search.resource.js: must call uploadPublicSearchFilesForA2a")
+        errors.append("public-search.resource.ts: must call uploadPublicSearchFilesForA2a")
     if "item.data" in resource_text and "files[" in resource_text:
-        errors.append("public-search.resource.js: base64 files[n].data payload forbidden")
+        errors.append("public-search.resource.ts: base64 files[n].data payload forbidden")
     return errors
 
 
 def _check_markdown_editor_no_base64_attach() -> list[str]:
     """Mail compose attachments: chunked upload + file_id, not btoa(arrayBuffer)."""
     errors: list[str] = []
-    path = js_or_ts(
+    path = (
         REPO_ROOT
         / "core"
         / "frontend"
         / "static"
         / "lib"
         / "components"
-        / "platform-markdown-editor.js"
+        / "platform-markdown-editor.ts"
 )
     text = path.read_text(encoding="utf-8")
     if "content_base64" in text:
-        errors.append("platform-markdown-editor.js: content_base64 attach forbidden")
+        errors.append("platform-markdown-editor.ts: content_base64 attach forbidden")
     if "btoa(" in text:
-        errors.append("platform-markdown-editor.js: btoa file attach forbidden")
+        errors.append("platform-markdown-editor.ts: btoa file attach forbidden")
     if "arrayBuffer()" in text:
-        errors.append("platform-markdown-editor.js: arrayBuffer file attach forbidden")
+        errors.append("platform-markdown-editor.ts: arrayBuffer file attach forbidden")
     if "uploadPlatformFile" not in text:
-        errors.append("platform-markdown-editor.js: must use uploadPlatformFile")
-    reducer = js_or_ts(
+        errors.append("platform-markdown-editor.ts: must use uploadPlatformFile")
+    reducer = (
         REPO_ROOT
         / "core"
         / "frontend"
@@ -275,13 +268,13 @@ def _check_markdown_editor_no_base64_attach() -> list[str]:
         / "lib"
         / "events"
         / "reducers"
-        / "mail.js"
+        / "mail.ts"
 )
     reducer_text = reducer.read_text(encoding="utf-8")
     if "content_base64 required" in reducer_text:
-        errors.append("mail.js reducer: content_base64 compose path must be removed")
+        errors.append("mail.ts reducer: content_base64 compose path must be removed")
     if "attachment.file_id required" not in reducer_text:
-        errors.append("mail.js reducer: attachment.file_id required")
+        errors.append("mail.ts reducer: attachment.file_id required")
     return errors
 
 
@@ -299,56 +292,56 @@ def _check_chunked_only_upload() -> list[str]:
     if "single_shot_max_bytes" in config_path.read_text(encoding="utf-8"):
         errors.append("core/config/models.py: single_shot_max_bytes must be removed")
 
-    files_url_js = js_or_ts(
+    files_url_js = (
         REPO_ROOT
         / "core"
         / "frontend"
         / "static"
         / "lib"
         / "utils"
-        / "platform-files-url.js"
+        / "platform-files-url.ts"
 )
     if not files_url_js.is_file():
-        errors.append("platform-files-url.js must exist")
+        errors.append("platform-files-url.ts must exist")
     else:
         files_url_text = files_url_js.read_text(encoding="utf-8")
         if "resolvePlatformFilesApiBase" not in files_url_text:
-            errors.append("platform-files-url.js: resolvePlatformFilesApiBase required")
+            errors.append("platform-files-url.ts: resolvePlatformFilesApiBase required")
         if "setPlatformFilesRouteSegment" not in files_url_text:
-            errors.append("platform-files-url.js: setPlatformFilesRouteSegment required")
+            errors.append("platform-files-url.ts: setPlatformFilesRouteSegment required")
 
-    app_js = js_or_ts(
+    app_js = (
         REPO_ROOT
         / "core"
         / "frontend"
         / "static"
         / "lib"
         / "base"
-        / "PlatformApp.js"
+        / "PlatformApp.ts"
 )
     if "setPlatformFilesRouteSegment" not in app_js.read_text(encoding="utf-8"):
-        errors.append("PlatformApp.js: must bind files route segment via setPlatformFilesRouteSegment")
+        errors.append("PlatformApp.ts: must bind files route segment via setPlatformFilesRouteSegment")
 
-    upload_js = js_or_ts(
+    upload_js = (
         REPO_ROOT
         / "core"
         / "frontend"
         / "static"
         / "lib"
         / "utils"
-        / "platform-file-upload.js"
+        / "platform-file-upload.ts"
 )
     upload_text = upload_js.read_text(encoding="utf-8")
     if "_uploadSingleShot" in upload_text or "singleShotMaxBytes" in upload_text:
-        errors.append("platform-file-upload.js: single-shot branch must be removed")
+        errors.append("platform-file-upload.ts: single-shot branch must be removed")
     if "FormData" in upload_text:
-        errors.append("platform-file-upload.js: FormData upload forbidden")
+        errors.append("platform-file-upload.ts: FormData upload forbidden")
     if "const FILES_BASE = '/frontend/api/v1/files'" in upload_text:
-        errors.append("platform-file-upload.js: hardcoded frontend FILES_BASE forbidden")
+        errors.append("platform-file-upload.ts: hardcoded frontend FILES_BASE forbidden")
     if "resolvePlatformFilesApiBase" not in upload_text:
-        errors.append("platform-file-upload.js: must use resolvePlatformFilesApiBase")
+        errors.append("platform-file-upload.ts: must use resolvePlatformFilesApiBase")
 
-    multipart_path = js_or_ts(
+    multipart_path = (
         REPO_ROOT
         / "core"
         / "frontend"
@@ -356,16 +349,16 @@ def _check_chunked_only_upload() -> list[str]:
         / "lib"
         / "events"
         / "factories"
-        / "_multipart-upload.js"
+        / "_multipart-upload.ts"
 )
     if multipart_path.is_file():
-        errors.append("_multipart-upload.js must be deleted")
+        errors.append("_multipart-upload.ts must be deleted")
 
-    events_index = js_or_ts(
-        REPO_ROOT / "core" / "frontend" / "static" / "lib" / "events" / "index.js"
+    events_index = (
+        REPO_ROOT / "core" / "frontend" / "static" / "lib" / "events" / "index.ts"
 )
     if "createMultipartFileUploadOp" in events_index.read_text(encoding="utf-8"):
-        errors.append("events/index.js: createMultipartFileUploadOp export must be removed")
+        errors.append("events/index.ts: createMultipartFileUploadOp export must be removed")
 
     forbidden_formdata_posts = (
         (
@@ -376,7 +369,7 @@ def _check_chunked_only_upload() -> list[str]:
             / "lib"
             / "events"
             / "resources"
-            / "rag-documents.resource.js",
+            / "rag-documents.resource.ts",
             "/frontend/api/v1/files/",
 ),
         (
@@ -386,7 +379,7 @@ def _check_chunked_only_upload() -> list[str]:
             / "ui"
             / "events"
             / "resources"
-            / "documents.resource.js",
+            / "documents.resource.ts",
             "FormData",
         ),
         (
@@ -396,7 +389,7 @@ def _check_chunked_only_upload() -> list[str]:
             / "ui"
             / "events"
             / "resources"
-            / "attachments.resource.js",
+            / "attachments.resource.ts",
             "FormData",
         ),
         (
@@ -407,12 +400,12 @@ def _check_chunked_only_upload() -> list[str]:
             / "lib"
             / "events"
             / "effects"
-            / "files.effect.js",
+            / "files.effect.ts",
             "FormData",
         ),
     )
     for path, needle in forbidden_formdata_posts:
-        text = js_or_ts(path).read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
         if needle in text:
             errors.append(f"{path.relative_to(REPO_ROOT)}: forbidden `{needle}` in upload path")
     return errors

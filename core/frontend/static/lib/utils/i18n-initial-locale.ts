@@ -32,7 +32,11 @@ export function resolveInitialUiLocale(): string {
             .map((c) => c.trim())
             .find((c) => c.startsWith(`${LANGUAGE_COOKIE}=`));
         if (cookie) {
-            return normalizeToSupportedLocale(cookie.split('=')[1] ?? '');
+            const cookieValue = cookie.split('=')[1];
+            if (cookieValue === undefined) {
+                throw new Error('resolveInitialUiLocale: language cookie value missing');
+            }
+            return normalizeToSupportedLocale(cookieValue);
         }
     }
     const rawLang =

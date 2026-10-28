@@ -279,10 +279,10 @@ class StockMoveLine(PlatformModel):
         ).all()
 
     @classmethod
-    async def list_open_for_warehouse(
+    async def list_unordered_open_for_warehouse(
         cls, company_id: str, warehouse_id: str
     ) -> list[Self]:
-        """Все открытые строки склада — сверка резервов при reconcile."""
+        """Строки склада в state OPEN. Порядка и limit нет."""
         return await cls.objects.filter(
             company_id=company_id,
             warehouse_id=warehouse_id,
@@ -367,7 +367,7 @@ class StockMoveLine(PlatformModel):
                         "Resource type not found",
                         error_code="resource_type_not_found",
                     )
-                fit_locations = await StockLocation.by_ids(
+                fit_locations = await StockLocation.found_in_company_by_ids(
                     company_id,
                     sorted(
                         {

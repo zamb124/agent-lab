@@ -19,6 +19,33 @@ import {
     upsertItem,
 } from '../index.js';
 import { CoreEvents } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
+
+function booleanMap(value: unknown, label: string): Record<string, boolean> {
+    if (!isPlainRecord(value)) {
+        throw new Error(`${label} must be an object`);
+    }
+    const map: Record<string, boolean> = {};
+    for (const [key, flag] of Object.entries(value)) {
+        if (typeof flag !== 'boolean') {
+            throw new Error(`${label}.${key} must be a boolean`);
+        }
+        map[key] = flag;
+    }
+    return map;
+}
+
+function snapshotMap(value: unknown): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        throw new Error('scheduler redis: snapshotByScheduleTaskId must be an object');
+    }
+    return value;
+}
+
+function scheduleTaskId(value: unknown): string | null {
+    if (typeof value !== 'string' || value.length === 0) return null;
+    return value;
+}
 
 const SCHEDULE_TASK_MUTATION_SUCCEEDED = new Set([
     'scheduler/schedule_pause/succeeded',
@@ -48,11 +75,10 @@ export const schedulerTasksResource = createResourceCollection({
         if (!SCHEDULE_TASK_MUTATION_SUCCEEDED.has(event.type)) {
             return state;
         }
-        const task = (event.payload as { result?: Record<string, unknown> } | null)?.result;
-        if (!task || typeof task.schedule_task_id !== 'string') {
-            return state;
+        if (!isPlainRecord(event.payload) || !isPlainRecord(event.payload.result) || typeof event.payload.result.schedule_task_id !== 'string') {
+            throw new Error('scheduler schedule task: SUCCEEDED result.schedule_task_id required');
         }
-        return upsertItem(state, task, 'schedule_task_id') as typeof state;
+        return upsertItem(state, event.payload.result, 'schedule_task_id');
     },
 });
 
@@ -108,31 +134,35 @@ export const schedulerRedisOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/scheduler/api/v1/schedules/:schedule_task_id/redis' },
     extraInitial: { snapshotByScheduleTaskId: {}, loadingByScheduleTaskId: {} },
     extraReducer: (state, event, events) => {
-        const loadingById = state.loadingByScheduleTaskId as Record<string, boolean>;
-        const snapshotById = state.snapshotByScheduleTaskId as Record<string, unknown>;
+        const loadingById = booleanMap(state.loadingByScheduleTaskId, 'scheduler redis: loadingByScheduleTaskId');
+        const snapshotById = snapshotMap(state.snapshotByScheduleTaskId);
         if (event.type === events.REQUESTED) {
-            const p = event.payload as { schedule_task_id?: unknown } | null;
-            const scheduleTaskId = p && p.schedule_task_id;
-            if (typeof scheduleTaskId !== 'string' || scheduleTaskId.length === 0) return state;
+            const id = isPlainRecord(event.payload) ? scheduleTaskId(event.payload.schedule_task_id) : null;
+            if (id === null) {
+                throw new Error('scheduler redis: REQUESTED schedule_task_id required');
+            }
             return {
                 ...state,
                 loadingByScheduleTaskId: {
                     ...loadingById,
-                    [scheduleTaskId]: true,
+                    [id]: true,
                 },
             };
         }
         if (event.type === events.SUCCEEDED) {
-            const p = event.payload as { request?: { schedule_task_id?: unknown }; result?: unknown } | null;
-            const scheduleTaskId = p?.request?.schedule_task_id;
-            if (typeof scheduleTaskId !== 'string' || scheduleTaskId.length === 0) return state;
+            const payload = event.payload;
+            const request = isPlainRecord(payload) && isPlainRecord(payload.request) ? payload.request : null;
+            const id = request === null ? null : scheduleTaskId(request.schedule_task_id);
+            if (id === null || !isPlainRecord(payload)) {
+                throw new Error('scheduler redis: SUCCEEDED request.schedule_task_id required');
+            }
             const nextLoading = { ...loadingById };
-            delete nextLoading[scheduleTaskId];
+            delete nextLoading[id];
             return {
                 ...state,
                 snapshotByScheduleTaskId: {
                     ...snapshotById,
-                    [scheduleTaskId]: p?.result,
+                    [id]: payload.result,
                 },
                 loadingByScheduleTaskId: nextLoading,
             };
@@ -143,3 +173,14 @@ export const schedulerRedisOp = createAsyncOp({
         return state;
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'scheduler/schedule_tasks': typeof schedulerTasksResource;
+        'scheduler/schedule_pause': typeof schedulerPauseOp;
+        'scheduler/schedule_resume': typeof schedulerResumeOp;
+        'scheduler/schedule_cancel': typeof schedulerCancelOp;
+        'scheduler/schedule_run_now': typeof schedulerRunNowOp;
+        'scheduler/schedule_redis': typeof schedulerRedisOp;
+    }
+}

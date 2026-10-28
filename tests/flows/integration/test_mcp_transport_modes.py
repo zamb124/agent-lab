@@ -542,7 +542,7 @@ async def test_mcp_wire_tool_meta_and_output_schema(mcp_modes_stub, unique_id: s
     assert discovered.annotations == {"readOnlyHint": True}
     assert discovered.meta == {"source": "stub"}
 
-    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(server.server_id))
+    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.server_row_id_for_active_company(server.server_id))
 
 
 def test_mcp_jsonrpc_body_parse_multiline_sse_and_done() -> None:

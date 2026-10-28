@@ -11,7 +11,7 @@ alwaysApply: false
 
 # Тестирование
 
-Тесты — `tests/`; процессы стека — `make test-up` (`scripts/test_stack.py`, `docker-compose-test.yaml`); лимиты pytest — `pytest.ini`; прогоны — `mk/test.mk`. Lint до тестов → `main.mdc` § Lint gate. Команды, профили, ёмкость стека, таймауты пакетов и триаж — скил `backend-engineer` (`.cursor/skills/backend-engineer/references/testing.md`); сценарные UI-инструкции — скил `documentator`.
+Тесты — `tests/`; процессы стека — `make test-up` (`scripts/test_stack.py`, `docker-compose-test.yaml`; до старта собирает UI целью `ui-build`); лимиты pytest — `pytest.ini`; прогоны — `mk/test.mk`. Lint до тестов → `main.mdc` § Lint gate. Команды, профили, ёмкость стека, таймауты пакетов и триаж — скил `backend-engineer` (`.cursor/skills/backend-engineer/references/testing.md`); сценарные UI-инструкции — скил `documentator`.
 
 ## Канон
 

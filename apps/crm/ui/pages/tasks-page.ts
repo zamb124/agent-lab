@@ -5,6 +5,7 @@
 import { html, css, nothing } from 'lit';
 import { CRMNamespacePage } from './crm-namespace-page.js';
 import { isMobileViewport } from '@platform/lib/utils/work-item-deeplink.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
@@ -149,10 +150,15 @@ export class CRMTasksPage extends CRMNamespacePage {
         const routeId = params && typeof params.workItemId === 'string' ? params.workItemId : '';
         if (routeId && routeId !== this._selectedId) {
             this._selectedId = routeId;
-            const fromList = ((this._workItems?.items || []) as Record<string, any>[]).find((i) => i.work_item_id === routeId);
-            this._selectedItem = fromList || null;
+            const workItems = this._workItems;
+            const items = workItems === null ? [] : workItems.items;
+            const fromList = items.find((item) => isPlainRecord(item) && item.work_item_id === routeId);
+            this._selectedItem = isPlainRecord(fromList) ? fromList : null;
             if (!this._selectedItem) {
-                this._workItems!.get(routeId);
+                if (workItems === null) {
+                    throw new Error('tasks-page: work items resource required');
+                }
+                workItems.get(routeId);
             }
         }
     }
@@ -218,7 +224,9 @@ export class CRMTasksPage extends CRMNamespacePage {
         const fromCache = selectedId && this._workItems && this._workItems.byId
             ? this._workItems.byId[selectedId]
             : null;
-        const selectedItem = this._selectedItem || fromCache || null;
+        const selectedItem = this._selectedItem !== null
+            ? this._selectedItem
+            : (fromCache === null || fromCache === undefined ? null : fromCache);
         if (routeKey === 'task' && selectedId) {
             return html`
                 <div class="page">

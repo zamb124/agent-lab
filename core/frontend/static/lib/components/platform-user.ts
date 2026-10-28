@@ -29,7 +29,29 @@ import { buildCompanySubdomainUrl } from '../utils/company-url.js';
 import { COMPANY_SWITCH_STORAGE_KEY } from '../events/effects/auth-company-navigation.effect.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
+import { isPlainRecord } from '../events/payload.js';
+import { PlatformPopover } from './platform-popover.js';
 import type { SelectController } from '../events/select-controller.js';
+import './platform-icon.js';
+import './platform-calendar-modal.js';
+import './platform-mail-modal.js';
+
+function menuUserId(raw: unknown): string {
+    if (raw === undefined) return '';
+    if (!isPlainRecord(raw)) {
+        throw new Error('platform-user: auth user raw must be an object');
+    }
+    const userId = raw.user_id;
+    return typeof userId === 'string' ? userId : '';
+}
+
+function hasOwnerRole(role: unknown): boolean {
+    if (!Array.isArray(role)) return false;
+    for (const item of role) {
+        if (item === 'owner') return true;
+    }
+    return false;
+}
 
 interface AuthUserRecord {
     id?: string;
@@ -49,10 +71,6 @@ interface CompanyRecord {
     name?: string;
     role?: unknown;
 }
-import './platform-icon.js';
-import './platform-popover.js';
-import './platform-calendar-modal.js';
-import './platform-mail-modal.js';
 
 export class PlatformUser extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -75,17 +93,14 @@ export class PlatformUser extends PlatformElement {
         this._avatarFallbackLevel = 0;
         this._menuAvatarSig = '';
 
-        this._authSelect = this.select((s): AuthSliceView => {
-            const auth = s.auth as AuthSliceView;
-            return {
-                status: auth.status,
-                user: auth.user,
-                activeCompanyId: auth.activeCompanyId,
-            };
-        });
-        this._companiesSelect = this.select((s) => (s.companies as { list?: CompanyRecord[] }).list);
-        this._themeSelect = this.select((s) => (s.theme as { mode?: string }).mode);
-        this._localeSelect = this.select((s) => (s.i18n as { locale?: string }).locale);
+        this._authSelect = this.select((s): AuthSliceView => ({
+            status: s.auth.status,
+            user: s.auth.user === null ? undefined : s.auth.user,
+            activeCompanyId: s.auth.activeCompanyId,
+        }));
+        this._companiesSelect = this.select((s) => s.companies.list);
+        this._themeSelect = this.select((s) => s.theme.mode);
+        this._localeSelect = this.select((s) => s.i18n.locale);
 
         this._companiesLoaded = false;
 
@@ -109,7 +124,7 @@ export class PlatformUser extends PlatformElement {
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
 
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         if (auth.status === 'authenticated' && auth.user && !this._companiesLoaded) {
             this._companiesLoaded = true;
             this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
@@ -117,10 +132,9 @@ export class PlatformUser extends PlatformElement {
 
         const menuUser = auth.user;
         if (menuUser) {
-            const raw = menuUser.raw as { user_id?: unknown } | undefined;
-            const uid = raw && typeof raw.user_id === 'string' ? raw.user_id : '';
+            const uid = menuUserId(menuUser.raw);
             const url = this._avatarUrl(menuUser);
-            const sig = `${uid}|${url || ''}`;
+            const sig = `${uid}|${url === null ? '' : url}`;
             if (this._menuAvatarSig !== sig) {
                 this._menuAvatarSig = sig;
                 this._avatarFallbackLevel = 0;
@@ -134,8 +148,11 @@ export class PlatformUser extends PlatformElement {
             }
         }
         if (this._menuOpen) {
-            const popover = this.renderRoot?.querySelector('platform-popover') as { reposition?: () => void } | null;
-            popover?.reposition?.();
+            const popover = this.renderRoot.querySelector('platform-popover');
+            if (!(popover instanceof PlatformPopover)) {
+                throw new Error('platform-user: open menu popover is missing');
+            }
+            popover.reposition();
         }
     }
 
@@ -169,7 +186,7 @@ export class PlatformUser extends PlatformElement {
 
     _switchCompany(companyId: string | undefined, e: Event): void {
         e.stopPropagation();
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         const currentCompanyId = this._currentCompanyId(auth);
         if (!companyId || companyId === currentCompanyId) {
             this._companySelectorOpen = false;
@@ -206,7 +223,7 @@ export class PlatformUser extends PlatformElement {
 
     _openUserInfo(): void {
         this._menuOpen = false;
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         const user = auth.user;
         if (!user) return;
         const userId = (user.raw && user.raw.user_id as string | undefined) || user.id;
@@ -250,10 +267,8 @@ export class PlatformUser extends PlatformElement {
     }
 
     _isOwnerOfCompany(companyRecord: CompanyRecord | undefined): boolean {
-        if (!companyRecord || !Array.isArray(companyRecord.role)) {
-            return false;
-        }
-        return (companyRecord.role as unknown[]).includes('owner');
+        if (!companyRecord) return false;
+        return hasOwnerRole(companyRecord.role);
     }
 
     _logout(): void {
@@ -273,7 +288,7 @@ export class PlatformUser extends PlatformElement {
 
     _companyName(companyId: string | null): string {
         if (!companyId) return '';
-        const company = (this._companiesSelect.value || []).find((c) => c.company_id === companyId);
+        const company = this._companiesSelect.value.find((c) => c.company_id === companyId);
         return company && company.name ? company.name : '';
     }
 
@@ -311,7 +326,7 @@ export class PlatformUser extends PlatformElement {
     }
 
     _onMenuAvatarError(): void {
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         const user = auth.user;
         if (!user) return;
         const url = this._avatarUrl(user);
@@ -323,11 +338,11 @@ export class PlatformUser extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const auth = this._authSelect.value || {};
+        const auth = this._authSelect.value;
         const user = auth.user;
         if (!user) return html``;
 
-        const companies = this._companiesSelect.value || [];
+        const companies = this._companiesSelect.value;
         const currentCompanyId = this._currentCompanyId(auth);
         const currentCompanyName = this._companyName(currentCompanyId);
         const hasCompaniesMenu = companies.length >= 1;
@@ -507,9 +522,9 @@ export class PlatformUser extends PlatformElement {
 
     private _menuAvatarSig: string;
     private _authSelect: SelectController<AuthSliceView>;
-    private _companiesSelect: SelectController<CompanyRecord[] | undefined>;
-    private _themeSelect: SelectController<string | undefined>;
-    private _localeSelect: SelectController<string | undefined>;
+    private _companiesSelect: SelectController<CompanyRecord[]>;
+    private _themeSelect: SelectController<'dark' | 'light'>;
+    private _localeSelect: SelectController<string>;
     private _companiesLoaded: boolean;
 
     static override styles: CSSResultGroup = [

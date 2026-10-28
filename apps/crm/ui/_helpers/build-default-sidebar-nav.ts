@@ -12,6 +12,7 @@
  * }} opts
  * @returns {Array<Record<string, unknown>>} узлы для platform-sidebar-nav-tree
  */
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface EntityTypeRow {
     type_id?: unknown;
@@ -22,12 +23,6 @@ interface EntityTypeRow {
 
 type ById = ReadonlyMap<string, EntityTypeRow>;
 type NavNode = Record<string, unknown> & { id?: unknown; children?: unknown };
-
-interface SidebarNavLabels {
-    groupNotes?: unknown; groupTasks?: unknown; groupEntities?: unknown; groupGraph?: unknown;
-    allNotes?: unknown; allTasks?: unknown; allEntities?: unknown;
-    graphView3d?: unknown; graphViewMindmap?: unknown;
-}
 
 interface BuildDefaultSidebarNavOpts {
     allowedTypeIds?: unknown;
@@ -126,19 +121,20 @@ export function ensureCrmSidebarNavAllLeavesFirst(nodes: unknown, labels: unknow
     if (!Array.isArray(nodes)) {
         throw new Error('ensureCrmSidebarNavAllLeavesFirst: nodes must be an array');
     }
-    const L = (labels && typeof labels === 'object' ? labels : {}) as SidebarNavLabels;
-    const allNotes = typeof L.allNotes === 'string' ? L.allNotes : '';
-    const allTasks = typeof L.allTasks === 'string' ? L.allTasks : '';
-    const allEntities = typeof L.allEntities === 'string' ? L.allEntities : '';
+    const labelSource = isPlainRecord(labels) ? labels : {};
+    const allNotes = typeof labelSource.allNotes === 'string' ? labelSource.allNotes : '';
+    const allTasks = typeof labelSource.allTasks === 'string' ? labelSource.allTasks : '';
+    const allEntities = typeof labelSource.allEntities === 'string' ? labelSource.allEntities : '';
     const bag = { allNotes, allTasks, allEntities };
-    return (nodes as NavNode[]).map((n: NavNode) => _ensureAllFirstInNode(n, bag));
+    return nodes.map((n: NavNode) => _ensureAllFirstInNode(n, bag));
 }
 
 function _ensureAllFirstInNode(node: NavNode, labelBag: Record<string, string>): NavNode {
     if (!node || typeof node !== 'object') {
         throw new Error('ensureCrmSidebarNavAllLeavesFirst: invalid node');
     }
-    const children = Array.isArray(node.children) ? node.children as NavNode[] : [];
+    const childList = node.children;
+    const children = Array.isArray(childList) ? childList : [];
     if (children.length === 0) {
         return node;
     }
@@ -284,7 +280,7 @@ function _deepCopyNavNode(node: NavNode): NavNode {
     const ch = node.children;
     const out = { ...node };
     if (Array.isArray(ch) && ch.length > 0) {
-        out.children = (ch as NavNode[]).map((c: NavNode) => _deepCopyNavNode(c));
+        out.children = ch.map((c: NavNode) => _deepCopyNavNode(c));
     } else {
         delete out.children;
     }
@@ -311,7 +307,7 @@ export function replaceCrmSidebarGroupChildrenFromCanonical(nodes: unknown, cano
             canonMap.set(n.id, n);
         }
     }
-    return (nodes as NavNode[]).map((node: NavNode) => {
+    return nodes.map((node: NavNode) => {
         if (!node || typeof node.id !== 'string') {
             return node;
         }
@@ -319,7 +315,7 @@ export function replaceCrmSidebarGroupChildrenFromCanonical(nodes: unknown, cano
         if (cid === 'grp-notes' || cid === 'grp-tasks' || cid === 'grp-entities' || cid === 'grp-graph') {
             const canon = canonMap.get(cid);
             if (canon && Array.isArray(canon.children) && canon.children.length > 0) {
-                const childrenCopy = (canon.children as NavNode[]).map((ch: NavNode) => _deepCopyNavNode(ch));
+                const childrenCopy = canon.children.map((ch: NavNode) => _deepCopyNavNode(ch));
                 const out: NavNode = { ...node, children: childrenCopy };
                 if (typeof canon.icon === 'string' && canon.icon.length > 0) {
                     out.icon = canon.icon;
@@ -355,7 +351,7 @@ export function dropCrmSidebarLegacyTopLevelNodes(nodes: unknown): NavNode[] {
     if (!Array.isArray(nodes)) {
         throw new Error('dropCrmSidebarLegacyTopLevelNodes: nodes must be an array');
     }
-    return (nodes as NavNode[]).filter((n: NavNode) => {
+    return nodes.filter((n: NavNode) => {
         if (!n || typeof n !== 'object') {
             return true;
         }
@@ -389,7 +385,7 @@ export function mergeCrmSidebarNavMissingGroups(patchedNodes: unknown, canonical
         }
     }
     const out: NavNode[] = [];
-    for (const c of canonicalNodes as NavNode[]) {
+    for (const c of canonicalNodes) {
         if (!c || typeof c.id !== 'string' || c.id.length === 0) {
             continue;
         }
@@ -421,14 +417,15 @@ export function enrichSidebarNavWithEntityTypeIcons(nodes: unknown, entityTypes:
         throw new Error('enrichSidebarNavWithEntityTypeIcons: nodes must be an array');
     }
     const byId = _entityTypesById(Array.isArray(entityTypes) ? entityTypes : []);
-    return (nodes as NavNode[]).map((n: NavNode) => _enrichSidebarNavNode(n, byId));
+    return nodes.map((n: NavNode) => _enrichSidebarNavNode(n, byId));
 }
 
 function _enrichSidebarNavNode(node: NavNode, byId: ById): NavNode {
     if (!node || typeof node !== 'object') {
         throw new Error('enrichSidebarNavWithEntityTypeIcons: invalid node');
     }
-    const children = Array.isArray(node.children) ? node.children as NavNode[] : [];
+    const childList = node.children;
+    const children = Array.isArray(childList) ? childList : [];
     if (children.length > 0) {
         const enrichedChildren = children.map((c) => _enrichSidebarNavNode(c, byId));
         const gid = node.id;
@@ -474,17 +471,17 @@ export function buildDefaultSidebarNav(opts: BuildDefaultSidebarNavOpts): NavNod
         allowedTypeIds.filter((id) => typeof id === 'string' && id.length > 0),
     );
     const entityTypes = Array.isArray(opts.entityTypes) ? opts.entityTypes : [];
-    const labels = (opts.labels && typeof opts.labels === 'object' ? opts.labels : {}) as SidebarNavLabels;
-    const groupNotes = typeof labels.groupNotes === 'string' ? labels.groupNotes : '';
-    const groupTasks = typeof labels.groupTasks === 'string' ? labels.groupTasks : '';
-    const groupEntities = typeof labels.groupEntities === 'string' ? labels.groupEntities : '';
-    const allNotes = typeof labels.allNotes === 'string' ? labels.allNotes : '';
-    const allTasks = typeof labels.allTasks === 'string' ? labels.allTasks : '';
-    const allEntities = typeof labels.allEntities === 'string' ? labels.allEntities : '';
+    const labelSource = isPlainRecord(opts.labels) ? opts.labels : {};
+    const groupNotes = typeof labelSource.groupNotes === 'string' ? labelSource.groupNotes : '';
+    const groupTasks = typeof labelSource.groupTasks === 'string' ? labelSource.groupTasks : '';
+    const groupEntities = typeof labelSource.groupEntities === 'string' ? labelSource.groupEntities : '';
+    const allNotes = typeof labelSource.allNotes === 'string' ? labelSource.allNotes : '';
+    const allTasks = typeof labelSource.allTasks === 'string' ? labelSource.allTasks : '';
+    const allEntities = typeof labelSource.allEntities === 'string' ? labelSource.allEntities : '';
 
-    const groupGraph = typeof labels.groupGraph === 'string' ? labels.groupGraph : '';
-    const graphView3d = typeof labels.graphView3d === 'string' ? labels.graphView3d : '';
-    const graphViewMindmap = typeof labels.graphViewMindmap === 'string' ? labels.graphViewMindmap : '';
+    const groupGraph = typeof labelSource.groupGraph === 'string' ? labelSource.groupGraph : '';
+    const graphView3d = typeof labelSource.graphView3d === 'string' ? labelSource.graphView3d : '';
+    const graphViewMindmap = typeof labelSource.graphViewMindmap === 'string' ? labelSource.graphViewMindmap : '';
 
     const byId = _entityTypesById(entityTypes);
 
@@ -630,29 +627,28 @@ export function mapSidebarNavFromApi(raw: unknown): NavNode[] | null {
     if (!Array.isArray(raw)) {
         throw new Error('mapSidebarNavFromApi: expected array or null');
     }
-    return (raw as unknown[]).map((entry: unknown) => _mapEntry(entry));
+    return raw.map((entry: unknown) => _mapEntry(entry));
 }
 
 function _mapEntry(entry: unknown): NavNode {
-    if (!entry || typeof entry !== 'object') {
+    if (!isPlainRecord(entry)) {
         throw new Error('mapSidebarNavFromApi: invalid entry');
     }
-    const e = entry as Record<string, unknown>;
-    const id = e.id;
-    const label = e.label;
+    const id = entry.id;
+    const label = entry.label;
     if (typeof id !== 'string' || id.length === 0) {
         throw new Error('mapSidebarNavFromApi: id required');
     }
     if (typeof label !== 'string') {
         throw new Error('mapSidebarNavFromApi: label required');
     }
-    const iconRaw = e.icon;
+    const iconRaw = entry.icon;
     const icon = typeof iconRaw === 'string' && iconRaw.length > 0 ? iconRaw : undefined;
-    const rkRaw = e.route_key;
+    const rkRaw = entry.route_key;
     const routeKey = typeof rkRaw === 'string' && rkRaw.length > 0 ? rkRaw : undefined;
-    const searchRaw = e.search;
+    const searchRaw = entry.search;
     const search = typeof searchRaw === 'string' ? searchRaw : '';
-    const chRaw = e.children;
+    const chRaw = entry.children;
     const children = Array.isArray(chRaw) ? chRaw.map((c: unknown) => _mapEntry(c)) : [];
     const node: NavNode = { id, label, search };
     if (icon !== undefined) node.icon = icon;
@@ -669,16 +665,15 @@ export function sidebarNavTreeToApiPayload(nodes: unknown): Record<string, unkno
     if (!Array.isArray(nodes)) {
         throw new Error('sidebarNavTreeToApiPayload: nodes must be array');
     }
-    return (nodes as unknown[]).map((n: unknown) => _toApiEntry(n));
+    return nodes.map((n: unknown) => _toApiEntry(n));
 }
 
 function _toApiEntry(node: unknown): Record<string, unknown> {
-    if (!node || typeof node !== 'object') {
+    if (!isPlainRecord(node)) {
         throw new Error('sidebarNavTreeToApiPayload: invalid node');
     }
-    const n = node as Record<string, unknown>;
-    const id = n.id;
-    const label = n.label;
+    const id = node.id;
+    const label = node.label;
     if (typeof id !== 'string' || id.length === 0) {
         throw new Error('sidebarNavTreeToApiPayload: id required');
     }
@@ -688,15 +683,15 @@ function _toApiEntry(node: unknown): Record<string, unknown> {
     const out: Record<string, unknown> = {
         id,
         label,
-        search: typeof n.search === 'string' ? n.search : '',
+        search: typeof node.search === 'string' ? node.search : '',
     };
-    if (typeof n.icon === 'string' && n.icon.length > 0) {
-        out.icon = n.icon;
+    if (typeof node.icon === 'string' && node.icon.length > 0) {
+        out.icon = node.icon;
     }
-    if (typeof n.routeKey === 'string' && n.routeKey.length > 0) {
-        out.route_key = n.routeKey;
+    if (typeof node.routeKey === 'string' && node.routeKey.length > 0) {
+        out.route_key = node.routeKey;
     }
-    const children = n.children;
+    const children = node.children;
     if (Array.isArray(children) && children.length > 0) {
         out.children = children.map((c: unknown) => _toApiEntry(c));
     } else {

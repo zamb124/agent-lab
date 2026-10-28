@@ -118,7 +118,7 @@ async def index_rag_document_s3_task(
             settings = get_settings()
             binding = UploadProfileBinding(config=settings.rag.document_indexing)
 
-            await DocumentProcessingStatus.try_mark_processing(document_id)
+            await DocumentProcessingStatus.mark_processing(document_id)
             await publish_rag_document_status_updated(
                 company_id=str(trace_company_id).strip(),
                 document_id=document_id,
@@ -143,7 +143,7 @@ async def index_rag_document_s3_task(
                     document_name=document_name,
                     file_category=resolved_category,
                 )
-                _ = await DocumentProcessingStatus.record_indexing_done(document_id, 0)
+                _ = await DocumentProcessingStatus.mark_indexing_completed(document_id, 0)
                 await publish_rag_document_status_updated(
                     company_id=str(trace_company_id).strip(),
                     document_id=document_id,
@@ -179,7 +179,7 @@ async def index_rag_document_s3_task(
                     upload_profile=binding,
                 )
             except Exception as e:
-                await DocumentProcessingStatus.record_indexing_failed(document_id, str(e))
+                await DocumentProcessingStatus.mark_indexing_failed(document_id, str(e))
                 await publish_rag_document_status_updated(
                     company_id=str(trace_company_id).strip(),
                     document_id=document_id,
@@ -195,7 +195,7 @@ async def index_rag_document_s3_task(
                 raise ValueError("RAG document metadata.total_chunks must be an integer")
             chunks = raw_chunks
             runtime = document.metadata.get("indexing_runtime")
-            _ = await DocumentProcessingStatus.record_indexing_done(
+            _ = await DocumentProcessingStatus.mark_indexing_completed(
                 document_id,
                 chunks,
                 indexing_runtime=(

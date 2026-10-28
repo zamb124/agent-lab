@@ -3,7 +3,7 @@
 PYTHON_CHECK_PATHS ?= apps core
 RUFF_CHECK_ARGS ?= $(PYTHON_CHECK_PATHS)
 BASEDPYRIGHT_CHECK_ARGS ?= --level warning --warnings $(PYTHON_CHECK_PATHS)
-LINT_PATH_GOALS := $(filter-out lint lint-ts,$(filter %/%,$(MAKECMDGOALS)) $(filter %.py,$(MAKECMDGOALS)) $(filter %.js,$(MAKECMDGOALS)))
+LINT_PATH_GOALS := $(filter-out lint lint-ts,$(filter %/%,$(MAKECMDGOALS)) $(filter %.py,$(MAKECMDGOALS)) $(filter %.js,$(MAKECMDGOALS)) $(filter %.ts,$(MAKECMDGOALS)))
 
 lint:
 	@set -e; \
@@ -17,6 +17,8 @@ lint:
 	fi
 
 lint-ts:
+	@echo "=== lint-ts: typecheck (tsc) ==="
+	@npx tsc -p tsconfig.json
 	@echo "=== lint-ts: events/ui canon ==="
 	@$(MAKE) --no-print-directory check-events-canon
 	@echo "=== lint-ts: ui kit docs canon ==="
@@ -165,12 +167,12 @@ lint-file:
 			echo "=== lint-file: basedpyright ==="; \
 			uv run basedpyright --level warning --warnings "$(FILE)"; \
 			;; \
-		*.js) \
+		*.js|*.ts) \
 			$(MAKE) --no-print-directory lint-ts; \
 			;; \
 		*) \
 			echo "lint: unsupported file type: $(FILE)" >&2; \
-			echo "lint: поддерживаются .py и .js; полная проверка — make lint" >&2; \
+			echo "lint: поддерживаются .py, .js и .ts; полная проверка — make lint" >&2; \
 			exit 1; \
 			;; \
 	esac

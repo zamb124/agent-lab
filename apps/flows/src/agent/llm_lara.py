@@ -40,7 +40,7 @@ def list_lara_branch_model_ids(branch_ids: list[str]) -> list[str]:
 
 
 async def load_lara_branch_ids() -> list[str]:
-    flow_config = await FlowConfig.get_latest(_LARA_FLOW_ID)
+    flow_config = await FlowConfig.current_for_flow(_LARA_FLOW_ID)
     if flow_config is None:
         raise WsCommandError(
             "unavailable",
@@ -111,7 +111,7 @@ async def run_lara_chat_completion(
             error_params={"model": model_id},
         )
 
-    flow_config = await FlowConfig.get_latest(_LARA_FLOW_ID)
+    flow_config = await FlowConfig.current_for_flow(_LARA_FLOW_ID)
     if flow_config is None:
         raise WsCommandError(
             "unavailable",

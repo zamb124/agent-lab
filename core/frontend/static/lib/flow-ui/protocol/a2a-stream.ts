@@ -4,6 +4,7 @@
  * uncaught BodyStreamBuffer AbortError when dispose() cancels mid-read.
  */
 import { a2aRequestHeaders } from './a2a-codec.js';
+import { isPlainRecord } from '../../events/payload.js';
 import { INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES } from './constants.js';
 
 export interface A2aFrameEvent extends Record<string, unknown> {
@@ -25,6 +26,15 @@ export interface A2aRequestOptions {
     headers?: Record<string, string>;
     credentials?: RequestCredentials;
     signal?: AbortSignal | null;
+    /** Собрать сырой SSE-текст и вернуть envelope ответа (api-console). */
+    captureRaw?: boolean;
+}
+
+export interface A2aStreamEnvelope {
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    raw: string;
 }
 
 export interface A2aError extends Error {
@@ -38,15 +48,18 @@ export interface A2aError extends Error {
  * ``result`` кадра SendStreamingMessage/SubscribeToTask → ``{frameKind, event}``.
  * Кадры: ``statusUpdate``, ``artifactUpdate``, ``task`` (snapshot), ``message``.
  */
+function isFrameEvent(value: unknown): value is A2aFrameEvent {
+    return isPlainRecord(value);
+}
+
 export function unwrapA2aStreamResult(result: unknown): A2aUnwrappedFrame | null {
-    if (!result || typeof result !== 'object') return null;
-    const record = result as Record<string, unknown>;
+    if (!isPlainRecord(result)) return null;
     for (const frameKind of ['statusUpdate', 'artifactUpdate', 'task', 'message'] as const) {
-        const event = record[frameKind];
-        if (event && typeof event === 'object') return { frameKind, event: event as A2aFrameEvent };
+        const event = result[frameKind];
+        if (isFrameEvent(event)) return { frameKind, event };
     }
-    if (typeof record.id === 'string' && record.status && typeof record.status === 'object') {
-        return { frameKind: 'task', event: record as A2aFrameEvent };
+    if (typeof result.id === 'string' && isPlainRecord(result.status)) {
+        return { frameKind: 'task', event: result };
     }
     return null;
 }
@@ -84,14 +97,12 @@ export function isSettledTaskState(state: unknown): boolean {
  * @returns {error is Error}
  */
 export function flowUIIsAbortError(error: unknown): error is Error {
-    if (error == null || typeof error !== 'object') return false;
-    const name = (error as { name?: unknown }).name;
-    return name === 'AbortError';
+    return isPlainRecord(error) && error.name === 'AbortError';
 }
 
 async function responseError(response: Response): Promise<A2aError> {
-    let payload: { detail?: unknown; error?: { message?: unknown } } | null = null;
-    try { payload = await response.json(); } catch { payload = null; }
+    const raw = await response.text();
+    const payload: { detail?: unknown; error?: { message?: unknown } } | null = raw.trim().startsWith('{') ? JSON.parse(raw) : null;
     const detail = payload?.detail || payload?.error?.message || `HTTP ${response.status}`;
     const error: A2aError = new Error(String(detail));
     error.status = response.status;
@@ -120,25 +131,33 @@ export async function sendA2ARequest({ url, body, headers = {}, credentials = 'i
         signal,
     });
     if (!response.ok) throw await responseError(response);
-    let frame: { error?: { message?: string; code?: unknown } } | null;
+    let parsed: unknown;
     try {
-        frame = await response.json();
+        parsed = await response.json();
     } catch (error) {
         rethrowUnlessAbort(signal, error);
     }
-    if (frame?.error) {
-        const error: A2aError = new Error(frame.error.message || 'A2A request failed');
-        error.code = frame.error.code;
-        error.payload = frame.error;
+    if (!isPlainRecord(parsed)) {
+        throw new Error('flow-ui: A2A response must be an object');
+    }
+    if (parsed.error) {
+        const rpcError = parsed.error;
+        if (!isPlainRecord(rpcError)) {
+            throw new Error('A2A request failed');
+        }
+        const message = rpcError.message;
+        const error: A2aError = new Error(typeof message === 'string' && message.length > 0 ? message : 'A2A request failed');
+        error.code = rpcError.code;
+        error.payload = rpcError;
         throw error;
     }
-    return frame as Record<string, unknown>;
+    return parsed;
 }
 
 export async function consumeA2AStream(
-    { url, body, headers = {}, credentials = 'include', signal }: A2aRequestOptions,
+    { url, body, headers = {}, credentials = 'include', signal, captureRaw = false }: A2aRequestOptions,
     onFrame: (frame: unknown) => void,
-): Promise<void> {
+): Promise<A2aStreamEnvelope | undefined> {
     if (typeof onFrame !== 'function') throw new Error('flow-ui: onFrame is required');
     const response = await fetch(url, {
         method: 'POST',
@@ -148,7 +167,8 @@ export async function consumeA2AStream(
         signal,
     });
     if (!response.ok) throw await responseError(response);
-    if (!(response.headers.get('content-type') || '').toLowerCase().includes('text/event-stream')) {
+    const contentType = response.headers.get('content-type');
+    if (contentType === null || !contentType.toLowerCase().includes('text/event-stream')) {
         throw new Error('flow-ui: expected A2A text/event-stream response');
     }
     if (!response.body) {
@@ -157,18 +177,24 @@ export async function consumeA2AStream(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let raw = '';
+    let readerFailed = false;
     try {
         while (true) {
             let chunk: ReadableStreamReadResult<Uint8Array>;
             try {
                 chunk = await reader.read();
             } catch (error) {
+                readerFailed = true;
                 rethrowUnlessAbort(signal, error);
             }
-            const { done, value } = chunk as ReadableStreamReadResult<Uint8Array>;
-            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+            const { done, value } = chunk;
+            const decoded = decoder.decode(value || new Uint8Array(), { stream: !done });
+            buffer += decoded;
+            if (captureRaw) raw += decoded;
             const records = buffer.split(/\r?\n\r?\n/);
-            buffer = records.pop() || '';
+            const tail = records.pop();
+            buffer = tail === undefined ? '' : tail;
             for (const record of records) {
                 for (const line of record.split(/\r?\n/)) {
                     if (!line.startsWith('data:')) continue;
@@ -179,10 +205,13 @@ export async function consumeA2AStream(
             if (done) break;
         }
     } finally {
-        try {
-            await reader.cancel();
-        } catch {
-            // Body already aborted by AbortSignal — ignore.
-        }
+        // После ошибки чтения cancel() вернул бы ту же ошибку и скрыл бы исходную.
+        if (!readerFailed) await reader.cancel();
     }
+    if (!captureRaw) return undefined;
+    const responseHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+    });
+    return { status: response.status, statusText: response.statusText, headers: responseHeaders, raw };
 }

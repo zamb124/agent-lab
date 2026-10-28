@@ -79,7 +79,7 @@ class NamespaceTemplate(PlatformModel):
         return await cls.objects.create(instance=template)
 
     @classmethod
-    async def update_fields(
+    async def update_name_description_icon_and_crm_settings(
         cls,
         template: Self,
         *,
@@ -89,6 +89,7 @@ class NamespaceTemplate(PlatformModel):
         crm_settings: JsonObject | None,
         crm_settings_is_set: bool,
     ) -> Self:
+        """Пишет name, description и icon, если значение передано. crm_settings пишет только при crm_settings_is_set. Всегда обновляет updated_at."""
         if name is not None:
             template.name = name
         if description is not None:

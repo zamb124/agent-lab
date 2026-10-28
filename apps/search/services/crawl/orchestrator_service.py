@@ -56,6 +56,7 @@ from core.crawl.models import (
 )
 from core.crawl.report_projection import enrichment_snapshot_from_enriched_page
 from core.crawl.url_filter import build_url_filter
+from core.errors.boundary import PlatformNotFoundError
 from core.search.index_models import SearchIndexDefinition
 from core.tasks import enqueue
 
@@ -102,7 +103,7 @@ class CrawlOrchestratorService:
         trigger: CrawlJobTrigger,
         schedule_task_id: str | None,
     ) -> CrawlOrchestratorTickResult:
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         if not profile_bundle.profile.enabled:
             raise ValueError(f"crawl profile disabled: {crawl_profile_id}")
         job = await CrawlJob.start(crawl_profile_id, trigger, schedule_task_id)
@@ -193,10 +194,10 @@ class CrawlOrchestratorService:
         crawl_job_id: str,
         crawl_profile_id: str,
     ) -> None:
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         domain = await CrawlDomain.get(crawl_domain_id)
         if domain is None:
-            raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
         search_index_id = profile_bundle.search_index.search_index_id
         url_filter = build_url_filter(profile_bundle.profile, domain)
         try:
@@ -258,10 +259,10 @@ class CrawlOrchestratorService:
     ) -> None:
         if url_budget < 1:
             raise ValueError("url_budget must be >= 1")
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         domain = await CrawlDomain.get(crawl_domain_id)
         if domain is None:
-            raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
         urls = await CrawlUrl.claim_pending_batch(crawl_domain_id, 1)
         if not urls:
             return
@@ -495,7 +496,7 @@ class CrawlOrchestratorService:
             await CrawlJob.increment(crawl_job_id, errors=1)
             updated_url = await CrawlUrl.get(crawl_url.crawl_url_id)
             if updated_url is None:
-                raise ValueError(f"crawl url not found: {crawl_url.crawl_url_id}")
+                raise PlatformNotFoundError(f"crawl url not found: {crawl_url.crawl_url_id}")
             log_crawl_url_outcome(
                 crawl_profile_id=crawl_profile_id,
                 crawl_job_id=crawl_job_id,
@@ -516,13 +517,13 @@ class CrawlOrchestratorService:
         crawl_job_id: str,
         crawl_profile_id: str,
     ) -> None:
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         profile = profile_bundle.profile
         if not profile.llm_enrichment_enabled:
             raise ValueError(f"llm enrichment disabled for crawl profile: {crawl_profile_id}")
         crawl_url = await CrawlUrl.get(crawl_url_id)
         if crawl_url is None:
-            raise ValueError(f"crawl url not found: {crawl_url_id}")
+            raise PlatformNotFoundError(f"crawl url not found: {crawl_url_id}")
         if crawl_url.crawl_status != "indexed":
             raise ValueError(
                 f"crawl enrich requires indexed status: crawl_url_id={crawl_url_id}, status={crawl_url.crawl_status}"
@@ -547,7 +548,7 @@ class CrawlOrchestratorService:
             return
         domain = await CrawlDomain.get(crawl_url.crawl_domain_id)
         if domain is None:
-            raise ValueError(f"crawl domain not found: {crawl_url.crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_url.crawl_domain_id}")
         (
             url,
             canonical_url,
@@ -555,7 +556,7 @@ class CrawlOrchestratorService:
             extract_title,
             extract_content_hash,
             structural_signals,
-        ) = await CrawlUrl.get_layer1_snapshot(crawl_url_id)
+        ) = await CrawlUrl.require_layer1_snapshot(crawl_url_id)
         fetched = CrawlFetchResult(
             url=url,
             canonical_url=canonical_url,
@@ -662,7 +663,7 @@ class CrawlOrchestratorService:
         *,
         limit: int = 100,
     ) -> int:
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         if not profile_bundle.profile.llm_enrichment_enabled:
             raise ValueError(f"llm enrichment disabled for crawl profile: {crawl_profile_id}")
         crawl_url_ids = await CrawlUrl.list_indexed_missing_enrichment(
@@ -688,7 +689,7 @@ class CrawlOrchestratorService:
     ) -> None:
         if url_budget < 1:
             raise ValueError("url_budget must be >= 1")
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         profile = profile_bundle.profile
         pending = await CrawlUrl.count_pending(crawl_domain_id)
         if pending == 0:
@@ -837,12 +838,12 @@ class CrawlOrchestratorService:
         crawl_domain_id: str,
         crawl_profile_id: str,
     ) -> CrawlDomainRunResponse:
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         if not profile_bundle.profile.enabled:
             raise ValueError(f"crawl profile disabled: {crawl_profile_id}")
         domain = await CrawlDomain.get(crawl_domain_id)
         if domain is None:
-            raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
         if domain.crawl_profile_id != crawl_profile_id:
             raise ValueError("crawl_domain_id does not belong to crawl_profile_id")
         if domain.domain in profile_bundle.profile.denylist_domains:

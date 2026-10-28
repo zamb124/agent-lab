@@ -18,7 +18,7 @@ createFacets / createForm) во всех `apps/<svc>/ui/events/resources/**/*.js
      `get` (без идентификатора эти операции невозможны).
   6. Фабрика из `apps/<svc>/ui/events/**`, на которую ссылается
      `useOp`/`useResource`/`useForm`/`useCursorList`/`useFacets`/`useSlice`
-     в UI сервиса, обязана быть в `static factories` соответствующего `*-app.js`.
+     в UI сервиса, обязана быть в `static factories` соответствующего `*-app.ts`.
      Иначе модалка/страница падает в `getFactory: not registered`.
 
 Скрипт парсит JS как текст: AST не строим, обходим по регуляркам и читаем
@@ -45,7 +45,7 @@ CORE_FACTORY_RESOURCES = ROOT / "core" / "frontend" / "static" / "lib" / "events
 # Фабрики платформенного ядра (файлы, устройства LinnexAgent) — владелец 'platform'.
 CORE_PLATFORM_OWNER = "platform"
 
-# Общие ресурсы владельцев доменов: файл `core/frontend/static/lib/events/resources/*.resource.js`
+# Общие ресурсы владельцев доменов: файл `core/frontend/static/lib/events/resources/*.resource.ts`
 # может содержать фабрики одного или нескольких владельцев; владелец каждой фабрики — префикс
 # `name` ('<svc>/...'), и он обязан быть существующим сервисом `apps/<svc>`.
 
@@ -257,7 +257,7 @@ def _collect_used_factory_names(svc_ui: Path) -> set[str]:
         root = svc_ui / folder
         if not root.exists():
             continue
-        for path in sorted(p for g in ("*.js", "*.ts") for p in root.rglob(g)):
+        for path in sorted(root.rglob("*.ts")):
             names.update(USE_HELPER_RE.findall(path.read_text(encoding="utf-8")))
     return names
 
@@ -271,7 +271,7 @@ def _check_app_registration(
     app_dir = svc_dir / "ui" / "app"
     if not app_dir.exists():
         return
-    app_files = sorted(p for g in ("*-app.js", "*-app.ts") for p in app_dir.glob(g))
+    app_files = sorted(app_dir.glob("*-app.ts"))
     if not app_files:
         return
     app_path = app_files[0]
@@ -316,13 +316,13 @@ def main() -> int:
         ui_root = svc_dir / "ui" / "events"
         if not ui_root.exists():
             continue
-        for path in sorted(p for g in ("*.js", "*.ts") for p in ui_root.rglob(g)):
+        for path in sorted(ui_root.rglob("*.ts")):
             text = path.read_text(encoding="utf-8")
             if any(kind + "(" in text for kind in FACTORY_KINDS):
                 targets.append(path)
 
     if CORE_FACTORY_RESOURCES.exists():
-        for core_path in sorted(p for g in ("*.resource.js", "*.resource.ts") for p in CORE_FACTORY_RESOURCES.glob(g)):
+        for core_path in sorted(CORE_FACTORY_RESOURCES.glob("*.resource.ts")):
             targets.append(core_path)
 
     i18n_index = _load_i18n_index()

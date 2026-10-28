@@ -7,6 +7,14 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function anyRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
 
 const WS_TIMEOUT_MS = 30_000;
 
@@ -140,20 +148,22 @@ function _optionalProbeSnapshot(value: unknown, label: string) {
     if (value === null) {
         return null;
     }
-    if (!value || typeof value !== 'object') {
+    const probe = anyRecord(value);
+    if (probe === null) {
         throw new Error(`llm_model_scores: ${label} must be an object or null`);
     }
-    if (typeof (value as Record<string, any>).ok !== 'boolean') {
+    const ok = probe.ok;
+    if (typeof ok !== 'boolean') {
         throw new Error(`llm_model_scores: ${label}.ok must be a boolean`);
     }
     return {
-        provider: _requireString((value as Record<string, any>).provider, `${label}.provider`),
-        probed_at: _requireString((value as Record<string, any>).probed_at, `${label}.probed_at`),
-        ok: (value as Record<string, any>).ok,
-        error_class: _optionalErrorClass((value as Record<string, any>).error_class, `${label}.error_class`),
-        error_text: _optionalString((value as Record<string, any>).error_text, `${label}.error_text`),
-        http_status: _optionalNumber((value as Record<string, any>).http_status, `${label}.http_status`),
-        smoke_model: _optionalString((value as Record<string, any>).smoke_model, `${label}.smoke_model`),
+        provider: _requireString(probe.provider, `${label}.provider`),
+        probed_at: _requireString(probe.probed_at, `${label}.probed_at`),
+        ok,
+        error_class: _optionalErrorClass(probe.error_class, `${label}.error_class`),
+        error_text: _optionalString(probe.error_text, `${label}.error_text`),
+        http_status: _optionalNumber(probe.http_status, `${label}.http_status`),
+        smoke_model: _optionalString(probe.smoke_model, `${label}.smoke_model`),
     };
 }
 
@@ -175,7 +185,12 @@ export function normalizeLlmModelScoreList(raw: Record<string, any>) {
 
 function _normalizedListReducer(state: AsyncOpSlice, event: PlatformEvent, events: Readonly<Record<string, string>>): AsyncOpSlice {
     if (event.type === events.SUCCEEDED) {
-        return { ...state, lastResult: normalizeLlmModelScoreList((event.payload as Record<string, any>) && (event.payload as Record<string, any>).result) };
+        const payload = anyRecord(event.payload);
+        const result = payload === null ? null : anyRecord(payload.result);
+        if (result === null) {
+            throw new Error('llm_model_scores: response must be an object');
+        }
+        return { ...state, lastResult: normalizeLlmModelScoreList(result) };
     }
     return state;
 }
@@ -242,3 +257,13 @@ export const llmModelScoresProbeProvidersOp = createAsyncOp({
         ctx.dispatch(llmModelScoresLoadOp.events.REQUESTED, null, { source: 'local' });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/llm_model_scores_load': typeof llmModelScoresLoadOp;
+        'frontend/llm_model_score_upsert': typeof llmModelScoreUpsertOp;
+        'frontend/llm_model_score_delete': typeof llmModelScoreDeleteOp;
+        'frontend/llm_model_scores_refresh_cache': typeof llmModelScoresRefreshCacheOp;
+        'frontend/llm_model_scores_probe_providers': typeof llmModelScoresProbeProvidersOp;
+    }
+}

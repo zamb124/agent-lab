@@ -74,7 +74,7 @@ class DocumentLink(PlatformModel):
         )
 
     @classmethod
-    async def save_state(
+    async def update_enabled_token_hash_and_permission(
         cls,
         link: Self,
         *,
@@ -82,6 +82,7 @@ class DocumentLink(PlatformModel):
         token_hash: str | None,
         permission: str,
     ) -> Self:
+        """Пишет enabled, token_hash и permission и обновляет updated_at. token_hash None снимает токен."""
         link.enabled = enabled
         link.token_hash = token_hash
         link.permission = permission

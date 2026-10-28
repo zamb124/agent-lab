@@ -8,6 +8,7 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
+import { payloadFields, stringField } from '../payload.js';
 import type { CompanyRecord } from '../reducers/companies.js';
 import { buildCompanySubdomainUrl } from '../../utils/company-url.js';
 import { platformStorageKey } from '../../utils/storage-keys.js';
@@ -19,8 +20,8 @@ export function createAuthCompanyNavigationEffect(): (event: PlatformEvent, ctx:
     return async function authCompanyNavigationEffect(event: PlatformEvent, ctx: EffectCtx<{ companies?: { list?: CompanyRecord[] } }>): Promise<void> {
         if (event.type !== CoreEvents.AUTH_COMPANY_SWITCHED) return;
 
-        const companyId = ((event.payload ?? {}) as { company_id?: unknown }).company_id;
-        if (typeof companyId !== 'string' || companyId.length === 0) return;
+        const companyId = stringField(payloadFields(event).company_id);
+        if (companyId === null) return;
 
         const state = ctx.getState();
         const companies = state.companies && Array.isArray(state.companies.list) ? state.companies.list : [];

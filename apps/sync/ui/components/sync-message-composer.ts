@@ -15,10 +15,12 @@
  * Загрузка файла — `useOp('platform/file_create')` с FileCreateSpec.
  */
 
-import type { SyncMessagesStoreController, SyncChannelsSlice, SyncMessagesStoreSlice } from '../events/sync.types.js';
+import type { SyncChannelsSlice, SyncMessagesStoreSlice } from '../events/sync.types.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -36,6 +38,36 @@ const VOICE_DRAFT_WAVE_HEIGHTS_PX = Object.freeze([
 ]);
 
 const formatVoiceDurationMs = formatDurationMs;
+
+function isSyncMessagesStore(value: unknown): value is SyncMessagesStoreSlice {
+    return isPlainRecord(value) && isPlainRecord(value.byChannelId);
+}
+
+function isSyncChannelsState(value: unknown): value is SyncChannelsSlice {
+    return isPlainRecord(value) && isPlainRecord(value.membersByChannel);
+}
+
+function eventRecord(event: PlatformEvent): Record<string, unknown> | null {
+    return isPlainRecord(event.payload) ? event.payload : null;
+}
+
+function caughtMessage(err: unknown): string | null {
+    if (!isPlainRecord(err) || typeof err.message !== 'string' || err.message === '') {
+        return null;
+    }
+    return err.message;
+}
+
+function composerTextarea(root: ParentNode): HTMLTextAreaElement | null {
+    const node = root.querySelector('textarea');
+    if (node === null) {
+        return null;
+    }
+    if (!(node instanceof HTMLTextAreaElement)) {
+        throw new Error('sync-message-composer: textarea required');
+    }
+    return node;
+}
 
 export class SyncMessageComposer extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -309,14 +341,14 @@ export class SyncMessageComposer extends PlatformElement {
     private _upload: OpController;
     private _typing: OpController;
     private _members: ResourceController;
-    private _store: SyncMessagesStoreController;
+    private _store: ControllerFor<'sync/messages_store'>;
     private _messagesStoreSel: SelectController<SyncMessagesStoreSlice | undefined>;
     private _channelsSel: SelectController<SyncChannelsSlice | undefined>;
-    private _authSel: SelectController<Record<string, any> | null>;
+    private _authSel: SelectController<AuthUser | null>;
     private _mediaRecorder: MediaRecorder | null;
     private _recordedChunks: Blob[];
     private _recordStartedAt: number | null;
-    private _typingTimer: number | null;
+    private _typingTimer: ReturnType<typeof setTimeout> | null;
 
     constructor() {
         super();
@@ -337,21 +369,24 @@ export class SyncMessageComposer extends PlatformElement {
         this._upload = this.useOp('platform/file_create');
         this._typing = this.useOp('sync/channel_typing');
         this._members = this.useResource('sync/company_members', { autoload: true });
-        this._store = this.useSlice('sync/messages_store') as SyncMessagesStoreController;
-        this._messagesStoreSel = this.select((s) => s.syncMessagesStore as SyncMessagesStoreSlice | undefined);
-        this._channelsSel = this.select((s) => s.syncChannels as SyncChannelsSlice | undefined);
-        this._authSel = this.select((s) => {
-            const auth = s.auth as { user?: Record<string, any> | null } | undefined;
-            return auth ? auth.user ?? null : null;
+        this._store = this.useSlice('sync/messages_store');
+        this._messagesStoreSel = this.select((s) => {
+            const store = s.syncMessagesStore;
+            return isSyncMessagesStore(store) ? store : undefined;
         });
+        this._channelsSel = this.select((s) => {
+            const channels = s.syncChannels;
+            return isSyncChannelsState(channels) ? channels : undefined;
+        });
+        this._authSel = this.select((s) => s.auth.user);
         this.useEvent('sync/messages_store/reply_mode_set', (event) => this._onReplyMode(event));
         this.useEvent('sync/messages_store/edit_mode_set', (event) => this._onEditMode(event));
         this.useEvent('sync/messages_store/optimistic_resend_requested', (event) => this._onResendRequested(event));
     }
 
     async _onResendRequested(event: PlatformEvent) {
-        const p = event && event.payload as Record<string, unknown> | undefined;
-        if (!p || typeof p.channelId !== 'string' || typeof p.localId !== 'string') return;
+        const p = eventRecord(event);
+        if (p === null || typeof p.channelId !== 'string' || typeof p.localId !== 'string') return;
         if (p.channelId !== this.channelId) return;
         const slice = this._messagesStoreSel.value;
         const channelData = slice && slice.byChannelId && slice.byChannelId[p.channelId];
@@ -364,10 +399,10 @@ export class SyncMessageComposer extends PlatformElement {
         try {
             await this._sendOp.run({ channel_id: p.channelId, body });
         } catch (err) {
-            const e = err as { message?: unknown };
-            const errorMessage = e && typeof e.message === 'string' && e.message !== ''
-                ? e.message
-                : this.t('composer.send_failed_default');
+            const message = caughtMessage(err);
+            const errorMessage = message === null
+                ? this.t('composer.send_failed_default')
+                : message;
             this._store.failOptimistic({
                 channelId: p.channelId,
                 localId: p.localId,
@@ -377,8 +412,8 @@ export class SyncMessageComposer extends PlatformElement {
     }
 
     _onReplyMode(event: PlatformEvent) {
-        const p = event && event.payload as Record<string, unknown> | undefined;
-        const messageId = p && p.messageId;
+        const p = eventRecord(event);
+        const messageId = p === null ? undefined : p.messageId;
         this.requestUpdate();
         if (typeof messageId === 'string' && messageId !== '') {
             this._focusTextarea({ selectAll: false });
@@ -386,8 +421,8 @@ export class SyncMessageComposer extends PlatformElement {
     }
 
     _onEditMode(event: PlatformEvent) {
-        const p = event && event.payload as Record<string, unknown> | undefined;
-        const messageId = p && p.messageId;
+        const p = eventRecord(event);
+        const messageId = p === null ? undefined : p.messageId;
         if (typeof messageId !== 'string' || messageId === '') {
             this.requestUpdate();
             return;
@@ -397,8 +432,10 @@ export class SyncMessageComposer extends PlatformElement {
         if (!channelData || !Array.isArray(channelData.items)) return;
         const message = channelData.items.find((m: Record<string, any>) => m.message_id === messageId);
         if (!message || !Array.isArray(message.contents)) return;
-        const textBlock = (message.contents as Record<string, any>[]).find((c) => c.type === 'text/plain');
-        const data = textBlock && textBlock.data;
+        const contents = message.contents;
+        if (!Array.isArray(contents)) return;
+        const textBlock = contents.find((block) => isPlainRecord(block) && block.type === 'text/plain');
+        const data = textBlock !== undefined && isPlainRecord(textBlock.data) ? textBlock.data : null;
         const draft = data && typeof data.body === 'string'
             ? data.body
             : (data && typeof data.text === 'string' ? data.text : '');
@@ -407,9 +444,17 @@ export class SyncMessageComposer extends PlatformElement {
         this._focusTextarea({ selectAll: true });
     }
 
+    _clickPicker(id: string): void {
+        const node = this.renderRoot.querySelector(`#${id}`);
+        if (!(node instanceof HTMLElement)) {
+            throw new Error(`sync-message-composer: ${id} control required`);
+        }
+        node.click();
+    }
+
     _focusTextarea({ selectAll }: { selectAll: boolean }) {
         this.updateComplete.then(() => {
-            const ta = this.renderRoot && this.renderRoot.querySelector('textarea') as HTMLTextAreaElement | null;
+            const ta = composerTextarea(this.renderRoot);
             if (!ta) return;
             this._autoResize(ta);
             ta.focus();
@@ -433,7 +478,10 @@ export class SyncMessageComposer extends PlatformElement {
     }
 
     _onInput(e: Event) {
-        const target = e.target as HTMLTextAreaElement;
+        const target = e.target;
+        if (!(target instanceof HTMLTextAreaElement)) {
+            throw new Error('sync-message-composer: textarea required');
+        }
         const text = target.value;
         this._draft = text;
         this._autoResize(target);
@@ -504,7 +552,11 @@ export class SyncMessageComposer extends PlatformElement {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 const idx = Math.max(0, Math.min(this._mentionIndex, suggestions.length - 1));
-                this._insertMention(suggestions[idx] as Record<string, any>);
+                const member = suggestions[idx];
+                if (member === undefined) {
+                    throw new Error('sync-message-composer: mention missing');
+                }
+                this._insertMention(member);
                 return;
             }
             if (e.key === 'Escape') { this._mentionQuery = null; return; }
@@ -525,8 +577,11 @@ export class SyncMessageComposer extends PlatformElement {
         this._emojiOpen = false;
     }
 
-    _insertMention(member: Record<string, any>) {
+    _insertMention(member: { user_id?: unknown }) {
         if (!this._mentionQuery) return;
+        if (typeof member.user_id !== 'string' || member.user_id.length === 0) {
+            throw new Error('sync-message-composer: mention user_id required');
+        }
         const before = this._draft.slice(0, this._mentionQuery.atPos);
         const after = this._draft.slice(this._mentionQuery.atPos + 1 + this._mentionQuery.query.length);
         const insert = `@${member.user_id} `;
@@ -535,7 +590,10 @@ export class SyncMessageComposer extends PlatformElement {
     }
 
     async _onPickFiles(e: Event) {
-        const target = e.target as HTMLInputElement;
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('sync-message-composer: file input required');
+        }
         const fileList = target.files;
         const files = fileList ? Array.from(fileList) : [];
         for (const file of files) {
@@ -570,8 +628,11 @@ export class SyncMessageComposer extends PlatformElement {
         }
         const spec = buildSyncMessageFileCreateSpecJson({ channelId: this.channelId });
         await this._upload.run({ file, spec });
-        const result = this._upload.lastResult as Record<string, unknown> | null;
-        if (!result || typeof result.file_id !== 'string' || result.file_id === '') return;
+        const uploaded = this._upload.lastResult;
+        if (!isPlainRecord(uploaded) || typeof uploaded.file_id !== 'string' || uploaded.file_id === '') {
+            throw new Error('sync-message-composer: upload file_id required');
+        }
+        const result = uploaded;
         const meta = typeof opts === 'object' && opts !== null ? opts : null;
         const voiceMessage = meta !== null && meta.voiceMessage === true;
         let recordDurationMs = null;
@@ -617,7 +678,7 @@ export class SyncMessageComposer extends PlatformElement {
         try {
             stream = await getUserMediaCompat({ audio: true });
         } catch (err) {
-            const code = err && typeof (err as { name?: unknown }).name === 'string' ? (err as { name: string }).name : '';
+            const code = isPlainRecord(err) && typeof err.name === 'string' ? err.name : '';
             const i18nKey = code === 'NotAllowedError' || code === 'SecurityError'
                 ? 'composer.voice_permission_denied'
                 : (code === 'NotFoundError' ? 'composer.voice_no_microphone' : 'composer.voice_failed');
@@ -667,7 +728,7 @@ export class SyncMessageComposer extends PlatformElement {
         this._store.setEditMode({ messageId: null });
         this._draft = '';
         this.updateComplete.then(() => {
-            const ta = this.renderRoot && this.renderRoot.querySelector('textarea') as HTMLTextAreaElement | null;
+            const ta = composerTextarea(this.renderRoot);
             this._autoResize(ta);
         });
     }
@@ -743,10 +804,10 @@ export class SyncMessageComposer extends PlatformElement {
         try {
             await this._sendOp.run({ channel_id: this.channelId, body });
         } catch (err) {
-            const e = err as { message?: unknown };
-            const errorMessage = e && typeof e.message === 'string' && e.message !== ''
-                ? e.message
-                : this.t('composer.send_failed_default');
+            const message = caughtMessage(err);
+            const errorMessage = message === null
+                ? this.t('composer.send_failed_default')
+                : message;
             this._store.failOptimistic({
                 channelId: this.channelId,
                 localId,
@@ -758,7 +819,7 @@ export class SyncMessageComposer extends PlatformElement {
         this._attachments = [];
         if (reply) this._store.setReplyMode({ messageId: null });
         this.updateComplete.then(() => {
-            const ta = this.renderRoot && this.renderRoot.querySelector('textarea') as HTMLTextAreaElement | null;
+            const ta = composerTextarea(this.renderRoot);
             this._autoResize(ta);
         });
     }
@@ -818,7 +879,7 @@ export class SyncMessageComposer extends PlatformElement {
                         }
                         return html`
                             <span class="att" @click=${() => this._removeAttachment(i)}>
-                                ${att.original_name || ''}
+                                ${typeof att.original_name === 'string' ? att.original_name : ''}
                                 <platform-icon name="close" size="12"></platform-icon>
                             </span>
                         `;
@@ -839,10 +900,10 @@ export class SyncMessageComposer extends PlatformElement {
                 ` : ''}
                 <input type="file" accept="image/*,video/*" multiple style="display: none;" id="photopick" @change=${this._onPickFiles} />
                 <input type="file" multiple style="display: none;" id="filepick" @change=${this._onPickFiles} />
-                <button class="icon" title=${this.t('composer.attach_photo_video')} @click=${() => (this.renderRoot as DocumentFragment).getElementById('photopick')?.click()}>
+                <button class="icon" title=${this.t('composer.attach_photo_video')} @click=${() => this._clickPicker('photopick')}>
                     <platform-icon name="image" size="22"></platform-icon>
                 </button>
-                <button class="icon" title=${this.t('composer.attach_file')} @click=${() => (this.renderRoot as DocumentFragment).getElementById('filepick')?.click()}>
+                <button class="icon" title=${this.t('composer.attach_file')} @click=${() => this._clickPicker('filepick')}>
                     <platform-icon name="paperclip" size="22"></platform-icon>
                 </button>
                 <textarea

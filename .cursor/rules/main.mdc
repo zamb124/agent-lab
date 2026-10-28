@@ -118,7 +118,7 @@ apps/<svc>_worker/  # broker.py + worker.py + tasks/; di.py — только е�
 - `components.py` в корне процесса нет: recipes — в `di.py`. Гейт: `scripts/check_no_service_components.py`.
 - `apps/<svc>/db/`, `db/repositories/`, `dependencies.py`, `container.py`, `*_queries.py` не существуют; `di.py` содержит только `<Svc>Di`, recipes и alias `Di`. `[без гейта]`
 - Общее — из `create_service_app` (`core/app/factory.py`): middleware, платформенные роутеры, health, tracing/logging lifecycle, каталог событий, `static_mounts`, `/{segment}/services`. Свой lifespan, `on_startup`/`on_shutdown`, `@app.exception_handler`, `app.add_middleware` в `main.py` запрещены → `architecture.mdc` § App-level поведение. `[без гейта]`
-- Статика и SPA-fallback — только `mount_service_spa` (`core/app/spa.py`) после собственных маршрутов.
+- Статика и SPA-fallback — только `mount_service_spa` (`core/app/spa.py`) после собственных маршрутов; core-статику (`/static/core/lib` — собранный `embed-dist`, затем `/static/core`) монтирует только `mount_core_frontend`.
 - Сервис без UI (`secrets`, `scheduler`, `realtime`, `browser`, `capability_gateway`, `code_runner_*`, `guest_runtime`, `provider_litserve`) — подмножество той же схемы без новых папок. Домен с моделями в `core/` (`worktracker`, `rag`) держит в `apps/<svc>/` только `api/`, `realtime/`, `ui/`.
 - `apps/` содержит только процессы из § Сервисы и стек и библиотечные домены без HTTP-процесса: `apps/agent` (роутеры монтируются во `flows`/`frontend`), `apps/worker_manifest.py` (топология очередей TaskIQ). `[без гейта]`
 - Типы событий регистрирует `apps/<svc>/events.py` (flows — `apps/flows/src/events.py`).

@@ -188,7 +188,11 @@ export class PlatformEmojiPicker extends PlatformElement {
     }
 
     _onInput(event: Event) {
-        this._query = (event.target as HTMLInputElement).value;
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('platform-emoji-picker: input target must be an input');
+        }
+        this._query = target.value;
     }
 
     _select(emoji: string): void {
@@ -203,7 +207,7 @@ export class PlatformEmojiPicker extends PlatformElement {
 
     /** Отфильтрованные категории; пустые из выдачи убираются. */
     _visibleCategories() {
-        const query = (this._query || '').trim().toLowerCase();
+        const query = this._query.trim().toLowerCase();
         if (query === '') {
             return EMOJI_CATEGORIES.map((category) => ({ id: category.id, items: category.items }));
         }

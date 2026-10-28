@@ -14,6 +14,8 @@
  * Выражение с посторонним символом после пути (``{a-b}``) — литеральный текст.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
+
 type TemplateState = Record<string, unknown>;
 
 export interface RenderedTemplate {
@@ -62,15 +64,14 @@ export function valueAtPath(state: unknown, path: unknown): unknown {
     if (typeof path !== 'string' || path === '') return undefined;
     let current: unknown = state;
     for (const segment of path.split('.')) {
-        if (current === null || typeof current !== 'object') return undefined;
         if (Array.isArray(current)) {
             if (!/^\d+$/.test(segment)) return undefined;
             current = current[Number(segment)];
             continue;
         }
-        const record = current as Record<string, unknown>;
-        if (!Object.prototype.hasOwnProperty.call(record, segment)) return undefined;
-        current = record[segment];
+        if (!isPlainRecord(current)) return undefined;
+        if (!Object.prototype.hasOwnProperty.call(current, segment)) return undefined;
+        current = current[segment];
     }
     return current;
 }
@@ -123,7 +124,12 @@ function renderTemplateInternal(
         const optional = template[j] === '?';
         if (optional) j += 1;
         const exprStart = j;
-        while (j < length && isIdentChar(template[j] || '')) j += 1;
+        while (j < length) {
+            const ident = template[j];
+            if (ident === undefined) throw new Error('flow-ui template: character missing');
+            if (!isIdentChar(ident)) break;
+            j += 1;
+        }
         const path = template.slice(exprStart, j);
         if (path === '') {
             out += ch;

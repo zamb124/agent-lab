@@ -780,7 +780,8 @@ class NodeConfig(CompanyScopedModel):
         return self
 
     @classmethod
-    def row_id(cls, node_id: str) -> str:
+    def node_row_id_for_active_company(cls, node_id: str) -> str:
+        """Ключ company_id:node_id из активной компании. Нет компании — ValueError. Пустой node_id или двоеточие в node_id либо в компании — ValueError."""
         ctx = get_context()
         if ctx is None or ctx.active_company is None or ctx.active_company.company_id == "":
             raise ValueError("node_id requires an active company")
@@ -800,7 +801,7 @@ class NodeConfig(CompanyScopedModel):
             self.company_id = company_id
         elif self.company_id != company_id:
             raise ValueError("company_id does not match the active company")
-        expected = type(self).row_id(self.node_id)
+        expected = type(self).node_row_id_for_active_company(self.node_id)
         if self.node_row_id == "":
             self.node_row_id = expected
         elif self.node_row_id != expected:
@@ -809,7 +810,7 @@ class NodeConfig(CompanyScopedModel):
 
     @override
     async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
-        expected = type(self).row_id(self.node_id)
+        expected = type(self).node_row_id_for_active_company(self.node_id)
         if self.company_id == "" or self.node_row_id != expected:
             raise ValueError("node_row_id does not match the active company")
         _ = is_create, update_fields

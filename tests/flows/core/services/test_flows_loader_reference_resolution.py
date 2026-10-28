@@ -56,7 +56,7 @@ async def test_build_example_react_resolves_calculator_without_bulk_tool_list(
         flow_access_service=di.flow_access_service,
     )
 
-    calculator = await ToolReference.get(ToolReference.row_id("calculator"))
+    calculator = await ToolReference.get(ToolReference.row_id_for_active_company("calculator"))
     assert calculator is not None
 
     server_id = f"loader_mcp_flood_{unique_id}"

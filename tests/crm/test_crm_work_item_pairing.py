@@ -311,7 +311,7 @@ async def test_create_task_via_api_pairs_work_item(
     assert resp.status_code == 200
     entity_id = _entity_id(resp)
 
-    item = await WorkItem.find_work_item_by_crm_entity("system", entity_id)
+    item = await WorkItem.any_crm_activity_by_entity_id("system", entity_id)
     assert item is not None
     assert item.kind is WorkItemKind.CRM_ACTIVITY
     assert item.namespace == namespace
@@ -346,7 +346,7 @@ async def test_note_entity_has_no_paired_work_item(
     )
     assert resp.status_code == 200
     entity_id = _entity_id(resp)
-    item = await WorkItem.find_work_item_by_crm_entity("system", entity_id)
+    item = await WorkItem.any_crm_activity_by_entity_id("system", entity_id)
     assert item is None
 
 
@@ -368,7 +368,7 @@ async def test_update_task_name_syncs_work_item_title(
         headers=auth_headers_system,
     )
     assert upd.status_code == 200
-    item = await WorkItem.find_work_item_by_crm_entity("system", entity_id)
+    item = await WorkItem.any_crm_activity_by_entity_id("system", entity_id)
     assert item is not None
     assert item.title == f"renamed {unique_id}"
 
@@ -395,7 +395,7 @@ async def test_update_task_board_status_moves_work_item(
     attrs = body.get("attributes")
     assert isinstance(attrs, dict)
     assert "status" not in attrs
-    item = await WorkItem.find_work_item_by_crm_entity("system", entity_id)
+    item = await WorkItem.any_crm_activity_by_entity_id("system", entity_id)
     assert item is not None
     assert item.state is WorkItemState.DONE
 
@@ -411,10 +411,10 @@ async def test_delete_task_removes_paired_work_item(
         headers=auth_headers_system,
     )
     entity_id = _entity_id(create)
-    assert await WorkItem.find_work_item_by_crm_entity("system", entity_id) is not None
+    assert await WorkItem.any_crm_activity_by_entity_id("system", entity_id) is not None
     delete = await crm_client.delete(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
     assert delete.status_code == 204
-    assert await WorkItem.find_work_item_by_crm_entity("system", entity_id) is None
+    assert await WorkItem.any_crm_activity_by_entity_id("system", entity_id) is None
 
 
 async def test_merge_tasks_keeps_survivor_work_item(
@@ -433,8 +433,8 @@ async def test_merge_tasks_keeps_survivor_work_item(
         json={"entity_type": "task", "name": f"dup {unique_id}", "namespace": namespace},
         headers=auth_headers_system,
     ))
-    assert await WorkItem.find_work_item_by_crm_entity("system", survivor) is not None
-    assert await WorkItem.find_work_item_by_crm_entity("system", source) is not None
+    assert await WorkItem.any_crm_activity_by_entity_id("system", survivor) is not None
+    assert await WorkItem.any_crm_activity_by_entity_id("system", source) is not None
 
     merge = await crm_client.post(
         "/crm/api/v1/entities/merge",
@@ -442,8 +442,8 @@ async def test_merge_tasks_keeps_survivor_work_item(
         headers=auth_headers_system,
     )
     assert merge.status_code == 200
-    assert await WorkItem.find_work_item_by_crm_entity("system", survivor) is not None
-    assert await WorkItem.find_work_item_by_crm_entity("system", source) is None
+    assert await WorkItem.any_crm_activity_by_entity_id("system", survivor) is not None
+    assert await WorkItem.any_crm_activity_by_entity_id("system", source) is None
 
 
 async def test_sync_partial_update_preserves_unset_work_fields(app, crm_di, unique_id):
@@ -487,6 +487,6 @@ async def test_sync_create_places_on_task_board(app, crm_di, unique_id):
         seed=CrmTaskWorkSeed(),
     )
     assert item.board_id is not None
-    board = await Board.get_board(company_id="system", board_id=item.board_id)
+    board = await Board.require_in_company(company_id="system", board_id=item.board_id)
     assert board.board_key == "task"
     assert board.namespace == namespace

@@ -283,7 +283,7 @@ export class FrontendTeamPage extends PlatformPage {
     }
 
     _renderRoles(member: Record<string, any>) {
-        const roles = member.roles || [];
+        const roles = Array.isArray(member.roles) ? member.roles : [];
         if (roles.length === 0) return '';
         return roles.map((r: string) => html`
             <span class="role-tag ${r === 'owner' ? 'owner' : ''}">${this.t(`team_roles.${r}`)}</span>
@@ -347,7 +347,7 @@ export class FrontendTeamPage extends PlatformPage {
         return html`
             <tr>
                 <td><platform-user-chip user-id=${m.user_id} size="md"></platform-user-chip></td>
-                <td>${m.email || ''}</td>
+                <td>${typeof m.email === 'string' ? m.email : ''}</td>
                 <td>
                     ${m.is_flow_employee === true
                         ? html`<span class="role-tag">${this.t('team_page.flow_employee_badge')}</span>`
@@ -379,7 +379,7 @@ export class FrontendTeamPage extends PlatformPage {
                         `}
                     </div>
                 </div>
-                <div class="member-card-email">${m.email || ''}</div>
+                <div class="member-card-email">${typeof m.email === 'string' ? m.email : ''}</div>
                 <div class="member-card-roles">
                     ${m.is_flow_employee === true
                         ? html`<span class="role-tag">${this.t('team_page.flow_employee_badge')}</span>`

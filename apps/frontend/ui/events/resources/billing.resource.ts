@@ -72,3 +72,13 @@ export const billingTopupOp = createAsyncOp({
         window.location.assign((result as Record<string, any>).payment_url);
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/billing_subscription': typeof billingSubscriptionLoadOp;
+        'frontend/billing_usage': typeof billingUsageLoadOp;
+        'frontend/billing_history': typeof billingHistoryLoadOp;
+        'frontend/billing_plan_change': typeof billingPlanChangeOp;
+        'frontend/billing_topup': typeof billingTopupOp;
+    }
+}

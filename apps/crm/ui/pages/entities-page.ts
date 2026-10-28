@@ -1470,7 +1470,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     }
 
     _currentNamespace(): string | null {
-        return this._crmNamespaceSel.value ?? null;
+        return this._crmNamespaceSel.value;
     }
 
     _applyEntityQueryFromLocation() {

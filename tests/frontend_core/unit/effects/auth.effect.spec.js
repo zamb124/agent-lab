@@ -95,22 +95,24 @@ describe('authEffect: USER_SILENT_PROBE_REQUESTED', () => {
         expect(unauthorized).toBeFalsy();
     });
 
-    it('500 → AUTH_ASSUMED_ANONYMOUS (сбой не ломает публичную страницу)', async () => {
+    it('500 → ошибка эффекта без смены auth-состояния', async () => {
         fetchMock.respondStatus('GET', '/svc/api/auth/me', 500);
         const dispatched = [];
-        await createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED), buildCtx(() => ({}), dispatched));
-        const assumed = dispatched.find((d) => d.type === CoreEvents.AUTH_ASSUMED_ANONYMOUS);
-        expect(assumed).toBeTruthy();
+        await expect(
+            createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED), buildCtx(() => ({}), dispatched)),
+        ).rejects.toMatchObject({ status: 500 });
+        expect(dispatched).toEqual([]);
     });
 });
 
 describe('authEffect: AUTH_LOGOUT_REQUESTED', () => {
-    it('всегда диспатчит AUTH_LOGGED_OUT (даже если HTTP падает)', async () => {
+    it('отказ сервера не выводит пользователя из сессии на клиенте', async () => {
         fetchMock.respondStatus('POST', '/svc/api/auth/logout', 500);
         const dispatched = [];
-        await createAuthEffect({ baseUrl: '/svc' })(ev(CoreEvents.AUTH_LOGOUT_REQUESTED), buildCtx(() => ({}), dispatched));
-        const out = dispatched.find((d) => d.type === CoreEvents.AUTH_LOGGED_OUT);
-        expect(out).toBeTruthy();
+        await expect(
+            createAuthEffect({ baseUrl: '/svc' })(ev(CoreEvents.AUTH_LOGOUT_REQUESTED), buildCtx(() => ({}), dispatched)),
+        ).rejects.toMatchObject({ status: 500 });
+        expect(dispatched.find((d) => d.type === CoreEvents.AUTH_LOGGED_OUT)).toBeUndefined();
     });
 });
 

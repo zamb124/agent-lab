@@ -70,7 +70,7 @@ export class WorktrackerSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._routeKeySel = this.select((s) => (s.router as Record<string, unknown>).routeKey);
+        this._routeKeySel = this.select((s) => s.router.routeKey);
         this._countsOp = this.useOp('worktracker/work_item_counts');
     }
 
@@ -86,7 +86,7 @@ export class WorktrackerSidebar extends PlatformElement {
     }
 
     private _navigate(routeKey: string, params?: Record<string, string>) {
-        this.navigate(routeKey, params || {});
+        this.navigate(routeKey, params === undefined ? {} : params);
         this.closeMobile();
     }
 

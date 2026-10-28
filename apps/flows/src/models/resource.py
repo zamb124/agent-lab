@@ -174,7 +174,8 @@ class ResourceDefinition(CompanyScopedModel):
         return v
 
     @classmethod
-    def row_id(cls, resource_id: str) -> str:
+    def resource_row_id_for_active_company(cls, resource_id: str) -> str:
+        """Ключ company_id:resource_id из активной компании. Нет компании — ValueError. Пустой resource_id или двоеточие в resource_id либо в компании — ValueError."""
         ctx = get_context()
         if ctx is None or ctx.active_company is None or ctx.active_company.company_id == "":
             raise ValueError("resource_id requires an active company")
@@ -194,7 +195,7 @@ class ResourceDefinition(CompanyScopedModel):
             self.company_id = company_id
         elif self.company_id != company_id:
             raise ValueError("company_id does not match the active company")
-        expected = type(self).row_id(self.resource_id)
+        expected = type(self).resource_row_id_for_active_company(self.resource_id)
         if self.resource_row_id == "":
             self.resource_row_id = expected
         elif self.resource_row_id != expected:
@@ -203,7 +204,7 @@ class ResourceDefinition(CompanyScopedModel):
 
     @override
     async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
-        expected = type(self).row_id(self.resource_id)
+        expected = type(self).resource_row_id_for_active_company(self.resource_id)
         if self.company_id == "" or self.resource_row_id != expected:
             raise ValueError("resource_row_id does not match the active company")
         now = datetime.now(timezone.utc)

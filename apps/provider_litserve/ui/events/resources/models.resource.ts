@@ -63,3 +63,10 @@ export const humanitecModelRetryOp = createAsyncOp({
         ctx.dispatch(humanitecModelsResource.events.LIST_REQUESTED, null, { causation_id: event.id });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'humanitec_models/models': typeof humanitecModelsResource;
+        'humanitec_models/model_retry': typeof humanitecModelRetryOp;
+    }
+}

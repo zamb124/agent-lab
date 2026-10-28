@@ -224,7 +224,7 @@ class OfficeAccessService:
         namespace: str,
         user_id: str,
     ) -> list[tuple[DocumentCatalog, int]]:
-        candidates = await DocumentCatalog.list_in_namespace(company_id, namespace)
+        candidates = await DocumentCatalog.list_by_title_key_in_namespace(company_id, namespace)
         if not candidates:
             return []
         checks = [
@@ -408,7 +408,7 @@ class OfficeAccessService:
                 raw_token = None
         if body.link_permission is not None:
             link_permission = body.link_permission
-        _ = await DocumentLink.save_state(
+        _ = await DocumentLink.update_enabled_token_hash_and_permission(
             current,
             enabled=link_enabled,
             token_hash=link_token_hash,
@@ -465,7 +465,7 @@ class OfficeAccessService:
                 link_token_hash = None
         if body.link_permission is not None:
             link_permission = body.link_permission
-        _ = await DocumentLink.save_state(
+        _ = await DocumentLink.update_enabled_token_hash_and_permission(
             current,
             enabled=link_enabled,
             token_hash=link_token_hash,
@@ -533,7 +533,7 @@ class OfficeAccessService:
         if link is None or not link.enabled:
             raise ValueError("Public link is not enabled")
         raw_token, token_hash = create_share_token()
-        _ = await DocumentLink.save_state(
+        _ = await DocumentLink.update_enabled_token_hash_and_permission(
             link,
             enabled=True,
             token_hash=token_hash,
@@ -552,7 +552,7 @@ class OfficeAccessService:
         if link is None or not link.enabled:
             raise ValueError("Public link is not enabled")
         raw_token, token_hash = create_share_token()
-        _ = await DocumentLink.save_state(
+        _ = await DocumentLink.update_enabled_token_hash_and_permission(
             link,
             enabled=True,
             token_hash=token_hash,
@@ -634,7 +634,7 @@ class OfficeAccessService:
         if catalog_target.kind != "catalog" or catalog_target.catalog is None:
             raise ValueError("Token does not belong to the catalog")
         catalog = catalog_target.catalog
-        binding = await FileRecord.for_company(file_id, catalog.company_id)
+        binding = await FileRecord.by_file_id(file_id, catalog.company_id)
         if binding is None or binding.deleted_at is not None:
             raise ValueError("File not found")
         if binding.catalog_id != catalog.catalog_id:

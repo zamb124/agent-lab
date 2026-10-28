@@ -11,6 +11,22 @@ import {
     normalizeCronString,
 } from '../utils/cron-field.js';
 
+function selectValue(event: Event): string {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLSelectElement)) {
+        throw new Error('platform-cron-field: select target must be a select');
+    }
+    return target.value;
+}
+
+function inputValue(event: Event): string {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-cron-field: input target must be an input');
+    }
+    return target.value;
+}
+
 export class PlatformCronField extends PlatformElement {
     static i18nNamespace = 'platform';
 
@@ -103,13 +119,13 @@ export class PlatformCronField extends PlatformElement {
     }
 
     _onSelectChange(e: Event): void {
-        const id = (e.target as HTMLSelectElement).value;
+        const id = selectValue(e);
         const wasId = this._selectId;
         this._selectId = id;
         if (id === CRON_FIELD_PRESET_CUSTOM) {
             if (wasId !== CRON_FIELD_PRESET_CUSTOM) {
                 const c = getCronForPresetId(wasId);
-                this._customText = c ?? '';
+                this._customText = c === null ? '' : c;
             }
             this._emitBoth(this._customText);
             return;
@@ -124,12 +140,12 @@ export class PlatformCronField extends PlatformElement {
     }
 
     _onCustomInput(e: Event): void {
-        this._customText = (e.target as HTMLInputElement).value;
+        this._customText = inputValue(e);
         this.emit('input', { value: this._customText });
     }
 
     _onCustomChange(e: Event): void {
-        this._customText = (e.target as HTMLInputElement).value;
+        this._customText = inputValue(e);
         this.emit('change', { value: this._customText });
     }
 

@@ -102,7 +102,7 @@ class TestExampleReactAgent:
     @pytest_asyncio.fixture
     async def flow_config(self, app, di) -> FlowConfig:
         """Загружает конфиг example_react из БД."""
-        config = await FlowConfig.get_latest("example_react")
+        config = await FlowConfig.current_for_flow("example_react")
         assert config is not None, "Agent example_react не найден в БД"
         return config
 
@@ -303,7 +303,7 @@ class TestExampleGraphAgent:
     @pytest_asyncio.fixture
     async def flow_config(self, app, di) -> FlowConfig:
         """Загружает конфиг example_graph из БД."""
-        config = await FlowConfig.get_latest("example_graph")
+        config = await FlowConfig.current_for_flow("example_graph")
         assert config is not None, "Agent example_graph не найден в БД"
         return config
 
@@ -584,8 +584,8 @@ class TestExampleFlowsIntegration:
     async def test_both_flows_loaded(self, app, di):
         """Оба flow загружены в БД."""
 
-        react_flow = await FlowConfig.get_latest("example_react")
-        graph_flow = await FlowConfig.get_latest("example_graph")
+        react_flow = await FlowConfig.current_for_flow("example_react")
+        graph_flow = await FlowConfig.current_for_flow("example_graph")
 
         assert react_flow is not None
         assert graph_flow is not None

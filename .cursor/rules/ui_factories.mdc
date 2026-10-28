@@ -10,7 +10,7 @@ alwaysApply: false
 
 # UI-фабрики и события
 
-Доменное состояние SPA живёт только в slice фабрики (`core/frontend/static/lib/events/factories/`); клик, HTTP, WS, таймер и роутер — события одного `EventBus` (`core/frontend/static/lib/events/bus.js`). Базы и helpers → `frontend.mdc`; `PlatformEvent` и шина `platform:events` → `events.mdc`; команды, REST-зеркало и WS request-reply на backend → `architecture.mdc`.
+Доменное состояние SPA живёт только в slice фабрики (`core/frontend/static/lib/events/factories/`); клик, HTTP, WS, таймер и роутер — события одного `EventBus` (`core/frontend/static/lib/events/bus.ts`). Базы и helpers → `frontend.mdc`; `PlatformEvent` и шина `platform:events` → `events.mdc`; команды, REST-зеркало и WS request-reply на backend → `architecture.mdc`.
 
 ## Инварианты
 
@@ -27,10 +27,10 @@ alwaysApply: false
 
 ### Контракт события
 
-- Событие UI — `{ id, type, payload, meta }`; поля `meta` (`ts`, `source`, `causation_id`, `correlation_id`, `trace_id`) и допустимые `source` — `core/frontend/static/lib/events/contract.js`. `dispatch` без `payload` — `throw`, пустое событие несёт `null`.
+- Событие UI — `{ id, type, payload, meta }`; поля `meta` (`ts`, `source`, `causation_id`, `correlation_id`, `trace_id`) и допустимые `source` — `core/frontend/static/lib/events/contract.ts`. `dispatch` без `payload` — `throw`, пустое событие несёт `null`.
 - `type` — `<scope>/<entity>/<verb>`, lowercase snake_case, не меньше трёх сегментов; проверяет `assertEventType` при `dispatch` и `useEvent`.
 - Команда на backend оканчивается на `_requested`; исходы выводятся механически — `<type без _requested>_succeeded` и `_failed`, связь с командой — `meta.causation_id`. Push с backend — `PlatformEvent` без `delivery` (→ `events.mdc` § Канон), bus диспатчит его как любое событие.
-- `CoreEvents` (`core/frontend/static/lib/events/contract.js`) — единственный реестр платформенных UI-типов; core-константы доменов (`CoreAuthEvents`, `FILES_EVENTS`, `TEAM_EVENTS` и др.) экспортирует `@platform/lib/events/index.js`. Типы сервиса порождает фабрика, push-типы сервиса — константы `apps/<svc>/ui/events/types.js`, их литерал в `pages/`, `modals/`, `components/`, `app/` запрещён; свой `events/contract.js` сервиса запрещён.
+- `CoreEvents` (`core/frontend/static/lib/events/contract.ts`) — единственный реестр платформенных UI-типов; core-константы доменов (`CoreAuthEvents`, `FILES_EVENTS`, `TEAM_EVENTS` и др.) экспортирует `@platform/lib/events/index.js`. Типы сервиса порождает фабрика, push-типы сервиса — константы `apps/<svc>/ui/events/types.js`, их литерал в `pages/`, `modals/`, `components/`, `app/` запрещён; свой `events/contract.ts` сервиса запрещён.
 
 ### Шесть фабрик
 
@@ -45,7 +45,8 @@ alwaysApply: false
 
 - Седьмой фабрики нет: нестандартный случай — комбинация (`createForm.submitEvent` → `op.events.REQUESTED` или `resource.events.CREATE_REQUESTED`).
 - Lookup-реестр (test-run хендлер ноды по `nodeType`/`resourceType`) — не фабрика: без slice и транспорта, 0 или больше одного совпадения — `throw`. `[без гейта]`
-- Контракт опций — JSDoc файла фабрики `core/frontend/static/lib/events/factories/<kind>.js`; отсутствие обязательной опции — `throw` на старте, дефолт снаружи не подставляется.
+- Контракт опций — типы и JSDoc файла фабрики `core/frontend/static/lib/events/factories/<kind>.ts`; отсутствие обязательной опции — `throw` на старте, дефолт снаружи не подставляется.
+- Тип состояния `S` фабрики задаёт аннотация параметра `state` в `extraReducer` (тип slice — рядом с фабрикой), тип элемента коллекции — возврат `mapItem`, методы контроллера — ключи `actions`; ручной интерфейс контроллера запрещён.
 - `createSlice` запрещает `transport`, `request`, `restMirror`, `wsTimeoutMs`, `effect`; `extraInitial` (минимум один ключ) и pure `extraReducer` обязательны.
 
 ### Имена
@@ -83,9 +84,11 @@ alwaysApply: false
 
 ### Контроллеры
 
-- Компонент получает фабрику только helper-ом по имени (`this.useOp('<svc>/<entity>')`); импорт модуля фабрики, `new <X>Controller` и контроллеров запрещены → `frontend.mdc` § Инварианты.
+- Компонент получает фабрику только helper-ом по имени (`this.useOp('<svc>/<entity>')`); runtime-импорт модуля фабрики, `new <X>Controller` и контроллеров запрещены → `frontend.mdc` § Инварианты.
+- `use*` принимает только имя своего вида из `PlatformFactoryRegistry` (`core/frontend/static/lib/events/factory-registry.ts`) и возвращает контроллер с `S` и `actions` этой фабрики; тип поля — `ControllerFor<'<svc>/<entity>'>` (`core/frontend/static/lib/base/use-resource.ts`); каст результата `use*` запрещён.
 - Занятость команды — только `op.busy`, `resource.createInFlight`, `resource.isBusy(id)`, `form.submitting`; ручной флаг `this._busy` запрещён. `[без гейта]`
-- `OpController.run(payload)` возвращает Promise по `meta.causation_id` своего `REQUESTED`: SUCCEEDED → `result`, FAILED → `null`, ошибка — в `op.error`. `await this.dispatch(...)` вместо `run()` запрещён.
+- `OpController.run(payload)` возвращает Promise по `meta.causation_id` своего `REQUESTED`: SUCCEEDED → `result`, FAILED → `null`, текст — в `op.error`, HTTP-статус — в `op.failureStatus` (иначе `null`). Вызов, которому важен отказ, бросает `op.error`. `await this.dispatch(...)` вместо `run()` запрещён.
+- Состояние шины — `PlatformBusState` (`core/frontend/static/lib/events/bus-state.ts`). Core-слайс есть с создания bus; `s.<slice> || {}` и `select.value || initialSlice` запрещены. `SelectController.value` до `hostConnected` бросает. Слайс сервиса добавляется в интерфейс рядом с фабрикой; до этого ключ читается как `unknown`.
 - Подписка на `SUCCEEDED`/`FAILED` фильтрует `event.meta.causation_id` своего запуска (`op.lastRequestId` или id своего `REQUESTED`); разовое ожидание через `bus.subscribeType` снимает обе подписки при первом совпадении; несколько `_requested` одного действия пользователя без ожидания исхода запрещены. `[без гейта]`
 - `run()` из `updated()`/`render()` без проверки `busy`, `error`, `lastResult` запрещён: `REQUESTED` перерисовывает host и даёт шторм запросов; старт — `connectedCallback` или явное действие. `[без гейта]`
 
@@ -103,7 +106,8 @@ alwaysApply: false
 
 ### Реестр и PlatformApp
 
-- Регистрация — один раз при старте через `static factories = [...]` в `apps/<svc>/ui/app/<svc>-app.js` (`registerFactory`, `core/frontend/static/lib/events/factory-registry.js`); коллизия `name` или `sliceKey` — `throw`, `getFactory(name, kind)` неизвестного имени — `throw`.
+- Регистрация — один раз при старте через `static factories = [...]` в `apps/<svc>/ui/app/<svc>-app.ts` (`registerFactory`, `core/frontend/static/lib/events/factory-registry.ts`); коллизия `name` или `sliceKey` — `throw`, `getFactory(name, kind)` неизвестного имени — `throw`.
+- Модуль фабрик расширяет `PlatformFactoryRegistry` блоком `declare module '@platform/lib/events/factory-registry.js'` с записью `'<svc>/<entity>': typeof <factory>`; имя вне реестра в `use*` — ошибка `tsc`.
 - Фабрика, на которую ссылается `use*` в UI сервиса, зарегистрирована в `static factories` этого сервиса; иначе `getFactory: not registered`.
 - `getServiceSlices()` для slice фабрики запрещён; `getServiceEffects()` — только core-effects (`createRouterEffect` и др.) и bridge-effect. `[без гейта]`
 - Bridge-effect (`apps/<svc>/ui/events/<svc>-*.effect.js`) — только тонкая связка доменных событий с `STORAGE_*`, `ROUTER_*`, `WS_*`, `AUTH_*`; HTTP/WS-запрос, мутация slice и бизнес-логика в нём запрещены. `[без гейта]`
@@ -121,27 +125,28 @@ alwaysApply: false
 
 - Push (`PlatformEvent` без `delivery`) и исход мутации (`<op>/succeeded`, `resource.events.CREATED|UPDATED|REMOVED`) фабрика принимает только в `extraReducer`, `extraEffect` или `onSuccess` и точечно мержит в slice. Публикация на backend → `events.mdc`.
 - В `pages/`, `modals/`, `components/` запрещено `useEvent(<push | исход мутации | WS_CONNECTED>)` → `.load()`, `.reload()`, `.run(<читающая операция>)`, `dispatch(*_LOAD_REQUESTED)`. Только цепочка после чтения (`*_list/succeeded` → `run(...)`) и смена области данных (`UI_NAMESPACE_CHANGED`, `*_RELOAD_REQUESTED`, `ROUTER_*`, `AUTH_USER_LOADED`, `AUTH_COMPANY_SWITCHED`).
-- Инструменты мержа (`core/frontend/static/lib/events/factories/merge.js`, экспорт `@platform/lib/events/index.js`): `upsertItem`, `removeItem` для slice коллекции; payload `SUCCEEDED` у `createAsyncOp` — `{ result, request }`; `slice.lastRequest` и `slice.lastListQuery` — последний запрос или `null`.
+- Инструменты мержа (`core/frontend/static/lib/events/factories/merge.ts`, экспорт `@platform/lib/events/index.js`): `upsertItem`, `removeItem` для slice коллекции; payload `SUCCEEDED` у `createAsyncOp` — `{ result, request }`; `slice.lastRequest` и `slice.lastListQuery` — последний запрос или `null`.
 - `rerunLastRequest(ctx, op, { when })` и `reloadLastList(ctx, resource, { when })` — повтор последнего запроса из фабрики для данных, которые не мержатся из исхода (граф, карточка со связями, вложения с асинхронной обработкой, досинхронизация на `CoreEvents.WS_CONNECTED`).
 - Загрузка по выбору пользователя (активная доска, вкладка) — в `updated(changed)` по смене свойства state, не в обработчике события; `useEvent` в компоненте — только UI-реакция без состояния (модалка, toast, подсветка). `[без гейта]`
 
 ### Размещение
 
 - Фабрики сервиса — `apps/<svc>/ui/events/resources/*.resource.js`; фабрики сервисов без своего UI и кросс-сервисные фабрики владельцев — `core/frontend/static/lib/events/resources/` (владелец — префикс `name`); upload — `platform/file_create` → `frontend.mdc` § Утилиты.
-- Core-effects и core-reducers — только `core/frontend/static/lib/events/effects/` и `core/frontend/static/lib/events/reducers/`; реестр core-типов `CoreEvents` — один, `core/frontend/static/lib/events/contract.js` → `events.mdc`.
+- Core-effects и core-reducers — только `core/frontend/static/lib/events/effects/` и `core/frontend/static/lib/events/reducers/`; реестр core-типов `CoreEvents` — один, `core/frontend/static/lib/events/contract.ts` → `events.mdc`.
 
 ### Тестирование
 
 - Reducer — unit `(state, event) => state` без bus и моков; effect — фейковый `ctx = { dispatch, getState }` и настоящий `httpRequest` с подменой `fetch`; контроллер — Web Test Runner на настоящей фабрике, проверка по dispatch.
-- Между тестами — `clearFactoryRegistry()`, `_resetResourceRegistryForTests()` (`core/frontend/static/lib/events/factories/_internal.js`), `resetPlatformBusForTests()`; изолированный `<flows-flow-canvas>` регистрирует `FLOW_CANVAS_FACTORIES` (`tests/frontend_core/helpers/flows-dataflow-fixtures.js`).
+- Между тестами — `clearFactoryRegistry()`, `_resetResourceRegistryForTests()` (`core/frontend/static/lib/events/factories/_internal.ts`), `resetPlatformBusForTests()`; изолированный `<flows-flow-canvas>` регистрирует `FLOW_CANVAS_FACTORIES` (`tests/frontend_core/helpers/flows-dataflow-fixtures.js`).
 - Канон сериализованного create — `tests/frontend_core/unit/factories/resource-collection.spec.js`, `tests/frontend_core/unit/factories/resource-controller-create-idempotency.spec.js`. Стек тестов → `testing.mdc`.
 
 ## Гейты
 
+- `npx tsc -p tsconfig.json` (`make ui-typecheck`) — имя `use*` зарегистрировано в `PlatformFactoryRegistry` и совпадает по виду; `scripts/check_ui_kit_canon.py` (`make lint-ts`) — ratchet `ts_controller_cast` (каст результата `use*`).
 - `scripts/check_ui_factories.py` (`make check-ui-factories`) — уникальность и формат `name`, `baseUrl` под префиксом сервиса, toast-ключи с namespace в ru и en, `idField` у `get`/`update`/`remove`, запреты `createSlice`, фабрика из `use*` зарегистрирована в `static factories`.
 - `scripts/check_command_rest_mirror.py` (`make check-command-rest-mirror`) — `restMirror` операций `createAsyncOp`, `createResourceCollection`, `createCursorList` указывает на FastAPI route владельца; `transport: 'ws'` у `COMMAND_WS_SERVICES` вне `COMMAND_WS_HTTP_ALLOWLIST`.
-- `scripts/check_core_frontend_canon.py` (`make check-core-frontend-canon`) — фолбеки в `events/reducers/` и `events/factories/`, имена `CoreEvents`, `fetch` и `WebSocket` только в `events/http.js` и `events/effects/`.
-- `scripts/check_ui_canon.sh` (`make check-ui-canon`) — п.12 литерал в `this.dispatch(...)` по форме `<scope>/<entity>/<verb>`; п.13 импорт фабрик и контроллеров, `new <X>Controller`, каталог `events/effects/`; п.14 `await (this.dispatch(...))`; п.15 `||`/`??`-фолбеки в `*.resource.js`.
+- `scripts/check_core_frontend_canon.py` (`make check-core-frontend-canon`) — фолбеки в `events/reducers/` и `events/factories/`, имена `CoreEvents`, `fetch` и `WebSocket` только в `events/http.ts` и `events/effects/`.
+- `scripts/check_ui_canon.sh` (`make check-ui-canon`) — п.12 литерал в `this.dispatch(...)` по форме `<scope>/<entity>/<verb>`; п.13 импорт фабрик и контроллеров, `new <X>Controller`, каталог `events/effects/`; п.14 `await (this.dispatch(...))`; п.15 `||`/`??`-фолбеки в `*.resource.ts`.
 - `scripts/check_platform_events_canon.py` — `_check_push_reload`: reload по push и исходу мутации в pages, modals, components; `_check_bare_push_literals_outside_types`: литерал push-типа вне `events/types.js` и `events/resources/`.
-- Фабрики бросают на старте: `assertResourceName`, `requireI18nKey` (`core/frontend/static/lib/events/factories/_internal.js`), `normalizeTransport`, `normalizeRestMirror*` (`core/frontend/static/lib/events/factories/_transport.js`).
+- Фабрики бросают на старте: `assertResourceName`, `requireI18nKey` (`core/frontend/static/lib/events/factories/_internal.ts`), `normalizeTransport`, `normalizeRestMirror*` (`core/frontend/static/lib/events/factories/_transport.ts`).
 - `tests/frontend_core/unit/factories/*.spec.js` — контракты фабрик. Все гейты входят в `make check-events-canon` и `make lint-ts`.

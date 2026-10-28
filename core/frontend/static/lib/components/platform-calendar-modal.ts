@@ -19,13 +19,18 @@ import { buildCalendarEventFileCreateSpecJson } from '../utils/file-create-spec.
 import { registerModalKind } from '../utils/modal-registry.js';
 import type { SelectController } from '../events/select-controller.js';
 import type { PlatformEvent } from '../events/contract.js';
+import { isPlainRecord, payloadFields, stringField } from '../events/payload.js';
 import type { CalendarState } from '../events/reducers/calendar.js';
 import type { MailState } from '../events/reducers/mail.js';
-import type { TeamState, TeamMemberRecord } from '../events/reducers/team.js';
-import type { I18nState } from '../events/reducers/i18n.js';
+import type { TeamMemberRecord } from '../events/reducers/team.js';
 
 import { COLOR_PALETTE, resolvePaletteColor } from '@platform/lib/utils/color-palette.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+
+function calendarFailureMessage(event: PlatformEvent): string {
+    const message = stringField(payloadFields(event).message);
+    return message === null ? '' : message;
+}
 
 const EVENT_COLOR_KEY = 'event_color';
 const DEFAULT_EVENT_COLOR = 'default';
@@ -47,8 +52,8 @@ const SERVICE_APP_TAG_SELECTORS = [
  */
 function serviceBaseUrlForCalendar(): string {
     for (const sel of SERVICE_APP_TAG_SELECTORS) {
-        const el = document.querySelector(sel) as (Element & { getBaseUrl?: () => string }) | null;
-        if (el && el.isConnected && typeof el.getBaseUrl === 'function') {
+        const el = document.querySelector(sel);
+        if (el !== null && el.isConnected && 'getBaseUrl' in el && typeof el.getBaseUrl === 'function') {
             const base = el.getBaseUrl();
             if (typeof base === 'string' && base.length > 0) {
                 return base;
@@ -56,6 +61,57 @@ function serviceBaseUrlForCalendar(): string {
         }
     }
     throw new Error('platform-calendar-modal: root service app (getBaseUrl) not found');
+}
+
+function formControlValue(event: Event): string {
+    const target = event.target;
+    if (
+        !(target instanceof HTMLInputElement)
+        && !(target instanceof HTMLTextAreaElement)
+        && !(target instanceof HTMLSelectElement)
+    ) {
+        throw new Error('platform-calendar-modal: form control required');
+    }
+    return target.value;
+}
+
+function customEventValue(event: Event): unknown {
+    if (!(event instanceof CustomEvent)) {
+        throw new Error('platform-calendar-modal: custom event required');
+    }
+    if (!isPlainRecord(event.detail) || !('value' in event.detail)) {
+        throw new Error('platform-calendar-modal: detail.value required');
+    }
+    return event.detail.value;
+}
+
+function pointerTarget(event: PointerEvent): HTMLElement {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLElement)) {
+        throw new Error('platform-calendar-modal: pointer target required');
+    }
+    return target;
+}
+
+function pointerListener(handler: (event: PointerEvent) => void): EventListener {
+    return (event: Event) => {
+        if (!(event instanceof PointerEvent)) {
+            throw new Error('platform-calendar-modal: pointer event required');
+        }
+        handler(event);
+    };
+}
+
+function integrationSettings(settings: unknown): Record<string, unknown> {
+    return isPlainRecord(settings) ? settings : {};
+}
+
+function calendarIdLabel(settings: unknown, emptyLabel: string): string {
+    const calendarId = integrationSettings(settings).default_calendar_id;
+    if (typeof calendarId !== 'string' || calendarId.length === 0) {
+        return emptyLabel;
+    }
+    return calendarId;
 }
 
 function pad2(value: unknown): string {
@@ -126,8 +182,21 @@ function isSameDay(left: Date, right: Date): boolean {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function textOrEmpty(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function missingAsNull<T>(value: T | null | undefined): T | null {
+    return value === undefined ? null : value;
+}
+
+function blankToNull(value: string): string | null {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed;
+}
+
 function normalizeEmail(value: unknown): string {
-    return String(value || '').trim().toLowerCase();
+    return textOrEmpty(value).trim().toLowerCase();
 }
 
 interface AttendeeTag {
@@ -202,10 +271,10 @@ function parseEventAttachments(metadata: { attachments?: unknown } | null | unde
         throw new Error('metadata.attachments must be a JSON array');
     }
     return parsed.map((item: unknown) => {
-        const record = item as { file_id?: unknown; name?: unknown; url?: unknown; content_type?: unknown; file_size?: unknown };
-        if (!item || typeof item !== 'object') {
+        if (!isPlainRecord(item)) {
             throw new Error('Attachment item must be an object');
         }
+        const record = item;
         if (typeof record.file_id !== 'string' || record.file_id === '') {
             throw new Error('Attachment file_id is required');
         }
@@ -227,7 +296,8 @@ function parseEventAttachments(metadata: { attachments?: unknown } | null | unde
 
 function buildEventMetadata(baseMetadata: Record<string, unknown> | null | undefined, attachments: EventAttachment[]): Record<string, string> {
     const nextMetadata: Record<string, string> = {};
-    for (const [key, value] of Object.entries(baseMetadata || {})) {
+    const metadata = baseMetadata === undefined || baseMetadata === null ? {} : baseMetadata;
+    for (const [key, value] of Object.entries(metadata)) {
         if (typeof value !== 'string') {
             throw new Error(`Event metadata value for key '${key}' must be string`);
         }
@@ -265,6 +335,23 @@ function eventMetadataHasSyncMeeting(metadata: { sync_meeting?: unknown; sync_li
 const SYNC_LOGO_SRC = '/static/core/assets/service_logos/sync_logo.svg';
 const CALENDAR_VIEW_STORAGE_KEY = platformStorageKey('core', 'calendar_view');
 const VALID_VIEWS = ['day', 'week', 'month'];
+
+function isStoredCalendarEvent(event: CalendarState['events'][number]): event is CalendarEventRecord {
+    return typeof event.event_id === 'string' && event.event_id.length > 0
+        && typeof event.start_at === 'string'
+        && typeof event.end_at === 'string';
+}
+
+function requireCalendarEvents(events: CalendarState['events']): CalendarEventRecord[] {
+    const stored: CalendarEventRecord[] = [];
+    for (const event of events) {
+        if (!isStoredCalendarEvent(event)) {
+            throw new Error('calendar modal: event requires event_id, start_at and end_at');
+        }
+        stored.push(event);
+    }
+    return stored;
+}
 
 interface CalendarEventRecord {
     event_id: string;
@@ -2278,13 +2365,13 @@ export class PlatformCalendarModal extends PlatformModal {
         this._attendeeDraft = '';
         this._attendeeDropdownOpen = false;
         this._pendingAttachmentUploads = new Map();
-        this._eventsSelect = this.select((s) => ((s.calendar || {}) as CalendarState).events as CalendarEventRecord[] || []);
-        this._integrationsSelect = this.select((s) => ((s.calendar || {}) as CalendarState).integrations || []);
-        this._calendarLoadingSelect = this.select((s) => Boolean(((s.calendar || {}) as CalendarState).loading));
-        this._calendarSyncingSelect = this.select((s) => Boolean(((s.calendar || {}) as CalendarState).syncing));
-        this._teamMembersSelect = this.select((s) => ((s.team || {}) as TeamState).members || []);
-        this._localeSelect = this.select((s) => ((s.i18n || {}) as I18nState).locale || 'en');
-        this._mailSelect = this.select((s) => (s.mail || {}) as MailState);
+        this._eventsSelect = this.select((s) => requireCalendarEvents(s.calendar.events));
+        this._integrationsSelect = this.select((s) => s.calendar.integrations);
+        this._calendarLoadingSelect = this.select((s) => s.calendar.loading);
+        this._calendarSyncingSelect = this.select((s) => s.calendar.syncing);
+        this._teamMembersSelect = this.select((s) => s.team.members);
+        this._localeSelect = this.select((s) => s.i18n.locale);
+        this._mailSelect = this.select((s) => s.mail);
         const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         const now = new Date();
         const defaultEnd = addDays(now, 0);
@@ -2322,8 +2409,8 @@ export class PlatformCalendarModal extends PlatformModal {
         this._dragGhostLeft = 0;
         this._dragOrigin = null;
         this._dragPointerId = null;
-        this._onDragMoveBound = this._onDragMove.bind(this) as EventListener;
-        this._onDragUpBound = this._onDragUp.bind(this) as EventListener;
+        this._onDragMoveBound = pointerListener((event) => this._onDragMove(event));
+        this._onDragUpBound = pointerListener((event) => this._onDragUp(event));
         this._dragJustFinished = false;
     }
 
@@ -2388,7 +2475,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _kickInitialLoad() {
         const range = this._viewRange();
         this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
-        const bindings = this._mailSelect.value?.bindings;
+        const bindings = this._mailSelect.value.bindings;
         if (!Array.isArray(bindings) || bindings.length === 0) {
             this.dispatch(MAIL_EVENTS.BINDINGS_LOAD_REQUESTED, null);
         }
@@ -2409,7 +2496,7 @@ export class PlatformCalendarModal extends PlatformModal {
         if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
             return nothing;
         }
-        const bindings = this._mailSelect.value?.bindings;
+        const bindings = this._mailSelect.value.bindings;
         const binding = Array.isArray(bindings)
             ? bindings.find((item) => item.mailbox_binding_id === mailboxBindingId)
             : null;
@@ -2440,35 +2527,35 @@ export class PlatformCalendarModal extends PlatformModal {
     override connectedCallback(): void {
         super.connectedCallback();
         this.useEvent(CALENDAR_EVENTS.EVENTS_LOAD_FAILED, (e) => {
-            this.toast('err_load_events', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_load_events', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_CREATE_FAILED, (e) => {
             this._saving = false;
-            this.toast('err_save_event', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_save_event', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_UPDATE_FAILED, (e) => {
             this._saving = false;
-            this.toast('err_save_event', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_save_event', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_DELETE_FAILED, (e) => {
-            this.toast('err_delete_event', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_delete_event', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(CALENDAR_EVENTS.INTEGRATIONS_LOAD_FAILED, (e) => {
-            this.toast('err_load_integrations', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_load_integrations', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(CALENDAR_EVENTS.INTEGRATION_CONNECT_FAILED, (e) => {
             this._saving = false;
-            this.toast('err_connect_integration', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_connect_integration', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_FAILED, (e) => {
-            this.toast('err_disconnect_integration', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_disconnect_integration', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(CALENDAR_EVENTS.SYNC_FAILED, (e) => {
             this._syncing = false;
-            this.toast('err_sync', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_sync', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(TEAM_EVENTS.MEMBERS_LOAD_FAILED, (e) => {
-            this.toast('err_load_team', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
+            this.toast('err_load_team', { type: 'error', vars: { message: calendarFailureMessage(e) } });
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_CREATED, () => {
             this._saving = false;
@@ -2578,7 +2665,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _onDragStart(event: CalendarEventRecord, pointerEvent: PointerEvent): void {
         pointerEvent.preventDefault();
         pointerEvent.stopPropagation();
-        const target = pointerEvent.currentTarget as HTMLElement;
+        const target = pointerTarget(pointerEvent);
         target.setPointerCapture(pointerEvent.pointerId);
         this._dragPointerId = pointerEvent.pointerId;
         this._dragOrigin = { x: pointerEvent.clientX, y: pointerEvent.clientY, started: false };
@@ -2608,7 +2695,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _onDragUp(pointerEvent: PointerEvent): void {
-        const target = pointerEvent.currentTarget as HTMLElement;
+        const target = pointerTarget(pointerEvent);
         target.removeEventListener('pointermove', this._onDragMoveBound);
         target.removeEventListener('pointerup', this._onDragUpBound);
         target.removeEventListener('pointercancel', this._onDragUpBound);
@@ -2698,7 +2785,10 @@ export class PlatformCalendarModal extends PlatformModal {
             for (const cell of cells) {
                 const rect = cell.getBoundingClientRect();
                 if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-                    const iso = (cell as HTMLElement).dataset.iso;
+                    if (!(cell instanceof HTMLElement)) {
+                        throw new Error('platform-calendar-modal: month cell required');
+                    }
+                    const iso = cell.dataset.iso;
                     if (iso) {
                         return { date: iso };
                     }
@@ -2781,28 +2871,28 @@ export class PlatformCalendarModal extends PlatformModal {
             title: event.title,
             kind: event.kind,
             source: event.source,
-            source_id: event.source_id ?? null,
-            namespace: event.namespace ?? null,
-            description: event.description ?? null,
-            location: event.location ?? null,
+            source_id: missingAsNull(event.source_id),
+            namespace: missingAsNull(event.namespace),
+            description: missingAsNull(event.description),
+            location: missingAsNull(event.location),
             status: event.status ?? 'confirmed',
             timezone: event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
             all_day: Boolean(event.all_day),
             start_at: startAt.toISOString(),
             end_at: endAt.toISOString(),
-            attendees: event.attendees ?? [],
-            recurrence_rule: event.recurrence_rule ?? null,
-            recurrence_id: event.recurrence_id ?? null,
-            series_id: event.series_id ?? null,
-            deep_link: event.deep_link ?? null,
-            metadata: event.metadata ?? {},
+            attendees: event.attendees === undefined ? [] : event.attendees,
+            recurrence_rule: missingAsNull(event.recurrence_rule),
+            recurrence_id: missingAsNull(event.recurrence_id),
+            series_id: missingAsNull(event.series_id),
+            deep_link: missingAsNull(event.deep_link),
+            metadata: event.metadata === undefined ? {} : event.metadata,
         });
     }
 
     _eventsForDate(date: Date): CalendarEventRecord[] {
         const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
         const dayEnd = addDays(dayStart, 1);
-        const events = this._eventsSelect.value || [];
+        const events = this._eventsSelect.value;
         return events.filter((event) => {
             const start = new Date(event.start_at);
             const end = new Date(event.end_at);
@@ -3039,7 +3129,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _sourceKey(source: unknown): string {
-        return String(source || '').toLowerCase();
+        return textOrEmpty(source).toLowerCase();
     }
 
     _isCalDavProvider(provider: unknown): boolean {
@@ -3074,7 +3164,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _kindKey(kind: unknown): string {
-        return String(kind || '').toLowerCase();
+        return textOrEmpty(kind).toLowerCase();
     }
 
     _sourceLabel(source: unknown): string {
@@ -3157,15 +3247,15 @@ export class PlatformCalendarModal extends PlatformModal {
         this._showDescriptionField = Boolean(event.description);
         this._selectedEventSource = this._sourceKey(event.source);
         this._selectedEventKind = this._kindKey(event.kind);
-        this._selectedEventNamespace = event.namespace || null;
+        this._selectedEventNamespace = event.namespace === undefined || event.namespace.length === 0 ? null : event.namespace;
         this._eventMetadata = event.metadata && typeof event.metadata === 'object' ? { ...event.metadata } : {};
         this._eventAttachments = parseEventAttachments(this._eventMetadata);
         this._eventForm = {
             kind: event.kind || 'event',
             color: normalizeEventColor(this._eventMetadata[EVENT_COLOR_KEY]),
-            title: event.title || '',
-            description: event.description || '',
-            location: event.location || '',
+            title: textOrEmpty(event.title),
+            description: textOrEmpty(event.description),
+            location: textOrEmpty(event.location),
             timezone: event.timezone || 'UTC',
             all_day: Boolean(event.all_day),
             start_at: toDateTimeInputValue(new Date(event.start_at)),
@@ -3286,7 +3376,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _attendeeSuggestions() {
         const query = this._attendeeDraft.trim().toLowerCase();
         const selectedEmails = new Set(this._attendeeTags().map((item) => item.email));
-        const membersWithEmail = (this._teamMembersSelect.value || [])
+        const membersWithEmail = (this._teamMembersSelect.value)
             .filter((member) => normalizeEmail(member.email) !== '')
             .filter((member) => !selectedEmails.has(normalizeEmail(member.email)));
         if (!query) {
@@ -3294,8 +3384,8 @@ export class PlatformCalendarModal extends PlatformModal {
         }
         return membersWithEmail
             .filter((member) => {
-                const name = String(member.name || '').toLowerCase();
-                const email = String(member.email || '').toLowerCase();
+                const name = textOrEmpty(member.name).toLowerCase();
+                const email = textOrEmpty(member.email).toLowerCase();
                 return name.includes(query) || email.includes(query);
             })
             .slice(0, 8);
@@ -3374,8 +3464,11 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _onAttachmentInputChange(event: Event): void {
-        const input = event.target as HTMLInputElement;
-        const files = Array.from(input.files || []);
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('platform-calendar-modal: file input required');
+        }
+        const files = input.files === null ? [] : Array.from(input.files);
         if (files.length === 0) {
             return;
         }
@@ -3387,7 +3480,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 {
                     file,
                     name: file.name,
-                    spec: buildCalendarEventFileCreateSpecJson({ eventId: this._selectedEventId || '' }),
+                    spec: buildCalendarEventFileCreateSpecJson({ eventId: this._selectedEventId === null ? '' : this._selectedEventId }),
                 },
                 { correlation_id, source: 'local' },
             );
@@ -3402,8 +3495,8 @@ export class PlatformCalendarModal extends PlatformModal {
             return;
         }
         this._pendingAttachmentUploads.delete(correlation_id);
-        const file = ((event.payload || {}) as { file?: Record<string, unknown> }).file;
-        if (!file || typeof file.file_id !== 'string' || file.file_id === '') {
+        const file = payloadFields(event).file;
+        if (!isPlainRecord(file) || typeof file.file_id !== 'string' || file.file_id === '') {
             this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
             this.toast('err_upload_attachment', { type: 'error', vars: { message: 'invalid file payload' } });
             this.requestUpdate();
@@ -3430,7 +3523,7 @@ export class PlatformCalendarModal extends PlatformModal {
         }
         this._pendingAttachmentUploads.delete(correlation_id);
         this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
-        this.toast('err_upload_attachment', { type: 'error', vars: { message: ((event.payload || {}) as { message?: string }).message || '' } });
+        this.toast('err_upload_attachment', { type: 'error', vars: { message: calendarFailureMessage(event) } });
         this.requestUpdate();
     }
 
@@ -3466,19 +3559,19 @@ export class PlatformCalendarModal extends PlatformModal {
             this.toast('err_edit_remote', { type: 'error', vars: { label: this._sourceLabel(this._selectedEventSource) } });
             return;
         }
-        const activeMailboxBindingId = this._mailSelect.value?.activeMailboxBindingId;
+        const activeMailboxBindingId = this._mailSelect.value.activeMailboxBindingId;
         if (typeof activeMailboxBindingId !== 'string' || activeMailboxBindingId.length === 0) {
             this.toast('err_mailbox_required', { type: 'error' });
             return;
         }
         const payload = {
             title: this._eventForm.title.trim(),
-            kind: String(this._eventForm.kind || '').trim(),
+            kind: this._eventForm.kind.trim(),
             source: 'platform',
             source_id: null,
             namespace: null,
-            description: this._eventForm.description.trim() || null,
-            location: this._eventForm.location.trim() || null,
+            description: blankToNull(this._eventForm.description),
+            location: blankToNull(this._eventForm.location),
             status: 'confirmed',
             timezone: this._eventForm.timezone.trim(),
             all_day: Boolean(this._eventForm.all_day),
@@ -3548,8 +3641,8 @@ export class PlatformCalendarModal extends PlatformModal {
             expires_at: null,
             scope: null,
             token_type: null,
-            default_calendar_id: this._integrationForm.default_calendar_id.trim() || null,
-            caldav_base_url: this._integrationForm.caldav_base_url.trim() || null,
+            default_calendar_id: blankToNull(this._integrationForm.default_calendar_id),
+            caldav_base_url: blankToNull(this._integrationForm.caldav_base_url),
             sync_enabled: Boolean(this._integrationForm.sync_enabled),
             sync_inbound_enabled: Boolean(this._integrationForm.sync_inbound_enabled),
             sync_outbound_enabled: Boolean(this._integrationForm.sync_outbound_enabled),
@@ -3599,11 +3692,11 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _activeIntegration() {
-        const integrations = this._integrationsSelect.value || [];
-        if (this._activeIntegrationId) {
-            return integrations.find((item) => item.integration_id === this._activeIntegrationId) || null;
-        }
-        return integrations.find((item) => item.provider === this._activeProvider) || null;
+        const integrations = this._integrationsSelect.value;
+        const found = this._activeIntegrationId
+            ? integrations.find((item) => item.integration_id === this._activeIntegrationId)
+            : integrations.find((item) => item.provider === this._activeProvider);
+        return found === undefined ? null : found;
     }
 
     _mailboxLabelForIntegration(integration: CalendarState['integrations'][number] | null | undefined): string | null {
@@ -3611,7 +3704,7 @@ export class PlatformCalendarModal extends PlatformModal {
         if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
             return null;
         }
-        const bindings = this._mailSelect.value?.bindings;
+        const bindings = this._mailSelect.value.bindings;
         const binding = Array.isArray(bindings)
             ? bindings.find((item) => item.mailbox_binding_id === mailboxBindingId)
             : null;
@@ -3625,11 +3718,12 @@ export class PlatformCalendarModal extends PlatformModal {
         if (!this._isCalDavProvider(provider) || !activeIntegration) {
             return;
         }
-        const settings = (activeIntegration.settings || {}) as Record<string, unknown>;
+        const settings = isPlainRecord(activeIntegration.settings) ? activeIntegration.settings : {};
+        const mailboxLabel = this._mailboxLabelForIntegration(activeIntegration);
         this._integrationForm = {
             ...this._integrationForm,
             username: activeIntegration.mailbox_binding_id
-                ? (this._mailboxLabelForIntegration(activeIntegration) || '')
+                ? (mailboxLabel === null ? '' : mailboxLabel)
                 : this._integrationForm.username,
             default_calendar_id: typeof settings.default_calendar_id === 'string' ? settings.default_calendar_id : '',
             caldav_base_url: typeof settings.caldav_base_url === 'string' ? settings.caldav_base_url : '',
@@ -3845,7 +3939,7 @@ export class PlatformCalendarModal extends PlatformModal {
                         <input
                             class="event-compose-title-input"
                             .value=${this._eventForm.title}
-                            @input=${(e: Event) => this._onEventFormChange('title', (e.target as HTMLInputElement).value)}
+                            @input=${(e: Event) => this._onEventFormChange('title', formControlValue(e))}
                         />
                     </div>
                 </div>
@@ -3912,7 +4006,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                 class="event-compose-textarea"
                                 rows="3"
                                 .value=${this._eventForm.description}
-                                @input=${(e: Event) => this._onEventFormChange('description', (e.target as HTMLTextAreaElement).value)}
+                                @input=${(e: Event) => this._onEventFormChange('description', formControlValue(e))}
                             ></textarea>
                         </div>
                     </div>
@@ -3946,7 +4040,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                         }, 120);
                                     }}
                                     @input=${(event: Event) => {
-                                        this._attendeeDraft = (event.target as HTMLInputElement).value;
+                                        this._attendeeDraft = formControlValue(event);
                                         this._attendeeDropdownOpen = true;
                                     }}
                                     @keydown=${(event: KeyboardEvent) => this._onAttendeeInputKeyDown(event)}
@@ -3975,14 +4069,14 @@ export class PlatformCalendarModal extends PlatformModal {
                                 mode="datetime"
                                 value-format="iso"
                                 .value=${this._eventForm.start_at}
-                                @change=${(e: Event) => this._onEventFormChange('start_at', (e.target as HTMLInputElement).value)}
+                                @change=${(e: Event) => this._onEventFormChange('start_at', formControlValue(e))}
                             ></platform-date-picker>
                             <div class="event-compose-time-sep">-</div>
                             <platform-date-picker
                                 mode="datetime"
                                 value-format="iso"
                                 .value=${this._eventForm.end_at}
-                                @change=${(e: Event) => this._onEventFormChange('end_at', (e.target as HTMLInputElement).value)}
+                                @change=${(e: Event) => this._onEventFormChange('end_at', formControlValue(e))}
                             ></platform-date-picker>
                         </div>
                         <div class="event-compose-options">
@@ -3990,20 +4084,20 @@ export class PlatformCalendarModal extends PlatformModal {
                                 <platform-switch
                                     .checked=${Boolean(this._eventForm.all_day)}
                                     .label=${c('all_day')}
-                                    @change=${(e: Event) => this._onEventFormChange('all_day', (e as CustomEvent).detail?.value)}
+                                    @change=${(e: Event) => this._onEventFormChange('all_day', customEventValue(e))}
                                 ></platform-switch>
                             </div>
                             <div class="event-compose-switch">
                                 <platform-switch
                                     .checked=${this._eventForm.recurrence !== 'none'}
                                     .label=${c('repeat')}
-                                    @change=${(e: Event) => this._onEventFormChange('recurrence', (e as CustomEvent).detail?.value ? 'weekly' : 'none')}
+                                    @change=${(e: Event) => this._onEventFormChange('recurrence', customEventValue(e) ? 'weekly' : 'none')}
                                 ></platform-switch>
                             </div>
                             <platform-timezone-picker
                                 class="event-compose-tz"
                                 .value=${this._eventForm.timezone}
-                                @change=${(e: Event) => this._onEventFormChange('timezone', (e as CustomEvent).detail?.value)}
+                                @change=${(e: Event) => this._onEventFormChange('timezone', customEventValue(e))}
                             ></platform-timezone-picker>
                         </div>
                     </div>
@@ -4032,7 +4126,7 @@ export class PlatformCalendarModal extends PlatformModal {
                         <select
                             class="event-compose-select"
                             .value=${this._eventForm.kind}
-                            @change=${(e: Event) => this._onEventFormChange('kind', (e.target as HTMLSelectElement).value)}
+                            @change=${(e: Event) => this._onEventFormChange('kind', formControlValue(e))}
                             ?disabled=${this._selectedEventId && !this._isEventEditable(this._selectedEventSource)}
                         >
                             <option value="meeting">${c('kind_meeting')}</option>
@@ -4052,7 +4146,7 @@ export class PlatformCalendarModal extends PlatformModal {
                         <input
                             class="event-compose-input"
                             .value=${this._eventForm.location}
-                            @input=${(e: Event) => this._onEventFormChange('location', (e.target as HTMLInputElement).value)}
+                            @input=${(e: Event) => this._onEventFormChange('location', formControlValue(e))}
                             placeholder=${c('location_placeholder')}
                         />
                     </div>
@@ -4159,7 +4253,7 @@ export class PlatformCalendarModal extends PlatformModal {
             ${activeIntegration ? html`
                 <div class="hint">
                     ${c('notifications_label', {
-                        state: (activeIntegration.settings as Record<string, unknown> | undefined)?.notifications_enabled === false
+                        state: integrationSettings(activeIntegration.settings).notifications_enabled === false
                             ? c('notifications_off')
                             : c('notifications_on'),
                     })}
@@ -4209,7 +4303,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <input
                     class="form-input"
                     .value=${this._integrationForm.caldav_base_url}
-                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, caldav_base_url: (e.target as HTMLInputElement).value }; }}
+                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, caldav_base_url: formControlValue(e) }; }}
                     placeholder=${baseUrlPlaceholder}
                 />
             </div>
@@ -4218,7 +4312,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <input
                     class="form-input"
                     .value=${this._integrationForm.username}
-                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, username: (e.target as HTMLInputElement).value }; }}
+                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, username: formControlValue(e) }; }}
                     placeholder=${usernamePlaceholder}
                 />
             </div>
@@ -4227,7 +4321,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <input
                     class="form-input"
                     .value=${this._integrationForm.app_password}
-                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, app_password: (e.target as HTMLInputElement).value }; }}
+                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, app_password: formControlValue(e) }; }}
                     placeholder=${c('yandex_password_placeholder')}
                 />
             </div>
@@ -4236,7 +4330,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <input
                     class="form-input"
                     .value=${this._integrationForm.default_calendar_id}
-                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, default_calendar_id: (e.target as HTMLInputElement).value }; }}
+                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, default_calendar_id: formControlValue(e) }; }}
                     placeholder=${calendarIdPlaceholder}
                 />
             </div>
@@ -4245,7 +4339,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     .checked=${Boolean(this._integrationForm.notifications_enabled)}
                     .label=${c('notifications_new_events')}
                     @change=${(e: Event) => {
-                        this._integrationForm = { ...this._integrationForm, notifications_enabled: Boolean((e as CustomEvent).detail?.value) };
+                        this._integrationForm = { ...this._integrationForm, notifications_enabled: Boolean(customEventValue(e)) };
                     }}
                 ></platform-switch>
             </div>
@@ -4276,24 +4370,30 @@ export class PlatformCalendarModal extends PlatformModal {
         const c = (key: string, params?: Record<string, string | number>) => this._calT(key, params);
         return html`
             <div class="integration-list">
-                ${(this._integrationsSelect.value || []).map((integration) => {
+                ${(this._integrationsSelect.value).map((integration) => {
                     const mailboxLabel = this._mailboxLabelForIntegration(integration);
                     const title = mailboxLabel
                         ? `${this._providerDisplayLabel(integration.provider)} / ${mailboxLabel}`
-                        : `${this._providerDisplayLabel(integration.provider)} / ${(integration.settings as Record<string, unknown> | undefined)?.default_calendar_id || c('integration_no_calendar')}`;
+                        : `${this._providerDisplayLabel(integration.provider)} / ${calendarIdLabel(integration.settings, c('integration_no_calendar'))}`;
                     return html`
                         <div class="integration-item">
                             <div>
                                 <div>${title}</div>
                                 <div class="hint">${c('integration_updated_at', {
-                                    value: formatPlatformDateTime(integration.updated_at as string, this._localeSelect.value || 'en'),
+                                    value: formatPlatformDateTime(integration.updated_at as string, this._localeSelect.value),
                                 })}</div>
                             </div>
                             <div class="actions">
                                 <button
                                     class="btn btn-secondary"
                                     type="button"
-                                    @click=${() => this._openIntegrationModal(integration.provider as string, (integration.integration_id as string | undefined) || null)}
+                                    @click=${() => {
+                                        const integrationId = integration.integration_id;
+                                        this._openIntegrationModal(
+                                            integration.provider as string,
+                                            typeof integrationId === 'string' && integrationId.length > 0 ? integrationId : null,
+                                        );
+                                    }}
                                 >${c('integration_configure')}</button>
                                 <button
                                     class="btn btn-danger"

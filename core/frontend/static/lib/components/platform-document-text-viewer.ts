@@ -4,6 +4,18 @@
 import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
+
+function editorValue(event: Event, label: string): string {
+    if (!(event instanceof CustomEvent) || !isPlainRecord(event.detail)) {
+        throw new Error(`platform-document-text-viewer: ${label} detail must be an object`);
+    }
+    const value = event.detail.value;
+    if (typeof value !== 'string') {
+        throw new Error(`platform-document-text-viewer: ${label} value must be a string`);
+    }
+    return value;
+}
 import './platform-json-editor.js';
 import './platform-code-editor.js';
 import './platform-markdown-editor.js';
@@ -11,8 +23,17 @@ import './platform-markdown-editor.js';
 type PresentationMode = 'html' | 'markdown' | 'code';
 type ViewMode = 'preview' | 'source';
 
+function contentTypeBase(contentType: unknown): string {
+    if (typeof contentType !== 'string') return '';
+    const head = contentType.split(';', 1)[0];
+    if (head === undefined) {
+        throw new Error('platform-document-text-viewer: content type segment missing');
+    }
+    return head.trim();
+}
+
 function languageFromFileName(originalName: unknown, contentType: unknown): string {
-    const normalizedType = typeof contentType === 'string' ? (contentType.split(';', 1)[0] ?? '').trim() : '';
+    const normalizedType = contentTypeBase(contentType);
     const name = typeof originalName === 'string' ? originalName : '';
     if (normalizedType === 'application/json' || name.toLowerCase().endsWith('.json')) {
         return 'json';
@@ -272,22 +293,14 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         if (this._isPreviewMode) {
             return;
         }
-        const detail = (event as CustomEvent).detail as { value?: unknown } | undefined;
-        if (!detail || typeof detail.value !== 'string') {
-            return;
-        }
-        void this._saveContent(detail.value);
+        void this._saveContent(editorValue(event, 'save'));
     }
 
     _onChange(event: Event) {
         if (this._isPreviewMode) {
             return;
         }
-        const detail = (event as CustomEvent).detail as { value?: unknown } | undefined;
-        if (!detail || typeof detail.value !== 'string') {
-            return;
-        }
-        this._content = detail.value;
+        this._content = editorValue(event, 'change');
         this.emit('document-state', { dirty: true });
     }
 

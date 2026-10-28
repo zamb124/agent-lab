@@ -127,7 +127,8 @@ class AgentSkill(CompanyScopedModel):
         return self
 
     @classmethod
-    def row_id(cls, agent_skill_id: str) -> str:
+    def skill_row_id_for_active_company(cls, agent_skill_id: str) -> str:
+        """Ключ company_id:agent_skill_id из активной компании. Пустой agent_skill_id или компания — ValueError. Двоеточие — ValueError."""
         company_id = require_active_company().company_id
         if agent_skill_id == "" or company_id == "":
             raise ValueError("agent_skill_id is required")
@@ -144,7 +145,7 @@ class AgentSkill(CompanyScopedModel):
             self.company_id = company_id
         elif self.company_id != company_id:
             raise ValueError("company_id does not match the active company")
-        expected = type(self).row_id(self.agent_skill_id)
+        expected = type(self).skill_row_id_for_active_company(self.agent_skill_id)
         if self.agent_skill_row_id == "":
             self.agent_skill_row_id = expected
         elif self.agent_skill_row_id != expected:
@@ -154,7 +155,7 @@ class AgentSkill(CompanyScopedModel):
     @override
     async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
         _ = is_create, update_fields
-        expected = type(self).row_id(self.agent_skill_id)
+        expected = type(self).skill_row_id_for_active_company(self.agent_skill_id)
         if self.company_id == "" or self.agent_skill_row_id != expected:
             raise ValueError("agent_skill_row_id does not match the active company")
 
@@ -179,7 +180,7 @@ class AgentSkill(CompanyScopedModel):
 
     @classmethod
     async def require_by_agent_skill_id(cls, agent_skill_id: str) -> Self:
-        skill = await cls.get(cls.row_id(agent_skill_id))
+        skill = await cls.get(cls.skill_row_id_for_active_company(agent_skill_id))
         if skill is None:
             raise LookupError(f"AgentSkill not found: {agent_skill_id}")
         return skill
@@ -199,7 +200,7 @@ class AgentSkill(CompanyScopedModel):
     @classmethod
     async def _validate_depends_on_exist(cls, depends_on: list[str]) -> None:
         for dep_id in depends_on:
-            dep = await cls.get(cls.row_id(dep_id))
+            dep = await cls.get(cls.skill_row_id_for_active_company(dep_id))
             if dep is None:
                 raise ValueError(f"depends_on AgentSkill not found: {dep_id}")
 
@@ -214,7 +215,7 @@ class AgentSkill(CompanyScopedModel):
             if tool_ref.tool_id in builtins:
                 continue
             catalog_tool = await ToolReference.objects.filter(
-                tool_row_id=ToolReference.row_id(tool_ref.tool_id)
+                tool_row_id=ToolReference.row_id_for_active_company(tool_ref.tool_id)
             ).get_or_none()
             if catalog_tool is None:
                 raise ValueError(
@@ -223,7 +224,7 @@ class AgentSkill(CompanyScopedModel):
 
     @classmethod
     async def create(cls, payload: Self) -> Self:
-        existing = await cls.get(cls.row_id(payload.agent_skill_id))
+        existing = await cls.get(cls.skill_row_id_for_active_company(payload.agent_skill_id))
         if existing is not None:
             raise ValueError(f"AgentSkill already exists: {payload.agent_skill_id}")
         await cls._validate_tool_refs(payload.tool_refs)
@@ -259,7 +260,7 @@ class AgentSkill(CompanyScopedModel):
 
     @classmethod
     async def delete_by_agent_skill_id(cls, agent_skill_id: str) -> None:
-        row_id = cls.row_id(agent_skill_id)
+        row_id = cls.skill_row_id_for_active_company(agent_skill_id)
         if row_id == "":
             raise ValueError("AgentSkill agent_skill_row_id is required")
         deleted = await cls.objects.filter(agent_skill_row_id=row_id).delete()
@@ -295,7 +296,7 @@ class AgentSkill(CompanyScopedModel):
         await cls._validate_depends_on_exist(parsed.depends_on)
         if not persist:
             return parsed
-        existing = await cls.get(cls.row_id(parsed.agent_skill_id))
+        existing = await cls.get(cls.skill_row_id_for_active_company(parsed.agent_skill_id))
         if existing is not None:
             raise ValueError(f"AgentSkill already exists: {parsed.agent_skill_id}")
         stored = cls.model_validate(parsed.model_dump(mode="python"))

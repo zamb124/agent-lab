@@ -202,7 +202,7 @@ async def op_documents_list(
     await _namespace(di, payload.namespace_id)
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     completed_docs = await rag_provider.list_documents(payload.namespace_id, limit=payload.limit)
-    processing_statuses = await DocumentProcessingStatus.list_by_namespace(
+    processing_statuses = await DocumentProcessingStatus.list_by_namespace_and_status(
         payload.namespace_id, status=["pending", "processing", "failed"], limit=payload.limit
     )
     all_documents = list(completed_docs)
@@ -292,7 +292,7 @@ async def _enqueue_s3_indexing_task(
     if not isinstance(ttl_raw, int) or isinstance(ttl_raw, bool):
         raise RuntimeError("ensure_ttl_seconds_in_metadata returned non-integer ttl_seconds")
     task_id_placeholder = f"pending_{document_id}"
-    _ = await DocumentProcessingStatus.create_status(
+    _ = await DocumentProcessingStatus.upsert_pending(
         document_id=document_id,
         task_id=task_id_placeholder,
         namespace_id=namespace_id,
@@ -311,7 +311,7 @@ async def _enqueue_s3_indexing_task(
         metadata=dict(metadata_dict),
         provider=provider,
     )
-    _ = await DocumentProcessingStatus.finalize_enqueued_indexing_task(document_id, task.task_id)
+    _ = await DocumentProcessingStatus.update_task_id(document_id, task.task_id)
     return document_id, task.task_id
 
 

@@ -5,6 +5,8 @@
 # В TUI: j/k — выбрать процесс, Ctrl-a — фокус список/терминал, r — restart, x — stop, q — выход.
 
 procs:
+  ui_watch:
+    shell: "uv run python scripts/run.py ui_watch"
   flows:
     shell: "uv run python scripts/run.py flows"
   frontend:

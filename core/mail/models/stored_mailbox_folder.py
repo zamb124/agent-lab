@@ -88,12 +88,13 @@ class StoredMailboxFolder(PlatformModel):
         return await cls.list_for_binding(binding_id)
 
     @classmethod
-    async def set_sort_indices(
+    async def replace_sort_indices(
         cls,
         mailbox_binding_id: str,
         *,
         folder_name_to_index: dict[str, int],
     ) -> list[Self]:
+        """Заменяет sort_index всех папок ящика. Пустая карта — ValueError. Набор имён не совпал с кэшем — ValueError."""
         binding_id = mail_required(mailbox_binding_id, "mailbox_binding_id")
         if len(folder_name_to_index) == 0:
             raise ValueError("folder_name_to_index is required")

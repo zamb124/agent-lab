@@ -158,7 +158,7 @@ class TestAuthLogin:
 
         from core.models.identity_models import UserProviderRecord
 
-        row = await UserProviderRecord.find_by_provider_user_id("test_upsert_uid_1")
+        row = await UserProviderRecord.any_by_provider_user_id("test_upsert_uid_1")
         assert row is not None
         assert row.email == "upsert-test2@example.com"
 

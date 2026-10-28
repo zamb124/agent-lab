@@ -20,7 +20,7 @@
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
-import type { RouterRoute, RouterState } from '../../events/reducers/router.js';
+import type { RouterRoute } from '../../events/reducers/router.js';
 import type { SelectController } from '../../events/select-controller.js';
 import '../platform-icon.js';
 
@@ -154,10 +154,10 @@ export class PlatformTopBar extends PlatformElement {
         this.compact = false;
         this._routeKey = null;
         this._routes = [];
-        this._routerSelect = this.select((s) => {
-            const router = s.router as RouterState;
-            return { routeKey: router.routeKey, routes: router.routes };
-        });
+        this._routerSelect = this.select((s) => ({
+            routeKey: s.router.routeKey,
+            routes: s.router.routes,
+        }));
         this._boundTouchStart = (e: TouchEvent) => this._onTouchStart(e);
         this._boundTouchMove = (e: TouchEvent) => this._onTouchMove(e);
         this._boundTouchEnd = () => this._onTouchEnd();
@@ -188,7 +188,7 @@ export class PlatformTopBar extends PlatformElement {
 
     _findRoute(key: string | null): RouterRoute | null {
         if (!key) return null;
-        for (const r of this._routes || []) {
+        for (const r of this._routes) {
             if (r && r.key === key) return r;
         }
         return null;
@@ -208,12 +208,8 @@ export class PlatformTopBar extends PlatformElement {
             return r && typeof r.titleKey === 'string' ? r.titleKey : '';
         })();
         if (!key) return '';
-        const ns = this.titleNamespace || undefined;
-        try {
-            return this.t(key, null, ns);
-        } catch {
-            return '';
-        }
+        const ns = this.titleNamespace.length === 0 ? undefined : this.titleNamespace;
+        return this.t(key, null, ns);
     }
 
     _onBackClick(): void {
@@ -239,7 +235,8 @@ export class PlatformTopBar extends PlatformElement {
         const t = e.touches.item(0);
         if (!t) return;
         const dx = t.clientX - this._edgeSwipeStartX;
-        const dy = Math.abs(t.clientY - (this._edgeSwipeStartY || 0));
+        const startY = this._edgeSwipeStartY;
+        const dy = Math.abs(t.clientY - (startY === null ? 0 : startY));
         if (dy > 40) {
             this._edgeSwipeStartX = null;
             this._edgeSwipeStartY = null;

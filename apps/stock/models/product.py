@@ -111,7 +111,8 @@ class StockProduct(PlatformModel):
 
 
     @classmethod
-    async def by_ids(cls, company_id: str, product_ids: list[str]) -> dict[str, Self]:
+    async def found_in_company_by_ids(cls, company_id: str, product_ids: list[str]) -> dict[str, Self]:
+        """Найденные товары компании по id. Пустой список — {}. Отсутствующие id не входят. Порядка нет."""
         if not product_ids:
             return {}
         rows = await cls.objects.filter(
@@ -120,9 +121,10 @@ class StockProduct(PlatformModel):
         return {row.product_id: row for row in rows}
 
     @classmethod
-    async def list_for_company(
+    async def list_by_sku(
         cls, company_id: str, *, limit: int, offset: int
     ) -> list[Self]:
+        """Окно товаров компании, ORDER BY sku, limit и offset."""
         return await cls.objects.filter(company_id=company_id).order_by("sku").limit(
             limit
         ).offset(offset).all()

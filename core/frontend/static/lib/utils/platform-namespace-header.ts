@@ -11,7 +11,25 @@
  * request: ({ ctx }) => httpRequest({ url, headers: platformNamespaceHeader(ctx) })
  */
 
+import { isPlainRecord } from '../events/payload.js';
 import { getActivePlatformNamespaceName } from './platform-namespace.js';
+
+function companyIdFromState(state: unknown): string {
+    if (!isPlainRecord(state)) {
+        throw new Error('platformNamespaceHeader: state must be an object');
+    }
+    const auth = state.auth;
+    if (auth == null) return '';
+    if (!isPlainRecord(auth)) {
+        throw new Error('platformNamespaceHeader: auth must be an object');
+    }
+    const user = auth.user;
+    if (user == null) return '';
+    if (!isPlainRecord(user)) {
+        throw new Error('platformNamespaceHeader: auth.user must be an object');
+    }
+    return typeof user.company_id === 'string' ? user.company_id : '';
+}
 
 /**
  * @param {{ getState: () => object }} ctx контекст фабрики
@@ -25,8 +43,5 @@ export function platformNamespaceHeader(ctx: { getState: () => unknown }, explic
     if (!ctx || typeof ctx.getState !== 'function') {
         throw new Error('platformNamespaceHeader: требуется ctx с getState()');
     }
-    const state = ctx.getState() as { auth?: { user?: { company_id?: unknown } | null } };
-    const user = state.auth ? state.auth.user : null;
-    const companyId = user && typeof user.company_id === 'string' ? user.company_id : '';
-    return { 'X-Platform-Namespace': getActivePlatformNamespaceName(companyId) };
+    return { 'X-Platform-Namespace': getActivePlatformNamespaceName(companyIdFromState(ctx.getState())) };
 }

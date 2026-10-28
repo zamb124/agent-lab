@@ -16,13 +16,13 @@ import {
     getPlatformNamespaceSidebarSelection,
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
-import { namespacesResource } from '../../events/resources/namespaces.resource.js';
 import '@platform/lib/components/platform-icon.js';
 import type { CSSResultGroup, TemplateResult } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-const FACTORY_NAME = namespacesResource.name;
+const FACTORY_NAME = 'office/namespaces';
 
 export class OfficeWorkspacePickerSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'office.workspace_picker';
@@ -84,9 +84,9 @@ export class OfficeWorkspacePickerSheet extends PlatformBottomSheet {
         super();
         this.snap = 'half';
         this._namespaces = this.useResource(FACTORY_NAME);
-        this._authSel = this.select((s) => (s.auth as Record<string, unknown>).user);
+        this._authSel = this.select((s) => s.auth.user);
         this._namespaceSelectionByCompany = this.select(
-            (s) => ((s.ui as Record<string, unknown>).namespace as Record<string, unknown>).selectionByCompany,
+            (s) => (s.ui.namespace as Record<string, unknown>).selectionByCompany,
         );
     }
 
@@ -98,7 +98,11 @@ export class OfficeWorkspacePickerSheet extends PlatformBottomSheet {
 
     private _currentSelection() {
         const user = this._authSel.value as { company_id?: unknown } | null;
-        const map = (this._namespaceSelectionByCompany.value || {}) as Record<string, string>;
+        const rawMap = this._namespaceSelectionByCompany.value;
+        if (rawMap !== undefined && rawMap !== null && !isPlainRecord(rawMap)) {
+            throw new Error('office workspace picker: selection map must be an object');
+        }
+        const map = isPlainRecord(rawMap) ? rawMap : {};
         if (!user || typeof user.company_id !== 'string') return null;
         const cid = user.company_id.trim();
         if (cid.length === 0) return null;

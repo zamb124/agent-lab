@@ -17,6 +17,7 @@
  */
 
 import { SelectController } from '../events/select-controller.js';
+import { isPlainRecord } from '../events/payload.js';
 import type { PlatformBusLike } from '../events/bus-singleton.js';
 import type { PlatformEvent } from '../events/contract.js';
 import type {
@@ -29,7 +30,26 @@ import type { FormFactory, FormSlice } from '../events/factories/form.js';
 import type { CursorListFactory, CursorListSlice } from '../events/factories/cursor-list.js';
 import type { FacetsFactory, FacetsSlice } from '../events/factories/facets.js';
 import type { SliceFactory } from '../events/factories/slice.js';
-import type { PlatformFactory } from '../events/factory-registry.js';
+import type { ActionMap, PlatformFactory, PlatformFactoryName, PlatformFactoryRegistry } from '../events/factory-registry.js';
+
+type AnyResourceFactory = ResourceCollectionFactory<ResourceCollectionSlice<unknown>, ActionMap>;
+type AnyOpFactory = AsyncOpFactory<unknown, AsyncOpSlice<unknown>, ActionMap>;
+type AnySliceFactory = SliceFactory<object, ActionMap>;
+
+/** Контроллер фабрики F: состояние — S фабрики (`F['slice']['initial']`), методы — её actions. */
+export type ResourceControllerOf<F extends AnyResourceFactory> = ResourceController<F['slice']['initial']> & ActionMethods<F['actions']>;
+export type OpControllerOf<F extends AnyOpFactory> = OpController<F['slice']['initial']> & ActionMethods<F['actions']>;
+export type SliceControllerOf<F extends AnySliceFactory> = SliceController<F['slice']['initial']> & ActionMethods<F['actions']>;
+
+/** Тип контроллера, который `use*` возвращает для зарегистрированного имени фабрики. */
+export type ControllerFor<N extends PlatformFactoryName> =
+    PlatformFactoryRegistry[N] extends AnyResourceFactory ? ResourceControllerOf<PlatformFactoryRegistry[N]>
+    : PlatformFactoryRegistry[N] extends AnyOpFactory ? OpControllerOf<PlatformFactoryRegistry[N]>
+    : PlatformFactoryRegistry[N] extends AnySliceFactory ? SliceControllerOf<PlatformFactoryRegistry[N]>
+    : PlatformFactoryRegistry[N] extends FormFactory ? FormController
+    : PlatformFactoryRegistry[N] extends CursorListFactory ? CursorListController
+    : PlatformFactoryRegistry[N] extends FacetsFactory ? FacetsController
+    : never;
 
 /** Host компонента с доступом к platform bus (PlatformElement). */
 export interface ControllerHost {
@@ -38,12 +58,8 @@ export interface ControllerHost {
     requestUpdate(): void;
 }
 
-type ActionMap = Readonly<Record<string, string>>;
-
-interface ActionTarget {
-    bus: PlatformBusLike;
-    [methodName: string]: unknown;
-}
+/** Методы действий контроллера: имя из `factory.actions`, вызов диспатчит тип события действия. */
+export type ActionMethods<A extends ActionMap> = { readonly [K in keyof A]: (payload: unknown) => PlatformEvent | null };
 
 function _requireFactory(factory: PlatformFactory | null | undefined, expectedKind: string, controllerName: string): void {
     if (!factory || factory.kind !== expectedKind) {
@@ -51,18 +67,35 @@ function _requireFactory(factory: PlatformFactory | null | undefined, expectedKi
     }
 }
 
-function _bindActions(target: ActionTarget, actions: ActionMap, controllerName: string, factoryName: string): void {
+export function bindActions<C extends { readonly bus: PlatformBusLike }, A extends ActionMap>(
+    controller: C,
+    actions: A,
+    controllerName: string,
+    factoryName: string,
+): C & ActionMethods<A> {
+    const methods: Record<string, (payload: unknown) => PlatformEvent | null> = {};
     for (const [methodName, eventType] of Object.entries(actions)) {
-        if (typeof target[methodName] === 'function') {
-            throw new Error(`${controllerName}: action "${methodName}" collides with built-in method on factory "${factoryName}"`);
+        if (methodName in controller) {
+            throw new Error(`${controllerName}: action "${methodName}" collides with built-in member on factory "${factoryName}"`);
         }
-        target[methodName] = (payload: unknown) => {
+        methods[methodName] = (payload: unknown) => {
             if (payload === undefined) {
                 throw new Error(`${controllerName}.${methodName}: payload required (use null for empty events)`);
             }
-            return target.bus.dispatch(eventType, payload, { source: 'local' });
+            return controller.bus.dispatch(eventType, payload, { source: 'local' });
         };
     }
+    if (!actionMethodsMatch(methods, actions)) {
+        throw new Error(`${controllerName}: actions of factory "${factoryName}" were not bound`);
+    }
+    return Object.assign(controller, methods);
+}
+
+function actionMethodsMatch<A extends ActionMap>(
+    methods: Record<string, (payload: unknown) => PlatformEvent | null>,
+    actions: A,
+): methods is ActionMethods<A> {
+    return Object.keys(actions).every((key) => typeof methods[key] === 'function');
 }
 
 /**
@@ -73,29 +106,27 @@ function _bindActions(target: ActionTarget, actions: ActionMap, controllerName: 
  *   ctl.load(query?), ctl.create(payload), ctl.update(id, payload), ctl.remove(id)
  *   ctl.fetchItem(id) — Promise с mapped item после ITEM_LOADED
  */
-export class ResourceController {
+export class ResourceController<S extends ResourceCollectionSlice<unknown> = ResourceCollectionSlice> {
     host: ControllerHost;
-    resource: ResourceCollectionFactory;
+    resource: ResourceCollectionFactory<S, ActionMap>;
     autoload: boolean;
     autoloadQuery: Record<string, unknown> | null;
-    private _slice: SelectController<ResourceCollectionSlice>;
-    [action: string]: unknown;
+    private _slice: SelectController<unknown>;
 
-    constructor(host: ControllerHost, resource: ResourceCollectionFactory, opts?: { autoload?: boolean; autoloadQuery?: Record<string, unknown> | null }) {
+    constructor(host: ControllerHost, resource: ResourceCollectionFactory<S, ActionMap>, opts?: { autoload?: boolean; autoloadQuery?: Record<string, unknown> | null }) {
         _requireFactory(resource, 'resource-collection', 'ResourceController');
         this.host = host;
         this.resource = resource;
         this.autoload = Boolean(opts && opts.autoload === true);
         this.autoloadQuery = opts && opts.autoloadQuery !== undefined ? opts.autoloadQuery : null;
-        this._slice = new SelectController(host, resource.selectors.slice);
-        _bindActions(this, resource.actions || {}, 'ResourceController', resource.name);
+        this._slice = new SelectController<unknown>(host, resource.selectors.slice);
         host.addController(this);
     }
 
     get bus(): PlatformBusLike { return this.host.bus; }
-    get state(): ResourceCollectionSlice { return this._slice.value as ResourceCollectionSlice; }
-    get items(): readonly ResourceItem[] { return this.state.items; }
-    get byId(): Readonly<Record<string, ResourceItem>> { return this.state.byId; }
+    get state(): S { return this.resource.selectors.slice(this.bus.getState()); }
+    get items(): S['items'] { return this.state.items; }
+    get byId(): S['byId'] { return this.state.byId; }
     get loading(): boolean { return Boolean(this.state.loading); }
     get refreshing(): boolean { return Boolean(this.state.refreshing); }
     get listTotal(): number | null {
@@ -124,7 +155,7 @@ export class ResourceController {
             { source: 'local' },
         );
     }
-    fetchItem(id: string | number): Promise<ResourceItem> {
+    fetchItem<K extends keyof S['byId'] & string>(id: K): Promise<S['byId'][K]> {
         if (!id) throw new Error(`ResourceController(${this.resource.name}).fetchItem: id required`);
         const okType = this.resource.events.ITEM_LOADED;
         const failType = this.resource.events.ITEM_FAILED;
@@ -148,7 +179,7 @@ export class ResourceController {
             unsubOk = this.bus.subscribeType(okType, (event) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) return;
                 cleanup();
-                const item = this.byId[id];
+                const item: S['byId'][K] = this.byId[id];
                 if (!item || typeof item !== 'object') {
                     reject(new Error(`ResourceController(${this.resource.name}).fetchItem: item "${id}" missing after ITEM_LOADED`));
                     return;
@@ -158,11 +189,12 @@ export class ResourceController {
             unsubFail = this.bus.subscribeType(failType, (event) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) return;
                 cleanup();
-                const p = event.payload;
-                const message = p && typeof p === 'object' && typeof (p as { message?: unknown }).message === 'string'
-                    ? (p as { message: string }).message
-                    : `ResourceController(${this.resource.name}).fetchItem failed`;
-                reject(new Error(message));
+                const message = isPlainRecord(event.payload) ? event.payload.message : undefined;
+                reject(new Error(
+                    typeof message === 'string'
+                        ? message
+                        : `ResourceController(${this.resource.name}).fetchItem failed`,
+                ));
             });
         });
     }
@@ -211,10 +243,12 @@ export class ResourceController {
  *
  * `run(payload)` возвращает Promise, который ВСЕГДА резолвится:
  *   - SUCCEEDED → resolve(result) (значение из `event.payload.result`).
- *   - FAILED    → resolve(null), ошибка кладётся в `state.error` slice.
+ *   - FAILED    → resolve(null), ошибка кладётся в `state.error` slice,
+ *     HTTP-статус отказа — в `failureStatus` (иначе null).
  *
  * Это явный контракт: caller, которому важна обработка ошибки, проверяет
- * `ctl.error` после `await ctl.run(...)` (или подписывается на slice).
+ * `ctl.error` после `await ctl.run(...)` и бросает её. `failureStatus === 404`
+ * — единственный отказ, который страница может показать как «не найдено».
  * Никакого скрытого успеха — null result отличим от реального result.
  * Спасает fire-and-forget вызовы (`this._typing.run(...)` без await/catch)
  * от unhandled promise rejection.
@@ -222,28 +256,37 @@ export class ResourceController {
  * Привязка REQUESTED → SUCCEEDED/FAILED делается по `causation_id`
  * (фабрика всегда выставляет его в effect'е).
  */
-export class OpController {
-    host: ControllerHost;
-    op: AsyncOpFactory;
-    private _slice: SelectController<AsyncOpSlice>;
-    [action: string]: unknown;
+function _httpStatus(payload: unknown): number | null {
+    if (typeof payload !== 'object' || payload === null || !('status' in payload)) {
+        return null;
+    }
+    return typeof payload.status === 'number' ? payload.status : null;
+}
 
-    constructor(host: ControllerHost, op: AsyncOpFactory) {
+export class OpController<S extends AsyncOpSlice<unknown> = AsyncOpSlice> {
+    host: ControllerHost;
+    op: AsyncOpFactory<unknown, S, ActionMap>;
+    private _slice: SelectController<unknown>;
+    private _failureStatus: number | null = null;
+
+    constructor(host: ControllerHost, op: AsyncOpFactory<unknown, S, ActionMap>) {
         _requireFactory(op, 'async-op', 'OpController');
         this.host = host;
         this.op = op;
-        this._slice = new SelectController(host, op.selectors.slice);
-        _bindActions(this, op.actions || {}, 'OpController', op.name);
+        this._slice = new SelectController<unknown>(host, op.selectors.slice);
     }
 
     get bus(): PlatformBusLike { return this.host.bus; }
-    get state(): AsyncOpSlice { return this._slice.value as AsyncOpSlice; }
+    get state(): S { return this.op.selectors.slice(this.bus.getState()); }
     get busy(): boolean { return Boolean(this.state.busy); }
     get error(): string | null { return this.state.error; }
-    get lastResult(): unknown { return this.state.lastResult; }
+    /** HTTP-статус последнего FAILED этого контроллера; у успеха и не-HTTP отказа — null. */
+    get failureStatus(): number | null { return this._failureStatus; }
+    get lastResult(): S['lastResult'] { return this.state.lastResult; }
     get lastRequestId(): string | null { return this.state.lastRequestId; }
 
     run(payload?: unknown): Promise<unknown> {
+        this._failureStatus = null;
         const okType = this.op.events.SUCCEEDED;
         const failType = this.op.events.FAILED;
         const requested = this.bus.dispatch(
@@ -265,15 +308,18 @@ export class OpController {
             unsubOk = this.bus.subscribeType(okType, (event) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) return;
                 cleanup();
+                // Результат run() — result своего SUCCEEDED; lastResult slice может быть преобразован extraReducer.
                 const pl = event.payload;
-                const out = pl != null && typeof pl === 'object' && Object.prototype.hasOwnProperty.call(pl, 'result')
-                    ? (pl as { result: unknown }).result
+                const out = isPlainRecord(pl) && Object.prototype.hasOwnProperty.call(pl, 'result')
+                    ? pl.result
                     : null;
+                this._failureStatus = null;
                 resolve(out);
             });
             unsubFail = this.bus.subscribeType(failType, (event) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) return;
                 cleanup();
+                this._failureStatus = _httpStatus(event.payload);
                 resolve(null);
             });
         });
@@ -301,7 +347,7 @@ export class FormController {
     }
 
     get bus(): PlatformBusLike { return this.host.bus; }
-    get state(): FormSlice { return this._slice.value as FormSlice; }
+    get state(): FormSlice { return this._slice.value; }
     get open(): boolean { return Boolean(this.state.open); }
     get draft(): Readonly<Record<string, unknown>> { return this.state.draft; }
     get errors(): Readonly<Record<string, string>> { return this.state.errors; }
@@ -364,7 +410,7 @@ export class CursorListController {
     }
 
     get bus(): PlatformBusLike { return this.host.bus; }
-    get state(): CursorListSlice { return this._slice.value as CursorListSlice; }
+    get state(): CursorListSlice { return this._slice.value; }
     get items(): readonly unknown[] { return this.state.items; }
     get hasMore(): boolean { return Boolean(this.state.hasMore); }
     get loading(): boolean { return Boolean(this.state.loading); }
@@ -416,22 +462,20 @@ export class CursorListController {
  *   ctl.value          // slice только для чтения (frozen)
  *   ctl.<actionMethod>(payload)  // привязан из factory.actions
  */
-export class SliceController {
+export class SliceController<S extends object = Record<string, unknown>> {
     host: ControllerHost;
-    slice: SliceFactory;
-    private _slice: SelectController<Record<string, unknown>>;
-    [action: string]: unknown;
+    slice: SliceFactory<S, ActionMap>;
+    private _slice: SelectController<unknown>;
 
-    constructor(host: ControllerHost, slice: SliceFactory) {
+    constructor(host: ControllerHost, slice: SliceFactory<S, ActionMap>) {
         _requireFactory(slice, 'slice', 'SliceController');
         this.host = host;
         this.slice = slice;
-        this._slice = new SelectController(host, slice.selectors.slice);
-        _bindActions(this, slice.actions || {}, 'SliceController', slice.name);
+        this._slice = new SelectController<unknown>(host, slice.selectors.slice);
     }
 
     get bus(): PlatformBusLike { return this.host.bus; }
-    get value(): Record<string, unknown> | undefined { return this._slice.value; }
+    get value(): S { return this.slice.selectors.slice(this.bus.getState()); }
 }
 
 /**
@@ -454,7 +498,7 @@ export class FacetsController {
     }
 
     get bus(): PlatformBusLike { return this.host.bus; }
-    get state(): FacetsSlice { return this._slice.value as FacetsSlice; }
+    get state(): FacetsSlice { return this._slice.value; }
 
     items(facet: string): readonly unknown[] | undefined {
         if (!(facet in this.facets.facets)) {

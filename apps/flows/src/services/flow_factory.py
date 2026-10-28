@@ -61,8 +61,8 @@ class FlowFactory:
     ) -> FlowConfig | None:
         """Снимок FlowConfig: конкретная версия или последняя в flows."""
         if config_version:
-            return await FlowConfig.get_version(flow_id, config_version)
-        return await FlowConfig.get_latest(flow_id)
+            return await FlowConfig.by_flow_id_and_version(flow_id, config_version)
+        return await FlowConfig.current_for_flow(flow_id)
 
     async def get_flow(
         self,
@@ -423,7 +423,7 @@ class FlowFactory:
         Возвращает:
             Flow
         """
-        previous = await FlowConfig.get_latest(config.flow_id)
+        previous = await FlowConfig.current_for_flow(config.flow_id)
         _ = await FlowConfig.create_version(config)
         ctx = require_context()
         if ctx.active_company is None:
@@ -448,7 +448,7 @@ class FlowFactory:
         ctx = require_context()
         if ctx.active_company is None:
             raise ValueError("active company required for flow authz sync")
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
         branch_ids = list(config.branches.keys()) if config is not None else []
         deleted = await FlowConfig.delete_by_flow_id(flow_id)
         if deleted:
@@ -469,7 +469,7 @@ class FlowFactory:
         Возвращает:
             Dict branch_id -> BranchConfig
         """
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
         if config is None:
             return {}
 

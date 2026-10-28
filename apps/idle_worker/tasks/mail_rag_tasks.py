@@ -24,7 +24,7 @@ async def _notify_users_for_binding(
     payload: JsonObject,
     di: Di,
 ) -> None:
-    bindings = await MailboxBinding.list_by_company(company_id)
+    bindings = await MailboxBinding.list_by_email_address_for_company(company_id)
     binding = next(
         (item for item in bindings if item.mailbox_binding_id == mailbox_binding_id),
         None,
@@ -46,7 +46,7 @@ async def mail_rag_index_task(
     uid: str,
     di: Di,
 ) -> dict[str, str]:
-    binding = await MailboxBinding.find_in_company(
+    binding = await MailboxBinding.by_mailbox_binding_id(
         company_id, mailbox_binding_id
     )
     if binding is None:

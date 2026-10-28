@@ -15,7 +15,6 @@ import {
     getPlatformNamespaceSidebarSelection,
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
-import { namespacesResource } from '../../events/resources/namespaces.resource.js';
 import '@platform/lib/components/platform-icon.js';
 import type {
     CSSResultGroup,
@@ -25,7 +24,7 @@ import type {
 } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
-const FACTORY_NAME = namespacesResource.name;
+const FACTORY_NAME = 'crm/namespaces';
 
 export class CrmWorkspacePickerSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'crm.workspace_picker';
@@ -102,7 +101,8 @@ export class CrmWorkspacePickerSheet extends PlatformBottomSheet {
 
     _currentSelection() {
         const user = this._authSel.value;
-        const map = this._namespaceSelectionByCompany.value || {};
+        const rawMap = this._namespaceSelectionByCompany.value;
+        const map = rawMap === undefined ? {} : rawMap;
         if (!user || typeof user.company_id !== 'string') return 'all';
         const cid = user.company_id.trim();
         if (cid.length === 0) return 'all';

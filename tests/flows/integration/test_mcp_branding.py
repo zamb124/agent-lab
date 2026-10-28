@@ -240,7 +240,7 @@ async def test_mcp_servers_list_includes_branding_icon_via_alias(
     assert put_resp.status_code == 200, put_resp.text
     icon_url = put_resp.json()["icon_url"]
 
-    existing = await MCPServerConfig.get(MCPServerConfig.row_id(alias_server_id))
+    existing = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(alias_server_id))
     created_manual = existing is None
     if created_manual:
         manual_server = MCPServerConfig(
@@ -262,7 +262,7 @@ async def test_mcp_servers_list_includes_branding_icon_via_alias(
     assert matched[0]["icon_url"] == icon_url
 
     if created_manual:
-        _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(alias_server_id))
+        _ = await MCPServerConfig.delete_by_id(MCPServerConfig.server_row_id_for_active_company(alias_server_id))
     del_resp = await client.delete(f"/flows/api/v1/mcp/branding/{canonical_server_id}")
     assert del_resp.status_code == 200, del_resp.text
     assert del_resp.json() == {"status": "deleted", "server_id": canonical_server_id}

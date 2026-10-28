@@ -321,7 +321,7 @@ async def _execute_flow_tool_call(
     context_id: str | None = None,
     device_id: str | None = None,
 ) -> tuple[str, str, str]:
-    flow_config = await FlowConfig.get_latest(flow_id)
+    flow_config = await FlowConfig.current_for_flow(flow_id)
     if flow_config is None:
         raise WsCommandError(
             "not_found",
@@ -438,7 +438,7 @@ async def _handle_flow_tools_call(
         explicit_context_id=explicit_context_id,
     )
 
-    flow_config = await FlowConfig.get_latest(flow_id)
+    flow_config = await FlowConfig.current_for_flow(flow_id)
     if flow_config is None:
         return _rpc_error(
             rpc_id, -32602, f"Flow '{flow_id}' is not available for HumanitecAgent"

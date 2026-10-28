@@ -135,3 +135,18 @@ export const publicCatalogItemsOp = createAsyncOp({
         });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/catalog_access_get': typeof catalogAccessGetOp;
+        'office/catalog_access_update': typeof catalogAccessPatchOp;
+        'office/catalog_access_rotate_link': typeof catalogAccessRotateLinkOp;
+        'office/document_access_get': typeof documentAccessGetOp;
+        'office/document_access_update': typeof documentAccessPatchOp;
+        'office/document_access_rotate_link': typeof documentAccessRotateLinkOp;
+        'office/public_resolve': typeof publicResolveOp;
+        'office/public_open': typeof publicOpenOp;
+        'office/public_catalog_binding_open': typeof publicCatalogBindingOpenOp;
+        'office/public_catalog_items': typeof publicCatalogItemsOp;
+    }
+}

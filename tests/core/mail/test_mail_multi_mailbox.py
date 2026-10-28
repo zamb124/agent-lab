@@ -72,7 +72,7 @@ async def test_list_by_user_and_default(unique_id: str) -> None:
             updated_at=now,
         )
     )
-    listed = await MailboxBinding.list_by_user(company_id, user_id)
+    listed = await MailboxBinding.list_user_kind_by_default_and_email(company_id, user_id)
     assert len(listed) == 2
     assert listed[0].mailbox_binding_id == first.mailbox_binding_id
     by_user = await MailboxBinding.preferred_for_user(company_id, user_id)

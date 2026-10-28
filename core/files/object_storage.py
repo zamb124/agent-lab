@@ -51,7 +51,8 @@ class ObjectStorage(PlatformModel):
     updated_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
 
     @classmethod
-    async def list_for_company(cls, company_id: str) -> list[Self]:
+    async def list_by_created_at(cls, company_id: str) -> list[Self]:
+        """Все хранилища компании, ORDER BY created_at. Предела нет."""
         return await cls.objects.filter(company_id=company_id).order_by("created_at").all()
 
     @classmethod

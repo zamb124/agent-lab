@@ -4,6 +4,7 @@
 
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import { isPlainRecord } from '../../events/payload.js';
 import { PlatformFormModal } from '../glass-form-modal.js';
 import { registerModalKind } from '../../utils/modal-registry.js';
 import type { ResourceItem } from '../../events/factories/resource-collection.js';
@@ -41,26 +42,67 @@ function _defaultPayload(): VariablePayload {
     };
 }
 
+function textValue(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+function matchEntry(value: unknown): VariableMatchEntry {
+    if (!isPlainRecord(value)) {
+        throw new Error('company variable editor: scope match entry must be an object');
+    }
+    const op = value.op;
+    return {
+        field: typeof value.field === 'string' ? value.field : undefined,
+        op: typeof op === 'string' && op.length > 0 ? op : 'eq',
+        ref_key: typeof value.ref_key === 'string' ? value.ref_key : null,
+        value: textValue(value.value),
+    };
+}
+
+function variableScope(value: unknown): VariableScope {
+    if (!isPlainRecord(value)) {
+        throw new Error('company variable editor: scope must be an object');
+    }
+    return {
+        value_kind: value.value_kind === 'expression' ? 'expression' : 'static',
+        value: textValue(value.value),
+        expression: typeof value.expression === 'string' ? value.expression : '',
+        priority: typeof value.priority === 'number' ? value.priority : 0,
+        match: Array.isArray(value.match) ? value.match.map(matchEntry) : [],
+    };
+}
+
+function valueChange(detail: unknown): VariablePayload['base'] {
+    if (!isPlainRecord(detail)) {
+        throw new Error('company variable editor: value change must be an object');
+    }
+    const kind = detail.value_kind;
+    if (kind !== 'static' && kind !== 'expression') {
+        throw new Error('company variable editor: value_kind must be static or expression');
+    }
+    return {
+        value_kind: kind,
+        value: textValue(detail.value),
+        expression: typeof detail.expression === 'string' ? detail.expression : '',
+    };
+}
+
+function scopesChange(detail: unknown): VariableScope[] {
+    if (!isPlainRecord(detail) || !Array.isArray(detail.scopes)) {
+        throw new Error('company variable editor: scopes change must include scopes');
+    }
+    return detail.scopes.map(variableScope);
+}
+
 function _payloadFromItem(item: ResourceItem | null | undefined): VariablePayload {
-    const rawPayload = item?.payload as { base?: Record<string, unknown>; scopes?: unknown } | undefined;
-    if (!rawPayload) {
+    const rawPayload = item === null || item === undefined ? undefined : item.payload;
+    if (!isPlainRecord(rawPayload)) {
         return _defaultPayload();
     }
-    const base = rawPayload.base || {};
-    const scopes: VariableScope[] = Array.isArray(rawPayload.scopes)
-        ? (rawPayload.scopes as Array<Record<string, unknown>>).map((scope) => ({
-            value_kind: scope.value_kind === 'expression' ? 'expression' : 'static',
-            value: typeof scope.value === 'string' ? scope.value : String(scope.value ?? ''),
-            expression: typeof scope.expression === 'string' ? scope.expression : '',
-            priority: typeof scope.priority === 'number' ? scope.priority : 0,
-            match: Array.isArray(scope.match) ? (scope.match as VariableMatchEntry[]).map((entry) => ({
-                field: entry.field,
-                op: entry.op ?? 'eq',
-                ref_key: entry.ref_key ?? null,
-                value: entry.value ?? '',
-            })) : [],
-        }))
-        : [];
+    const base = isPlainRecord(rawPayload.base) ? rawPayload.base : {};
+    const scopes = Array.isArray(rawPayload.scopes) ? rawPayload.scopes.map(variableScope) : [];
     return {
         base: {
             value_kind: base.value_kind === 'expression' ? 'expression' : 'static',
@@ -166,7 +208,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
         this._title = typeof item.title === 'string' ? item.title : '';
         this._description = typeof item.description === 'string' ? item.description : '';
         this._order = item.order === null || item.order === undefined ? '' : String(item.order);
-        this._groups = Array.isArray(item.groups) ? (item.groups as unknown[]).join(', ') : '';
+        this._groups = Array.isArray(item.groups) ? item.groups.map((group) => textValue(group)).join(', ') : '';
         this._public = Boolean(item.public);
         this._secret = Boolean(item.secret);
         this._sharedForExecution = Boolean(item.shared_for_execution);
@@ -306,7 +348,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                     .value=${this._payload.base.value}
                     .expression=${this._payload.base.expression}
                     @change=${(e: CustomEvent) => {
-                        this._payload = { ...this._payload, base: { ...this._payload.base, ...(e.detail as Record<string, unknown>) } } as VariablePayload;
+                        this._payload = { ...this._payload, base: valueChange(e.detail) };
                         this.isDirty = true;
                     }}
                 ></platform-variable-value-editor>
@@ -317,7 +359,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                 <platform-variable-scopes-editor
                     .scopes=${this._payload.scopes}
                     @change=${(e: CustomEvent) => {
-                        this._payload = { ...this._payload, scopes: e.detail.scopes as VariableScope[] };
+                        this._payload = { ...this._payload, scopes: scopesChange(e.detail) };
                         this.isDirty = true;
                     }}
                 ></platform-variable-scopes-editor>

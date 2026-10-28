@@ -266,7 +266,7 @@ async def test_rescore_empty_records_does_not_write_redis(
         stored = await redis_client.get(platform_free_cache_key)
         assert stored == snapshot
     finally:
-        stored_row = await AIModelRecord.get_provider_model("groq", groq_model.model_id)
+        stored_row = await AIModelRecord.by_provider_and_model_id("groq", groq_model.model_id)
         if stored_row is not None:
             _ = await stored_row.delete()
 
@@ -316,6 +316,6 @@ async def test_fetch_skips_unconfigured_provider_and_keeps_configured(
             ("groq", groq_model.model_id),
             ("openrouter", openrouter_model.model_id),
         ):
-            stored_row = await AIModelRecord.get_provider_model(provider, model_id)
+            stored_row = await AIModelRecord.by_provider_and_model_id(provider, model_id)
             if stored_row is not None:
                 _ = await stored_row.delete()

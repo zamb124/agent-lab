@@ -39,3 +39,10 @@ export const leadRequestsList = createCursorList({
     statusMap: { 403: 'forbidden' },
     errorToastKey: 'frontend:leads_page.load_error',
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/lead_submit': typeof leadSubmitOp;
+        'frontend/lead_requests': typeof leadRequestsList;
+    }
+}

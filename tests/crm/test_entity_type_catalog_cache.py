@@ -94,7 +94,7 @@ async def test_entity_type_catalog_update_visible_after_warm_cache(
     )
     assert {row.name for row in warmed if row.type_id == type_id} == {"Before"}
 
-    await EntityType.update_fields(
+    await EntityType.update_field_patch(
         type_id,
         namespace=namespace,
         company_id=company_id,
@@ -105,6 +105,13 @@ async def test_entity_type_catalog_update_visible_after_warm_cache(
         company_id=company_id,
     )
     assert {row.name for row in listed if row.type_id == type_id} == {"After"}
+    with pytest.raises(ValueError, match="entity type update requires fields"):
+        await EntityType.update_field_patch(
+            type_id,
+            namespace=namespace,
+            company_id=company_id,
+            patch={},
+        )
 
 
 @pytest.mark.asyncio

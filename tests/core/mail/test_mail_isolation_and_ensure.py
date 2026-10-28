@@ -86,9 +86,9 @@ async def test_bindings_isolated_by_company(
             updated_at=now,
         )
     )
-    listed_b = await MailboxBinding.list_by_company(company_b)
+    listed_b = await MailboxBinding.list_by_email_address_for_company(company_b)
     assert listed_b == []
-    listed_a = await MailboxBinding.list_by_company(company_a)
+    listed_a = await MailboxBinding.list_by_email_address_for_company(company_a)
     assert len(listed_a) == 1
     assert listed_a[0].mailbox_binding_id == f"mailbind_a_{unique_id}"
 

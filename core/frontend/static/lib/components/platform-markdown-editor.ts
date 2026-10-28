@@ -23,6 +23,83 @@ import {
 } from '../utils/markdown-html.js';
 import { createVariableExtensions, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
 import type { CmCompartmentLike, CmEditorViewLike, CmModule, CmViewUpdateLike } from '../codemirror/variable-extensions.js';
+import { isPlainRecord } from '../events/payload.js';
+
+const CM_EXPORTS = [
+    'EditorState',
+    'EditorView',
+    'Compartment',
+    'keymap',
+    'history',
+    'autocompletion',
+    'oneDark',
+    'syntaxHighlighting',
+    'defaultHighlightStyle',
+    'lineNumbers',
+    'highlightActiveLine',
+    'highlightActiveLineGutter',
+    'defaultKeymap',
+    'historyKeymap',
+] as const;
+
+function isCmModule(value: unknown): value is CmModule {
+    if (!isPlainRecord(value)) return false;
+    return CM_EXPORTS.every((name) => value[name] !== undefined && value[name] !== null);
+}
+
+interface VariableCatalogEntry {
+    name: string;
+    type?: string;
+    source?: string;
+    hasValue?: boolean;
+    kind?: string;
+}
+
+function isVariableCatalogEntry(value: unknown): value is VariableCatalogEntry {
+    if (!isPlainRecord(value) || typeof value.name !== 'string' || value.name.length === 0) return false;
+    if (value.type !== undefined && typeof value.type !== 'string') return false;
+    if (value.source !== undefined && typeof value.source !== 'string') return false;
+    if (value.hasValue !== undefined && typeof value.hasValue !== 'boolean') return false;
+    if (value.kind !== undefined && typeof value.kind !== 'string') return false;
+    return true;
+}
+
+function variableCatalogEntries(value: unknown): VariableCatalogEntry[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter(isVariableCatalogEntry);
+}
+
+function stringList(value: unknown, label: string): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.map((item, index) => {
+        if (typeof item !== 'string') {
+            throw new Error(`platform-markdown-editor: ${label}[${index}] must be a string`);
+        }
+        return item;
+    });
+}
+
+function iconCache(icon: unknown): { uiCache: Record<string, string> } | undefined {
+    if (!isPlainRecord(icon) || !isPlainRecord(icon.uiCache)) return undefined;
+    const uiCache: Record<string, string> = {};
+    for (const [key, value] of Object.entries(icon.uiCache)) {
+        if (typeof value !== 'string') {
+            throw new Error(`platform-markdown-editor: icon cache ${key} must be a string`);
+        }
+        uiCache[key] = value;
+    }
+    return { uiCache };
+}
+
+function attachmentChip(value: unknown): { filename?: string; size?: number } {
+    if (!isPlainRecord(value)) {
+        throw new Error('platform-markdown-editor: attachment must be an object');
+    }
+    const chip: { filename?: string; size?: number } = {};
+    if (typeof value.filename === 'string') chip.filename = value.filename;
+    if (typeof value.size === 'number') chip.size = value.size;
+    return chip;
+}
 import type { SelectController } from '../events/select-controller.js';
 import { lookupPreviewValue } from '../variables/variable-refs.js';
 import { variableRefsStyles } from '../styles/shared/variable-refs.styles.js';
@@ -947,7 +1024,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
         this._editorEl = null;
         this._skipNextHtmlSync = false;
         this._iconCacheSelect = this.select(
-            (s: Record<string, unknown>) => (s.icon as { uiCache: Record<string, string> } | undefined),
+            (s) => iconCache(s.icon),
         );
         this._cmModules = null;
         this._readonlyCompartment = null;
@@ -969,7 +1046,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
         const htmlValue = markdownToHtml(value);
         const tmp = document.createElement('div');
         tmp.innerHTML = sanitizeMarkdownEditorHtml(htmlValue);
-        const textValue = tmp.innerText || '';
+        const textValue = tmp.innerText;
         return { value, htmlValue, textValue };
     }
 
@@ -1017,7 +1094,8 @@ export class PlatformMarkdownEditor extends PlatformElement {
     _icon(name: string): string {
         const cache = this._iconCacheSelect.value;
         if (!cache) return '';
-        return cache.uiCache[name] || '';
+        const icon = cache.uiCache[name];
+        return icon === undefined ? '' : icon;
     }
 
     _variablesFingerprintValue(variables: unknown): string {
@@ -1055,7 +1133,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
             const currentValue = this._editorView.state.doc.toString();
             if (this.value !== currentValue) {
                 this._editorView.dispatch({
-                    changes: { from: 0, to: currentValue.length, insert: this.value || '' }
+                    changes: { from: 0, to: currentValue.length, insert: this.value }
                 });
             }
         }
@@ -1079,9 +1157,9 @@ export class PlatformMarkdownEditor extends PlatformElement {
             && this._editorView
         ) {
             const nextFingerprint = this._variablesFingerprintValue(this.variables);
-            const nextCatalogFingerprint = JSON.stringify(this.variableCatalog || []);
-            const nextStateFingerprint = JSON.stringify(this.statePreview || {});
-            const nextPathsFingerprint = JSON.stringify(this.statePaths || []);
+            const nextCatalogFingerprint = JSON.stringify(this.variableCatalog);
+            const nextStateFingerprint = JSON.stringify(this.statePreview);
+            const nextPathsFingerprint = JSON.stringify(this.statePaths);
             const combinedFingerprint = `${nextFingerprint}|${nextCatalogFingerprint}|${nextStateFingerprint}|${nextPathsFingerprint}`;
             if (combinedFingerprint !== this._variablesFingerprint) {
                 this._variablesFingerprint = combinedFingerprint;
@@ -1114,7 +1192,11 @@ export class PlatformMarkdownEditor extends PlatformElement {
     }
 
     async _initCodeMirror(): Promise<void> {
-        const cm = await import('/static/core/assets/codemirror/codemirror-bundle.js') as CmModule;
+        const loaded: unknown = await import('/static/core/assets/codemirror/codemirror-bundle.js');
+        if (!isCmModule(loaded)) {
+            throw new Error('platform-markdown-editor: CodeMirror bundle is incomplete');
+        }
+        const cm = loaded;
         
         this._cmBundle = cm;
         this._cmModules = {
@@ -1137,6 +1219,14 @@ export class PlatformMarkdownEditor extends PlatformElement {
         this._createEditor();
     }
 
+    _requireCmBundle(): CmModule {
+        const bundle = this._cmBundle;
+        if (bundle === null) {
+            throw new Error('platform-markdown-editor: CodeMirror bundle required');
+        }
+        return bundle;
+    }
+
     _createEditor(): void {
         const container = this.renderRoot.querySelector('#codemirror-container');
         if (!container) return;
@@ -1148,16 +1238,12 @@ export class PlatformMarkdownEditor extends PlatformElement {
         this._readonlyCompartment = new cm.Compartment();
         
         const variableExtensions = this.enableVariables
-            ? createVariableExtensions(this._cmBundle as CmModule, {
+            ? createVariableExtensions(this._requireCmBundle(), {
                 syntax: this.variableSyntax === 'at-ref' ? 'at-ref' : 'both',
                 getValues: () => (this.variables && typeof this.variables === 'object' ? this.variables : {}),
                 getStatePreview: () => (this.statePreview && typeof this.statePreview === 'object' ? this.statePreview : {}),
-                getCatalog: () => (
-                    Array.isArray(this.variableCatalog)
-                        ? this.variableCatalog as Array<{ name: string; type?: string; source?: string; hasValue?: boolean; kind?: string }>
-                        : []
-                ),
-                getStatePaths: () => (Array.isArray(this.statePaths) ? this.statePaths as string[] : []),
+                getCatalog: () => variableCatalogEntries(this.variableCatalog),
+                getStatePaths: () => stringList(this.statePaths, 'statePaths'),
                 t: (key: string) => {
                     if (key === 'undefined') return this.t('markdown_editor.var_undefined');
                     if (key === 'runtime_value') return this.t('markdown_editor.runtime_value');
@@ -1210,12 +1296,12 @@ export class PlatformMarkdownEditor extends PlatformElement {
 
         this._editorView = new cm.EditorView({
             state: cm.EditorState.create({
-                doc: this.value || '',
+                doc: this.value,
                 extensions
             }),
             parent: container
         });
-        this._variablesFingerprint = `${this._variablesFingerprintValue(this.variables)}|${JSON.stringify(this.variableCatalog || [])}|${JSON.stringify(this.statePreview || {})}|${JSON.stringify(this.statePaths || [])}`;
+        this._variablesFingerprint = `${this._variablesFingerprintValue(this.variables)}|${JSON.stringify(this.variableCatalog)}|${JSON.stringify(this.statePreview)}|${JSON.stringify(this.statePaths)}`;
         this._syncFileDropListeners();
     }
 
@@ -1248,8 +1334,12 @@ export class PlatformMarkdownEditor extends PlatformElement {
         const onDrop = (e: Event) => {
             e.preventDefault();
             e.stopPropagation();
-            const text = asDropEvent(e).dataTransfer?.getData('text/plain') || '';
-            if (text) {
+            const transfer = asDropEvent(e).dataTransfer;
+            if (transfer === undefined || transfer === null) {
+                return;
+            }
+            const text = transfer.getData('text/plain');
+            if (text !== '') {
                 this.insertTextAtCursor(text);
             }
         };
@@ -1355,7 +1445,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
         const catalog = Array.isArray(this.variableCatalog) ? this.variableCatalog : [];
         const root = typeof varName === 'string' ? varName.split('.')[0] : '';
         const entry = catalog.find((item: unknown) => {
-            const name = (item as { name?: unknown } | null)?.name;
+            const name = isPlainRecord(item) ? item.name : undefined;
             if (typeof name !== 'string' || name.length === 0) return false;
             if (name === varName || name === root) return true;
             return typeof root === 'string' && root.length > 0 && name.startsWith(`${root}.`);
@@ -1374,14 +1464,14 @@ export class PlatformMarkdownEditor extends PlatformElement {
                 return `⚠️ ${this.t('markdown_editor.for_not_array', { name: listVar })}`;
             }
             
-            const results = (listValue as unknown[]).map((item: unknown) => {
+            const results = listValue.map((item: unknown) => {
                 let itemBody = body;
                 
                 itemBody = itemBody.replace(new RegExp(`\\{${itemVar}\\}`, 'g'), this._formatValue(item));
                 
                 itemBody = itemBody.replace(new RegExp(`\\{${itemVar}\\.(\\w+)\\}`, 'g'), (_m: string, prop: string) => {
-                    if (typeof item === 'object' && item !== null && prop in item) {
-                        return this._formatValue((item as Record<string, unknown>)[prop]);
+                    if (isPlainRecord(item) && prop in item) {
+                        return this._formatValue(item[prop]);
                     }
                     return `⚠️{${itemVar}.${prop}}`;
                 });
@@ -1447,12 +1537,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
 
     _availableVariableEntries(): Array<{ name: string; source?: string; hasValue?: boolean; type?: string }> {
         if (!Array.isArray(this.variableCatalog)) return [];
-        return this.variableCatalog.filter(
-            (entry: unknown): entry is { name: string; source?: string; hasValue?: boolean; type?: string } =>
-                typeof entry === 'object' && entry !== null
-                    && typeof (entry as { name?: unknown }).name === 'string'
-                    && ((entry as { name: string }).name).length > 0,
-        );
+        return this.variableCatalog.filter(isVariableCatalogEntry);
     }
 
     _variableChipTitle(entry: { name?: string; type?: string; source?: string; hasValue?: boolean }): string {
@@ -1468,12 +1553,13 @@ export class PlatformMarkdownEditor extends PlatformElement {
         const text = update.state.doc.toString();
         const before = text.slice(0, pos);
         const match = before.match(/(^|[\s([{])@([^\s@]*)$/);
-        if (!match) {
+        const mentionQuery = match === null ? undefined : match[2];
+        if (match === null || mentionQuery === undefined) {
             return;
         }
         this.emit('mention-query', {
-            query: match[2],
-            from: pos - (match[2] || '').length - 1,
+            query: mentionQuery,
+            from: pos - mentionQuery.length - 1,
             to: pos,
         });
     }
@@ -1646,8 +1732,8 @@ export class PlatformMarkdownEditor extends PlatformElement {
      * @param {CustomEvent<{ text: string, provider: string }>} event
      */
     _onVoiceDictationTranscribed(event: Event) {
-        const detail = event instanceof CustomEvent ? event.detail as { text?: unknown } : null;
-        if (!detail || typeof detail.text !== 'string' || detail.text.length === 0) {
+        const detail = event instanceof CustomEvent && isPlainRecord(event.detail) ? event.detail : null;
+        if (detail === null || typeof detail.text !== 'string' || detail.text.length === 0) {
             throw new Error('platform-markdown-editor: transcribed detail.text required');
         }
         const current = this.getValue();
@@ -1789,18 +1875,21 @@ export class PlatformMarkdownEditor extends PlatformElement {
                 </div>
                 ${!this.readonly && atts.length > 0 ? html`
                     <div class="attachments">
-                        ${(atts as Array<{ filename?: string; size?: number }>).map((att, index: number) => html`
+                        ${atts.map((att, index: number) => {
+                            const chip = attachmentChip(att);
+                            return html`
                             <div class="att-chip">
                                 <platform-icon name="attach" size="12"></platform-icon>
-                                <span class="att-chip-name">${att.filename}</span>
-                                <span>${formatFileSize(att.size || 0)}</span>
+                                <span class="att-chip-name">${chip.filename}</span>
+                                <span>${formatFileSize(typeof chip.size === 'number' && Number.isFinite(chip.size) ? chip.size : 0)}</span>
                                 <button type="button" class="att-chip-remove"
                                     .ariaLabel=${this.t('markdown_editor.attach_remove')}
                                     @click=${() => this._removeAttachment(index)}>
                                     <platform-icon name="close" size="12"></platform-icon>
                                 </button>
                             </div>
-                        `)}
+                        `;
+                        })}
                     </div>
                 ` : nothing}
                 ${!this.readonly && this.showFormatToggle && this._formatOpen ? html`

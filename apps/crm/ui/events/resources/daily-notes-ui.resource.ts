@@ -7,6 +7,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import type { CrmDailyNotesUiSlice } from '../crm.types.js';
 
 function _formatIsoDate(d: Date) {
     const y = d.getFullYear();
@@ -35,7 +36,7 @@ export const dailyNotesUiSlice = createSlice({
     actions: {
         setRange: 'range_updated',
     },
-    extraReducer: (state, event) => {
+    extraReducer: (state: CrmDailyNotesUiSlice, event) => {
         switch (event.type) {
             case 'crm/daily_notes_ui/range_updated': {
                 const p = (event.payload as Record<string, any>);
@@ -49,3 +50,9 @@ export const dailyNotesUiSlice = createSlice({
         }
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/daily_notes_ui': typeof dailyNotesUiSlice;
+    }
+}

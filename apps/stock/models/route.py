@@ -87,20 +87,21 @@ class StockRoute(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_company(
+    async def list_active_by_name(
         cls,
         company_id: str,
         *,
         warehouse_id: str | None = None,
         limit: int = 200,
     ) -> list[Self]:
+        """Активные маршруты компании, ORDER BY name, limit по умолчанию 200, без offset. warehouse_id None не фильтрует."""
         q = cls.objects.filter(company_id=company_id, is_active=True)
         if warehouse_id is not None:
             q = q.filter(warehouse_id=warehouse_id)
         return await q.order_by("name").limit(limit).all()
 
     @classmethod
-    async def create_route(
+    async def create(
         cls,
         *,
         company_id: str,
@@ -109,6 +110,7 @@ class StockRoute(PlatformModel):
         code: str = "",
         steps: list[StockRouteStepSpec] | None = None,
     ) -> Self:
+        """Вставляет маршрут. route_id новый. steps None становится пустым списком и сортируется по sequence. code по умолчанию пустая строка."""
         return await cls.objects.create(
             instance=cls(
                 route_id=new_id("rte"),

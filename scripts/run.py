@@ -56,16 +56,23 @@ if str(project_root) not in sys.path:
 # (Granian отдаёт Rust-ом, не касаясь ASGI; FastAPI StaticFiles остаётся как
 # fallback для in-process тестов через httpx.ASGITransport).
 CORE_FRONTEND_STATIC = ("/static/core", "core/frontend/static")
+# granian берёт первый совпавший маршрут: embed-бандлы `/static/core/lib/*` объявляются до `/static/core`.
+CORE_FRONTEND_EMBED = ("/static/core/lib", "core/frontend/embed-dist")
 
 # Конфигурация сервисов (HTTP — granian, taskiq — taskiq CLI, module — python -m)
 SERVICES = {
+    "ui_watch": {
+        "type": "npm-script",
+        "script": "watch:ui",
+    },
     "flows": {
         "type": "granian",
         "app": "apps.flows.main:app",
         "port": "8001",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/flows/static", "apps/flows/ui"),
+            ("/flows/static", "apps/flows/ui-dist"),
             ("/static", "apps/flows/static"),
             ("/flows/demo_cards", "apps/flows/static/demo_cards"),
         ],
@@ -75,8 +82,9 @@ SERVICES = {
         "app": "apps.frontend.main:app",
         "port": "8002",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/static/frontend", "apps/frontend/ui"),
+            ("/static/frontend", "apps/frontend/ui-dist"),
         ],
     },
     "crm": {
@@ -84,8 +92,9 @@ SERVICES = {
         "app": "apps.crm.main:app",
         "port": "8003",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/crm/ui/static", "apps/crm/ui"),
+            ("/crm/ui/static", "apps/crm/ui-dist"),
             ("/crm/ui/vendor/3d-force-graph", "node_modules/3d-force-graph/dist"),
             ("/crm/ui/vendor/three", "node_modules/three/build"),
         ],
@@ -95,8 +104,9 @@ SERVICES = {
         "app": "apps.rag.main:app",
         "port": "8004",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/rag/ui/static", "apps/rag/ui"),
+            ("/rag/ui/static", "apps/rag/ui-dist"),
         ],
     },
     "sync": {
@@ -104,8 +114,9 @@ SERVICES = {
         "app": "apps.sync.main:app",
         "port": "8005",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/sync/ui/static", "apps/sync/ui"),
+            ("/sync/ui/static", "apps/sync/ui-dist"),
         ],
     },
     "office": {
@@ -113,8 +124,9 @@ SERVICES = {
         "app": "apps.office.main:app",
         "port": "8008",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/documents/ui/static", "apps/office/ui"),
+            ("/documents/ui/static", "apps/office/ui-dist"),
         ],
     },
     "worktracker": {
@@ -122,8 +134,9 @@ SERVICES = {
         "app": "apps.worktracker.main:app",
         "port": "8021",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/worktracker/ui/static", "apps/worktracker/ui"),
+            ("/worktracker/ui/static", "apps/worktracker/ui-dist"),
         ],
     },
     "scheduler-api": {
@@ -141,8 +154,9 @@ SERVICES = {
         "app": "apps.wiki.main:app",
         "port": "8023",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/wiki/ui/static", "apps/wiki/ui"),
+            ("/wiki/ui/static", "apps/wiki/ui-dist"),
         ],
     },
     "stock": {
@@ -150,8 +164,9 @@ SERVICES = {
         "app": "apps.stock.main:app",
         "port": "8026",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/stock/ui/static", "apps/stock/ui"),
+            ("/stock/ui/static", "apps/stock/ui-dist"),
         ],
     },
     "guest_runtime": {
@@ -190,8 +205,9 @@ SERVICES = {
         "app": "apps.provider_litserve.main:app",
         "port": "8014",
         "static": [
+            CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
-            ("/litserve/ui/static", "apps/provider_litserve/ui"),
+            ("/litserve/ui/static", "apps/provider_litserve/ui-dist"),
         ],
     },
 
@@ -285,6 +301,8 @@ SERVICES = {
 # остаются с PPID=1 и копят RSS до OOM. В тестах и prod reload нет.
 GRANIAN_RELOAD_DISABLED_SERVICES = frozenset({"provider_litserve", "browser"})
 
+# watchfiles в granian следит за всеми файлами: UI-исходники и бандлы (esbuild watch пишет ui-dist)
+# не перезапускают Python-процессы.
 GRANIAN_RELOAD_IGNORE_DIRS = (
     "__pycache__",
     ".pytest_cache",
@@ -295,6 +313,10 @@ GRANIAN_RELOAD_IGNORE_DIRS = (
     "data",
     ".cursor",
     "documentation-dist",
+    "ui",
+    "ui-dist",
+    "embed-dist",
+    "static",
 )
 
 
@@ -370,7 +392,7 @@ def build_command(service: str) -> list[str]:
             raise ValueError(f"SERVICES[{service!r}].static must be list[tuple[str,str]]")
         for route, mount in static:
             if not Path(mount).exists():
-                continue
+                raise SystemExit(f"{service}: нет каталога статики {mount} — выполните make ui-build")
             cmd += ["--static-path-route", route, "--static-path-mount", mount]
         return cmd
     if service_type == "taskiq-worker":
@@ -396,6 +418,11 @@ def build_command(service: str) -> list[str]:
             "scheduler",
             scheduler,
         ]
+    if service_type == "npm-script":
+        script = config.get("script")
+        if not isinstance(script, str) or not script:
+            raise ValueError(f"SERVICES[{service!r}].script must be non-empty str")
+        return ["npm", "run", script]
     if service_type == "centrifugo-compose":
         compose_service = config.get("compose_service")
         if not isinstance(compose_service, str) or not compose_service:

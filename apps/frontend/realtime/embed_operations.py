@@ -269,7 +269,7 @@ async def op_embed_configs_create(
     request_data: CreateEmbedConfigRequest, *, user: User, di: Di
 ) -> EmbedConfig:
     """Создаёт EmbedConfig компании и глобальный маппинг embed_id -> company_id."""
-    flow = await FlowConfig.get_latest(request_data.flow_id)
+    flow = await FlowConfig.current_for_flow(request_data.flow_id)
     if flow is None:
         raise PlatformNotFoundError(
             (
@@ -475,7 +475,7 @@ async def op_embed_configs_list(
     """Конфигурации активной компании без preview-share ссылок."""
     _ = user
     scope = await require_company_viewer(di.authz_service)
-    configs = await EmbedConfig.list_for_company(
+    configs = await EmbedConfig.list_unordered_window_for_company(
         scope.company_id,
         limit=payload.limit,
         offset=payload.offset,

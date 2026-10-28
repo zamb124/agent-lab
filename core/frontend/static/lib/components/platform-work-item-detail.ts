@@ -19,6 +19,7 @@ import './glass-spinner.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
 import type { OpController, ResourceController } from '../base/use-resource.js';
 import type { SelectController } from '../events/select-controller.js';
+import { isPlainRecord } from '../events/payload.js';
 
 interface WorkItemLink {
     link_kind?: unknown;
@@ -60,11 +61,26 @@ const STATES = Object.freeze(['open', 'in_progress', 'blocked', 'done', 'cancell
 const PRIORITIES = Object.freeze(['low', 'normal', 'high', 'urgent']);
 const TERMINAL = Object.freeze(new Set(['done', 'cancelled', 'failed']));
 
+function isWorkItemLink(value: unknown): value is WorkItemLink {
+    return isPlainRecord(value);
+}
+
+function isWorkItem(value: unknown): value is WorkItemRecord {
+    return isPlainRecord(value) && typeof value.work_item_id === 'string';
+}
+
+function isFileRef(value: unknown): value is FileRefRecord {
+    return isPlainRecord(value) && typeof value.file_id === 'string';
+}
+
 function _crmEntityId(item: WorkItemRecord | null | undefined): string {
     if (!item || !Array.isArray(item.links)) {
         return '';
     }
-    for (const link of item.links as WorkItemLink[]) {
+    for (const link of item.links) {
+        if (!isWorkItemLink(link)) {
+            continue;
+        }
         if (link && link.link_kind === 'crm_entity' && typeof link.entity_id === 'string') {
             return link.entity_id;
         }
@@ -92,10 +108,7 @@ function _cloneFileRefs(files: unknown): FileRefRecord[] {
     if (!Array.isArray(files)) {
         return [];
     }
-    return files.filter(
-        (file): file is FileRefRecord =>
-            Boolean(file) && typeof file === 'object' && typeof (file as FileRefRecord).file_id === 'string',
-    );
+    return files.filter((file): file is FileRefRecord => isFileRef(file));
 }
 
 export class PlatformWorkItemDetail extends PlatformElement {
@@ -334,13 +347,8 @@ export class PlatformWorkItemDetail extends PlatformElement {
         this._items = null;
         this._moveOp = null;
         this._assignOp = null;
-        this._teamSel = this.select((s) => {
-            const team = s.team as { members?: unknown } | undefined;
-            const members = team && team.members;
-            return Array.isArray(members) ? (members as TeamMemberRecord[]) : [];
-        });
-        this._teamLoadingSel = this.select((s) =>
-            Boolean((s.team as { loading?: unknown } | undefined)?.loading));
+        this._teamSel = this.select((s) => s.team.members);
+        this._teamLoadingSel = this.select((s) => s.team.loading);
     }
 
     override connectedCallback(): void {
@@ -364,7 +372,11 @@ export class PlatformWorkItemDetail extends PlatformElement {
             && typeof this.workItemId === 'string'
             && this.workItemId.length > 0
         ) {
-            void this._getOp!.run({ work_item_id: this.workItemId });
+            const getOp = this._getOp;
+            if (getOp === null) {
+                throw new Error('platform-work-item-detail: get op required');
+            }
+            void getOp.run({ work_item_id: this.workItemId });
         }
         if (changed.has('workItemId') || changed.has('item')) {
             this._ensureTeamMembers();
@@ -378,27 +390,28 @@ export class PlatformWorkItemDetail extends PlatformElement {
     _ensureTeamMembers(): void {
         const members = this._teamSel.value;
         const loading = this._teamLoadingSel.value;
-        if ((members || []).length === 0 && !loading) {
+        if (members.length === 0 && !loading) {
             this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
         }
     }
 
     _hasLiveItem(): boolean {
-        return Boolean(this.item) && typeof this.item!.work_item_id === 'string';
+        const item = this.item;
+        return item !== null && typeof item.work_item_id === 'string';
     }
 
     _resolved(): WorkItemRecord | null {
-        if (this._hasLiveItem()) {
-            return this.item as WorkItemRecord;
+        if (isWorkItem(this.item)) {
+            return this.item;
         }
         const id = this.workItemId;
         const cached = this._items ? this._items.byId[id] : undefined;
-        if (cached && typeof (cached as WorkItemRecord).work_item_id === 'string') {
-            return cached as WorkItemRecord;
+        if (isWorkItem(cached)) {
+            return cached;
         }
         const result = this._getOp ? this._getOp.lastResult : null;
-        if (result && typeof result === 'object' && typeof (result as WorkItemRecord).work_item_id === 'string') {
-            return result as WorkItemRecord;
+        if (isWorkItem(result)) {
+            return result;
         }
         return null;
     }
@@ -418,7 +431,11 @@ export class PlatformWorkItemDetail extends PlatformElement {
         if (!item) {
             throw new Error('platform-work-item-detail: no item');
         }
-        this._items!.update(item.work_item_id, fields);
+        const items = this._items;
+        if (items === null) {
+            throw new Error('platform-work-item-detail: work items resource required');
+        }
+        items.update(item.work_item_id, fields);
         this.emit('work-item-changed', { work_item_id: item.work_item_id, fields });
     }
 
@@ -430,7 +447,11 @@ export class PlatformWorkItemDetail extends PlatformElement {
         if (item.state && TERMINAL.has(item.state)) {
             return;
         }
-        await this._moveOp!.run({ work_item_id: item.work_item_id, state });
+        const moveOp = this._moveOp;
+        if (moveOp === null) {
+            throw new Error('platform-work-item-detail: move op required');
+        }
+        await moveOp.run({ work_item_id: item.work_item_id, state });
         this.emit('work-item-changed', { work_item_id: item.work_item_id, state });
     }
 
@@ -485,12 +506,16 @@ export class PlatformWorkItemDetail extends PlatformElement {
         const assignment = typeof userId !== 'string' || userId.length === 0
             ? { assignee_kind: 'unassigned' }
             : { assignee_kind: 'users', user_ids: [userId] };
-        const result = await this._assignOp!.run({
+        const assignOp = this._assignOp;
+        if (assignOp === null) {
+            throw new Error('platform-work-item-detail: assign op required');
+        }
+        const result = await assignOp.run({
             work_item_id: item.work_item_id,
             assignment,
         });
-        if (result && typeof result === 'object' && typeof (result as WorkItemRecord).work_item_id === 'string') {
-            this.item = result as WorkItemRecord;
+        if (isWorkItem(result)) {
+            this.item = result;
             this._hydrateDrafts(this.item);
         }
         this.emit('work-item-changed', { work_item_id: item.work_item_id });

@@ -136,7 +136,7 @@ class ActivityTask(PlatformModel):
                 _ = await ActivityTask.objects.create(instance=task)
                 _ = await ActivityAttempt.objects.create(instance=attempt)
         except IntegrityError:
-            record = await cls.get_activity(
+            record = await cls.activity_record(
                 company_id=company_id,
                 session_id=session_id,
                 execution_branch_id=execution_branch_id,
@@ -154,7 +154,7 @@ class ActivityTask(PlatformModel):
         return cls._activity_record(task, attempt, was_created=True)
 
     @classmethod
-    async def get_activity(
+    async def activity_record(
         cls,
         *,
         company_id: str,
@@ -186,7 +186,7 @@ class ActivityTask(PlatformModel):
         return cls._activity_record(task, attempt)
 
     @classmethod
-    async def get_completed_activity_result(
+    async def completed_result(
         cls,
         *,
         company_id: str,
@@ -196,7 +196,7 @@ class ActivityTask(PlatformModel):
         idempotency_key: str | None = None,
         input_hash: str,
     ) -> JsonObject | None:
-        record = await cls.get_activity(
+        record = await cls.activity_record(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=execution_branch_id,

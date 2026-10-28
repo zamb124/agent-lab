@@ -11,6 +11,12 @@ import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 const RECENT_LIMIT = 12;
 
 export class WikiHomePage extends PlatformPage {
@@ -119,7 +125,7 @@ export class WikiHomePage extends PlatformPage {
         super();
         this._pages = this.useResource('wiki/pages');
         this._createPage = this.useOp('wiki/page_create');
-        this._locale = this.select((state) => (state.i18n as Record<string, unknown>).locale);
+        this._locale = this.select((state) => state.i18n.locale);
     }
 
     private async _createRootPage(): Promise<void> {
@@ -160,7 +166,7 @@ export class WikiHomePage extends PlatformPage {
                                 class="card"
                                 type="button"
                                 data-wiki-home-page=${page.wiki_page_id}
-                                @click=${() => this.navigate('wiki_page', { pageId: String(page.wiki_page_id ?? '') })}
+                                @click=${() => this.navigate('wiki_page', { pageId: missingAsEmpty(page.wiki_page_id) })}
                             >
                                 <span class="card-icon">
                                     ${page.icon === ''
@@ -172,7 +178,7 @@ export class WikiHomePage extends PlatformPage {
                                         ${page.title === '' ? this.t('page.untitled') : page.title}
                                     </span>
                                     <span class="card-meta">
-                                        ${formatPlatformDateTime(new Date(String(page.updated_at ?? '')), String(this._locale.value ?? ''))}
+                                        ${formatPlatformDateTime(new Date(missingAsEmpty(page.updated_at)), missingAsEmpty(this._locale.value))}
                                     </span>
                                 </span>
                             </button>

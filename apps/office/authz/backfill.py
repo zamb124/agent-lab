@@ -62,7 +62,7 @@ async def _write_office_authz_edges(authz: AuthzService, *, limit: int | None) -
     catalogs_written = 0
     documents_written = 0
 
-    catalog_rows = await DocumentCatalog.list_by_created_at(limit=limit)
+    catalog_rows = await DocumentCatalog.list_all_by_created_at(limit=limit)
     file_limit = limit if limit is not None else 1000
     binding_rows = await FileRecord.objects.filter(catalog_id__isnull=False).limit(file_limit).all()
 

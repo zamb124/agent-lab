@@ -136,7 +136,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
     }
 
     private async _load(): Promise<void> {
-        const token = (this.token || '').trim();
+        const token = this.token.trim();
         this._errorKey = '';
         this._loading = true;
         this._openConfig = null;
@@ -172,7 +172,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
     }
 
     private async _openFileItem(item: PublicCatalogItem) {
-        const token = (this.token || '').trim();
+        const token = this.token.trim();
         if (typeof item.file_id !== 'string' || item.file_id.length === 0) return;
         if (token.length === 0) return;
         this._loading = true;

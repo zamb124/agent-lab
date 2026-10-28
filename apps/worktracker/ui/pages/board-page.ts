@@ -35,6 +35,21 @@ const WORK_ITEM_MIME = 'application/x-worktracker-work-item-id';
 const BOARD_COLUMN_MIME = 'application/x-worktracker-board-column-id';
 const BOARD_COLUMN_INDEX_MIME = 'application/x-worktracker-board-column-index';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+function optionalZero(value: unknown): number {
+    if (value === undefined || value === null) return 0;
+    return Number(value);
+}
+
+function dragText(transfer: DataTransfer | null, mime: string): string {
+    if (transfer === null) return '';
+    return transfer.getData(mime);
+}
+
 export class WorktrackerBoardPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
     declare _activeBoardId: string;
@@ -195,12 +210,16 @@ export class WorktrackerBoardPage extends PlatformPage {
             this._boards.get(this._activeBoardId);
             this._workItems.load({ board_id: this._activeBoardId });
         }
-        const boards = (this._boards.items || []) as BoardRecord[];
+        const boards = this._boards.items as BoardRecord[];
         if (boards.length === 0) {
             return;
         }
         const urlBoardId = this._readBoardIdFromUrl();
-        const firstBoardId = String(boards[0]!.board_id ?? '');
+        const first = boards[0];
+        if (first === undefined) {
+            throw new Error('WorktrackerBoardPage: board missing');
+        }
+        const firstBoardId = missingAsEmpty(first.board_id);
         if (!this._activeBoardId) {
             const initialId = urlBoardId.length > 0 && boards.some((b) => b.board_id === urlBoardId)
                 ? urlBoardId
@@ -266,14 +285,15 @@ export class WorktrackerBoardPage extends PlatformPage {
     }
 
     private _activeBoard(): BoardRecord | null {
-        const boards = (this._boards.items || []) as BoardRecord[];
+        const boards = this._boards.items as BoardRecord[];
         const fromList = boards.find((b) => b.board_id === this._activeBoardId);
         if (fromList) {
             return fromList;
         }
         const byId = this._boards.byId as Record<string, BoardRecord>;
         if (byId && typeof byId === 'object' && byId[this._activeBoardId]) {
-            return byId[this._activeBoardId] ?? null;
+            const cached = byId[this._activeBoardId];
+            return cached === undefined ? null : cached;
         }
         return null;
     }
@@ -282,11 +302,11 @@ export class WorktrackerBoardPage extends PlatformPage {
         if (!Array.isArray(columns)) {
             throw new Error('WorktrackerBoardPage: columns must be an array');
         }
-        return (columns as BoardColumn[]).slice().sort((left, right) => (left.position ?? 0) - (right.position ?? 0));
+        return (columns as BoardColumn[]).slice().sort((left, right) => optionalZero(left.position) - optionalZero(right.position));
     }
 
     private _itemsForColumn(columnId: string) {
-        const items = this._workItems.items || [];
+        const items = this._workItems.items;
         return items.filter((i) => i.board_column_id === columnId);
     }
 
@@ -374,7 +394,7 @@ export class WorktrackerBoardPage extends PlatformPage {
         event.stopPropagation();
         this._columnInsertIndex = -1;
         this._draggingColumnId = '';
-        const sourceColumnId = event.dataTransfer?.getData(BOARD_COLUMN_MIME) ?? '';
+        const sourceColumnId = dragText(event.dataTransfer, BOARD_COLUMN_MIME);
         if (typeof sourceColumnId !== 'string' || sourceColumnId.length === 0) {
             return;
         }
@@ -415,7 +435,7 @@ export class WorktrackerBoardPage extends PlatformPage {
     private _onDrop(e: DragEvent, columnId: string) {
         e.preventDefault();
         this._dragOverColumnId = '';
-        const workItemId = e.dataTransfer?.getData(WORK_ITEM_MIME) ?? '';
+        const workItemId = dragText(e.dataTransfer, WORK_ITEM_MIME);
         if (!workItemId) {
             return;
         }
@@ -435,7 +455,7 @@ export class WorktrackerBoardPage extends PlatformPage {
     }
 
     private _renderColumn(column: BoardColumn, columnIndex: number) {
-        const columnId = String(column.board_column_id ?? '');
+        const columnId = missingAsEmpty(column.board_column_id);
         const items = this._itemsForColumn(columnId);
         const isOver = this._dragOverColumnId === columnId;
         const isDragging = this._draggingColumnId === columnId;
@@ -465,7 +485,7 @@ export class WorktrackerBoardPage extends PlatformPage {
                         <div
                             class="card-wrap"
                             draggable="true"
-                            @dragstart=${(e: DragEvent) => this._onDragStart(e, String(item.work_item_id ?? ''))}
+                            @dragstart=${(e: DragEvent) => this._onDragStart(e, missingAsEmpty(item.work_item_id))}
                         >
                             <worktracker-work-item-card
                                 .item=${item}
@@ -482,7 +502,7 @@ export class WorktrackerBoardPage extends PlatformPage {
 
     override render() {
         const board = this._activeBoard();
-        const boards = this._boards.items || [];
+        const boards = this._boards.items;
         const hasBoard = board && Array.isArray(board.columns) && board.columns.length > 0;
 
         return html`

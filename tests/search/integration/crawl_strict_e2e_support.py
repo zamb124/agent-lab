@@ -93,7 +93,7 @@ async def create_search_index_and_profile(
     assert create_profile.status_code == 201
 
     if llm_enrichment_enabled:
-        await CrawlProfile.set_llm_enrichment(
+        await CrawlProfile.update_llm_enrichment_enabled_and_model(
             crawl_profile_id,
             llm_enrichment_enabled=True,
             enrichment_model=CRAWL_STRICT_ENRICHMENT_MODEL,
@@ -115,7 +115,7 @@ async def seed_strict_sites(
         seeds,
         next_crawl_after=datetime.now(UTC),
     )
-    domain_page = await CrawlDomain.list_page(
+    domain_page = await CrawlDomain.page_by_domain(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=50,
@@ -149,7 +149,7 @@ async def queue_crawl_fetch_for_all_domains(
     search_di,
     crawl_profile_id: str,
 ) -> None:
-    domain_page = await CrawlDomain.list_page(
+    domain_page = await CrawlDomain.page_by_domain(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=50,
@@ -318,7 +318,7 @@ async def enable_llm_enrichment_layer(
     search_di,
     crawl_profile_id: str,
 ) -> int:
-    await CrawlProfile.set_llm_enrichment(
+    await CrawlProfile.update_llm_enrichment_enabled_and_model(
         crawl_profile_id,
         llm_enrichment_enabled=True,
         enrichment_model=CRAWL_STRICT_ENRICHMENT_MODEL,

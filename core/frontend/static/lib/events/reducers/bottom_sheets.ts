@@ -14,6 +14,7 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent } from '../contract.js';
+import { recordField, payloadFields } from '../payload.js';
 
 export interface BottomSheetItem {
     id: string;
@@ -58,7 +59,10 @@ function _markClosingByKind(state: BottomSheetsState, kind: string, ts: number) 
     let changed = false;
     const stack = state.stack.slice();
     for (let i = stack.length - 1; i >= 0; i -= 1) {
-        const item = stack[i]!;
+        const item = stack[i];
+        if (item === undefined) {
+            throw new Error('bottom sheet stack item missing');
+        }
         if (item.kind !== kind || item.closing === true) continue;
         stack[i] = _withClosing(item, ts);
         changed = true;
@@ -70,7 +74,10 @@ function _markClosingByKind(state: BottomSheetsState, kind: string, ts: number) 
 function _markTopClosing(state: BottomSheetsState, ts: number) {
     const stack = state.stack.slice();
     for (let i = stack.length - 1; i >= 0; i -= 1) {
-        const item = stack[i]!;
+        const item = stack[i];
+        if (item === undefined) {
+            throw new Error('bottom sheet stack item missing');
+        }
         if (item.closing === true) continue;
         stack[i] = _withClosing(item, ts);
         return { ...state, stack };
@@ -88,7 +95,10 @@ function _removeByKind(state: BottomSheetsState, kind: string) {
     let removed = false;
     const next = [];
     for (let i = state.stack.length - 1; i >= 0; i -= 1) {
-        const item = state.stack[i]!;
+        const item = state.stack[i];
+        if (item === undefined) {
+            throw new Error('bottom sheet stack item missing');
+        }
         if (!removed && item.kind === kind) {
             removed = true;
             continue;
@@ -101,19 +111,19 @@ function _removeByKind(state: BottomSheetsState, kind: string) {
 export function bottomSheetsReducer(state: BottomSheetsState = initialBottomSheetsState, event: PlatformEvent): BottomSheetsState {
     switch (event.type) {
         case CoreEvents.UI_BOTTOM_SHEET_OPEN_REQUESTED: {
-            const p = (event.payload || {}) as { id?: unknown; kind?: unknown; props?: Record<string, unknown> };
+            const p = payloadFields(event);
             const kind = p.kind;
             if (typeof kind !== 'string' || kind.length === 0) return state;
             const sheet = {
                 id: typeof p.id === 'string' && p.id.length > 0 ? p.id : _nextBottomSheetId(),
                 kind,
-                props: p.props || {},
+                props: recordField(p.props, 'UI_BOTTOM_SHEET_OPEN_REQUESTED.props'),
                 openedAt: event.meta.ts,
             };
             return { ...state, stack: [...state.stack, sheet] };
         }
         case CoreEvents.UI_BOTTOM_SHEET_CLOSE_REQUESTED: {
-            const p = (event.payload || {}) as { id?: unknown; kind?: unknown; props?: Record<string, unknown> };
+            const p = payloadFields(event);
             const id = typeof p.id === 'string' && p.id.length > 0 ? p.id : null;
             const kind = typeof p.kind === 'string' && p.kind.length > 0 ? p.kind : null;
             if (id !== null) {
@@ -126,7 +136,7 @@ export function bottomSheetsReducer(state: BottomSheetsState = initialBottomShee
             return _markTopClosing(state, event.meta.ts);
         }
         case CoreEvents.UI_BOTTOM_SHEET_CLOSED: {
-            const p = (event.payload || {}) as { id?: unknown; kind?: unknown; props?: Record<string, unknown> };
+            const p = payloadFields(event);
             const id = typeof p.id === 'string' && p.id.length > 0 ? p.id : null;
             const kind = typeof p.kind === 'string' && p.kind.length > 0 ? p.kind : null;
             if (id !== null) return _removeById(state, id);

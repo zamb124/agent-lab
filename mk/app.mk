@@ -7,7 +7,7 @@
 # Остановка: q в mprocs (или Ctrl+C). APP_KILL=1 — освободить порты перед стартом.
 # Исключение: make app ex flows_worker  (ex | x, затем имя; либо APP_EXCLUDE=…; либо make -- app --ex …).
 APP_MAK_EX_FLAGS := ex x --ex --exclude -e --kill
-APP_MAK_SVC := flows frontend crm rag sync worktracker office scheduler-api secrets wiki stock guest_runtime browser search \
+APP_MAK_SVC := ui_watch flows frontend crm rag sync worktracker office scheduler-api secrets wiki stock guest_runtime browser search \
 	provider_litserve voice capability_gateway code_runner_python code_runner_node code_runner_go \
 	code_runner_csharp flows_worker rag_worker search_worker sync_worker crm_worker crm_summary_worker idle_worker scheduler
 ifneq (,$(findstring app,$(MAKECMDGOALS)))
@@ -23,7 +23,7 @@ endif
 endif
 
 # APP_EXCLUDE=… — тот же эффект (через запятую), можно совмещать с make app --ex …
-app: runtime-bootstrap
+app: runtime-bootstrap ui-build
 	@command -v mprocs >/dev/null 2>&1 || { echo "mprocs не найден. Установи: brew install mprocs"; exit 1; }
 	@APP_EXCLUDE="$(APP_EXCLUDE)" uv run python scripts/run.py from-make $(MAKECMDGOALS) $(if $(filter 1,$(APP_KILL)),--from-make-kill,)
 

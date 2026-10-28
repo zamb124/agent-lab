@@ -95,8 +95,10 @@ export class CrawlReportMetricStrip extends PlatformElement {
         const dueCount = (this.countFromSummary as (...args: any[]) => any)('domains_due');
         const fetchingCount = (this.countFromSummary as (...args: any[]) => any)('url_fetching');
         const failedCount = (this.countFromSummary as (...args: any[]) => any)('url_failed');
-        const enrichedTotal = (this.summary.urls_enriched_total as number) ?? 0;
-        const enrichmentPending = (this.summary.urls_enrichment_pending as number) ?? 0;
+        const enrichedRaw = this.summary.urls_enriched_total;
+        const pendingRaw = this.summary.urls_enrichment_pending;
+        const enrichedTotal = enrichedRaw === undefined || enrichedRaw === null ? 0 : enrichedRaw;
+        const enrichmentPending = pendingRaw === undefined || pendingRaw === null ? 0 : pendingRaw;
         return html`
             <div class="summary-grid">
                 <platform-metric-card

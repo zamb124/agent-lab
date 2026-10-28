@@ -247,9 +247,10 @@ export class CRMApp extends PlatformApp {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
             return;
         }
-        this._crmMql = window.matchMedia('(max-width: 767px)');
+        const mql = window.matchMedia('(max-width: 767px)');
+        this._crmMql = mql;
         this._onCrmMobileMql = () => {
-            const next = this._crmMql!.matches;
+            const next = mql.matches;
             if (next !== this._crmMobile) {
                 this._crmMobile = next;
                 this.requestUpdate();
@@ -413,7 +414,7 @@ export class CRMApp extends PlatformApp {
         const auth = this._authSelect.value;
         applyCompanyHostRedirectIfNeeded(
             auth,
-            (this._companiesListSel.value ?? []) as ReadonlyArray<CompanyListEntry>,
+            (this._companiesListSel.value === undefined ? [] : this._companiesListSel.value) as ReadonlyArray<CompanyListEntry>,
             Boolean(this._companiesLoadingSel.value),
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );

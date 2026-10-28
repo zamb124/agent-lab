@@ -85,7 +85,7 @@ class StockPutawayRule(PlatformModel):
         return matched
 
     @classmethod
-    async def create_rule(
+    async def create(
         cls,
         *,
         company_id: str,
@@ -97,6 +97,7 @@ class StockPutawayRule(PlatformModel):
         owner_entity_id: str | None = None,
         sequence: int = 0,
     ) -> Self:
+        """Вставляет правило. rule_id новый."""
         return await cls.objects.create(
             instance=cls(
                 rule_id=new_id("pur"),
@@ -112,9 +113,10 @@ class StockPutawayRule(PlatformModel):
         )
 
     @classmethod
-    async def list_for_warehouse(
+    async def list_by_sequence_and_rule_id_for_warehouse(
         cls, company_id: str, warehouse_id: str
     ) -> list[Self]:
+        """Все правила размещения склада, ORDER BY sequence, rule_id. Предела нет."""
         return await cls.objects.filter(
             company_id=company_id, warehouse_id=warehouse_id
         ).order_by("sequence", "rule_id").all()
@@ -126,7 +128,7 @@ class StockPutawayRule(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def update_rule(
+    async def update_locations_filters_and_sequence(
         cls,
         company_id: str,
         rule_id: str,
@@ -138,7 +140,7 @@ class StockPutawayRule(PlatformModel):
         owner_entity_id: str | None = None,
         sequence: int | None = None,
     ) -> Self | None:
-        """Точечная правка полей; ``None``-поле не трогаем."""
+        """Пишет только переданные поля: локации, product_id, category, owner_entity_id, sequence. None не пишет поле и не очищает его. Все None — строка не сохраняется. Нет строки — None."""
         rule = await cls.by_id(company_id, rule_id)
         if rule is None:
             return None
@@ -159,9 +161,10 @@ class StockPutawayRule(PlatformModel):
         return rule
 
     @classmethod
-    async def set_active(
+    async def update_is_active(
         cls, company_id: str, rule_id: str, active: bool
     ) -> None:
+        """Пишет is_active по company_id и rule_id. updated_at не трогает. Нет строки — ничего не меняет."""
         _ = await cls.objects.filter(
             company_id=company_id, rule_id=rule_id
         ).update(using=STOCK_DB, is_active=active)

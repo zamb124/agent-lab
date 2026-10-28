@@ -3,6 +3,7 @@
  * ``<platform-flow-ui>`` (``host.blockContext()``); на холсте редактора тот же хост с атрибутом ``editing``.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
 import { LitElement, css, html, nothing, type PropertyValues } from '../../lit-shim.js';
 import { blockStyles, renderBlocks } from '../blocks/registry.js';
 import type { FlowUIStore, FlowUiPage as FlowUiPageModel, FlowUiBlock, FlowUiRenderContext } from '../runtime/flow-ui-store.js';
@@ -14,11 +15,30 @@ export interface FlowUiPageHostLike {
     blockContext(): FlowUiRenderContext;
 }
 
+function isPageBlock(value: unknown): value is FlowUiBlock {
+    return isPlainRecord(value) && typeof value.type === 'string';
+}
+
+function pageBlockList(blocks: unknown): FlowUiBlock[] | null {
+    if (!Array.isArray(blocks)) return null;
+    const items: unknown[] = [];
+    for (const item of blocks) items.push(item);
+    const list: FlowUiBlock[] = [];
+    for (const item of items) {
+        if (!isPageBlock(item)) {
+            throw new Error('flow-ui: page block must be an object with type');
+        }
+        list.push(item);
+    }
+    return list;
+}
+
 /** Чат на весь экран только если на странице нет других блоков: иначе overflow:hidden их срезает. */
 export function pageFillsViewport(page: { blocks?: unknown }): boolean {
-    return Array.isArray(page.blocks)
-        && (page.blocks as FlowUiBlock[]).some((block) => block.type === 'conversation')
-        && (page.blocks as FlowUiBlock[]).every((block) => block.type === 'conversation' || block.type === 'agent_identity');
+    const blocks = pageBlockList(page.blocks);
+    if (blocks === null) return false;
+    return blocks.some((block) => block.type === 'conversation')
+        && blocks.every((block) => block.type === 'conversation' || block.type === 'agent_identity');
 }
 
 export class FlowUIPage extends LitElement {
@@ -112,7 +132,8 @@ export class FlowUIPage extends LitElement {
         if (!this.host || !this.page) return nothing;
         const ctx = this.host.blockContext();
         const fill = pageFillsViewport(this.page);
-        const title = this.showTitle && this.page.show_title !== false ? (blockText(ctx, this.page.title) ?? '') : '';
+        const pageTitle = blockText(ctx, this.page.title);
+        const title = this.showTitle && this.page.show_title !== false ? (pageTitle === null ? '' : pageTitle) : '';
         return html`<div class="page" data-page-id=${this.page.page_id} data-fill=${fill ? 'true' : 'false'}>
             <div class="content" data-container-key="page">
                 ${title !== '' ? html`<h1 class="page-title">${title}</h1>` : ''}

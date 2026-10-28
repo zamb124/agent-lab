@@ -8,6 +8,13 @@ import './platform-user-chip.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
 import { isIsoDateLike, workItemAssigneeUserId } from './platform-work-item-row.js';
 import type { WorkItemLite } from './platform-work-item-row.js';
+import { isPlainRecord } from '../events/payload.js';
+
+function isWorkItemLite(value: unknown): value is WorkItemLite {
+    if (!isPlainRecord(value)) return false;
+    const id = value.work_item_id;
+    return typeof id === 'string' && id.length > 0;
+}
 import type { OpController } from '../base/use-resource.js';
 import type { SelectController } from '../events/select-controller.js';
 
@@ -186,8 +193,8 @@ export class PlatformWorkItemPreview extends PlatformElement {
         this.anchorRect = null;
         this._getOp = this.useOp('worktracker/work_item_get');
         this._locale = this.select((s) => {
-            const i18n = s.i18n as { locale?: string } | undefined;
-            return typeof i18n?.locale === 'string' && i18n.locale.length > 0 ? i18n.locale : 'en';
+            const locale = s.i18n.locale;
+            return locale.length > 0 ? locale : 'en';
         });
     }
 
@@ -206,10 +213,8 @@ export class PlatformWorkItemPreview extends PlatformElement {
         if (this.item && typeof this.item === 'object') {
             return this.item;
         }
-        const result = this._getOp.lastResult as WorkItemLite | null | undefined;
-        if (result && typeof result === 'object' && typeof result.work_item_id === 'string') {
-            return result;
-        }
+        const result = this._getOp.lastResult;
+        if (isWorkItemLite(result)) return result;
         return null;
     }
 
@@ -220,8 +225,8 @@ export class PlatformWorkItemPreview extends PlatformElement {
         if (this._getOp.busy) {
             return;
         }
-        const cached = this._getOp.lastResult as WorkItemLite | null | undefined;
-        if (cached && typeof cached === 'object' && cached.work_item_id === this.workItemId) {
+        const cached = this._getOp.lastResult;
+        if (isWorkItemLite(cached) && cached.work_item_id === this.workItemId) {
             return;
         }
         this._getOp.run({ work_item_id: this.workItemId });

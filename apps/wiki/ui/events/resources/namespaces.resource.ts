@@ -17,3 +17,9 @@ export const wikiNamespacesResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     listQuery: () => ({ limit: 200, offset: 0 }),
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'wiki/namespaces': typeof wikiNamespacesResource;
+    }
+}

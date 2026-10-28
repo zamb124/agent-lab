@@ -335,12 +335,12 @@ async def reconcile_daily_summary_task(
     _ = company_id
     since_date = date.today() - timedelta(days=days_back)
 
-    distinct_company_ids = await CRMEntity.distinct_note_company_ids_since(since_date)
+    company_ids = await CRMEntity.list_note_company_ids_since(since_date)
 
     enqueued_count = 0
     total_rows_processed = 0
-    for cid in distinct_company_ids:
-        company_rows = await CRMEntity.distinct_note_scopes_since(since_date, cid)
+    for cid in company_ids:
+        company_rows = await CRMEntity.list_note_company_namespace_dates_since(since_date, cid)
 
         total_rows_processed += len(company_rows)
         tick_id = str(uuid.uuid4())
@@ -390,11 +390,11 @@ async def reconcile_daily_summary_task(
         rows=total_rows_processed,
         enqueued=enqueued_count,
         days_back=days_back,
-        companies=len(distinct_company_ids),
+        companies=len(company_ids),
     )
     return {
         "rows": total_rows_processed,
         "enqueued": enqueued_count,
         "days_back": days_back,
-        "companies": len(distinct_company_ids),
+        "companies": len(company_ids),
     }

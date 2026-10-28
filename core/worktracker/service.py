@@ -96,7 +96,7 @@ class WorkItemService:
     # === Чтение ===
 
     async def mine_summary(self, company_id: str, user_id: str) -> WorkItemMineSummary:
-        assigned_open_count = await WorkItem.count_work_items(
+        assigned_open_count = await WorkItem.count_for_filters(
             company_id,
             assignee_user_id=user_id,
             exclude_terminal=True,
@@ -104,12 +104,12 @@ class WorkItemService:
         queue_ids = await self._queue_access.list_viewable_queue_ids(user_id=user_id)
         company_queue_ids = {
             queue.work_queue_id
-            for queue in await WorkQueue.list_for_company(company_id)
+            for queue in await WorkQueue.list_unordered_for_company(company_id)
         }
         queue_ids = [qid for qid in queue_ids if qid in company_queue_ids]
         queue_inbox_count = 0
         if queue_ids:
-            queue_inbox_count = await WorkItem.count_work_items(
+            queue_inbox_count = await WorkItem.count_for_filters(
                 company_id,
                 exclude_terminal=True,
                 queue_unclaimed_only=True,
@@ -562,7 +562,7 @@ class WorkItemService:
         viewable = set(await self._queue_access.list_viewable_queue_ids(user_id=user_id))
         return [
             queue
-            for queue in await WorkQueue.list_queues(company_id)
+            for queue in await WorkQueue.list_by_created_at(company_id)
             if queue.work_queue_id in viewable
         ]
 
@@ -671,7 +671,7 @@ class WorkItemService:
         name: str | None = None,
         columns: list[BoardColumn] | None = None,
     ) -> Board:
-        board = await Board.get_board(company_id, board_id)
+        board = await Board.require_in_company(company_id, board_id)
         if name is not None:
             board.name = name
         if columns is not None:
@@ -729,7 +729,7 @@ class WorkItemService:
     ) -> tuple[WorkItemState, str | None]:
         if board_id is None:
             return WorkItemState.OPEN, None
-        board = await Board.get_board(company_id, board_id)
+        board = await Board.require_in_company(company_id, board_id)
         if not board.columns:
             return WorkItemState.OPEN, None
         if board_column_id is not None:
@@ -743,7 +743,7 @@ class WorkItemService:
     ) -> BoardColumn:
         if board_id is None:
             raise ValueError('A task without a board cannot have a column')
-        board = await Board.get_board(company_id, board_id)
+        board = await Board.require_in_company(company_id, board_id)
         return self._find_column(board, board_column_id)
 
     @staticmethod

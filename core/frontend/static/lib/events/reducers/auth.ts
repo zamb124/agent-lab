@@ -40,6 +40,29 @@ export interface AuthState {
     sessionEndCause: string | null;
 }
 import { CoreAuthEvents } from '../effects/auth.effect.js';
+import { isPlainRecord, payloadFields, stringField } from '../payload.js';
+
+function isAuthUser(value: unknown): value is AuthUser {
+    return isPlainRecord(value);
+}
+
+function authUser(value: unknown): AuthUser | null {
+    if (value === undefined || value === null) return null;
+    if (!isAuthUser(value)) throw new Error('auth: user must be an object');
+    return value;
+}
+
+function providerItems(value: unknown, eventType: string): Record<string, unknown>[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`${eventType}: payload.items must be an array`);
+    }
+    const items: Record<string, unknown>[] = [];
+    for (const item of value) {
+        if (!isPlainRecord(item)) throw new Error(`${eventType}: provider item must be an object`);
+        items.push(item);
+    }
+    return items;
+}
 
 export const initialAuthState: AuthState = Object.freeze({
     status: 'unknown',
@@ -72,13 +95,14 @@ export function authReducer(state: AuthState = initialAuthState, event: Platform
         case CoreEvents.AUTH_USER_LOADED:
         case CoreEvents.AUTH_VALIDATED:
         case CoreEvents.AUTH_LOGIN_SUCCEEDED: {
-            const rawUser = ((event.payload || {}) as { user?: unknown }).user;
-            const user = rawUser && typeof rawUser === 'object' ? rawUser as AuthUser : null;
+            const user = authUser(payloadFields(event).user);
             return {
                 ...state,
                 status: 'authenticated',
                 user,
-                activeCompanyId: user ? (user.company_id || null) : state.activeCompanyId,
+                activeCompanyId: user
+                    ? (typeof user.company_id === 'string' && user.company_id.length > 0 ? user.company_id : null)
+                    : state.activeCompanyId,
                 error: null,
                 lastValidatedAt: event.meta.ts,
                 sessionEndCause: null,
@@ -86,17 +110,17 @@ export function authReducer(state: AuthState = initialAuthState, event: Platform
         }
 
         case CoreEvents.AUTH_USER_FAILED:
-        case CoreEvents.AUTH_LOGIN_FAILED:
+        case CoreEvents.AUTH_LOGIN_FAILED: {
+            const message = stringField(payloadFields(event).message);
             return {
                 ...state,
                 status: 'error',
                 user: null,
                 activeCompanyId: null,
-                error: typeof ((event.payload || {}) as { message?: unknown }).message === 'string'
-                    ? ((event.payload || {}) as { message: string }).message
-                    : 'auth_error',
+                error: message === null ? 'auth_error' : message,
                 sessionEndCause: null,
             };
+        }
 
         case CoreEvents.AUTH_UNAUTHORIZED:
             return _sessionReset(state, { status: 'unauthenticated', sessionEndCause: 'lost_session' });
@@ -108,7 +132,7 @@ export function authReducer(state: AuthState = initialAuthState, event: Platform
             return _sessionReset(state, { status: 'unauthenticated', sessionEndCause: 'logout' });
 
         case CoreEvents.AUTH_COMPANY_SWITCHED: {
-            const companyId = ((event.payload || {}) as { company_id?: unknown }).company_id;
+            const companyId = (payloadFields(event)).company_id;
             if (typeof companyId !== 'string' || !companyId) return state;
             return { ...state, activeCompanyId: companyId };
         }
@@ -116,18 +140,15 @@ export function authReducer(state: AuthState = initialAuthState, event: Platform
         case CoreAuthEvents.PROVIDERS_LOAD_REQUESTED:
             return { ...state, providers: { ...state.providers, loading: true, error: null } };
         case CoreAuthEvents.PROVIDERS_LOADED: {
-            const items = ((event.payload || {}) as { items?: unknown }).items;
-            if (!Array.isArray(items)) {
-                throw new Error(`${event.type}: payload.items must be an array`);
-            }
-            return { ...state, providers: { list: items as Record<string, unknown>[], loading: false, error: null } };
+            const items = providerItems(payloadFields(event).items, event.type);
+            return { ...state, providers: { list: items, loading: false, error: null } };
         }
         case CoreAuthEvents.PROVIDERS_LOAD_FAILED:
-            const msg = ((event.payload || {}) as { message?: unknown }).message;
+            const msg = (payloadFields(event)).message;
             return { ...state, providers: { ...state.providers, loading: false, error: typeof msg === 'string' ? msg : null } };
 
         case CoreAuthEvents.DEMO_STATUS_LOADED: {
-            const p = (event.payload || {}) as { enabled?: unknown; email?: unknown };
+            const p = payloadFields(event);
             return {
                 ...state,
                 demo: {
@@ -140,10 +161,14 @@ export function authReducer(state: AuthState = initialAuthState, event: Platform
 
         case CoreAuthEvents.SERVICE_ATTRS_LOADED:
         case CoreAuthEvents.SERVICE_ATTRS_UPDATED: {
-            const p = (event.payload || {}) as { service?: unknown; attrs?: unknown };
-            if (typeof p.service !== 'string' || !p.service) return state;
-            const attrs = p.attrs && typeof p.attrs === 'object' ? p.attrs as Record<string, unknown> : {};
-            return { ...state, serviceAttrs: { ...state.serviceAttrs, [p.service]: attrs } };
+            const p = payloadFields(event);
+            const service = p.service;
+            if (typeof service !== 'string' || service.length === 0) return state;
+            const attrs = p.attrs;
+            if (!isPlainRecord(attrs)) {
+                throw new Error(`${event.type}: attrs must be an object`);
+            }
+            return { ...state, serviceAttrs: { ...state.serviceAttrs, [service]: attrs } };
         }
 
         default:

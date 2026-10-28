@@ -277,15 +277,15 @@ async def cleanup_flow_context(
     with service_client_asgi_auth_context(auth_headers_system):
         await FlowConfig.delete_by_flow_id(flow_id)
         for resource_id in resource_ids or []:
-            await ResourceDefinition.delete_by_id(ResourceDefinition.row_id(resource_id))
+            await ResourceDefinition.delete_by_id(ResourceDefinition.resource_row_id_for_active_company(resource_id))
         memory_namespace = llm_context_memory_namespace_id("system")
         compacted_documents = await _documents_matching(
             memory_namespace, {"flow_id": flow_id, "source": "llm_context_compaction"}, limit=100
         )
         for document in compacted_documents:
-            _ = await VectorDocument.delete_document_chunks(memory_namespace, document.document_id)
+            _ = await VectorDocument.delete_by_namespace_and_document_id(memory_namespace, document.document_id)
         for namespace in namespaces:
-            _ = await VectorDocument.delete_namespace_chunks(namespace)
+            _ = await VectorDocument.delete_by_namespace(namespace)
             _ = await di.namespace_service.delete(namespace)
 
 

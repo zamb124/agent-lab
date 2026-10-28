@@ -4,8 +4,8 @@
 
 ## Состав `make lint`
 
-- `make lint` = `_lint-py` + `lint-ts` (`mk/lint.mk`), `set -e`: остановка на первом упавшем шаге. `make lint <path>` — ruff + basedpyright на файл (`.py`) или `lint-ts` (`.js`).
-- `lint-ts` = `check-events-canon` (`Makefile`) + `scripts/check_ui_kit_docs.py` + `check-field-canon` + `check-logging`.
+- `make lint` = `_lint-py` + `lint-ts` (`mk/lint.mk`), `set -e`: остановка на первом упавшем шаге. `make lint <path>` — ruff + basedpyright на файл (`.py`) или `lint-ts` (`.js`, `.ts`).
+- `lint-ts` = `tsc -p tsconfig.json` + `check-events-canon` (`Makefile`) + `scripts/check_ui_kit_docs.py` + `check-field-canon` + `scripts/check_ui_kit_canon.py` + `check-logging`.
 - `make test-static` (`mk/test.mk`) = `_lint-py` + `scripts/pin_a2a_official_fixtures.py --check` + agent-гейты + `tests/core/ai/test_platform_model_scoring_fixtures.py`.
 - Вне `make lint`: `make check-a2a-fixtures`, `make check-ft-wheels` (`scripts/check_ft_wheels.sh`), `make check-gpu-dockerfile-llm-model`, проверки документации (`scripts/check_docs_locale_parity.py`, `scripts/check_scenario_docs_quality.py`); отчёты без fail — `scripts/report_ui_i18n_gaps.py`, `scripts/report_ui_cyrillic.sh`.
 

@@ -16,13 +16,17 @@
 
 import { createAsyncOp } from '../index.js';
 import { httpRequest } from '../http.js';
+import { isPlainRecord } from '../payload.js';
 
 export { companyVoiceProvidersCatalogLoadOp } from '@platform/lib/events/resources/voice-providers-catalog.resource.js';
 
 type VoiceKind = 'stt' | 'tts';
-const VOICE_KINDS: readonly string[] = ['stt', 'tts'];
 
 type JsonObject = Record<string, unknown>;
+
+function isVoiceKind(value: unknown): value is VoiceKind {
+    return value === 'stt' || value === 'tts';
+}
 
 export interface VoiceProviderSecretsMeta {
     api_key_set: boolean;
@@ -58,10 +62,10 @@ function _normalizeSecretsMetaField(raw: unknown): VoiceProviderSecretsMeta {
             scope: null,
         };
     }
-    if (typeof raw !== 'object') {
+    if (!isPlainRecord(raw)) {
         throw new Error('company_voice_providers: secrets_meta must be object or null');
     }
-    const r = raw as JsonObject;
+    const r = raw;
     return {
         api_key_set: r.api_key_set === true,
         client_secret_set: r.client_secret_set === true,
@@ -71,12 +75,34 @@ function _normalizeSecretsMetaField(raw: unknown): VoiceProviderSecretsMeta {
     };
 }
 
+function isSecretsMeta(value: unknown): value is VoiceProviderSecretsMeta {
+    if (!isPlainRecord(value)) return false;
+    return typeof value.api_key_set === 'boolean'
+        && typeof value.client_secret_set === 'boolean'
+        && (value.folder_id === null || typeof value.folder_id === 'string')
+        && (value.client_id === null || typeof value.client_id === 'string')
+        && (value.scope === null || typeof value.scope === 'string');
+}
+
+function isVoiceProviderItem(value: unknown): value is VoiceProviderItem {
+    if (!isPlainRecord(value) || !isVoiceKind(value.kind)) return false;
+    if (typeof value.provider !== 'string' || value.provider.length === 0) return false;
+    if (value.model !== null && typeof value.model !== 'string') return false;
+    if (value.voice !== null && typeof value.voice !== 'string') return false;
+    if (value.language !== null && typeof value.language !== 'string') return false;
+    if (value.sample_rate !== null && typeof value.sample_rate !== 'number') return false;
+    if (value.threshold !== null && typeof value.threshold !== 'number') return false;
+    if (value.response_format !== null && typeof value.response_format !== 'string') return false;
+    if (value.secrets_meta !== null && !isSecretsMeta(value.secrets_meta)) return false;
+    return true;
+}
+
 function _normalizeItem(raw: unknown): VoiceProviderItem {
-    if (!raw || typeof raw !== 'object') {
+    if (!isPlainRecord(raw)) {
         throw new Error('company_voice_providers: payload item required');
     }
-    const r = raw as JsonObject;
-    if (typeof r.kind !== 'string' || !VOICE_KINDS.includes(r.kind)) {
+    const r = raw;
+    if (!isVoiceKind(r.kind)) {
         throw new Error(`company_voice_providers: unknown kind ${String(r.kind)}`);
     }
     if (typeof r.provider !== 'string' || r.provider.length === 0) {
@@ -87,7 +113,7 @@ function _normalizeItem(raw: unknown): VoiceProviderItem {
         secrets_meta = _normalizeSecretsMetaField(r.secrets_meta);
     }
     return {
-        kind: r.kind as VoiceKind,
+        kind: r.kind,
         provider: r.provider,
         model: typeof r.model === 'string' ? r.model : null,
         voice: typeof r.voice === 'string' ? r.voice : null,
@@ -108,20 +134,19 @@ export const companyVoiceProvidersLoadOp = createAsyncOp({
         path: '/voice/api/v1/companies/:company_id/voice-providers',
     },
     request: async ({ payload }) => {
-        const p = payload as { company_id?: unknown } | null;
-        if (!p || typeof p.company_id !== 'string' || p.company_id.length === 0) {
+        if (!isPlainRecord(payload) || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
             throw new Error('company_voice_providers_load: company_id required');
         }
         const response = await httpRequest({
             method: 'GET',
-            url: `/voice/api/v1/companies/${encodeURIComponent(p.company_id)}/voice-providers`,
-        }) as { items?: unknown } | null;
-        if (!response || !Array.isArray(response.items)) {
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/voice-providers`,
+        });
+        if (!isPlainRecord(response) || !Array.isArray(response.items)) {
             throw new Error('company_voice_providers_load: response.items required');
         }
         return {
-            company_id: p.company_id,
-            items: (response.items as unknown[]).map(_normalizeItem),
+            company_id: payload.company_id,
+            items: response.items.map(_normalizeItem),
         };
     },
     extraInitial: {
@@ -134,11 +159,15 @@ export const companyVoiceProvidersLoadOp = createAsyncOp({
             return state;
         }
         if (event.type === events.SUCCEEDED) {
-            const result = (event.payload as { result?: { items?: VoiceProviderItem[] } } | null)?.result;
-            if (!result || !Array.isArray(result.items)) return state;
+            if (!isPlainRecord(event.payload) || !isPlainRecord(event.payload.result) || !Array.isArray(event.payload.result.items)) {
+                throw new Error('company_voice_providers_load: SUCCEEDED result.items required');
+            }
             const byKind = _emptyByKind();
-            for (const item of result.items) {
-                byKind[item.kind] = item;
+            for (const raw of event.payload.result.items) {
+                if (!isVoiceProviderItem(raw)) {
+                    throw new Error('company_voice_providers_load: SUCCEEDED item must include kind and provider');
+                }
+                byKind[raw.kind] = raw;
             }
             return { ...state, byKind };
         }
@@ -155,32 +184,40 @@ export const companyVoiceProvidersUpsertOp = createAsyncOp({
         path: '/voice/api/v1/companies/:company_id/voice-providers/:kind',
     },
     request: async ({ payload }) => {
-        const p = payload as JsonObject | null;
-        if (!p || typeof p.company_id !== 'string' || p.company_id.length === 0) {
+        if (!isPlainRecord(payload) || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
             throw new Error('company_voice_providers_upsert: company_id required');
         }
-        if (typeof p.kind !== 'string' || !VOICE_KINDS.includes(p.kind)) {
-            throw new Error(`company_voice_providers_upsert: unknown kind ${String(p.kind)}`);
+        const companyId = payload.company_id;
+        const kind = payload.kind;
+        if (!isVoiceKind(kind)) {
+            throw new Error(`company_voice_providers_upsert: unknown kind ${String(kind)}`);
         }
-        if (typeof p.provider !== 'string' || p.provider.length === 0) {
+        const provider = payload.provider;
+        if (typeof provider !== 'string' || provider.length === 0) {
             throw new Error('company_voice_providers_upsert: provider required');
         }
+        const model = payload.model;
+        const voice = payload.voice;
+        const language = payload.language;
+        const sampleRate = payload.sample_rate;
+        const threshold = payload.threshold;
+        const responseFormat = payload.response_format;
         const body: JsonObject = {
-            provider: p.provider,
-            model: typeof p.model === 'string' && p.model.length > 0 ? p.model : null,
-            voice: typeof p.voice === 'string' && p.voice.length > 0 ? p.voice : null,
-            language: typeof p.language === 'string' && p.language.length > 0 ? p.language : null,
-            sample_rate: typeof p.sample_rate === 'number' ? p.sample_rate : null,
-            threshold: typeof p.threshold === 'number' ? p.threshold : null,
-            response_format: typeof p.response_format === 'string' && p.response_format.length > 0 ? p.response_format : null,
+            provider,
+            model: typeof model === 'string' && model.length > 0 ? model : null,
+            voice: typeof voice === 'string' && voice.length > 0 ? voice : null,
+            language: typeof language === 'string' && language.length > 0 ? language : null,
+            sample_rate: typeof sampleRate === 'number' ? sampleRate : null,
+            threshold: typeof threshold === 'number' ? threshold : null,
+            response_format: typeof responseFormat === 'string' && responseFormat.length > 0 ? responseFormat : null,
         };
-        const sec = p.secrets;
+        const sec = payload.secrets;
         if (sec !== undefined) {
             body.secrets = sec;
         }
         const response = await httpRequest({
             method: 'PUT',
-            url: `/voice/api/v1/companies/${encodeURIComponent(p.company_id)}/voice-providers/${encodeURIComponent(p.kind)}`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(companyId)}/voice-providers/${encodeURIComponent(kind)}`,
             body,
         });
         return _normalizeItem(response);
@@ -196,17 +233,29 @@ export const companyVoiceProvidersRemoveOp = createAsyncOp({
         path: '/voice/api/v1/companies/:company_id/voice-providers/:kind',
     },
     request: async ({ payload }) => {
-        const p = payload as JsonObject | null;
-        if (!p || typeof p.company_id !== 'string' || p.company_id.length === 0) {
+        if (!isPlainRecord(payload) || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
             throw new Error('company_voice_providers_remove: company_id required');
         }
-        if (typeof p.kind !== 'string' || !VOICE_KINDS.includes(p.kind)) {
-            throw new Error(`company_voice_providers_remove: unknown kind ${String(p.kind)}`);
+        const companyId = payload.company_id;
+        const kind = payload.kind;
+        if (!isVoiceKind(kind)) {
+            throw new Error(`company_voice_providers_remove: unknown kind ${String(kind)}`);
         }
         const response = await httpRequest({
             method: 'DELETE',
-            url: `/voice/api/v1/companies/${encodeURIComponent(p.company_id)}/voice-providers/${encodeURIComponent(p.kind)}`,
-        }) as { deleted?: unknown } | null;
-        return { kind: p.kind, deleted: Boolean(response && response.deleted) };
+            url: `/voice/api/v1/companies/${encodeURIComponent(companyId)}/voice-providers/${encodeURIComponent(kind)}`,
+        });
+        if (!isPlainRecord(response)) {
+            throw new Error('company_voice_providers_remove: response must be an object');
+        }
+        return { kind, deleted: response.deleted === true };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'voice/company_voice_providers_load': typeof companyVoiceProvidersLoadOp;
+        'voice/company_voice_providers_upsert': typeof companyVoiceProvidersUpsertOp;
+        'voice/company_voice_providers_remove': typeof companyVoiceProvidersRemoveOp;
+    }
+}

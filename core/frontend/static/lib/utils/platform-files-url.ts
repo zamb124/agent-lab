@@ -89,7 +89,10 @@ export function resolvePlatformFilesRouteSegment(opts: PlatformFilesRouteOpts = 
                 `resolvePlatformFilesRouteSegment: invalid filesApiBase ${opts.filesApiBase}`,
             );
         }
-        const seg = match[1] ?? '';
+        const seg = match[1];
+        if (seg === undefined) {
+            throw new Error('resolvePlatformFilesRouteSegment: filesApiBase segment missing');
+        }
         if (!PLATFORM_FILES_ROUTE_SEGMENTS.has(seg)) {
             throw new Error(
                 `resolvePlatformFilesRouteSegment: unknown filesApiBase segment ${seg}`,
@@ -107,8 +110,8 @@ export function resolvePlatformFilesRouteSegment(opts: PlatformFilesRouteOpts = 
               ? window.location.pathname
               : '';
     const segments = pathname.split('/').filter(Boolean);
-    const first = segments[0] ?? '';
-    if (first !== '' && PLATFORM_FILES_ROUTE_SEGMENTS.has(first)) {
+    const first = segments[0];
+    if (first !== undefined && PLATFORM_FILES_ROUTE_SEGMENTS.has(first)) {
         return first;
     }
     throw new Error(
@@ -169,15 +172,16 @@ export function extractPlatformFileDownloadId(raw: unknown): string | null {
     if (s.toLowerCase().startsWith('vscode-file:')) {
         return null;
     }
-    try {
-        if (/^https?:\/\//i.test(s)) {
-            const u = new URL(s);
-            const m = (u.pathname || '').match(PLATFORM_FILES_DOWNLOAD_PATH_RE);
-            return m ? (m[1] ?? null) : null;
-        }
-    } catch {
-        /* ignore invalid absolute URL */
+    if (/^https?:\/\//i.test(s) && URL.canParse(s)) {
+        const u = new URL(s);
+        const m = u.pathname.match(PLATFORM_FILES_DOWNLOAD_PATH_RE);
+        return downloadId(m);
     }
-    const m = s.match(PLATFORM_FILES_DOWNLOAD_PATH_RE);
-    return m ? (m[1] ?? null) : null;
+    return downloadId(s.match(PLATFORM_FILES_DOWNLOAD_PATH_RE));
+}
+
+function downloadId(match: RegExpMatchArray | null): string | null {
+    if (match === null) return null;
+    const id = match[1];
+    return id === undefined ? null : id;
 }

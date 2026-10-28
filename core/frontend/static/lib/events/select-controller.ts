@@ -7,27 +7,36 @@
  */
 
 import { getPlatformBus } from './bus-singleton.js';
+import type { PlatformBusState } from './bus-state.js';
+import { isPlainRecord } from './payload.js';
+
+function unknownItems(value: unknown): unknown[] | null {
+    if (!Array.isArray(value)) return null;
+    const items: unknown[] = [];
+    for (const item of value) items.push(item);
+    return items;
+}
 
 function _shallowEqual(a: unknown, b: unknown): boolean {
     if (a === b) return true;
     if (a === null || b === null || a === undefined || b === undefined) return false;
     if (typeof a !== 'object' || typeof b !== 'object') return false;
-    if (Array.isArray(a) !== Array.isArray(b)) return false;
-    const arr = b as unknown[];
-    if (Array.isArray(a)) {
-        if (a.length !== arr.length) return false;
-        for (let i = 0; i < a.length; i += 1) {
-            if (a[i] !== arr[i]) return false;
+    const leftItems = unknownItems(a);
+    const rightItems = unknownItems(b);
+    if (leftItems !== null || rightItems !== null) {
+        if (leftItems === null || rightItems === null) return false;
+        if (leftItems.length !== rightItems.length) return false;
+        for (let index = 0; index < leftItems.length; index += 1) {
+            if (leftItems[index] !== rightItems[index]) return false;
         }
         return true;
     }
-    const ra = a as Record<string, unknown>;
-    const rb = b as Record<string, unknown>;
-    const ak = Object.keys(ra);
-    const bk = Object.keys(rb);
-    if (ak.length !== bk.length) return false;
-    for (const k of ak) {
-        if (ra[k] !== rb[k]) return false;
+    if (!isPlainRecord(a) || !isPlainRecord(b)) return false;
+    const leftKeys = Object.keys(a);
+    const rightKeys = Object.keys(b);
+    if (leftKeys.length !== rightKeys.length) return false;
+    for (const key of leftKeys) {
+        if (a[key] !== b[key]) return false;
     }
     return true;
 }
@@ -40,33 +49,41 @@ interface ReactiveHost {
 
 export class SelectController<V = unknown> {
     host: ReactiveHost;
-    selector: (state: Record<string, unknown>) => V;
-    equality: (a: V, b: V) => boolean;
-    value: V | undefined;
+    selector: (state: Readonly<PlatformBusState>) => V;
+    private _read: () => V;
+    private _equal: (a: unknown, b: unknown) => boolean;
     private _unsubscribe: (() => void) | null;
 
-    constructor(host: ReactiveHost, selector: (state: Record<string, unknown>) => V, opts?: { equality?: (a: V, b: V) => boolean }) {
+    constructor(host: ReactiveHost, selector: (state: Readonly<PlatformBusState>) => V, opts?: { equality?: (a: unknown, b: unknown) => boolean }) {
         if (typeof selector !== 'function') {
             throw new Error('SelectController: selector function required');
         }
         this.host = host;
         this.selector = selector;
-        this.equality = (opts && opts.equality) || (_shallowEqual as (a: V, b: V) => boolean);
-        this.value = undefined;
+        this._equal = opts?.equality === undefined ? _shallowEqual : opts.equality;
+        this._read = () => {
+            throw new Error('SelectController.value read before hostConnected');
+        };
         this._unsubscribe = null;
         host.addController(this);
     }
 
+    /** Значение селектора. До `hostConnected` шина ещё не прочитана — это ошибка вызова, а не пустой слайс. */
+    get value(): V {
+        return this._read();
+    }
+
     hostConnected(): void {
         const bus = getPlatformBus();
-        this.value = this.selector(bus.getState());
+        let current = this.selector(bus.getState());
+        this._read = () => current;
         this._unsubscribe = bus.subscribeSelector(
             this.selector,
             (next: V) => {
-                this.value = next;
+                current = next;
                 this.host.requestUpdate();
             },
-            { equality: this.equality },
+            { equality: (left, right) => this._equal(left, right) },
         );
     }
 

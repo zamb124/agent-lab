@@ -23,6 +23,7 @@
 import { html, css, nothing } from '../lit-shim.js';
 import { guard } from 'lit/directives/guard.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
 
 interface OnlyOfficeDocEditor {
@@ -64,17 +65,34 @@ function parseJwtPayloadClaims(jwt: unknown): Record<string, unknown> {
     const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
     const json = atob(padded);
     const claims: unknown = JSON.parse(json);
-    if (!claims || typeof claims !== 'object' || Array.isArray(claims)) {
+    if (!isPlainRecord(claims)) {
         throw new Error('parseJwtPayloadClaims: payload is not a JSON object');
     }
-    return claims as Record<string, unknown>;
+    return claims;
+}
+
+function documentRecord(value: unknown): Record<string, unknown> | null {
+    if (value === undefined || value === null) return null;
+    if (!isPlainRecord(value)) {
+        throw new Error('platform-onlyoffice-host: config.document must be an object');
+    }
+    return value;
+}
+
+function frameEditorIframe(node: Element | null | undefined): HTMLIFrameElement | null {
+    if (node === null || node === undefined) return null;
+    if (!(node instanceof HTMLIFrameElement)) {
+        throw new Error('platform-onlyoffice-host: frameEditor is not an iframe');
+    }
+    return node;
 }
 
 function ensureOnlyOfficeIframePermissions(iframe: HTMLElement | null | undefined): void {
     if (!iframe) {
         return;
     }
-    const entries = (iframe.getAttribute('allow') || '')
+    const allow = iframe.getAttribute('allow');
+    const entries = (allow === null ? '' : allow)
         .split(';')
         .map((entry) => entry.trim())
         .filter(Boolean);
@@ -88,7 +106,7 @@ function ensureOnlyOfficeIframePermissions(iframe: HTMLElement | null | undefine
 }
 
 function isLocalDocumentServerHost(hostname: unknown): boolean {
-    const host = String(hostname || '').toLowerCase();
+    const host = (typeof hostname === 'string' ? hostname : '').toLowerCase();
     return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 }
 
@@ -97,19 +115,15 @@ function browserSafeDocumentServerUrl(raw: unknown): string {
     if (!value || typeof window === 'undefined') {
         return value;
     }
-    try {
-        const url = new URL(value, window.location.href);
-        if (
-            window.location.protocol === 'https:'
-            && url.protocol === 'http:'
-            && !isLocalDocumentServerHost(url.hostname)
-        ) {
-            url.protocol = 'https:';
-        }
-        return url.toString().replace(/\/$/, '');
-    } catch {
-        return value;
+    const url = new URL(value, window.location.href);
+    if (
+        window.location.protocol === 'https:'
+        && url.protocol === 'http:'
+        && !isLocalDocumentServerHost(url.hostname)
+    ) {
+        url.protocol = 'https:';
     }
+    return url.toString().replace(/\/$/, '');
 }
 
 let _ooEmbedCounter = 0;
@@ -292,9 +306,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
     }
 
     _emitDocumentState(dirty: unknown): void {
-        const documentConfig = this.config && typeof this.config.document === 'object' && this.config.document !== null
-            ? this.config.document as Record<string, unknown>
-            : null;
+        const documentConfig = this.config ? documentRecord(this.config.document) : null;
         const fileId = typeof this.fileId === 'string' && this.fileId.length > 0
             ? this.fileId
             : (documentConfig && typeof documentConfig.key === 'string' ? documentConfig.key : '');
@@ -366,24 +378,20 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
     _pickFrameEditorIframe(): HTMLIFrameElement | null {
         const wantId = this._ooPlaceholder ? this._ooPlaceholder.id : null;
         if (!wantId) {
-            return document.querySelector('iframe[name="frameEditor"]') as HTMLIFrameElement | null;
+            return frameEditorIframe(document.querySelector('iframe[name="frameEditor"]'));
         }
         const key = ooFrameIdKey(wantId);
         const list = document.querySelectorAll('iframe[name="frameEditor"]');
         for (const f of list) {
             const src = f.getAttribute('src');
             if (!src) continue;
-            try {
-                const u = new URL(src, document.baseURI);
-                const fid = u.searchParams.get('frameEditorId');
-                if (fid && ooFrameIdKey(fid) === key) {
-                    return f as HTMLIFrameElement;
-                }
-            } catch {
-                continue;
+            if (!URL.canParse(src, document.baseURI)) continue;
+            const fid = new URL(src, document.baseURI).searchParams.get('frameEditorId');
+            if (fid && ooFrameIdKey(fid) === key) {
+                return frameEditorIframe(f);
             }
         }
-        return list.length === 1 ? (list[0] as HTMLIFrameElement) : null;
+        return list.length === 1 ? frameEditorIframe(list[0]) : null;
     }
 
     _pinIframeToHost(iframe: HTMLElement): void {
@@ -493,7 +501,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         const mount = this._ooIframeMount;
         if (!(anchor && anchor.isConnected) || !(ph && ph.isConnected)) return;
         const iframeInMount = mount && mount.isConnected
-            ? (mount.querySelector('iframe[name="frameEditor"]') as HTMLElement | null)
+            ? frameEditorIframe(mount.querySelector('iframe[name="frameEditor"]'))
             : null;
         if (this.suspended) {
             ph.style.cssText = this._minimalOoPlaceholderStyle();
@@ -548,7 +556,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
 
     _destroyEditor(): void {
         if (this._docEditor && typeof this._docEditor.destroyEditor === 'function') {
-            try { this._docEditor.destroyEditor(); } catch { /* ignore */ }
+            this._docEditor.destroyEditor();
         }
         this._docEditor = null;
         this._teardownOoDom();
@@ -562,7 +570,9 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
             return;
         }
         if (typeof window.DocsAPI !== 'undefined' && window.__ooDocsApiOrigin !== base) {
-            try { delete window.DocsAPI; } catch { /* ignore */ }
+            if (!Reflect.deleteProperty(window, 'DocsAPI')) {
+                throw new Error('platform-onlyoffice-host: window.DocsAPI is not configurable');
+            }
             delete window.__ooDocsApiOrigin;
         }
         await new Promise<void>((resolve, reject) => {
@@ -640,10 +650,9 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                     onError: (event: { data?: unknown; message?: string } | null) => {
                         const d = event && event.data;
                         let detail = '';
-                        if (d != null && typeof d === 'object') {
-                            const data = d as { errorCode?: unknown; errorDescription?: unknown };
-                            const code = data.errorCode;
-                            const desc = data.errorDescription;
+                        if (isPlainRecord(d)) {
+                            const code = d.errorCode;
+                            const desc = d.errorDescription;
                             if (code != null || desc != null) {
                                 detail = [
                                     code != null ? String(code) : '',

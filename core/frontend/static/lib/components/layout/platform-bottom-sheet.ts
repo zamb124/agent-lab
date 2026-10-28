@@ -30,6 +30,14 @@ const SNAP_HALF = 'half';
 const SNAP_FULL = 'full';
 const SWIPE_CLOSE_THRESHOLD_PX = 80;
 
+function pointerTarget(event: PointerEvent): Element {
+    const target = event.currentTarget;
+    if (!(target instanceof Element)) {
+        throw new Error('platform-bottom-sheet: pointer target must be an element');
+    }
+    return target;
+}
+
 export class PlatformBottomSheet extends PlatformElement {
     static override properties: PropertyDeclarations = {
         ...PlatformElement.properties,
@@ -345,8 +353,7 @@ export class PlatformBottomSheet extends PlatformElement {
         this._dragging = true;
         this._dragStartY = e.clientY;
         this._dragOffset = 0;
-        const target = e.currentTarget as Element;
-        try { target.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+        pointerTarget(e).setPointerCapture(e.pointerId);
     }
 
     _onHandlePointerMove(e: PointerEvent): void {
@@ -361,8 +368,8 @@ export class PlatformBottomSheet extends PlatformElement {
     _onHandlePointerUp(e: PointerEvent): void {
         if (!this._dragging) return;
         this._dragging = false;
-        const target = e.currentTarget as Element;
-        try { target.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+        const target = pointerTarget(e);
+        if (target.hasPointerCapture(e.pointerId)) target.releasePointerCapture(e.pointerId);
         if (this._dragOffset >= SWIPE_CLOSE_THRESHOLD_PX) {
             this._requestClose();
         } else if (this._panelEl) {

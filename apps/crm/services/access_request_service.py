@@ -258,7 +258,7 @@ class AccessRequestService:
         try:
             await self._entity_access.sync_entity_created(copy)
         except Exception:
-            removed = await CRMEntity.take_by_id(copy.entity_id)
+            removed = await CRMEntity.delete_returning(copy.entity_id)
             if removed is not None:
                 _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
@@ -308,7 +308,7 @@ class AccessRequestService:
         try:
             await self._entity_access.sync_entity_created(copy)
         except Exception:
-            removed = await CRMEntity.take_by_id(copy.entity_id)
+            removed = await CRMEntity.delete_returning(copy.entity_id)
             if removed is not None:
                 _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
@@ -418,7 +418,7 @@ class AccessRequestService:
         offset: int = 0,
     ) -> list[AccessRequest]:
         return await (
-            AccessRequest.in_company(company_id, status)
+            AccessRequest.query_by_status_in_company(company_id, status)
             .order_by("-created_at")
             .limit(limit)
             .offset(offset)
@@ -430,4 +430,4 @@ class AccessRequestService:
         company_id: str,
         status: str | None = None,
     ) -> int:
-        return await AccessRequest.in_company(company_id, status).count()
+        return await AccessRequest.query_by_status_in_company(company_id, status).count()

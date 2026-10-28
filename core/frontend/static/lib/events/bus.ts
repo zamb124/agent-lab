@@ -18,6 +18,7 @@
 
 import { createEvent, assertEventType } from './contract.js';
 import type { PlatformEvent, EventMetaInput, EventSource, EffectCtx } from './contract.js';
+import { isPlainRecord } from './payload.js';
 
 export type Reducer<S> = (state: S, event: PlatformEvent) => S;
 export type EventMiddleware<S> = (event: PlatformEvent, ctx: { getState: () => S }) => PlatformEvent | null | void;
@@ -30,15 +31,39 @@ export type EventMiddleware<S> = (event: PlatformEvent, ctx: { getState: () => S
 export type EventEffect<S = never> = (event: PlatformEvent, ctx: EffectCtx<S>) => void | Promise<void>;
 interface EventLogLike { append: (event: PlatformEvent) => void }
 
+function unknownItems(value: unknown): unknown[] | null {
+    if (!Array.isArray(value)) return null;
+    const items: unknown[] = [];
+    for (const item of value) items.push(item);
+    return items;
+}
+
+function isPlatformEvent(value: unknown): value is PlatformEvent {
+    if (!isPlainRecord(value) || typeof value.id !== 'string' || typeof value.type !== 'string') return false;
+    const meta = value.meta;
+    if (!isPlainRecord(meta) || typeof meta.ts !== 'number' || typeof meta.source !== 'string') return false;
+    return true;
+}
+
 function _shallowEqual(a: unknown, b: unknown): boolean {
     if (a === b) return true;
     if (a === null || b === null || a === undefined || b === undefined) return false;
     if (typeof a !== 'object' || typeof b !== 'object') return false;
-    const ak = Object.keys(a);
-    const bk = Object.keys(b);
-    if (ak.length !== bk.length) return false;
-    for (const k of ak) {
-        if ((a as Record<string, unknown>)[k] !== (b as Record<string, unknown>)[k]) return false;
+    const leftItems = unknownItems(a);
+    const rightItems = unknownItems(b);
+    if (leftItems !== null || rightItems !== null) {
+        if (leftItems === null || rightItems === null || leftItems.length !== rightItems.length) return false;
+        for (let index = 0; index < leftItems.length; index += 1) {
+            if (leftItems[index] !== rightItems[index]) return false;
+        }
+        return true;
+    }
+    if (!isPlainRecord(a) || !isPlainRecord(b)) return false;
+    const leftKeys = Object.keys(a);
+    const rightKeys = Object.keys(b);
+    if (leftKeys.length !== rightKeys.length) return false;
+    for (const key of leftKeys) {
+        if (a[key] !== b[key]) return false;
     }
     return true;
 }
@@ -68,8 +93,11 @@ export class EventBus<S extends object = Record<string, unknown>> {
         if (!log || typeof log.append !== 'function') {
             throw new Error('EventBus: log with append() is required');
         }
+        if (initialState === undefined || initialState === null) {
+            throw new Error('EventBus: initialState required');
+        }
         this._reducer = reducer;
-        this._state = Object.freeze(initialState || {});
+        this._state = Object.freeze(initialState);
         this._log = log;
         this._middleware = middleware.slice();
         this._effects = [];
@@ -135,7 +163,11 @@ export class EventBus<S extends object = Record<string, unknown>> {
         if (!this._typeSubscribers.has(type)) {
             this._typeSubscribers.set(type, new Set());
         }
-        this._typeSubscribers.get(type)!.add(callback);
+        const subscribers = this._typeSubscribers.get(type);
+        if (subscribers === undefined) {
+            throw new Error(`EventBus.subscribeType: subscribers for ${type} missing`);
+        }
+        subscribers.add(callback);
         return () => {
             const set = this._typeSubscribers.get(type);
             if (set) {
@@ -186,10 +218,12 @@ export class EventBus<S extends object = Record<string, unknown>> {
             event = typeOrEvent;
             assertEventType(event.type);
             if (!event.id || !event.meta) {
-                event = createEvent(event.type, event.payload, (event.meta || {}) as EventMetaInput);
+                event = createEvent(event.type, event.payload, event.meta);
             }
+        } else if (typeof typeOrEvent === 'string') {
+            event = createEvent(typeOrEvent, payload, meta);
         } else {
-            event = createEvent(typeOrEvent as string, payload, meta || {});
+            throw new Error('EventBus.dispatch: event type must be a string');
         }
 
         for (const mw of this._middleware) {
@@ -197,9 +231,13 @@ export class EventBus<S extends object = Record<string, unknown>> {
             if (result === null) {
                 return null;
             }
-            if (result && typeof result === 'object') {
-                event = result as PlatformEvent;
+            if (result === undefined) {
+                continue;
             }
+            if (!isPlatformEvent(result)) {
+                throw new Error('EventBus.dispatch: middleware must return an event or null');
+            }
+            event = result;
         }
 
         this._log.append(event);
@@ -247,12 +285,13 @@ export class EventBus<S extends object = Record<string, unknown>> {
                     Promise.resolve()
                         .then(() => effect(event, ctx as never))
                         .catch((err) => {
-                            console.error('[EventBus] Effect failed', { event, err });
                             this.dispatch('ui/effect/failed', {
                                 event_type: event.type,
                                 event_id: event.id,
                                 error: String(err && err.message ? err.message : err),
                             }, { causation_id: event.id, source: 'system' });
+                            // Ошибка эффекта остаётся uncaught: событие фиксирует факт, а не заменяет сбой.
+                            throw err;
                         });
                 }
             }

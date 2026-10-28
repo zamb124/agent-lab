@@ -68,7 +68,7 @@ async def test_enqueue_enrichment_backfill_enqueues_missing_urls(
             browser_fallback_enabled=False,
         )
     )
-    await CrawlProfile.set_llm_enrichment(
+    await CrawlProfile.update_llm_enrichment_enabled_and_model(
         crawl_profile_id,
         llm_enrichment_enabled=True,
         enrichment_model="test-enrichment-model",

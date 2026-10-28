@@ -57,17 +57,10 @@ import type {
     PropertyValues,
     TemplateResult,
 } from 'lit';
-import type {
-    CursorListController,
-    OpController,
-    ResourceController,
-} from '@platform/lib/base/use-resource.js';
+import type { CursorListController, OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
-import type {
-    CrmDailyNotesUiController,
-    CrmNoteComposeController,
-} from '../events/crm.types.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const ENTITY_TYPES_RESOURCE = 'crm/entity_types';
 const SUMMARY_ENTITY_TOKEN_RE = /\[(@?[^\]]+)\]\(entity:([^)]+)\)/gi;
@@ -104,6 +97,41 @@ const NOTE_SUBTYPE_ICONS = {
     task: 'tasks',
     note: 'doc-detail',
 };
+
+function noteSubtypeIcon(sub: string): string {
+    switch (sub) {
+        case 'call':
+            return NOTE_SUBTYPE_ICONS.call;
+        case 'meeting':
+            return NOTE_SUBTYPE_ICONS.meeting;
+        case 'email':
+            return NOTE_SUBTYPE_ICONS.email;
+        case 'task':
+            return NOTE_SUBTYPE_ICONS.task;
+        case 'note':
+            return NOTE_SUBTYPE_ICONS.note;
+        default:
+            return 'doc-detail';
+    }
+}
+
+function noteRows(value: unknown): Record<string, any>[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const rows: Record<string, any>[] = [];
+    for (const item of value) {
+        if (!isPlainRecord(item)) {
+            throw new Error('daily notes: note must be an object');
+        }
+        const row: Record<string, any> = {};
+        for (const [key, field] of Object.entries(item)) {
+            row[key] = field;
+        }
+        rows.push(row);
+    }
+    return rows;
+}
 const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
 const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
 
@@ -810,8 +838,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         `,
     ];
 
-    private _dailyNotesUi: CrmDailyNotesUiController;
-    private _noteCompose: CrmNoteComposeController;
+    private _dailyNotesUi: ControllerFor<'crm/daily_notes_ui'>;
+    private _noteCompose: ControllerFor<'crm/note_compose'>;
     private _notes: CursorListController;
     private _latestRange: OpController;
     private _search: OpController;
@@ -833,8 +861,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
     constructor() {
         super();
-        this._dailyNotesUi = this.useSlice('crm/daily_notes_ui') as CrmDailyNotesUiController;
-        this._noteCompose = this.useSlice('crm/note_compose') as CrmNoteComposeController;
+        this._dailyNotesUi = this.useSlice('crm/daily_notes_ui');
+        this._noteCompose = this.useSlice('crm/note_compose');
         this._query = '';
         this._searchMode = 'hybrid';
         this._summaryOpen = false;
@@ -891,7 +919,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             }
             this._reloadNotes();
         });
-        this.useEvent(CRM_NOTE_UPDATED, (event: PlatformEvent) => this._onNoteWsUpdate(event.payload as Record<string, any> | null));
+        this.useEvent(CRM_NOTE_UPDATED, (event: PlatformEvent) => this._onNoteWsUpdate(event.payload));
 
         this.useEvent('crm/note_search/succeeded', (event: PlatformEvent) => {
             const causationId = event.meta && typeof event.meta.causation_id === 'string' ? event.meta.causation_id : null;
@@ -903,8 +931,9 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 throw new Error('crm/note_search/succeeded: slice lastRequestId missing');
             }
             if (causationId !== expectedId) return;
-            const result = event.payload && (event.payload as Record<string, any>).result;
-            const items = result && Array.isArray(result.items) ? result.items : [];
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const result = payload !== null && isPlainRecord(payload.result) ? payload.result : null;
+            const items = noteRows(result === null ? undefined : result.items);
             this._searchResults = items;
             this._searchLoading = false;
             this._loadCardsForVisibleNotes(items);
@@ -926,7 +955,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this.useEvent(CRM_TASK_UPDATED, () => this._rebuildAnalyzeTaskMap());
 
         this.useEvent('crm/notes_list/loaded', (event: PlatformEvent) => {
-            const items = event.payload && Array.isArray((event.payload as Record<string, any>).items) ? (event.payload as Record<string, any>).items : [];
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const items = noteRows(payload === null ? undefined : payload.items);
             if (this._query.trim().length === 0) {
                 this._loadCardsForVisibleNotes(items);
             }
@@ -1005,14 +1035,19 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             throw new Error('crm/note_latest_range/succeeded: slice lastRequestId missing');
         }
         if (causationId !== expectedId) return;
-        const result = event.payload && (event.payload as Record<string, any>).result;
-        const items = result && Array.isArray(result.items) ? result.items : [];
+        const payloadRecord = isPlainRecord(event.payload) ? event.payload : null;
+        const result = payloadRecord !== null && isPlainRecord(payloadRecord.result) ? payloadRecord.result : null;
+        const items = noteRows(result === null ? undefined : result.items);
         const noteDates = items
             .map((item: Record<string, any>) => (item && typeof item.note_date === 'string' ? item.note_date : ''))
             .filter((value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value));
-        const from = noteDates.length > 0
-            ? noteDates.reduce((earliest: string, value: string) => (value < earliest ? value : earliest), noteDates[0]!)
-            : _today();
+        const earliestDate = noteDates[0];
+        if (noteDates.length > 0 && earliestDate === undefined) {
+            throw new Error('daily notes: note date missing');
+        }
+        const from = earliestDate === undefined
+            ? _today()
+            : noteDates.reduce((earliest: string, value: string) => (value < earliest ? value : earliest), earliestDate);
         this._latestRangeBootstrapped = true;
         this._dailyNotesUi.setRange({ from, to: _tomorrow() });
         this._reloadNotes();
@@ -1050,17 +1085,23 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
     _rebuildAnalyzeTaskMap(): void {
         const byNoteId: Record<string, Record<string, any>> = {};
-        const items = this._tasks.items as Record<string, any>[];
-        for (const task of items) {
-            if (!ACTIVE_ANALYZE_TASK_STATUSES.has(task.status)) {
+        for (const task of this._tasks.items) {
+            if (!isPlainRecord(task)) {
+                throw new Error('daily notes: analyze task must be an object');
+            }
+            if (typeof task.status !== 'string' || !ACTIVE_ANALYZE_TASK_STATUSES.has(task.status)) {
                 continue;
             }
-            const data = task && typeof task.data === 'object' && task.data !== null ? task.data : null;
-            const noteId = data && typeof data.note_id === 'string' ? data.note_id : '';
+            const data = isPlainRecord(task.data) ? task.data : null;
+            const noteId = data !== null && typeof data.note_id === 'string' ? data.note_id : '';
             if (noteId.length === 0) {
                 continue;
             }
-            byNoteId[noteId] = task;
+            const row: Record<string, any> = {};
+            for (const [key, field] of Object.entries(task)) {
+                row[key] = field;
+            }
+            byNoteId[noteId] = row;
         }
         this._analyzeTasksByNoteId = byNoteId;
     }
@@ -1068,9 +1109,9 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     _reloadSummary(options?: { force_rebuild?: boolean }): void {
         const force_rebuild = options && options.force_rebuild === true;
         const ns = this._currentNamespace();
-        const payload = this._isPeriod()
-            ? { date_from: this._range().from, date_to: this._range().to, force_rebuild } as Record<string, unknown>
-            : { date: this._range().from, force_rebuild } as Record<string, unknown>;
+        const payload: Record<string, unknown> = this._isPeriod()
+            ? { date_from: this._range().from, date_to: this._range().to, force_rebuild }
+            : { date: this._range().from, force_rebuild };
         if (typeof ns === 'string' && ns.length > 0) {
             payload.namespace = ns;
         }
@@ -1081,8 +1122,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         }
     }
 
-    _onNoteWsUpdate(payload: Record<string, any> | null): void {
-        if (!payload || typeof payload !== 'object') return;
+    _onNoteWsUpdate(payload: unknown): void {
+        if (!isPlainRecord(payload)) return;
         if (typeof payload.note_id !== 'string' || payload.note_id.trim().length === 0) return;
         const ns = this._currentNamespace();
         const payloadNs = payload.namespace === null || payload.namespace === undefined
@@ -1091,7 +1132,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         if (ns !== payloadNs) return;
         if (typeof payload.note_date !== 'string') return;
         const mf = payload.markdown_format;
-        if (mf && (mf.phase === 'partial' || mf.phase === 'started')) {
+        if (isPlainRecord(mf) && (mf.phase === 'partial' || mf.phase === 'started')) {
             return;
         }
         if (payload.note_date < this._range().from || payload.note_date > this._range().to) return;
@@ -1104,7 +1145,11 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     }
 
     _onSearchInput(event: Event) {
-        this._query = (event.target as HTMLInputElement).value;
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('daily notes: search input required');
+        }
+        this._query = target.value;
         if (this._debounceTimer) clearTimeout(this._debounceTimer);
         const trimmed = this._query.trim();
         if (trimmed.length === 0) {
@@ -1203,11 +1248,10 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._cardsBulk.run({ entity_ids: ids });
     }
 
-    _onCardsBulkLoaded(payload: Record<string, any> | null): void {
-        if (!payload || typeof payload !== 'object') return;
+    _onCardsBulkLoaded(payload: Record<string, unknown>): void {
         const next = { ...this._noteEntitiesByNoteId };
         for (const [entityId, card] of Object.entries(payload)) {
-            if (card && Array.isArray(card.related_entities)) {
+            if (isPlainRecord(card) && Array.isArray(card.related_entities)) {
                 next[entityId] = card.related_entities;
             } else {
                 next[entityId] = [];
@@ -1219,9 +1263,12 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         const cardsResult = this._cardsBulk.lastResult;
-        if (cardsResult && cardsResult !== this._lastCardsResult) {
+        if (cardsResult !== null && cardsResult !== undefined && cardsResult !== this._lastCardsResult) {
             this._lastCardsResult = cardsResult;
-            this._onCardsBulkLoaded(cardsResult as Record<string, any> | null);
+            if (!isPlainRecord(cardsResult)) {
+                throw new Error('daily notes: cards bulk result must be an object');
+            }
+            this._onCardsBulkLoaded(cardsResult);
         }
     }
 
@@ -1252,9 +1299,10 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         if (!note || typeof note.entity_id !== 'string') {
             return false;
         }
+        const analyzed = this._analyze.lastResult;
         if (this._analyze.busy
-            && this._analyze.lastResult
-            && (this._analyze.lastResult as Record<string, any>).note_id === note.entity_id) {
+            && isPlainRecord(analyzed)
+            && analyzed.note_id === note.entity_id) {
             return true;
         }
         return this._analyzeTaskForNote(note.entity_id) !== null;
@@ -1280,7 +1328,18 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     }
 
     _summaryResult(): Record<string, any> | null {
-        return (this._isPeriod() ? this._periodSummary.lastResult : this._dailySummary.lastResult) as Record<string, any> | null;
+        const value = this._isPeriod() ? this._periodSummary.lastResult : this._dailySummary.lastResult;
+        if (value === null || value === undefined) {
+            return null;
+        }
+        if (!isPlainRecord(value)) {
+            throw new Error('daily notes: summary must be an object');
+        }
+        const row: Record<string, any> = {};
+        for (const [key, field] of Object.entries(value)) {
+            row[key] = field;
+        }
+        return row;
     }
 
     _summaryBusy() {
@@ -1292,14 +1351,18 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
     _summaryEntities() {
         const r = this._summaryResult();
-        if (!r || !Array.isArray(r.entities)) return [];
-        return (r.entities as unknown[]).filter((e) => typeof e === 'string' && e.trim().length > 0);
+        if (r === null) return [];
+        const entities = r.entities;
+        if (!Array.isArray(entities)) return [];
+        return entities.filter((entity) => typeof entity === 'string' && entity.trim().length > 0);
     }
 
     _summaryEntityLinks() {
         const r = this._summaryResult();
-        if (!r || !Array.isArray(r.entity_links)) return [];
-        return (r.entity_links as Record<string, any>[]).filter((item) => (
+        if (r === null) return [];
+        const links = r.entity_links;
+        if (!Array.isArray(links)) return [];
+        return links.filter((item) => (
             item
             && typeof item === 'object'
             && typeof item.entity_id === 'string'
@@ -1369,7 +1432,18 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         if (!ctrl || ctrl.items === undefined || !Array.isArray(ctrl.items)) {
             return [];
         }
-        return ctrl.items as Record<string, any>[];
+        const rows: Record<string, any>[] = [];
+        for (const item of ctrl.items) {
+            if (!isPlainRecord(item)) {
+                throw new Error('daily notes: entity type must be an object');
+            }
+            const row: Record<string, any> = {};
+            for (const [key, field] of Object.entries(item)) {
+                row[key] = field;
+            }
+            rows.push(row);
+        }
+        return rows;
     }
 
     _loadEntityTypesCatalog() {
@@ -1388,8 +1462,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     _getNoteSubtypeIcon(note: Record<string, any>) {
         const sub = typeof note && note.entity_subtype === 'string' ? note.entity_subtype.trim() : '';
         if (sub.length === 0) return 'doc-detail';
-        const icon = (NOTE_SUBTYPE_ICONS as Record<string, string>)[sub];
-        return icon === undefined ? 'doc-detail' : icon;
+        return noteSubtypeIcon(sub);
     }
 
     _noteHasAnalysisError(note: Record<string, any>) {
@@ -1489,7 +1562,11 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         const re = new RegExp(SUMMARY_ENTITY_TOKEN_RE.source, 'gi');
         let match: RegExpExecArray | null;
         while ((match = re.exec(summaryText)) !== null) {
-            const [full, rawLabel, entityId] = match as unknown as [string, string, string];
+            const rawLabel = match[1];
+            const entityId = match[2];
+            if (rawLabel === undefined || entityId === undefined) {
+                throw new Error('CRMDailyNotesPage: entity token is incomplete');
+            }
             if (match.index > lastIndex) {
                 parts.push(summaryText.slice(lastIndex, match.index));
             }
@@ -1501,7 +1578,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                     @click=${(e: any) => this._openEntityId(entityId, e)}
                 >${label}</button>
             `);
-            lastIndex = match.index + full.length;
+            lastIndex = match.index + match[0].length;
         }
         if (lastIndex < summaryText.length) {
             parts.push(summaryText.slice(lastIndex));
@@ -1565,9 +1642,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     }
 
     _renderNoteCard(note: Record<string, any>) {
-        const related = Array.isArray(this._noteEntitiesByNoteId[note.entity_id])
-            ? this._noteEntitiesByNoteId[note.entity_id]
-            : [];
+        const stored = this._noteEntitiesByNoteId[note.entity_id];
+        const related = Array.isArray(stored) ? stored : [];
         const isAnalyzing = this._isAnalyzingNote(note);
         const analyzeTask = this._analyzeTaskForNote(note.entity_id);
         const progressPctRaw = analyzeTask && typeof analyzeTask.progress_pct === 'number'
@@ -1606,7 +1682,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                     <span class="note-type-badge">
                         <platform-icon name=${this._getNoteSubtypeIcon(note)} size="14"></platform-icon>
                     </span>
-                    ${(related as Record<string, any>[]).map((entity: Record<string, any>, i: number) => html`
+                    ${related.map((entity: Record<string, any>, i: number) => html`
                         <button
                             class="note-tag ${ENTITY_TAG_TONES[i % ENTITY_TAG_TONES.length]}"
                             type="button"
@@ -1693,7 +1769,11 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         if (!el) {
             throw new Error('Mobile date picker is not mounted');
         }
-        (el as unknown as { requestOpen(): void }).requestOpen();
+        const requestOpen = Reflect.get(el, 'requestOpen');
+        if (typeof requestOpen !== 'function') {
+            throw new Error('Mobile date picker cannot open');
+        }
+        requestOpen.call(el);
     }
 
     _toggleMobileHeaderSearch() {

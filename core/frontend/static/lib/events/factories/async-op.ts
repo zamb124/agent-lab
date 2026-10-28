@@ -37,6 +37,7 @@
  */
 
 import { CoreEvents, assertEventType } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 import { HttpError } from '../http.js';
 import {
     assertResourceName,
@@ -49,7 +50,7 @@ import {
     requireI18nKey,
 } from './_internal.js';
 import type { EffectCtx, PlatformEvent, PlatformEventMeta } from '../contract.js';
-import type { PlatformFactory } from '../factory-registry.js';
+import type { ActionMap, PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 import type { FactoryTransport, RestMirrorEntry } from './_transport.js';
 
@@ -77,6 +78,21 @@ function _deriveSucceededType(commandType: string): string {
 function _deriveFailedType(commandType: string): string {
     return commandType.slice(0, -_REQUESTED_SUFFIX.length) + '_failed';
 }
+
+function requestedEvent(type: string, payload: unknown, causationId: string): PlatformEvent {
+    const meta: PlatformEventMeta = {
+        ts: Date.now(),
+        source: 'local',
+        causation_id: causationId.length > 0 ? causationId : null,
+        correlation_id: null,
+        trace_id: null,
+    };
+    return { type, payload, id: causationId, meta };
+}
+
+function toastSuppressed(payload: unknown, flag: 'suppressErrorToast' | 'suppressSuccessToast'): boolean {
+    return isPlainRecord(payload) && payload[flag] === true;
+}
 import {
     WsTransportError,
     normalizeRestMirrorSingle,
@@ -93,26 +109,30 @@ const INITIAL_SLICE = freeze({
     lastRequest: null,
 });
 
-export interface AsyncOpSlice {
+export interface AsyncOpSlice<TResult = unknown> {
     busy: boolean;
     error: string | null;
-    lastResult: unknown;
+    lastResult: TResult | null;
     lastRequestId: string | null;
     lastRequest: { payload: unknown } | null;
     [key: string]: unknown;
 }
 
-export type AsyncOpRequest = (args: { payload: unknown; ctx: EffectCtx; event: PlatformEvent }) => Promise<unknown>;
-export type AsyncOpReducer = (state: AsyncOpSlice, event: PlatformEvent, events: Readonly<Record<string, string>>) => AsyncOpSlice | null | undefined;
+export type AsyncOpRequest<TResult = unknown> = (args: { payload: unknown; ctx: EffectCtx; event: PlatformEvent }) => Promise<TResult>;
+export type AsyncOpReducer<S extends AsyncOpSlice<unknown> = AsyncOpSlice> = (state: S, event: PlatformEvent, events: Readonly<Record<string, string>>) => NoInfer<S> | null | undefined;
 export type AsyncOpEffect = (event: PlatformEvent, ctx: EffectCtx, events: Readonly<Record<string, string>>) => boolean | void | Promise<boolean | void>;
 
-export interface AsyncOpOptions {
+export interface AsyncOpOptions<
+    TResult = unknown,
+    S extends AsyncOpSlice<unknown> = AsyncOpSlice<TResult>,
+    A extends ActionMap = ActionMap,
+> {
     name: string;
     transport?: FactoryTransport;
     wsTimeoutMs?: number;
     restMirror?: RestMirrorEntry | { method: string; path: string } | null;
     commandType?: string | null;
-    request?: AsyncOpRequest;
+    request?: AsyncOpRequest<TResult>;
     silent?: boolean;
     successToastKey?: string | null;
     errorToastKey?: string | null;
@@ -120,13 +140,17 @@ export interface AsyncOpOptions {
     onFailure?: (ctx: EffectCtx, err: unknown, event: PlatformEvent) => void;
     sliceKey?: string;
     extraInitial?: Record<string, unknown>;
-    extraReducer?: AsyncOpReducer;
+    extraReducer?: AsyncOpReducer<S>;
     extraEffect?: AsyncOpEffect;
     extraEvents?: Record<string, string>;
-    actions?: Record<string, string>;
+    actions?: A;
 }
 
-export interface AsyncOpFactory extends PlatformFactory {
+export interface AsyncOpFactory<
+    TResult = unknown,
+    S extends AsyncOpSlice<unknown> = AsyncOpSlice<TResult>,
+    A extends ActionMap = ActionMap,
+> extends PlatformFactory {
     kind: 'async-op';
     name: string;
     sliceKey: string;
@@ -134,14 +158,14 @@ export interface AsyncOpFactory extends PlatformFactory {
     restMirror: Readonly<RestMirrorEntry> | null;
     commandType: string | null;
     events: Readonly<Record<string, string>> & { REQUESTED: string; SUCCEEDED: string; FAILED: string };
-    actions: Readonly<Record<string, string>>;
-    reducer: (state: AsyncOpSlice | undefined, event: PlatformEvent) => AsyncOpSlice;
-    slice: SliceDef<AsyncOpSlice>;
+    actions: Readonly<A>;
+    reducer(state: S | undefined, event: PlatformEvent): S;
+    slice: SliceDef<S>;
     selectors: {
-        slice: (state: Record<string, unknown>) => AsyncOpSlice;
+        slice: (state: Record<string, unknown>) => S;
         busy: (state: Record<string, unknown>) => boolean;
         error: (state: Record<string, unknown>) => string | null;
-        lastResult: (state: Record<string, unknown>) => unknown;
+        lastResult: (state: Record<string, unknown>) => S['lastResult'];
         lastRequestId: (state: Record<string, unknown>) => string | null;
         lastRequest: (state: Record<string, unknown>) => { payload: unknown } | null;
     };
@@ -149,7 +173,11 @@ export interface AsyncOpFactory extends PlatformFactory {
     run: (payload: unknown, ctx?: EffectCtx & { causationId?: string }) => Promise<void>;
 }
 
-export function createAsyncOp(options: AsyncOpOptions): AsyncOpFactory {
+export function createAsyncOp<
+    TResult = unknown,
+    S extends AsyncOpSlice<unknown> = AsyncOpSlice<TResult>,
+    A extends ActionMap = Record<never, string>,
+>(options: AsyncOpOptions<TResult, S, A>): AsyncOpFactory<TResult, S, A> {
     if (!options || typeof options !== 'object') {
         throw new Error('createAsyncOp: options object required');
     }
@@ -176,17 +204,21 @@ export function createAsyncOp(options: AsyncOpOptions): AsyncOpFactory {
         );
     }
 
-    let request: AsyncOpRequest | null = null;
+    let request: AsyncOpRequest<TResult> | null = null;
     if (typeof options.request === 'function') {
         request = options.request;
     } else if (transport !== 'ws') {
         // HTTP-режим: request обязателен (без него непонятно куда ходить).
-        request = requireFunction<AsyncOpRequest>(requireField(options, 'request', 'createAsyncOp'), 'createAsyncOp.request');
+        request = requireFunction<AsyncOpRequest<TResult>>(requireField(options, 'request', 'createAsyncOp'), 'createAsyncOp.request');
     }
 
     const silent = options.silent === true;
-    const successToastKey = options.successToastKey || null;
-    const errorToastKey = options.errorToastKey || null;
+    const successToastKey = options.successToastKey === undefined || options.successToastKey === null || options.successToastKey.length === 0
+        ? null
+        : options.successToastKey;
+    const errorToastKey = options.errorToastKey === undefined || options.errorToastKey === null || options.errorToastKey.length === 0
+        ? null
+        : options.errorToastKey;
     if (silent) {
         if (successToastKey || errorToastKey) {
             throw new Error(`createAsyncOp(${name}): silent: true is mutually exclusive with successToastKey/errorToastKey`);
@@ -243,10 +275,38 @@ export function createAsyncOp(options: AsyncOpOptions): AsyncOpFactory {
         }
     }
     const events = freeze({ ...baseEvents, ...extraEvents });
-    const actions = freeze(actionsMap);
-    const initialSlice = freeze(extraInitial ? { ...INITIAL_SLICE, ...extraInitial } : { ...INITIAL_SLICE }) as AsyncOpSlice;
 
-    function reducer(state: AsyncOpSlice = initialSlice, event: PlatformEvent): AsyncOpSlice {
+    function isBuiltActionMap(value: Record<string, string>): value is A {
+        if (actionsConfig === null) {
+            return Object.keys(value).length === 0;
+        }
+        return Object.keys(actionsConfig).every((key) => {
+            const eventType = value[key];
+            return typeof eventType === 'string' && eventType.length > 0;
+        });
+    }
+
+    function isAsyncOpSlice(value: unknown): value is S {
+        if (!isPlainRecord(value)) return false;
+        if (typeof value.busy !== 'boolean') return false;
+        if (value.error !== null && typeof value.error !== 'string') return false;
+        if (value.lastRequestId !== null && typeof value.lastRequestId !== 'string') return false;
+        if (value.lastRequest !== null && !isPlainRecord(value.lastRequest)) return false;
+        return true;
+    }
+
+    if (!isBuiltActionMap(actionsMap)) {
+        throw new Error(`createAsyncOp(${name}): actions map does not match options.actions`);
+    }
+    const actions = freeze(actionsMap);
+    const baseSlice: AsyncOpSlice<TResult> = { ...INITIAL_SLICE };
+    const mergedSlice = extraInitial ? { ...baseSlice, ...extraInitial } : baseSlice;
+    if (!isAsyncOpSlice(mergedSlice)) {
+        throw new Error(`createAsyncOp(${name}): initial slice must include busy, error and lastRequest`);
+    }
+    const initialSlice = freeze(mergedSlice);
+
+    function reducer(state: S = initialSlice, event: PlatformEvent): S {
         const next = _baseReducer(state, event);
         if (extraReducer) {
             const extended = extraReducer(next, event, events);
@@ -257,7 +317,7 @@ export function createAsyncOp(options: AsyncOpOptions): AsyncOpFactory {
         return next;
     }
 
-    function _baseReducer(state: AsyncOpSlice, event: PlatformEvent): AsyncOpSlice {
+    function _baseReducer(state: S, event: PlatformEvent): S {
         switch (event.type) {
             case events.REQUESTED:
                 return freeze({
@@ -268,28 +328,30 @@ export function createAsyncOp(options: AsyncOpOptions): AsyncOpFactory {
                     lastRequest: freeze({ payload: event.payload === undefined ? null : event.payload }),
                 });
             case events.SUCCEEDED: {
-                const p = event.payload as { result?: unknown } | null;
-                if (!p || !('result' in p)) {
+                if (!isPlainRecord(event.payload) || !('result' in event.payload)) {
                     throw new Error(`createAsyncOp(${name}): SUCCEEDED payload must include "result"`);
                 }
-                return freeze({ ...state, busy: false, error: null, lastResult: p.result });
+                return freeze({ ...state, busy: false, error: null, lastResult: event.payload.result });
             }
             case events.FAILED: {
-                const p = event.payload as { message?: unknown } | null;
-                if (!p || typeof p.message !== 'string') {
+                if (!isPlainRecord(event.payload) || typeof event.payload.message !== 'string') {
                     throw new Error(`createAsyncOp(${name}): FAILED payload must include "message" (string)`);
                 }
-                return freeze({ ...state, busy: false, error: p.message, lastResult: null });
+                return freeze({ ...state, busy: false, error: event.payload.message, lastResult: null });
             }
             default:
                 return state;
         }
     }
 
-    function _readSlice(state: Record<string, unknown>): AsyncOpSlice {
-        const slice = state[sliceKey] as AsyncOpSlice | undefined;
+    function _readSlice(state: Record<string, unknown>): S {
+        // Корневое состояние шины хранит slices разных фабрик; slice этой фабрики кладёт её reducer.
+        const slice = state[sliceKey];
         if (slice === undefined) {
             throw new Error(`createAsyncOp(${name}): slice "${sliceKey}" not registered in bus`);
+        }
+        if (!isAsyncOpSlice(slice)) {
+            throw new Error(`createAsyncOp(${name}): slice "${sliceKey}" must be an async op`);
         }
         return slice;
     }
@@ -349,11 +411,13 @@ export function createAsyncOp(options: AsyncOpOptions): AsyncOpFactory {
         slice: freeze({ reducer, initial: initialSlice }),
         selectors,
         effect,
-        run: (payload: unknown, ctx?: EffectCtx & { causationId?: string }) => _runEffect(
-            { type: events.REQUESTED, payload, id: (ctx?.causationId || ''), meta: {} } as PlatformEvent,
-            ctx as EffectCtx,
-            opCtx,
-        ),
+        run: (payload: unknown, ctx?: EffectCtx & { causationId?: string }) => {
+            if (ctx === undefined) {
+                throw new Error(`createAsyncOp(${name}): run requires an effect context`);
+            }
+            const causationId = ctx.causationId === undefined ? '' : ctx.causationId;
+            return _runEffect(requestedEvent(events.REQUESTED, payload, causationId), ctx, opCtx);
+        },
     });
 }
 
@@ -401,7 +465,7 @@ async function _runEffect(event: PlatformEvent, ctx: EffectCtx, opts: _OpCtx): P
             failurePayload,
             { causation_id: event.id, source: opts.transport === 'ws' ? 'ws' : 'http' },
         );
-        if (!opts.silent && !(payload && (payload as Record<string, unknown>).suppressErrorToast === true)) {
+        if (!opts.silent && !toastSuppressed(payload, 'suppressErrorToast')) {
             ctx.dispatch(
                 CoreEvents.UI_TOAST_SHOW,
                 { type: 'error', i18n_key: opts.errorToastKey },
@@ -420,7 +484,7 @@ async function _runEffect(event: PlatformEvent, ctx: EffectCtx, opts: _OpCtx): P
         { result, request: payload },
         { causation_id: event.id, source: opts.transport === 'ws' ? 'ws' : 'http' },
     );
-    if (!opts.silent && !(payload && (payload as Record<string, unknown>).suppressSuccessToast === true)) {
+    if (!opts.silent && !toastSuppressed(payload, 'suppressSuccessToast')) {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'success', i18n_key: opts.successToastKey },

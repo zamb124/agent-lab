@@ -23,8 +23,8 @@ for op in "${forbidden_ops[@]}"; do
   fi
 done
 
-if ! rg -q "platform/file_create" core/frontend/static/lib/events/factories/platform-file-create.{js,ts} 2>/dev/null; then
-  echo "check_files_ui_canon: platform-file-create.js|ts must define platform/file_create" >&2
+if ! rg -q "platform/file_create" core/frontend/static/lib/events/factories/platform-file-create.ts; then
+  echo "check_files_ui_canon: platform-file-create.ts must define platform/file_create" >&2
   fail=1
 fi
 

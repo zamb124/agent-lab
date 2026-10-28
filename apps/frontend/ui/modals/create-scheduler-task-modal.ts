@@ -117,8 +117,12 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
         }
         const trimmed = this._payloadJson.trim();
         if (trimmed) {
-            try { JSON.parse(trimmed); }
-            catch { errors.payload = this.t('scheduler_modal.err_payload_invalid'); }
+            try {
+                JSON.parse(trimmed);
+            } catch (err) {
+                if (!(err instanceof SyntaxError)) throw err;
+                errors.payload = this.t('scheduler_modal.err_payload_invalid');
+            }
         }
         return errors;
     }
@@ -209,7 +213,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                     type="datetime"
                     mode="edit"
                     label=${this.t('scheduler_modal.label_run_at')}
-                    .value=${this._runAt || null}
+                    .value=${this._runAt.length === 0 ? null : this._runAt}
                     .error=${this.fieldError('run_at')}
                     @change=${(e: CustomEvent) => {
                         if (!e.detail || typeof e.detail.value !== 'string') {

@@ -20,3 +20,9 @@ export const relationshipTypesResource = createResourceCollection({
         create: 'crm:toast.relationship_type.created',
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/relationship_types': typeof relationshipTypesResource;
+    }
+}

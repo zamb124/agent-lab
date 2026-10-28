@@ -19,11 +19,18 @@ describe('storageEffect', () => {
         expect(loaded.payload).toEqual({ key: 'k', value: { a: 1 } });
     });
 
-    it('LOAD_REQUESTED невалидный JSON → возвращает строку', async () => {
+    it('LOAD_REQUESTED обычная строка остаётся строкой', async () => {
         storage.localStorage.setItem('k', 'not json');
         const dispatched = [];
         await createStorageEffect()(ev(CoreEvents.STORAGE_LOAD_REQUESTED, { key: 'k' }), buildCtx(() => ({}), dispatched));
         expect(dispatched[0].payload.value).toBe('not json');
+    });
+
+    it('LOAD_REQUESTED битый JSON-литерал бросает', async () => {
+        storage.localStorage.setItem('k', '{"a":');
+        await expect(
+            createStorageEffect()(ev(CoreEvents.STORAGE_LOAD_REQUESTED, { key: 'k' }), buildCtx(() => ({}), [])),
+        ).rejects.toBeInstanceOf(SyntaxError);
     });
 
     it('LOAD_REQUESTED отсутствующий ключ → null', async () => {

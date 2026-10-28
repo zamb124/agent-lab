@@ -5,6 +5,11 @@
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
+import { isPlainRecord } from '../../events/payload.js';
+
+function isFieldChange(event: Event): event is CustomEvent<{ value?: unknown }> {
+    return event instanceof CustomEvent;
+}
 import '../fields/platform-field.js';
 import { defaultRetrievalPanelValue } from '../../rag/pack_search_request_options.js';
 
@@ -93,10 +98,13 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
 
     _defaultRetrievalMode(): 'hybrid' | 'semantic' | 'lexical' | null {
         const defaults = this._defaults();
-        if (!defaults || !defaults.channels || typeof defaults.channels !== 'object') {
+        if (!defaults) {
             return null;
         }
-        const channels = defaults.channels as { semantic?: boolean; lexical?: boolean };
+        const channels = defaults.channels;
+        if (!isPlainRecord(channels)) {
+            return null;
+        }
         const semantic = channels.semantic === true;
         const lexical = channels.lexical === true;
         if (semantic && lexical) {
@@ -128,7 +136,10 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
 
     _onFieldChange(e: Event, field: string, normalize: (ev: CustomEvent<{ value?: unknown }>) => unknown): void {
         e.stopPropagation();
-        this._patch(field, normalize(e as CustomEvent<{ value?: unknown }>));
+        if (!isFieldChange(e)) {
+            throw new Error('platform-rag-retrieval-panel: field change must be a CustomEvent');
+        }
+        this._patch(field, normalize(e));
     }
 
     _patch(field: string, rawValue: unknown): void {

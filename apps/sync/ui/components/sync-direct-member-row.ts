@@ -9,8 +9,7 @@
  * last seen) и пульсирующий зелёный dot online.
  */
 
-import type { SyncChannelsController } from '../events/sync.types.js';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -117,7 +116,7 @@ export class SyncDirectMemberRow extends PlatformElement {
             }
         }
     `;
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
     private _avatarMemberSig: string;
     private _pendingOpenDmPeerId: any;
 
@@ -127,7 +126,7 @@ export class SyncDirectMemberRow extends PlatformElement {
         this._avatarImgFailed = false;
         this._avatarMemberSig = '';
         this._pendingOpenDmPeerId = null;
-        this._channels = this.useResource('sync/channels') as SyncChannelsController;
+        this._channels = this.useResource('sync/channels');
         this.useEvent(SYNC_CHANNELS_CREATED, (e) => this._onChannelsCreated(e));
         this.useEvent('sync/channels/create_failed', () => {
             this._pendingOpenDmPeerId = null;

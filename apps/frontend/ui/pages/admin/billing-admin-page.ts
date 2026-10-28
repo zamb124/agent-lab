@@ -16,6 +16,95 @@ import { FrontendBalanceGrantModal } from '../../modals/balance-grant-modal.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { OpController, FacetsController} from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function matchFieldName(scope: string, mode: string): string | null {
+    switch (scope) {
+        case 'operation':
+            switch (mode) {
+                case 'prefix':
+                    return 'operation_name_prefix';
+                case 'equals':
+                    return 'operation_name_equals';
+                case 'regex':
+                    return 'operation_name_regex';
+                default:
+                    return null;
+            }
+        case 'service':
+            switch (mode) {
+                case 'equals':
+                    return 'service_name_equals';
+                case 'regex':
+                    return 'service_name_regex';
+                default:
+                    return null;
+            }
+        case 'event':
+            switch (mode) {
+                case 'equals':
+                    return 'event_type_equals';
+                case 'regex':
+                    return 'event_type_regex';
+                default:
+                    return null;
+            }
+        default:
+            return null;
+    }
+}
+
+function matchModeFields(scope: string): string[] | null {
+    switch (scope) {
+        case 'operation':
+            return ['operation_name_prefix', 'operation_name_equals', 'operation_name_regex'];
+        case 'service':
+            return ['service_name_equals', 'service_name_regex'];
+        case 'event':
+            return ['event_type_equals', 'event_type_regex'];
+        default:
+            return null;
+    }
+}
+
+function nestedRecord(source: unknown, field: string): Record<string, unknown> | null {
+    if (!isPlainRecord(source)) return null;
+    const value = source[field];
+    return isPlainRecord(value) ? value : null;
+}
+
+function controlValue(event: Event): string {
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        return target.value;
+    }
+    throw new Error('billing-admin: text control required');
+}
+
+function displayText(value: unknown): string {
+    if (value === undefined || value === null || value === false || value === 0 || value === '') return '';
+    if (typeof value === 'number' && !Number.isFinite(value)) return '';
+    return String(value);
+}
+
+function firstText(values: readonly unknown[]): string {
+    for (const value of values) {
+        const text = displayText(value);
+        if (text.length > 0) return text;
+    }
+    return '';
+}
+
+function objectList(value: unknown, label: string): Record<string, unknown>[] {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+    const rows: Record<string, unknown>[] = [];
+    for (const item of value) {
+        if (!isPlainRecord(item)) throw new Error(`${label} item must be an object`);
+        rows.push(item);
+    }
+    return rows;
+}
 
 const COMPANIES_PAGE_SIZE = 50;
 
@@ -609,8 +698,11 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return `${visibleName} (${visibleSlug})`;
     }
 
-    _companyPartsFromFacet(item: Record<string, any>) {
+    _companyPartsFromFacet(item: Record<string, unknown>) {
         const value = item.value;
+        if (typeof value !== 'string' || value.length === 0) {
+            throw new Error('billing-admin: company facet value required');
+        }
         const label = typeof item.label === 'string' && item.label.length > 0 ? item.label : value;
         if (label.endsWith(')') && label.includes('(')) {
             const openIdx = label.lastIndexOf('(');
@@ -649,12 +741,15 @@ export class FrontendBillingAdminPage extends PlatformPage {
         const q = this._companyQuery.trim();
         if (!q) return;
         const result = await this._companyResolve.run({ q });
-        if (!result || !(result as Record<string, any>).company_id) return;
-        this._companyId = (result as Record<string, any>).company_id;
-        this._companyName = (result as Record<string, any>).name;
-        this._companySubdomain = (result as Record<string, any>).subdomain as string;
-        this._companyQuery = this._companyLabelFromParts((result as Record<string, any>).company_id as string, (result as Record<string, any>).name as string, (result as Record<string, any>).subdomain as string);
-        await this._loadCompanyContext((result as Record<string, any>).company_id as string);
+        if (!isPlainRecord(result) || typeof result.company_id !== 'string' || result.company_id.length === 0) return;
+        if (typeof result.name !== 'string' || typeof result.subdomain !== 'string') {
+            throw new Error('billing-admin: company resolve name and subdomain required');
+        }
+        this._companyId = result.company_id;
+        this._companyName = result.name;
+        this._companySubdomain = result.subdomain;
+        this._companyQuery = this._companyLabelFromParts(result.company_id, result.name, result.subdomain);
+        await this._loadCompanyContext(result.company_id);
     }
 
     _onCompanyInput(value: string) {
@@ -667,8 +762,8 @@ export class FrontendBillingAdminPage extends PlatformPage {
         }
     }
 
-    async _selectCompanyFromFacet(item: Record<string, any>) {
-        if (!item || typeof item.value !== 'string') return;
+    async _selectCompanyFromFacet(item: Record<string, unknown>) {
+        if (typeof item.value !== 'string' || item.value.length === 0) return;
         const parts = this._companyPartsFromFacet(item);
         this._companyId = parts.companyId;
         this._companyName = parts.name;
@@ -709,7 +804,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _renderCompanyScope() {
-        const items = (this._facets.items('companies') ?? []) as Record<string, any>[];
+        const items = objectList(this._facets.items('companies'), 'billing-admin: company facets');
         return html`
             <div class="company-panel">
                 <div class="company-search">
@@ -773,7 +868,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _renderCompaniesTab() {
-        const records = (this._companies.state.items ?? []) as Record<string, any>[];
+        const records = objectList(this._companies.state.items, 'billing-admin: companies');
         const hasMore = !!(this._companies.state && this._companies.state.hasMore);
         const offset = this._companies.state.offset;
         const busy = this._companies.busy;
@@ -806,33 +901,39 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                     <th>${this.t('platform_billing_page.col_actions')}</th>
                                 </tr></thead>
                                 <tbody>
-                                    ${(records.map as (...args: any[]) => any)((r: Record<string, any>) => html`
+                                    ${records.map((r) => {
+                                        const companyId = r.company_id;
+                                        if (typeof companyId !== 'string' || companyId.length === 0) {
+                                            throw new Error('billing-admin: company_id required');
+                                        }
+                                        return html`
                                         <tr>
-                                            <td class="mono">${r.company_id}</td>
-                                            <td>${r.name}</td>
-                                            <td>${r.subdomain || ''}</td>
-                                            <td>${r.tariff_plan || ''}</td>
+                                            <td class="mono">${companyId}</td>
+                                            <td>${displayText(r.name)}</td>
+                                            <td>${displayText(r.subdomain)}</td>
+                                            <td>${displayText(r.tariff_plan)}</td>
                                             <td>${this._formatNumber(r.balance, 2)}</td>
                                             <td>${this._formatNumber(r.monthly_budget, 2)}</td>
                                             <td>${this._formatNumber(r.current_month_spent, 2)}</td>
                                             <td>
                                                 <div class="actions">
-                                                    <button class="btn" @click=${() => this.openModal(FrontendBalanceGrantModal, { company_id: r.company_id })}>
+                                                    <button class="btn" @click=${() => this.openModal(FrontendBalanceGrantModal, { company_id: companyId })}>
                                                         <platform-icon name="chart" size="16"></platform-icon>
                                                         ${this.t('platform_billing_page.balance_grant_button')}
                                                     </button>
-                                                    <button class="btn" @click=${() => this.openModal(FrontendSystemAccessModal, { company_id: r.company_id })}>
+                                                    <button class="btn" @click=${() => this.openModal(FrontendSystemAccessModal, { company_id: companyId })}>
                                                         <platform-icon name="login" size="16"></platform-icon>
                                                         ${this.t('platform_billing_page.system_access_enter')}
                                                     </button>
-                                                    <button class="btn danger" @click=${() => this._systemAccessLeave.run({ company_id: r.company_id })}>
+                                                    <button class="btn danger" @click=${() => this._systemAccessLeave.run({ company_id: companyId })}>
                                                         <platform-icon name="logout" size="16"></platform-icon>
                                                         ${this.t('platform_billing_page.system_access_leave')}
                                                     </button>
                                                 </div>
                                             </td>
                                         </tr>
-                                    `)}
+                                    `;
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -853,8 +954,8 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _flattenPrices(catalog: Record<string, any>) {
-        if (!catalog || typeof catalog !== 'object') return [];
+    _flattenPrices(catalog: unknown) {
+        if (!isPlainRecord(catalog)) return [];
         const out: any[] = [];
         for (const [category, resources] of Object.entries(catalog)) {
             if (!resources || typeof resources !== 'object') continue;
@@ -866,31 +967,31 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return out;
     }
 
-    _catalogHas(catalog: Record<string, any> | null | undefined, category: string, resourceName: string) {
+    _catalogHas(catalog: Record<string, unknown> | null | undefined, category: string, resourceName: string) {
         if (!catalog || typeof catalog !== 'object') return false;
         const bucket = catalog[category];
         return !!(bucket && typeof bucket === 'object' && Object.prototype.hasOwnProperty.call(bucket, resourceName));
     }
 
-    _priceSource(row: Record<string, any>, companyOverride: Record<string, any> | null | undefined, globalOverride: Record<string, any> | null | undefined) {
+    _priceSource(row: Record<string, any>, companyOverride: Record<string, unknown> | null | undefined, globalOverride: Record<string, unknown> | null | undefined) {
         if (this._catalogHas(companyOverride, row.category, row.resource_name)) return 'company';
         if (this._catalogHas(globalOverride, row.category, row.resource_name)) return 'global';
         return 'base';
     }
 
-    _catalogValue(catalog: Record<string, any> | null | undefined, category: string, resourceName: string) {
+    _catalogValue(catalog: Record<string, unknown> | null | undefined, category: string, resourceName: string) {
         if (!catalog || typeof catalog !== 'object') return null;
         const bucket = catalog[category];
-        if (!bucket || typeof bucket !== 'object') return null;
+        if (!isPlainRecord(bucket)) return null;
         if (!Object.prototype.hasOwnProperty.call(bucket, resourceName)) return null;
         const value = bucket[resourceName];
         return typeof value === 'number' && !Number.isNaN(value) ? value : null;
     }
 
-    _tariffMultiplier(tariffMultipliers: Record<string, any> | null | undefined, category: string, resourceName: string) {
+    _tariffMultiplier(tariffMultipliers: Record<string, unknown> | null | undefined, category: string, resourceName: string) {
         if (!tariffMultipliers || typeof tariffMultipliers !== 'object') return 1;
         const bucket = tariffMultipliers[category];
-        if (!bucket || typeof bucket !== 'object') return 1;
+        if (!isPlainRecord(bucket)) return 1;
         if (Object.prototype.hasOwnProperty.call(bucket, resourceName)) {
             const value = bucket[resourceName];
             return typeof value === 'number' && !Number.isNaN(value) ? value : 1;
@@ -902,7 +1003,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return 1;
     }
 
-    _pricingLayerRows({ staticBase, globalOverride, companyOverride, effective, unitEffective, tariffMultipliers }: Record<string, Record<string, Record<string, unknown>> | null>) {
+    _pricingLayerRows({ staticBase, globalOverride, companyOverride, effective, unitEffective, tariffMultipliers }: Record<string, Record<string, unknown> | null>) {
         const keys = new Set<string>();
         for (const catalog of [staticBase, globalOverride, companyOverride, effective, unitEffective]) {
             if (!catalog || typeof catalog !== 'object') continue;
@@ -926,8 +1027,10 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 tariff_multiplier: this._tariffMultiplier(tariffMultipliers, category, resourceName),
                 unit_effective: this._catalogValue(unitEffective, category, resourceName),
             };
-            (row as Record<string, any>).source = this._priceSource(row, companyOverride, globalOverride);
-            rows.push(row);
+            rows.push({
+                ...row,
+                source: this._priceSource(row, companyOverride, globalOverride),
+            });
         }
         rows.sort((a, b) => `${a.category}:${a.resource_name}`.localeCompare(`${b.category}:${b.resource_name}`));
         return rows;
@@ -1041,7 +1144,11 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                                 if (!e.detail || typeof e.detail.value !== 'string') {
                                                     throw new Error('billing prices: category expects detail.value string');
                                                 }
-                                                rows[idx]!.category = e.detail.value;
+                                                const row = rows[idx];
+                                                if (row === undefined) {
+                                                    throw new Error('billing prices: row missing');
+                                                }
+                                                row.category = e.detail.value;
                                                 onChange([...rows]);
                                             }}
                                         ></platform-field>
@@ -1056,7 +1163,11 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                                 if (!e.detail || typeof e.detail.value !== 'string') {
                                                     throw new Error('billing prices: resource_name expects detail.value string');
                                                 }
-                                                rows[idx]!.resource_name = e.detail.value;
+                                                const row = rows[idx];
+                                                if (row === undefined) {
+                                                    throw new Error('billing prices: row missing');
+                                                }
+                                                row.resource_name = e.detail.value;
                                                 onChange([...rows]);
                                             }}
                                         ></platform-field>
@@ -1071,7 +1182,11 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                                 if (!e.detail || e.detail.value === null || typeof e.detail.value !== 'number') {
                                                     throw new Error('billing prices: price expects numeric detail.value');
                                                 }
-                                                rows[idx]!.price = String(e.detail.value);
+                                                const row = rows[idx];
+                                                if (row === undefined) {
+                                                    throw new Error('billing prices: row missing');
+                                                }
+                                                row.price = String(e.detail.value);
                                                 onChange([...rows]);
                                             }}
                                         ></platform-field>
@@ -1099,16 +1214,16 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
     _syncPriceDrafts() {
         const pricesData = this._pricesGlobal.lastResult;
-        if (this._pricesDraft === null && pricesData) {
-            this._pricesDraft = this._flattenPrices((pricesData as Record<string, any>).storage_override);
+        if (this._pricesDraft === null && isPlainRecord(pricesData)) {
+            this._pricesDraft = this._flattenPrices(pricesData.storage_override);
         }
         const companyPrices = this._companyPrices.lastResult;
-        if (this._companyId && this._companyPricesDraft === null && companyPrices && (companyPrices as Record<string, any>).company_id === this._companyId) {
-            this._companyPricesDraft = this._flattenPrices((companyPrices as Record<string, any>).storage_override);
+        if (this._companyId && this._companyPricesDraft === null && isPlainRecord(companyPrices) && companyPrices.company_id === this._companyId) {
+            this._companyPricesDraft = this._flattenPrices(companyPrices.storage_override);
         }
         const rulesData = this._rules.lastResult;
-        if (this._companyId && this._rulesDraft === null && rulesData && (rulesData as Record<string, any>).document) {
-            this._rulesDraft = JSON.stringify((rulesData as Record<string, any>).document, null, 2);
+        if (this._companyId && this._rulesDraft === null && isPlainRecord(rulesData) && rulesData.document) {
+            this._rulesDraft = JSON.stringify(rulesData.document, null, 2);
         }
     }
 
@@ -1134,23 +1249,23 @@ export class FrontendBillingAdminPage extends PlatformPage {
     _renderEffectivePricesSection() {
         const pricesData = this._pricesGlobal.lastResult;
         const companyPricesResult = this._companyPrices.lastResult;
-        const companyPrices = companyPricesResult && (companyPricesResult as Record<string, any>).company_id === this._companyId ? companyPricesResult : null;
+        const companyPrices = isPlainRecord(companyPricesResult) && companyPricesResult.company_id === this._companyId ? companyPricesResult : null;
         const sourceData = this._companyId && companyPrices ? companyPrices : pricesData;
         if (!sourceData && (this._pricesGlobal.busy || this._companyPrices.busy)) {
             return html`<section><div class="state"><glass-spinner></glass-spinner></div></section>`;
         }
         const showCompanyPricing = !!(this._companyId && companyPrices);
-        const staticBase = sourceData && (sourceData as Record<string, any>).static_base ? (sourceData as Record<string, any>).static_base : null;
-        const effective = sourceData && (sourceData as Record<string, any>).effective ? (sourceData as Record<string, any>).effective : null;
-        const globalOverride = pricesData && (pricesData as Record<string, any>).storage_override ? (pricesData as Record<string, any>).storage_override : null;
-        const companyOverride = showCompanyPricing && (companyPrices as Record<string, any>).storage_override ? (companyPrices as Record<string, any>).storage_override : null;
+        const staticBase = nestedRecord(sourceData, 'static_base');
+        const effective = nestedRecord(sourceData, 'effective');
+        const globalOverride = nestedRecord(pricesData, 'storage_override');
+        const companyOverride = showCompanyPricing ? nestedRecord(companyPrices, 'storage_override') : null;
         const rows = this._pricingLayerRows({
             staticBase,
             globalOverride,
             companyOverride,
             effective,
-            unitEffective: showCompanyPricing ? (companyPrices as Record<string, any>).unit_effective : null,
-            tariffMultipliers: showCompanyPricing ? (companyPrices as Record<string, any>).tariff_multipliers : null,
+            unitEffective: showCompanyPricing ? nestedRecord(companyPrices, 'unit_effective') : null,
+            tariffMultipliers: showCompanyPricing ? nestedRecord(companyPrices, 'tariff_multipliers') : null,
         });
         return html`
             <section>
@@ -1166,7 +1281,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                     <div class="badge-row">
                         <span class="source">${this.t('platform_billing_page.billing_readonly_catalog_rows', { count: rows.length })}</span>
                         ${showCompanyPricing ? html`
-                            <span class="source">${this.t('platform_billing_page.price_tariff_badge', { tariff: (companyPrices as Record<string, any>).tariff_plan })}</span>
+                            <span class="source">${this.t('platform_billing_page.price_tariff_badge', { tariff: displayText(companyPrices ? companyPrices.tariff_plan : '') })}</span>
                         ` : null}
                     </div>
                 </div>
@@ -1176,8 +1291,8 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _renderPriceOverridesSection() {
-        const globalRows = this._pricesDraft || [];
-        const companyRows = this._companyPricesDraft || [];
+        const globalRows = Array.isArray(this._pricesDraft) ? this._pricesDraft : [];
+        const companyRows = Array.isArray(this._companyPricesDraft) ? this._companyPricesDraft : [];
         return html`
             <div class="split">
                 <section>
@@ -1293,7 +1408,13 @@ export class FrontendBillingAdminPage extends PlatformPage {
     _scrollToPendingRule() {
         const targetId = this._pendingRuleScrollId;
         this._pendingRuleScrollId = null;
-        const cards = Array.from(this.renderRoot.querySelectorAll('.rule-card')) as HTMLElement[];
+        const cards: HTMLElement[] = [];
+        for (const node of this.renderRoot.querySelectorAll('.rule-card')) {
+            if (!(node instanceof HTMLElement)) {
+                throw new Error('billing-admin: rule card must be an element');
+            }
+            cards.push(node);
+        }
         if (cards.length === 0) return;
         const target = cards.find((card) => card.dataset.ruleId === targetId) || cards[cards.length - 1];
         if (!target) return;
@@ -1352,11 +1473,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _setRuleMatchMode(idx: number, scope: string, mode: string) {
-        const fields = ({
-            operation: ['operation_name_prefix', 'operation_name_equals', 'operation_name_regex'],
-            service: ['service_name_equals', 'service_name_regex'],
-            event: ['event_type_equals', 'event_type_regex'],
-        } as Record<string, string[]>)[scope];
+        const fields = matchModeFields(scope);
         if (!fields) return;
         const doc = this._cloneRulesDoc();
         const rule = this._ensureRule(doc, idx);
@@ -1411,13 +1528,13 @@ export class FrontendBillingAdminPage extends PlatformPage {
     _matchValue(match: Record<string, any>, scope: string) {
         if (!match || typeof match !== 'object') return '';
         if (scope === 'operation') {
-            return match.operation_name_regex || match.operation_name_equals || match.operation_name_prefix || '';
+            return firstText([match.operation_name_regex, match.operation_name_equals, match.operation_name_prefix]);
         }
         if (scope === 'service') {
-            return match.service_name_regex || match.service_name_equals || '';
+            return firstText([match.service_name_regex, match.service_name_equals]);
         }
         if (scope === 'event') {
-            return match.event_type_regex || match.event_type_equals || '';
+            return firstText([match.event_type_regex, match.event_type_equals]);
         }
         return '';
     }
@@ -1426,23 +1543,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         const doc = this._cloneRulesDoc();
         const rule = this._ensureRule(doc, idx);
         const mode = modeHint || this._matchMode(rule.match, scope, idx, rule);
-        const fieldByScopeMode = {
-            operation: {
-                prefix: 'operation_name_prefix',
-                equals: 'operation_name_equals',
-                regex: 'operation_name_regex',
-            },
-            service: {
-                equals: 'service_name_equals',
-                regex: 'service_name_regex',
-            },
-            event: {
-                equals: 'event_type_equals',
-                regex: 'event_type_regex',
-            },
-        };
-        const scopeMap = (fieldByScopeMode as Record<string, Record<string, string>>)[scope];
-        const field = scopeMap && scopeMap[mode];
+        const field = matchFieldName(scope, mode);
         if (!field) return;
         const key = this._matchModeDraftKey(idx, rule, scope);
         if (typeof value === 'string' && value.trim().length === 0) {
@@ -1674,7 +1775,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                             ? this.t('platform_billing_page.rules_match_disabled_placeholder')
                             : this.t('platform_billing_page.rules_match_value_placeholder')}
                         ?disabled=${disabled}
-                        @input=${(e: Event) => this._setMatchValueByMode(idx, scope, (e.target as Record<string, any>).value, mode)}
+                        @input=${(e: Event) => this._setMatchValueByMode(idx, scope, controlValue(e), mode)}
                     />
                 </div>
             </platform-field-shell>
@@ -1808,7 +1909,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
             'storage_usage',
         ];
         return html`
-            <div class="rule-card" tabindex="-1" data-rule-id=${rule.rule_id || ''}>
+            <div class="rule-card" tabindex="-1" data-rule-id=${displayText(rule.rule_id)}>
                 <div class="rule-card-head">
                     <div class="rule-title">
                         <span class="source">${idx + 1}</span>
@@ -1835,7 +1936,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         pill-density="dense"
                         .label=${this.t('platform_billing_page.rules_col_rule')}
                         .hint=${this._ruleHint('rule_id')}
-                        .value=${rule.rule_id || ''}
+                        .value=${displayText(rule.rule_id)}
                         @change=${(e: CustomEvent) => {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('billing rule: rule_id expects detail.value string');
@@ -1861,7 +1962,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         pill-density="dense"
                         .label=${this.t('platform_billing_page.rules_col_group')}
                         .hint=${this._ruleHint('exclusive_group')}
-                        .value=${rule.exclusive_group || ''}
+                        .value=${displayText(rule.exclusive_group)}
                         @change=${(e: CustomEvent) => {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('billing rule: exclusive_group expects detail.value string');
@@ -1876,7 +1977,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         pill-density="dense"
                         .label=${this.t('platform_billing_page.rules_col_resource')}
                         .hint=${this._ruleHint('resource_name')}
-                        .value=${rule.resource_name || ''}
+                        .value=${displayText(rule.resource_name)}
                         @change=${(e: CustomEvent) => {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('billing rule: resource_name expects detail.value string');
@@ -2015,8 +2116,8 @@ export class FrontendBillingAdminPage extends PlatformPage {
     async _loadRulesDefault() {
         if (!(await platformConfirm(this.t('platform_billing_page.confirm_replace_rules_default')))) return;
         const result = await this._rulesDefault.run(null);
-        if (result && (result as Record<string, any>).document) {
-            this._rulesDraft = JSON.stringify((result as Record<string, any>).document, null, 2);
+        if (isPlainRecord(result) && result.document) {
+            this._rulesDraft = JSON.stringify(result.document, null, 2);
             this._rulesDraftError = '';
         }
     }
@@ -2053,7 +2154,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 <details class="json-details">
                     <summary>${this.t('platform_billing_page.rules_json_title')}</summary>
                     <platform-json-editor
-                        .value=${this._rulesDraft || ''}
+                        .value=${typeof this._rulesDraft === 'string' ? this._rulesDraft : ''}
                         .readonly=${false}
                         .minHeight=${360}
                         @change=${(e: CustomEvent) => {
@@ -2100,15 +2201,15 @@ export class FrontendBillingAdminPage extends PlatformPage {
         }
     }
 
-    _selectUsageFacet(field: string, item: Record<string, any>) {
-        if (!item || typeof item.value !== 'string') return;
+    _selectUsageFacet(field: string, item: Record<string, unknown>) {
+        if (typeof item.value !== 'string') return;
         this._usageFilters = { ...this._usageFilters, [field]: item.value };
         this._usageFacetOpen = null;
     }
 
     _renderUsageFacetField(field: string, facet: string, labelKey: string) {
-        const value = this._usageFilters[field] || '';
-        const items = (this._facets.items(facet) ?? []) as Record<string, any>[];
+        const value = displayText(this._usageFilters[field]);
+        const items = objectList(this._facets.items(facet), 'billing-admin: usage facets');
         const isOpen = this._usageFacetOpen === facet && value && value.length >= 2;
         return html`
             <div class="field">
@@ -2117,7 +2218,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                     type="text"
                     data-canon="combobox"
                     .value=${value}
-                    @input=${(e: Event) => this._onUsageFilter(field, facet, (e.target as Record<string, any>).value)}
+                    @input=${(e: Event) => this._onUsageFilter(field, facet, controlValue(e))}
                     @blur=${() => setTimeout(() => { this._usageFacetOpen = null; }, 180)} />
                 ${isOpen ? html`
                     <div class="suggest">
@@ -2136,7 +2237,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _renderUsageTimeField(field: string, labelKey: string) {
-        const value = this._usageFilters[field] || '';
+        const value = displayText(this._usageFilters[field]);
         return html`
             <div class="field">
                 <platform-field
@@ -2213,7 +2314,11 @@ export class FrontendBillingAdminPage extends PlatformPage {
     _renderUsageTab() {
         const offset = this._usage.state.offset as number;
         const limit = this._usage.state.limit as number;
-        const items = this._usage.state.items as Record<string, any>[];
+        const usageItems = this._usage.state.items;
+        if (!Array.isArray(usageItems)) {
+            throw new Error('billing-admin: usage items must be an array');
+        }
+        const items = usageItems;
         const summary = this._usageSummary(items);
         return html`
             <section>
@@ -2274,16 +2379,16 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                             <tr>
                                                 <td>${this._formatDate(r.timestamp)}</td>
                                                 <td>
-                                                    <div>${r.company_name || r.company_id || ''}</div>
-                                                    <div class="hint">${r.company_id || ''}</div>
+                                                    <div>${firstText([r.company_name, r.company_id])}</div>
+                                                    <div class="hint">${displayText(r.company_id)}</div>
                                                 </td>
-                                                <td>${r.usage_type || ''}</td>
-                                                <td class="mono">${r.resource_name || ''}</td>
+                                                <td>${displayText(r.usage_type)}</td>
+                                                <td class="mono">${displayText(r.resource_name)}</td>
                                                 <td>${this._formatNumber(r.quantity, 0)}</td>
                                                 <td>${this._formatNumber(r.unit_cost, 8)}</td>
                                                 <td>${this._formatNumber(r.cost, 4)}</td>
                                                 <td class="mono">${r.span_id ? r.span_id.slice(0, 16) : ''}</td>
-                                                <td class="mono">${r.rule_id || ''}</td>
+                                                <td class="mono">${displayText(r.rule_id)}</td>
                                             </tr>
                                         `)}
                                     </tbody>

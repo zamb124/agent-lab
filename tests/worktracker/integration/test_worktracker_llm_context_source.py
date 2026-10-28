@@ -73,7 +73,7 @@ async def test_collect_empty_when_no_active_items(worktracker_service, unique_id
     set_context(Context(user=user, active_company=company, trace_id=f"trace2-{unique_id}"))
 
     source = WorkItemLLMContextSource()
-    open_items = await WorkItem.list_work_items("system", state=WorkItemState.OPEN, limit=5)
+    open_items = await WorkItem.list_created_desc("system", state=WorkItemState.OPEN, limit=5)
     if not open_items:
         blocks = await source.collect(LLMContextSourceRequest())
         assert blocks == []

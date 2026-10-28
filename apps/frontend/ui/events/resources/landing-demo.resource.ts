@@ -45,3 +45,10 @@ export const landingDemoSessionOp = createAsyncOp({
         });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/landing_agents_load': typeof landingAgentsLoadOp;
+        'frontend/landing_demo_session': typeof landingDemoSessionOp;
+    }
+}

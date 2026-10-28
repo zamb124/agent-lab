@@ -62,6 +62,35 @@ interface FallbackModel {
 
 type FieldChangeDetail = { value?: unknown };
 
+function textOrEmpty(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function blankToNull(value: string): string | null {
+    return value.length === 0 ? null : value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isProviderModelOption(item: unknown): item is ProviderModelOption {
+    return isRecord(item);
+}
+
+function unknownItems(value: unknown): unknown[] {
+    if (!Array.isArray(value)) return [];
+    const items: unknown[] = [];
+    for (const item of value) items.push(item);
+    return items;
+}
+
+function catalogText(item: ProviderCatalogItem): { value: string; label: string } {
+    const value = textOrEmpty(item.value);
+    const label = textOrEmpty(item.label);
+    return { value, label: label.length > 0 ? label : value };
+}
+
 export class PlatformLlmConfigEditor extends PlatformElement {
     static i18nNamespace = 'frontend';
 
@@ -214,13 +243,16 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const provider = typeof this.config?.provider === 'string' ? this.config.provider : '';
         return (
             this.mode === 'company_capability'
-            && ((this.capability || '').startsWith('llm_') || this.capability === 'image_gen')
+            && (this.capability.startsWith('llm_') || this.capability === 'image_gen')
             && provider.length > 0
         );
     }
 
     _emitChange(patch: Record<string, unknown>): void {
-        const next = { ...(this.config || {}), ...patch };
+        if (this.config === undefined || this.config === null) {
+            throw new Error('platform-llm-config-editor: config required');
+        }
+        const next = { ...this.config, ...patch };
         this.config = next;
         this.dispatchEvent(new CustomEvent('change', { detail: { config: next }, bubbles: true, composed: true }));
     }
@@ -230,7 +262,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             throw new Error('platform-llm-config-editor: provider change expects detail.value string');
         }
         const value = e.detail.value;
-        const currentProvider = (this.config && this.config.provider) || '';
+        const currentProvider = textOrEmpty(this.config?.provider);
         const patch: Record<string, unknown> = { provider: value };
         if (this._isCustomProvider(value)) {
             patch.api_key = null;
@@ -256,26 +288,26 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         if (!e.detail || typeof e.detail.value !== 'string') {
             throw new Error('platform-llm-config-editor: api_key change expects detail.value string');
         }
-        this._emitChange({ api_key: e.detail.value || null });
+        this._emitChange({ api_key: blankToNull(e.detail.value) });
     }
 
     _onBaseUrlChange(e: CustomEvent<FieldChangeDetail>): void {
         if (!e.detail || typeof e.detail.value !== 'string') {
             throw new Error('platform-llm-config-editor: base_url change expects detail.value string');
         }
-        this._emitChange({ base_url: e.detail.value || null });
+        this._emitChange({ base_url: blankToNull(e.detail.value) });
     }
 
     _onModelChange(e: CustomEvent<FieldChangeDetail>): void {
         if (!e.detail || typeof e.detail.value !== 'string') {
             throw new Error('platform-llm-config-editor: model change expects detail.value string');
         }
-        const value = e.detail.value || null;
+        const value = blankToNull(e.detail.value);
         const patch: Record<string, unknown> = { model: value };
         if (this._isEmbeddingCapability()) {
             const selected = this._selectedProviderModels()
                 .find((item): item is ProviderModelOption =>
-                    Boolean(item) && typeof item === 'object' && (item as ProviderModelOption).value === value);
+                    isProviderModelOption(item) && item.value === value);
             if (selected) {
                 patch.dimension = Number.isFinite(selected.dimension) ? selected.dimension : null;
                 patch.mrl_output_dimension = Number.isFinite(selected.mrl_output_dimension)
@@ -290,31 +322,33 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'number')) {
             throw new Error('platform-llm-config-editor: embedding dimension expects numeric detail.value');
         }
-        this._emitChange({ dimension: e.detail.value || null });
+        this._emitChange({ dimension: e.detail.value === null || e.detail.value === 0 ? null : e.detail.value });
     }
 
     _onMrlOutputDimensionChange(e: CustomEvent<FieldChangeDetail>): void {
         if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'number')) {
             throw new Error('platform-llm-config-editor: embedding mrl_output_dimension expects numeric detail.value');
         }
-        this._emitChange({ mrl_output_dimension: e.detail.value || null });
+        this._emitChange({ mrl_output_dimension: e.detail.value === null || e.detail.value === 0 ? null : e.detail.value });
     }
 
     _onClear(): void {
         this.dispatchEvent(new CustomEvent('clear-override', { detail: {}, bubbles: true, composed: true }));
     }
 
+    _catalog(): ProviderCatalogItem[] {
+        return Array.isArray(this.providerCatalog) ? this.providerCatalog : [];
+    }
+
     _providerEnumConfig(): { values: Array<{ value: string; label: string }> } {
-        const items = (this.providerCatalog || []).map((p) => ({
-            value: p.value || '',
-            label: p.label || p.value || '',
-        }));
+        const items = this._catalog().map((p) => catalogText(p));
         return { values: items };
     }
 
     _selectedProviderCatalogItem(): ProviderCatalogItem | null {
         const provider = typeof this.config?.provider === 'string' ? this.config.provider : '';
-        return (this.providerCatalog || []).find((p) => p && p.value === provider) || null;
+        const found = this._catalog().find((p) => p && p.value === provider);
+        return found === undefined ? null : found;
     }
 
     _selectedProviderModels(): Array<string | ProviderModelOption> {
@@ -323,7 +357,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     }
 
     _providerModelsFor(provider: string): Array<string | ProviderModelOption> {
-        const selected = (this.providerCatalog || []).find((p) => p && p.value === provider) || null;
+        const selected = this._catalog().find((p) => p && p.value === provider);
         return Array.isArray(selected?.models) ? selected.models : [];
     }
 
@@ -333,18 +367,17 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                 if (typeof item === 'string') {
                     return { value: item, label: item };
                 }
-                if (!item || typeof item !== 'object') {
+                if (!isProviderModelOption(item)) {
                     return null;
                 }
-                const opt = item as ProviderModelOption;
-                const value = typeof opt.value === 'string' && opt.value.length > 0
-                    ? opt.value
-                    : (typeof opt.id === 'string' ? opt.id : '');
+                const value = typeof item.value === 'string' && item.value.length > 0
+                    ? item.value
+                    : (typeof item.id === 'string' ? item.id : '');
                 if (!value) {
                     return null;
                 }
-                const label = typeof opt.label === 'string' && opt.label.length > 0
-                    ? opt.label
+                const label = typeof item.label === 'string' && item.label.length > 0
+                    ? item.label
                     : value;
                 return { value, label };
             })
@@ -358,11 +391,9 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     }
 
     _fallbackModels(): FallbackModel[] {
-        const raw = (this.config && Array.isArray(this.config.fallback_models))
-            ? this.config.fallback_models as unknown[]
-            : [];
+        const raw = unknownItems(this.config?.fallback_models);
         return raw
-            .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+            .filter((item): item is Record<string, unknown> => isRecord(item))
             .map((item) => ({
                 provider: typeof item.provider === 'string' ? item.provider : '',
                 model: typeof item.model === 'string' ? item.model : '',
@@ -371,7 +402,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     }
 
     _updateFallbackModels(items: FallbackModel[]): void {
-        const next = (items || [])
+        const next = items
             .filter((item) => item && typeof item === 'object')
             .map((item) => ({
                 provider: typeof item.provider === 'string' ? item.provider.trim() : '',
@@ -382,7 +413,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     }
 
     _fallbackProviderCatalog(): ProviderCatalogItem[] {
-        const providers = (this.providerCatalog || []).filter((p) => {
+        const providers = this._catalog().filter((p) => {
             if (!p || typeof p.value !== 'string' || p.value.length === 0) {
                 return false;
             }
@@ -396,10 +427,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
 
     _fallbackProviderEnumConfig(): { values: Array<{ value: string; label: string }> } {
         return {
-            values: this._fallbackProviderCatalog().map((p) => ({
-                value: p.value || '',
-                label: p.label || p.value || '',
-            })),
+            values: this._fallbackProviderCatalog().map((p) => catalogText(p)),
         };
     }
 
@@ -412,7 +440,8 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         if (providers.some((p) => p.value === currentProvider)) {
             return currentProvider;
         }
-        return providers[0]?.value || '';
+        const first = providers[0];
+        return first === undefined ? '' : textOrEmpty(first.value);
     }
 
     _fallbackDefaultModel(provider: string): string {
@@ -516,9 +545,10 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         if (!this._isEmbeddingCapability() || !model) {
             return null;
         }
-        return this._selectedProviderModels()
+        const found = this._selectedProviderModels()
             .find((item): item is ProviderModelOption =>
-                Boolean(item) && typeof item === 'object' && (item as ProviderModelOption).value === model) || null;
+                isProviderModelOption(item) && item.value === model);
+        return found === undefined ? null : found;
     }
 
     override render(): TemplateResult {
@@ -635,8 +665,8 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                               type="password"
                               mode="edit"
                               label=${this.t('settings_page.ai_providers.api_key_label')}
-                              .value=${(this.config && this.config.api_key) || ''}
-                              .placeholder=${this.keyMasked || ''}
+                              .value=${textOrEmpty(this.config?.api_key)}
+                              .placeholder=${textOrEmpty(this.keyMasked)}
                               ?disabled=${this.readOnly}
                               @change=${this._onApiKeyChange}
                           ></platform-field>
@@ -645,7 +675,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                               type="string"
                               mode="edit"
                               label=${this.t('settings_page.ai_providers.base_url_label')}
-                              .value=${(this.config && this.config.base_url) || ''}
+                              .value=${textOrEmpty(this.config?.base_url)}
                               ?disabled=${this.readOnly}
                               @change=${this._onBaseUrlChange}
                           ></platform-field>
@@ -657,7 +687,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                               type="string"
                               mode="edit"
                               label=${this.t('settings_page.ai_providers.model_optional_label')}
-                              .value=${(this.config && this.config.model) || ''}
+                              .value=${textOrEmpty(this.config?.model)}
                               ?disabled=${this.readOnly}
                               @change=${this._onModelChange}
                           ></platform-field>

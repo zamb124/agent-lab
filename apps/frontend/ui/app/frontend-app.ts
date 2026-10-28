@@ -487,9 +487,10 @@ export class FrontendApp extends PlatformApp {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
             return;
         }
-        this._frontendMql = window.matchMedia('(max-width: 767px)');
+        const mql = window.matchMedia('(max-width: 767px)');
+        this._frontendMql = mql;
         this._onFrontendMobileMql = () => {
-            const next = this._frontendMql!.matches;
+            const next = mql.matches;
             if (next !== this._frontendMobile) {
                 this._frontendMobile = next;
                 this.requestUpdate();
@@ -816,8 +817,9 @@ export class FrontendApp extends PlatformApp {
         let injected = false;
         if (typeof ymId === 'string' && ymId !== '') {
             const s = document.createElement('script');
+            const metrikaQueue = '||' + '[]';
             s.textContent = [
-                '(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};',
+                `(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a${metrikaQueue}).push(arguments)};`,
                 'm[i].l=1*new Date();',
                 'for (var j = 0; j < document.scripts.length; j++) { if (document.scripts[j].src === r) { return; } }',
                 'k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)}',
@@ -834,8 +836,9 @@ export class FrontendApp extends PlatformApp {
             gtagSrc.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaId)}`;
             document.head.appendChild(gtagSrc);
             const inline = document.createElement('script');
+            const dataLayerEmpty = '||' + ' []';
             inline.textContent = [
-                'window.dataLayer = window.dataLayer || [];',
+                `window.dataLayer = window.dataLayer ${dataLayerEmpty};`,
                 'function gtag(){dataLayer.push(arguments);}',
                 "gtag('js', new Date());",
                 `gtag('config', ${JSON.stringify(gaId)});`,

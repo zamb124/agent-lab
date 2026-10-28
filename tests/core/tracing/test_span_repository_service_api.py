@@ -61,7 +61,7 @@ class TestSpanRepositoryServiceQuery:
         sid = f"{unique_id}_op1"
         tid = f"{unique_id}_tr1"
         t0 = datetime.now(timezone.utc)
-        await Span.insert_once(
+        await Span.insert_span_once(
             _span_row(
                 span_id=sid,
                 trace_id=tid,
@@ -78,7 +78,7 @@ class TestSpanRepositoryServiceQuery:
         assert row.operation_name == "crm.note.touch"
         assert row.event_type == "note.updated"
         assert row.trace_id == tid
-        await Span.insert_once(
+        await Span.insert_span_once(
             _span_row(
                 span_id=sid,
                 trace_id=tid,
@@ -92,7 +92,7 @@ class TestSpanRepositoryServiceQuery:
         assert again is not None
         assert again.operation_name == "crm.note.touch"
         with pytest.raises(ValueError, match="span.service_name is required to persist the span"):
-            await Span.insert_once(
+            await Span.insert_span_once(
                 _span_row(
                     span_id=f"{unique_id}_empty_service",
                     trace_id=tid,
@@ -108,7 +108,7 @@ class TestSpanRepositoryServiceQuery:
         with pytest.raises(ValueError, match="Span span_id is required"):
             _ = await Span.get("")
 
-    async def test_list_spans_for_service_filters_by_operation_name(
+    async def test_span_page_and_cursor_for_service_filters_by_operation_name(
         self,
         di,
         unique_id: str,
@@ -116,7 +116,7 @@ class TestSpanRepositoryServiceQuery:
         svc = f"sync_{unique_id}"
         base = datetime.now(timezone.utc)
         for i, op in enumerate(["sync.pull", "sync.push", "sync.pull"]):
-            await Span.insert_once(
+            await Span.insert_span_once(
                 _span_row(
                     span_id=f"{unique_id}_sn{i}",
                     trace_id=f"{unique_id}_tr{i}",
@@ -125,7 +125,7 @@ class TestSpanRepositoryServiceQuery:
                     start_time=base + timedelta(microseconds=i),
                 )
             )
-        rows, _ = await Span.list_spans_for_service(
+        rows, _ = await Span.span_page_and_cursor_for_service(
             service_name=svc,
             operation_name="sync.pull",
             limit=10,
@@ -133,7 +133,7 @@ class TestSpanRepositoryServiceQuery:
         assert len(rows) == 2
         assert {r.operation_name for r in rows} == {"sync.pull"}
 
-    async def test_list_spans_for_service_filters_by_event_type(
+    async def test_span_page_and_cursor_for_service_filters_by_event_type(
         self,
         di,
         unique_id: str,
@@ -141,7 +141,7 @@ class TestSpanRepositoryServiceQuery:
         svc = f"rag_{unique_id}"
         base = datetime.now(timezone.utc)
         for i, et in enumerate(["embed.started", "embed.done", "embed.started"]):
-            await Span.insert_once(
+            await Span.insert_span_once(
                 _span_row(
                     span_id=f"{unique_id}_ev{i}",
                     trace_id=f"{unique_id}_trx{i}",
@@ -151,7 +151,7 @@ class TestSpanRepositoryServiceQuery:
                     event_type=et,
                 )
             )
-        rows, _ = await Span.list_spans_for_service(
+        rows, _ = await Span.span_page_and_cursor_for_service(
             service_name=svc,
             event_type="embed.started",
             limit=10,
@@ -159,14 +159,14 @@ class TestSpanRepositoryServiceQuery:
         assert len(rows) == 2
         assert {r.event_type for r in rows} == {"embed.started"}
 
-    async def test_list_spans_for_service_respects_company_and_namespace(
+    async def test_span_page_and_cursor_for_service_respects_company_and_namespace(
         self,
         di,
         unique_id: str,
     ):
         svc = f"multi_{unique_id}"
         base = datetime.now(timezone.utc)
-        await Span.insert_once(
+        await Span.insert_span_once(
             _span_row(
                 span_id=f"{unique_id}_c1",
                 trace_id=f"{unique_id}_t1",
@@ -177,7 +177,7 @@ class TestSpanRepositoryServiceQuery:
                 namespace="ns1",
             )
         )
-        await Span.insert_once(
+        await Span.insert_span_once(
             _span_row(
                 span_id=f"{unique_id}_c2",
                 trace_id=f"{unique_id}_t2",
@@ -188,7 +188,7 @@ class TestSpanRepositoryServiceQuery:
                 namespace="ns1",
             )
         )
-        a_only, _ = await Span.list_spans_for_service(
+        a_only, _ = await Span.span_page_and_cursor_for_service(
             service_name=svc,
             company_id="company_a",
             limit=10,
@@ -196,7 +196,7 @@ class TestSpanRepositoryServiceQuery:
         assert len(a_only) == 1
         assert a_only[0].company_id == "company_a"
 
-        ns_only, _ = await Span.list_spans_for_service(
+        ns_only, _ = await Span.span_page_and_cursor_for_service(
             service_name=svc,
             company_id="company_b",
             namespace="ns1",
@@ -205,7 +205,7 @@ class TestSpanRepositoryServiceQuery:
         assert len(ns_only) == 1
         assert ns_only[0].span_id == f"{unique_id}_c2"
 
-    async def test_list_spans_for_service_cursor_no_duplicates_full_scan(
+    async def test_span_page_and_cursor_for_service_cursor_no_duplicates_full_scan(
         self,
         di,
         unique_id: str,
@@ -214,7 +214,7 @@ class TestSpanRepositoryServiceQuery:
         base = datetime.now(timezone.utc)
         n = 14
         for i in range(n):
-            await Span.insert_once(
+            await Span.insert_span_once(
                 _span_row(
                     span_id=f"{unique_id}_p{i:02d}",
                     trace_id=f"{unique_id}_pt{i}",
@@ -228,7 +228,7 @@ class TestSpanRepositoryServiceQuery:
         seen: set[str] = set()
         pages = 0
         while True:
-            rows, next_c = await Span.list_spans_for_service(
+            rows, next_c = await Span.span_page_and_cursor_for_service(
                 service_name=svc,
                 limit=page_size,
                 cursor=cursor,
@@ -243,17 +243,17 @@ class TestSpanRepositoryServiceQuery:
             assert pages <= 5
         assert len(seen) == n
 
-    async def test_list_spans_for_service_invalid_cursor_raises(self, di, unique_id: str):
+    async def test_span_page_and_cursor_for_service_invalid_cursor_raises(self, di, unique_id: str):
         with pytest.raises(ValueError, match="cursor"):
-            await Span.list_spans_for_service(
+            await Span.span_page_and_cursor_for_service(
                 service_name=f"x_{unique_id}",
                 limit=5,
                 cursor="not-valid-base64!!!",
             )
 
-    async def test_list_spans_for_service_limit_below_one_raises(self, di, unique_id: str):
+    async def test_span_page_and_cursor_for_service_limit_below_one_raises(self, di, unique_id: str):
         with pytest.raises(ValueError, match="limit"):
-            await Span.list_spans_for_service(
+            await Span.span_page_and_cursor_for_service(
                 service_name=f"x_{unique_id}",
                 limit=0,
             )
@@ -264,7 +264,7 @@ class TestSpanRepositoryServiceQuery:
         unique_id: str,
     ):
         base = datetime.now(timezone.utc)
-        await Span.insert_once(
+        await Span.insert_span_once(
             _span_row(
                 span_id=f"{unique_id}_crm",
                 trace_id=f"{unique_id}_tcrm",
@@ -273,7 +273,7 @@ class TestSpanRepositoryServiceQuery:
                 start_time=base,
             )
         )
-        await Span.insert_once(
+        await Span.insert_span_once(
             _span_row(
                 span_id=f"{unique_id}_sync",
                 trace_id=f"{unique_id}_tsync",
@@ -282,8 +282,8 @@ class TestSpanRepositoryServiceQuery:
                 start_time=base,
             )
         )
-        crm_rows, _ = await Span.list_spans_for_service(service_name=f"crm_{unique_id}", limit=20)
-        sync_rows, _ = await Span.list_spans_for_service(service_name=f"sync_{unique_id}", limit=20)
+        crm_rows, _ = await Span.span_page_and_cursor_for_service(service_name=f"crm_{unique_id}", limit=20)
+        sync_rows, _ = await Span.span_page_and_cursor_for_service(service_name=f"sync_{unique_id}", limit=20)
         assert len(crm_rows) == 1
         assert len(sync_rows) == 1
         assert crm_rows[0].operation_name == "entity.save"
@@ -296,7 +296,7 @@ async def test_list_for_trace_orders_by_start_time(di: object, unique_id: str) -
     trace_id = f"{unique_id}_trace"
     later = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
     earlier = later - timedelta(seconds=5)
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_late",
             trace_id=trace_id,
@@ -305,7 +305,7 @@ async def test_list_for_trace_orders_by_start_time(di: object, unique_id: str) -
             start_time=later,
         )
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_early",
             trace_id=trace_id,
@@ -314,7 +314,7 @@ async def test_list_for_trace_orders_by_start_time(di: object, unique_id: str) -
             start_time=earlier,
         )
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_other",
             trace_id=f"{unique_id}_other_trace",
@@ -329,12 +329,12 @@ async def test_list_for_trace_orders_by_start_time(di: object, unique_id: str) -
 
 
 @pytest.mark.asyncio
-async def test_list_by_task_id_orders_by_start_time(di: object, unique_id: str) -> None:
+async def test_list_by_task_id_asc_orders_by_start_time(di: object, unique_id: str) -> None:
     _ = di
     task_id = f"{unique_id}_task"
     later = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
     earlier = later - timedelta(seconds=5)
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_task_late",
             trace_id=f"{unique_id}_task_trace",
@@ -343,7 +343,7 @@ async def test_list_by_task_id_orders_by_start_time(di: object, unique_id: str) 
             start_time=later,
         ).model_copy(update={"attributes": {"platform.task_id": task_id}})
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_task_early",
             trace_id=f"{unique_id}_task_trace",
@@ -352,7 +352,7 @@ async def test_list_by_task_id_orders_by_start_time(di: object, unique_id: str) 
             start_time=earlier,
         ).model_copy(update={"attributes": {"platform.task_id": task_id}})
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_task_other",
             trace_id=f"{unique_id}_task_other_trace",
@@ -361,21 +361,21 @@ async def test_list_by_task_id_orders_by_start_time(di: object, unique_id: str) 
             start_time=earlier,
         ).model_copy(update={"attributes": {"platform.task_id": f"{unique_id}_other_task"}})
     )
-    spans = await Span.list_by_task_id(task_id)
+    spans = await Span.list_by_task_id_asc(task_id)
     assert [span.span_id for span in spans] == [
         f"{unique_id}_task_early",
         f"{unique_id}_task_late",
     ]
-    assert await Span.list_by_task_id(f"{unique_id}_missing_task") == []
+    assert await Span.list_by_task_id_asc(f"{unique_id}_missing_task") == []
 
 
 @pytest.mark.asyncio
-async def test_list_by_session_agent_orders_newest_first(di: object, unique_id: str) -> None:
+async def test_list_by_session_agent_desc_orders_newest_first(di: object, unique_id: str) -> None:
     _ = di
     session_agent = f"{unique_id}_session"
     later = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
     earlier = later - timedelta(seconds=5)
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_sess_early",
             trace_id=f"{unique_id}_sess_trace",
@@ -384,7 +384,7 @@ async def test_list_by_session_agent_orders_newest_first(di: object, unique_id: 
             start_time=earlier,
         ).model_copy(update={"session_agent": session_agent})
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_sess_late",
             trace_id=f"{unique_id}_sess_trace",
@@ -393,7 +393,7 @@ async def test_list_by_session_agent_orders_newest_first(di: object, unique_id: 
             start_time=later,
         ).model_copy(update={"session_agent": session_agent})
     )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_sess_other",
             trace_id=f"{unique_id}_sess_other_trace",
@@ -402,16 +402,16 @@ async def test_list_by_session_agent_orders_newest_first(di: object, unique_id: 
             start_time=later,
         ).model_copy(update={"session_agent": f"{unique_id}_other_session"})
     )
-    spans = await Span.list_by_session_agent(session_agent, limit=10)
+    spans = await Span.list_by_session_agent_desc(session_agent, limit=10)
     assert [span.span_id for span in spans] == [
         f"{unique_id}_sess_late",
         f"{unique_id}_sess_early",
     ]
-    assert await Span.list_by_session_agent(f"{unique_id}_missing_session") == []
+    assert await Span.list_by_session_agent_desc(f"{unique_id}_missing_session") == []
 
 
 @pytest.mark.asyncio
-async def test_list_by_user_id_orders_newest_first_and_keeps_bounds(
+async def test_list_by_user_id_desc_orders_newest_first_and_keeps_bounds(
     di: object,
     unique_id: str,
 ) -> None:
@@ -425,7 +425,7 @@ async def test_list_by_user_id_orders_newest_first_and_keeps_bounds(
         (f"{unique_id}_user_mid", middle),
         (f"{unique_id}_user_late", later),
     ):
-        await Span.insert_once(
+        await Span.insert_span_once(
             _span_row(
                 span_id=span_id,
                 trace_id=f"{unique_id}_user_trace",
@@ -434,7 +434,7 @@ async def test_list_by_user_id_orders_newest_first_and_keeps_bounds(
                 start_time=start_time,
             ).model_copy(update={"user_id": user_id})
         )
-    await Span.insert_once(
+    await Span.insert_span_once(
         _span_row(
             span_id=f"{unique_id}_user_other",
             trace_id=f"{unique_id}_user_other_trace",
@@ -443,10 +443,10 @@ async def test_list_by_user_id_orders_newest_first_and_keeps_bounds(
             start_time=middle,
         ).model_copy(update={"user_id": f"{unique_id}_other_user"})
     )
-    spans = await Span.list_by_user_id(user_id, from_time=earlier, to_time=middle, limit=10)
+    spans = await Span.list_by_user_id_desc(user_id, from_time=earlier, to_time=middle, limit=10)
     assert [span.span_id for span in spans] == [
         f"{unique_id}_user_mid",
         f"{unique_id}_user_early",
     ]
-    assert await Span.list_by_user_id(f"{unique_id}_missing_user") == []
+    assert await Span.list_by_user_id_desc(f"{unique_id}_missing_user") == []
 

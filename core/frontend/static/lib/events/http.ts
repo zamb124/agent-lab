@@ -8,26 +8,39 @@
  */
 
 import { formatPlatformError } from '../utils/platform-error-message.js';
+import { isPlainRecord } from './payload.js';
+
+function scalarParams(value: unknown): Record<string, string | number | boolean> | null {
+    if (value === undefined || value === null) return null;
+    if (!isPlainRecord(value)) return null;
+    const params: Record<string, string | number | boolean> = {};
+    for (const [key, field] of Object.entries(value)) {
+        if (typeof field !== 'string' && typeof field !== 'number' && typeof field !== 'boolean') {
+            throw new Error(`http: error_params.${key} must be a scalar`);
+        }
+        params[key] = field;
+    }
+    return params;
+}
 
 function _errorParams(errorData: unknown): Record<string, string | number | boolean> | null {
-    if (
-        errorData
-        && typeof errorData === 'object'
-        && !Array.isArray(errorData)
-        && 'error_params' in errorData
-        && typeof (errorData as Record<string, unknown>).error_params === 'object'
-        && !Array.isArray((errorData as Record<string, unknown>).error_params)
-    ) {
-        return (errorData as Record<string, unknown>).error_params as Record<string, string | number | boolean>;
+    if (!isPlainRecord(errorData)) return null;
+    return scalarParams(errorData.error_params);
+}
+
+function detailMessage(err: unknown): string {
+    if (!isPlainRecord(err)) {
+        throw new Error('http: error detail item must be an object');
     }
-    return null;
+    if (typeof err.field === 'string' && err.field.length > 0 && err.error != null && err.error !== '') {
+        return `${err.field}: ${String(err.error)}`;
+    }
+    const field = Array.isArray(err.loc) ? err.loc.slice(1).map((part) => String(part)).join('.') : 'field';
+    return `${field}: ${String(err.msg)}`;
 }
 
 function _formatError(errorData: unknown, status: number): string {
-    const rec =
-        errorData !== null && typeof errorData === 'object' && !Array.isArray(errorData)
-            ? (errorData as Record<string, unknown>)
-            : null;
+    const rec = isPlainRecord(errorData) ? errorData : null;
     if (rec === null) return `HTTP ${status}`;
 
     if (typeof rec.error_code === 'string' && rec.error_code.length > 0) {
@@ -35,12 +48,7 @@ function _formatError(errorData: unknown, status: number): string {
     }
 
     if (Array.isArray(rec.detail)) {
-        const messages = (rec.detail as Record<string, unknown>[]).map((err) => {
-            if (err.field && err.error) return `${err.field}: ${err.error}`;
-            const field = err.loc && Array.isArray(err.loc) ? err.loc.slice(1).join('.') : 'field';
-            return `${field}: ${err.msg}`;
-        });
-        return messages.join('; ');
+        return rec.detail.map(detailMessage).join('; ');
     }
     if (typeof rec.detail === 'string') return rec.detail;
     if (typeof rec.message === 'string') return rec.message;
@@ -74,6 +82,14 @@ function _parseResponseBody(raw: string, contentType: string): unknown {
     return raw;
 }
 
+/** Тело отказа: JSON по первому символу, как и у успешного ответа; нетекстовое или не-JSON тело даёт `null`. */
+async function _readErrorBody(response: Response): Promise<unknown> {
+    const raw = await response.text();
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return JSON.parse(raw);
+    return null;
+}
+
 export interface HttpResponseEnvelope {
     status: number;
     statusText: string;
@@ -103,7 +119,7 @@ interface PlatformErrorEnvelope {
 }
 
 function _platformErrorEnvelopeFromBody(body: unknown): PlatformErrorEnvelope {
-    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    if (!isPlainRecord(body)) {
         return {
             request_id: null,
             trace_id: null,
@@ -111,20 +127,17 @@ function _platformErrorEnvelopeFromBody(body: unknown): PlatformErrorEnvelope {
             observability: null,
         };
     }
-    const rec = body as Record<string, unknown>;
     const request_id =
-        typeof rec.request_id === 'string' && rec.request_id.length > 0 ? rec.request_id : null;
+        typeof body.request_id === 'string' && body.request_id.length > 0 ? body.request_id : null;
     const trace_id =
-        typeof rec.trace_id === 'string' && rec.trace_id.length > 0 ? rec.trace_id : null;
+        typeof body.trace_id === 'string' && body.trace_id.length > 0 ? body.trace_id : null;
     const service =
-        typeof rec.service === 'string' && rec.service.length > 0 ? rec.service : null;
+        typeof body.service === 'string' && body.service.length > 0 ? body.service : null;
 
     let observability: { logs_explore_url: string } | null = null;
-    const rawObs = rec.observability as Record<string, unknown> | null | undefined;
+    const rawObs = body.observability;
     if (
-        rawObs !== null &&
-        typeof rawObs === 'object' &&
-        !Array.isArray(rawObs) &&
+        isPlainRecord(rawObs) &&
         typeof rawObs.logs_explore_url === 'string' &&
         rawObs.logs_explore_url.length > 0
     ) {
@@ -154,9 +167,7 @@ export class HttpError extends Error {
         this.trace_id = env.trace_id;
         this.service = env.service;
         this.observability = env.observability;
-        const rec = body !== null && typeof body === 'object' && !Array.isArray(body)
-            ? (body as Record<string, unknown>)
-            : null;
+        const rec = isPlainRecord(body) ? body : null;
         this.error_code =
             rec !== null && typeof rec.error_code === 'string' && rec.error_code.length > 0
                 ? rec.error_code
@@ -195,11 +206,12 @@ export async function httpRequest(req: HttpRequestSpec): Promise<unknown> {
         throw new Error('httpRequest: { url } required');
     }
     const method = req.method || 'GET';
-    const isFormData = typeof FormData !== 'undefined' && req.body instanceof FormData;
-    const hasBody = req.body !== undefined && req.body !== null;
+    const requestBody = req.body;
+    const isFormData = typeof FormData !== 'undefined' && requestBody instanceof FormData;
+    const hasBody = requestBody !== undefined && requestBody !== null;
     const headers = {
         ...(hasBody && !isFormData ? { 'Content-Type': 'application/json' } : {}),
-        ...(req.headers || {}),
+        ...(req.headers === undefined ? {} : req.headers),
     };
     const url = `${req.url}${_buildQuery(req.query)}`;
     const init: RequestInit = {
@@ -209,18 +221,17 @@ export async function httpRequest(req: HttpRequestSpec): Promise<unknown> {
         signal: req.signal,
     };
     if (hasBody) {
-        init.body = isFormData ? (req.body as FormData) : JSON.stringify(req.body);
+        if (typeof FormData !== 'undefined' && requestBody instanceof FormData) {
+            init.body = requestBody;
+        } else {
+            init.body = JSON.stringify(requestBody);
+        }
     }
 
     const response = await fetch(url, init);
 
     if (!response.ok) {
-        let body = null;
-        try {
-            body = await response.json();
-        } catch {
-            body = null;
-        }
+        const body = await _readErrorBody(response);
         throw new HttpError(_formatError(body, response.status), response.status, body);
     }
 
@@ -231,7 +242,8 @@ export async function httpRequest(req: HttpRequestSpec): Promise<unknown> {
         return {};
     }
 
-    const ct = response.headers.get('content-type') || '';
+    const contentType = response.headers.get('content-type');
+    const ct = contentType === null ? '' : contentType;
     const raw = await response.text();
     const body = _parseResponseBody(raw, ct);
     if (req.returnMeta === true) {
@@ -250,15 +262,14 @@ export async function httpStream(req: HttpRequestSpec, onEvent: (data: unknown) 
     }
     const init = {
         method: req.method || 'POST',
-        headers: { 'Content-Type': 'application/json', ...(req.headers || {}) },
+        headers: { 'Content-Type': 'application/json', ...(req.headers === undefined ? {} : req.headers) },
         credentials: req.credentials || 'include',
         signal: req.signal,
         body: req.body !== undefined && req.body !== null ? JSON.stringify(req.body) : undefined,
     };
     const response = await fetch(req.url, init);
     if (!response.ok) {
-        let body = null;
-        try { body = await response.json(); } catch { body = null; }
+        const body = await _readErrorBody(response);
         throw new HttpError(_formatError(body, response.status), response.status, body);
     }
     if (!response.body) {
@@ -277,7 +288,8 @@ export async function httpStream(req: HttpRequestSpec, onEvent: (data: unknown) 
         }
         buffer += decoded;
         const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const tail = lines.pop();
+        buffer = tail === undefined ? '' : tail;
         for (const line of lines) {
             if (line.startsWith('data: ')) {
                 const data = line.slice(6);

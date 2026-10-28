@@ -72,7 +72,11 @@ export class FrontendEditApiKeyModal extends PlatformFormModal {
             this.closeAfterSave();
             return;
         }
-        (this._keys as unknown as { update: (id: string, patch: { name: string }) => void }).update((this.item as Record<string, any>).key_id, { name: next });
+        const keyId = this.item.key_id;
+        if (typeof keyId !== 'string' || keyId.length === 0) {
+            throw new Error('api key edit: key_id required');
+        }
+        this._keys.update(keyId, { name: next });
         this.closeAfterSave();
     }
 

@@ -109,7 +109,7 @@ class FlowDiscoveryService:
 
     async def get_flow(self, flow_id: str) -> FlowConfig | None:
         """Внешний flow (EXTERNAL) по flow_id."""
-        flow_cfg = await FlowConfig.get_latest(flow_id)
+        flow_cfg = await FlowConfig.current_for_flow(flow_id)
         if flow_cfg and flow_cfg.type == FlowType.EXTERNAL:
             return flow_cfg
         return None
@@ -145,7 +145,7 @@ class FlowDiscoveryService:
 
     async def health_check_agent(self, flow_id: str) -> bool:
         """Health-check для EXTERNAL flow по flow_id."""
-        ext_cfg = await FlowConfig.get_latest(flow_id)
+        ext_cfg = await FlowConfig.current_for_flow(flow_id)
         if ext_cfg is None or ext_cfg.type != FlowType.EXTERNAL:
             return False
         if ext_cfg.url is None:

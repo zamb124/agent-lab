@@ -85,7 +85,7 @@ class LaneCommit(PlatformModel):
         ).update(using=using, published_at=utcnow())
 
     @classmethod
-    async def list_unpublished(
+    async def list_unpublished_by_lane_seq(
         cls,
         *,
         created_before: datetime,
@@ -93,12 +93,7 @@ class LaneCommit(PlatformModel):
         using: str,
         lane_id: str | None = None,
     ) -> list[Self]:
-        """Неопубликованные коммиты в порядке полос: relay публикует их по ``lane_seq``.
-
-        ``lane_id`` ограничивает выборку одной полосой — точечный relay без
-        затрагивания чужих коммитов (например, воркер знает каталог событий
-        только своего домена).
-        """
+        """Неопубликованные коммиты старше created_before, ORDER BY lane_id, lane_seq, не больше limit. lane_id None не фильтрует. limit < 1 — ValueError. Relay публикует их по lane_seq."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         query = cls.objects.filter(published_at=None, created_at__lt=created_before)

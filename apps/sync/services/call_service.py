@@ -95,7 +95,7 @@ async def _post_call_boundary_message(
     company_id: str,
 ) -> MessageRead:
     if phase == "ended":
-        recordings = await SyncCallRecording.list_for_call(call_id, company_id)
+        recordings = await SyncCallRecording.list_by_created_at_desc_for_call(call_id, company_id)
         has_recording = any(recording.status == "uploaded" for recording in recordings)
         boundary_data = CallBoundaryContent(
             call_id=call_id, phase=phase, has_recording=has_recording
@@ -309,7 +309,7 @@ class SyncCallService:
             call = await SyncCall.require_company_call(call_id, company_id)
         except ValueError as exc:
             raise WsCommandError("not_found", str(exc), error_code="not_found") from exc
-        participants = await SyncCallParticipant.list_for_call(call_id)
+        participants = await SyncCallParticipant.list_unordered_for_call(call_id)
         return call_read_from_entities(call, participants)
 
     async def list_recordings(
@@ -324,7 +324,7 @@ class SyncCallService:
             AuthzObject.sync_channel(call.channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to the call.", error_code="forbidden")
-        rows = await SyncCallRecording.list_for_call(call_id, company_id)
+        rows = await SyncCallRecording.list_by_created_at_desc_for_call(call_id, company_id)
         return ListResponse[CallRecordingRead](
             items=[CallRecordingRead.model_validate(row.model_dump()) for row in rows]
         )
@@ -405,7 +405,7 @@ class SyncCallService:
             raise WsCommandError(
                 "forbidden", "Cannot assign a guest as meeting admin.", error_code="forbidden"
             )
-        participants = await SyncCallParticipant.list_for_call(call.call_id)
+        participants = await SyncCallParticipant.list_unordered_for_call(call.call_id)
         target_participant = next(
             (item for item in participants if item.user_id == target_user_id), None
         )
@@ -421,7 +421,7 @@ class SyncCallService:
             )
         await SyncCall.assign_admin(call.call_id, target_user_id)
         updated_call = await SyncCall.require_company_call(call.call_id, company_id)
-        updated_participants = await SyncCallParticipant.list_for_call(call.call_id)
+        updated_participants = await SyncCallParticipant.list_unordered_for_call(call.call_id)
         out = call_read_from_entities(updated_call, updated_participants)
         recipients = await channel_recipient_user_ids(self._channel_access, out.channel_id)
         await publish_events(

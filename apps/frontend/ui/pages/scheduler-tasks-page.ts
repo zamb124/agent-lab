@@ -10,6 +10,18 @@
  * (см. ScheduledTaskStatus в core/scheduler/models.py).
  */
 import { html, css } from 'lit';
+
+function displayText(value: unknown): string {
+    if (value === undefined || value === null || value === false || value === 0 || value === '') return '';
+    if (typeof value === 'number' && !Number.isFinite(value)) return '';
+    return String(value);
+}
+
+function shownCount(value: unknown): number | string {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.length > 0) return value;
+    return 0;
+}
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
@@ -202,8 +214,8 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
 
     _formatSchedule(t: Record<string, any>) {
         const type = t.schedule_type || (t.cron ? 'cron' : (t.interval_seconds ? 'interval' : 'one_time'));
-        if (type === 'cron') return this.t('scheduler_page.schedule_cron', { cron: t.cron || '' });
-        if (type === 'interval') return this.t('scheduler_page.schedule_interval', { sec: t.interval_seconds || 0 });
+        if (type === 'cron') return this.t('scheduler_page.schedule_cron', { cron: displayText(t.cron) });
+        if (type === 'interval') return this.t('scheduler_page.schedule_interval', { sec: shownCount(t.interval_seconds) });
         const at = t.run_at ? new Date(t.run_at).toLocaleString() : '';
         return this.t('scheduler_page.schedule_once', { at });
     }
@@ -292,8 +304,8 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         return html`
             <tr>
                 <td class="schedule-task-id">${t.schedule_task_id}</td>
-                <td>${t.target_service || ''}</td>
-                <td>${t.task_name || ''}</td>
+                <td>${displayText(t.target_service)}</td>
+                <td>${displayText(t.task_name)}</td>
                 <td><code>${this._formatSchedule(t)}</code></td>
                 <td><span class="status-tag ${status}">${status}</span></td>
                 <td>${t.next_run_at ? new Date(t.next_run_at).toLocaleString() : '—'}</td>

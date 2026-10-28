@@ -1,8 +1,15 @@
 /** Действия: button (ui-action), link (страница или внешний URL), suggested_prompts (текстовый ход). */
 
 import { html, nothing } from '../../lit-shim.js';
+import { isPlainRecord } from '../../events/payload.js';
 import { blockText as text, blockUrl } from '../runtime/templating.js';
 import type { FlowUiBlockRenderer } from '../runtime/flow-ui-store.js';
+
+function buttonActionName(action: unknown): string | null {
+    if (!isPlainRecord(action)) return null;
+    const name = action.name;
+    return typeof name === 'string' ? name : null;
+}
 
 
 export const ACTION_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Object.freeze({
@@ -12,7 +19,7 @@ export const ACTION_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Obje
         const pageId = block.page_id;
         const url = (pageId || block.action) ? null : blockUrl(ctx, block.url);
         return html`<button type="button" class="fu-button" data-variant=${block.variant}
-            data-action=${(block.action && typeof block.action === 'object' ? (block.action as Record<string, unknown>).name : null) ?? nothing}
+            data-action=${buttonActionName(block.action) ?? nothing}
             data-page-id=${pageId ?? nothing}
             ?disabled=${ctx.readonly || ctx.pending}
             @click=${() => {

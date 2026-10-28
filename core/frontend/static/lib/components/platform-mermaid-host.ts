@@ -12,16 +12,31 @@ interface MermaidApi {
     render(id: string, source: string): Promise<{ svg: string }>;
 }
 
-type MermaidWindow = Window & { mermaid?: MermaidApi };
-
 let _mermaidPromise: Promise<MermaidApi> | null = null;
 let _mermaidInitialized = false;
 let _renderSeq = 0;
 
+function isMermaidApi(value: unknown): value is MermaidApi {
+    if (typeof value !== 'object' || value === null) return false;
+    if (!('initialize' in value) || !('render' in value)) return false;
+    return typeof value.initialize === 'function' && typeof value.render === 'function';
+}
+
+function mermaidGlobal(win: Window): MermaidApi | null {
+    const host: unknown = win;
+    if (typeof host !== 'object' || host === null || !('mermaid' in host)) return null;
+    const api = host.mermaid;
+    if (api === undefined) return null;
+    if (!isMermaidApi(api)) {
+        throw new Error('mermaid global is not the Mermaid API');
+    }
+    return api;
+}
+
 function loadMermaid(): Promise<MermaidApi> {
-    const w = window as MermaidWindow;
-    if (typeof window !== 'undefined' && w.mermaid) {
-        return Promise.resolve(w.mermaid);
+    const ready = mermaidGlobal(window);
+    if (ready !== null) {
+        return Promise.resolve(ready);
     }
     if (_mermaidPromise) {
         return _mermaidPromise;
@@ -32,11 +47,12 @@ function loadMermaid(): Promise<MermaidApi> {
         script.async = true;
         script.dataset.platformMermaid = '1';
         script.onload = () => {
-            if (!w.mermaid) {
+            const loaded = mermaidGlobal(window);
+            if (loaded === null) {
                 reject(new Error('mermaid global missing after load'));
                 return;
             }
-            resolve(w.mermaid);
+            resolve(loaded);
         };
         script.onerror = () => reject(new Error(`mermaid load failed: ${MERMAID_URL}`));
         document.head.appendChild(script);

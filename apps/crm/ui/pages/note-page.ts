@@ -43,6 +43,14 @@ import type {
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function anyRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
 
 const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
 const TASK_RELATIONSHIP_TYPE = 'related_to';
@@ -213,12 +221,15 @@ export class CRMNotePage extends CRMNamespacePage {
     override connectedCallback(): void {
         super.connectedCallback();
         this.useEvent(CRM_NOTE_UPDATED, (event) => {
-            const payload = (event && event.payload ? event.payload : null) as Record<string, any> | null;
+            const payload = anyRecord(event.payload);
             const noteId = payload ? payload.note_id : null;
             if (typeof noteId !== 'string' || noteId !== this.noteId) {
                 return;
             }
-            const mf = payload!.markdown_format;
+            if (payload === null) {
+                return;
+            }
+            const mf = payload.markdown_format;
             const phase = mf && typeof mf.phase === 'string' ? mf.phase : '';
             if (phase === 'started') {
                 this._markdownFormatting = true;
@@ -238,7 +249,7 @@ export class CRMNotePage extends CRMNamespacePage {
             this._markdownFormatProgress = null;
             // Entity fields — из payload.note / crm/entities merge; related-граф
             // не перезагружаем на каждый note push (analyze — через crm/task/updated).
-            const note = payload!.note;
+            const note = payload.note;
             if (
                 note
                 && typeof note === 'object'
@@ -254,8 +265,8 @@ export class CRMNotePage extends CRMNamespacePage {
             if (this._isStaleEntityCardOpEvent(event)) {
                 return;
             }
-            const p = event.payload as Record<string, any> | null;
-            const result = p && p.result ? p.result : null;
+            const p = anyRecord(event.payload);
+            const result = p !== null && p.result ? p.result : null;
             if (!result || typeof result !== 'object') {
                 throw new Error('crm/entity_card SUCCEEDED: payload.result missing');
             }
@@ -266,7 +277,7 @@ export class CRMNotePage extends CRMNamespacePage {
             if (this._isStaleEntityCardOpEvent(event)) {
                 return;
             }
-            const p = event.payload as Record<string, any> | null;
+            const p = anyRecord(event.payload);
             const err = p && p.error ? p.error : null;
             this._card = null;
             this._cardError = err && typeof err.message === 'string' ? err.message : 'load_failed';
@@ -335,7 +346,7 @@ export class CRMNotePage extends CRMNamespacePage {
             this.requestUpdate();
         }
 
-        const note = this._resolveNote() as Record<string, any> | null;
+        const note = this._resolveNote();
         if (note === null) {
             return;
         }
@@ -450,11 +461,12 @@ export class CRMNotePage extends CRMNamespacePage {
 
     _activeAnalyzeTask() {
         const items = this._tasks.items;
-        return items.find((task) => {
-            const data = task && typeof task.data === 'object' && task.data !== null ? task.data : null;
-            const taskNoteId = data && typeof (data as Record<string, unknown>).note_id === 'string' ? (data as Record<string, any>).note_id : null;
+        const found = items.find((task) => {
+            const data = anyRecord(task.data);
+            const taskNoteId = data !== null && typeof data.note_id === 'string' ? data.note_id : null;
             return taskNoteId === this.noteId && ACTIVE_ANALYZE_TASK_STATUSES.has(task.status as string);
-        }) || null;
+        });
+        return found === undefined ? null : found;
     }
 
     _isAnalyzingNow() {
@@ -499,12 +511,8 @@ export class CRMNotePage extends CRMNamespacePage {
         this._loadAnalyzeTasks();
     }
 
-    _resolveNote() {
-        const byId = this._entities.byId;
-        if (byId && byId[this.noteId]) {
-            return byId[this.noteId];
-        }
-        return null;
+    _resolveNote(): Record<string, any> | null {
+        return anyRecord(this._entities.byId[this.noteId]);
     }
 
     _currentNamespace() {
@@ -572,7 +580,8 @@ export class CRMNotePage extends CRMNamespacePage {
     }
 
     _onEditCreated(event: CustomEvent) {
-        const created = event.detail && (event.detail as Record<string, any>).entity ? (event.detail as Record<string, any>).entity : null;
+        const detail = anyRecord(event.detail);
+        const created = detail !== null ? anyRecord(detail.entity) : null;
         if (!created || typeof created.entity_id !== 'string') return;
         this.navigate('note', { itemId: created.entity_id });
     }
@@ -593,10 +602,8 @@ export class CRMNotePage extends CRMNamespacePage {
                     return;
                 }
                 cleanup();
-                const pl = event.payload as Record<string, any> | null;
-                const item = pl && typeof pl.item === 'object'
-                    ? pl.item as Record<string, any>
-                    : null;
+                const pl = anyRecord(event.payload);
+                const item = pl !== null ? anyRecord(pl.item) : null;
                 resolve(item);
             });
             offFailed = bus.subscribeType(failedType, (event) => {
@@ -604,7 +611,7 @@ export class CRMNotePage extends CRMNamespacePage {
                     return;
                 }
                 cleanup();
-                const pl = event.payload as Record<string, any> | null;
+                const pl = anyRecord(event.payload);
                 const message = pl && typeof pl.message === 'string'
                     ? pl.message
                     : 'resource create failed';
@@ -631,7 +638,7 @@ export class CRMNotePage extends CRMNamespacePage {
 
     async _onTaskAdd(event: CustomEvent<{ text?: unknown }>) {
         const text = event.detail && typeof event.detail.text === 'string' ? event.detail.text.trim() : '';
-        const note = this._resolveNote() as Record<string, any> | null;
+        const note = this._resolveNote();
         if (text.length === 0 || note === null) {
             return;
         }

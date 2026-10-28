@@ -3,8 +3,15 @@ import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResu
 import { PlatformElement } from '../platform-element/index.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { getCachedSortedIanaTimeZones } from '../utils/iana-timezones.js';
-import './platform-popover.js';
-import type { PlatformPopover } from './platform-popover.js';
+import { PlatformPopover } from './platform-popover.js';
+
+function zoneQuery(event: Event): string {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-timezone-picker: query target must be an input');
+    }
+    return target.value;
+}
 import './fields/platform-field-shell.js';
 
 const LIST_MAX = 200;
@@ -124,7 +131,11 @@ export class PlatformTimezonePicker extends PlatformElement {
             }
         }
         if (this._listOpen && !this.disabled) {
-            (this.renderRoot?.querySelector?.('platform-popover') as PlatformPopover | null)?.reposition();
+            const popover = this.renderRoot.querySelector('platform-popover');
+            if (!(popover instanceof PlatformPopover)) {
+                throw new Error('platform-timezone-picker: open list popover is missing');
+            }
+            popover.reposition();
         }
     }
 
@@ -140,7 +151,7 @@ export class PlatformTimezonePicker extends PlatformElement {
         if (this.disabled) {
             return;
         }
-        this._inputText = (e.target as HTMLInputElement).value;
+        this._inputText = zoneQuery(e);
         this._listOpen = true;
         this.emit('input', { value: this._inputText });
     }

@@ -55,35 +55,52 @@
 import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
 import type { SyncChannelMessagesData, SyncMessagesStoreSlice } from '../sync.types.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-const EMPTY_CHANNEL_DATA = Object.freeze({
-    items: Object.freeze([]),
-    pendingByLocalId: Object.freeze({}),
-    loading: false,
-    loadingOlder: false,
-    loadingNewer: false,
-    error: null,
-    pagination: Object.freeze({
+function createEmptyChannelData(): SyncChannelMessagesData {
+    const items: Record<string, any>[] = [];
+    Object.freeze(items);
+    const pendingByLocalId: Record<string, Record<string, any>> = {};
+    Object.freeze(pendingByLocalId);
+    const pagination = {
         hasOlder: false,
         oldestCursor: null,
         hasNewer: false,
         newestCursor: null,
-    }),
-});
+    };
+    Object.freeze(pagination);
+    const data: SyncChannelMessagesData = {
+        items,
+        pendingByLocalId,
+        loading: false,
+        loadingOlder: false,
+        loadingNewer: false,
+        error: null,
+        pagination,
+    };
+    Object.freeze(data);
+    return data;
+}
+
+const EMPTY_CHANNEL_DATA = createEmptyChannelData();
 
 function _emptyChannelData(): SyncChannelMessagesData {
-    return EMPTY_CHANNEL_DATA as SyncChannelMessagesData;
+    return EMPTY_CHANNEL_DATA;
 }
 
 function _getChannelData(state: SyncMessagesStoreSlice, channelId: unknown): SyncChannelMessagesData {
-    if (typeof channelId !== 'string' || channelId === '') return EMPTY_CHANNEL_DATA as SyncChannelMessagesData;
+    if (typeof channelId !== 'string' || channelId === '') return EMPTY_CHANNEL_DATA;
     const data = state.byChannelId[channelId];
-    if (data && typeof data === 'object') return data;
-    return EMPTY_CHANNEL_DATA as SyncChannelMessagesData;
+    if (data !== undefined) return data;
+    return EMPTY_CHANNEL_DATA;
 }
 
-function _normalizeMessage(message: Record<string, any> | null | undefined): Record<string, any> | null | undefined {
-    if (!message || typeof message !== 'object') return message;
+function payloadRecord(event: { payload: unknown }): Record<string, unknown> | null {
+    return isPlainRecord(event.payload) ? event.payload : null;
+}
+
+function _normalizeMessage(message: unknown): Record<string, any> | null {
+    if (!isPlainRecord(message)) return null;
     const messageId = typeof message.message_id === 'string' && message.message_id !== ''
         ? message.message_id
         : null;
@@ -97,7 +114,15 @@ function _normalizeMessage(message: Record<string, any> | null | undefined): Rec
 
 function _normalizeMessages(items: unknown): Record<string, any>[] {
     if (!Array.isArray(items)) return [];
-    return items.map(_normalizeMessage) as Record<string, any>[];
+    const messages: Record<string, any>[] = [];
+    for (const item of items) {
+        const message = _normalizeMessage(item);
+        if (message === null) {
+            throw new Error('sync/messages: message must be an object');
+        }
+        messages.push(message);
+    }
+    return messages;
 }
 
 export const messagesResource = createAsyncOp({
@@ -135,7 +160,8 @@ export const messagesSendOp = createAsyncOp({
     commandType: 'sync/messages/send_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/messages' },
     onSuccess: (ctx, result, event) => {
-        const body = (event.payload as Record<string, any> | null)?.body;
+        const payload = payloadRecord(event);
+        const body = payload !== null && isPlainRecord(payload.body) ? payload.body : null;
         const localId = body && typeof body.local_id === 'string' && body.local_id !== ''
             ? body.local_id
             : null;
@@ -285,9 +311,9 @@ export const messagesStoreSlice = createSlice({
         loadedOlder: 'history_older_loaded',
         loadedNewer: 'history_newer_loaded',
     },
-    extraReducer: (state, event) => {
-        const s = state as SyncMessagesStoreSlice;
-        const updateChannel = (channelId: string, updater: (cur: SyncChannelMessagesData) => Record<string, any>) => {
+    extraReducer: (state: SyncMessagesStoreSlice, event) => {
+        const s = state;
+        const updateChannel = (channelId: string, updater: (cur: SyncChannelMessagesData) => SyncChannelMessagesData) => {
             const cur = _getChannelData(s, channelId);
             const next = updater(cur);
             return {
@@ -308,11 +334,10 @@ export const messagesStoreSlice = createSlice({
                 };
             }
             case 'sync/messages/succeeded': {
-                const payload = event.payload as Record<string, any> | null;
+                const payload = payloadRecord(event);
                 if (!payload || !payload.result) return state;
-                const result = payload.result;
-                if (!Array.isArray(result.items)) return state;
-                if (result.items.length === 0) return state;
+                const result = isPlainRecord(payload.result) ? payload.result : null;
+                if (result === null || !Array.isArray(result.items) || result.items.length === 0) return state;
                 const firstItem = result.items[0];
                 const channelId = firstItem && typeof firstItem.channel_id === 'string' ? firstItem.channel_id : '';
                 if (channelId === '') return state;
@@ -343,27 +368,31 @@ export const messagesStoreSlice = createSlice({
                 }));
             }
             case 'sync/messages_store/initial_load_started': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 return updateChannel(p.channelId, (cur) => ({ ...cur, loading: true, error: null }));
             }
             case 'sync/messages_store/initial_load_loaded': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
-                const result = p.result && typeof p.result === 'object' ? p.result : null;
+                const result = isPlainRecord(p.result) ? p.result : null;
                 const items = result && Array.isArray(result.items) ? _normalizeMessages(result.items) : [];
-                const hasOlder = result && typeof result.has_older === 'boolean'
+                const hasOlder = result !== null && typeof result.has_older === 'boolean'
                     ? result.has_older
-                    : (result && typeof result.prev_cursor === 'string' && result.prev_cursor !== '');
-                const hasNewer = result && typeof result.has_newer === 'boolean'
+                    : result !== null && typeof result.prev_cursor === 'string' && result.prev_cursor !== '';
+                const hasNewer = result !== null && typeof result.has_newer === 'boolean'
                     ? result.has_newer
-                    : (result && typeof result.next_cursor === 'string' && result.next_cursor !== '');
-                const oldestCursor = result && typeof result.oldest_cursor === 'string'
+                    : result !== null && typeof result.next_cursor === 'string' && result.next_cursor !== '';
+                const oldestCursor = result !== null && typeof result.oldest_cursor === 'string'
                     ? result.oldest_cursor
-                    : (result && typeof result.prev_cursor === 'string' ? result.prev_cursor : null);
-                const newestCursor = result && typeof result.newest_cursor === 'string'
+                    : result !== null && typeof result.prev_cursor === 'string'
+                        ? result.prev_cursor
+                        : null;
+                const newestCursor = result !== null && typeof result.newest_cursor === 'string'
                     ? result.newest_cursor
-                    : (result && typeof result.next_cursor === 'string' ? result.next_cursor : null);
+                    : result !== null && typeof result.next_cursor === 'string'
+                        ? result.next_cursor
+                        : null;
                 return updateChannel(p.channelId, (cur) => ({
                     ...cur,
                     items: Object.freeze(items),
@@ -378,13 +407,13 @@ export const messagesStoreSlice = createSlice({
                 }));
             }
             case 'sync/messages_store/initial_load_failed': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 const message = typeof p.message === 'string' && p.message !== '' ? p.message : 'failed';
                 return updateChannel(p.channelId, (cur) => ({ ...cur, loading: false, error: message }));
             }
             case 'sync/messages_store/history_older_loaded': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 if (!Array.isArray(p.items)) return state;
                 const newItems = _normalizeMessages(p.items);
@@ -404,7 +433,7 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/messages_store/history_newer_loaded': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 if (!Array.isArray(p.items)) return state;
                 const newItems = _normalizeMessages(p.items);
@@ -424,27 +453,28 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/messages_store/history_older_started': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 return updateChannel(p.channelId, (cur) => ({ ...cur, loadingOlder: true }));
             }
             case 'sync/messages_store/history_newer_started': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 return updateChannel(p.channelId, (cur) => ({ ...cur, loadingNewer: true }));
             }
             case 'sync/message/created':
             case 'sync/messages_store/send_confirmed': {
+                const payload = payloadRecord(event);
                 const raw = event.type === 'sync/messages_store/send_confirmed'
-                    ? ((event.payload as Record<string, any> | null)?.message)
+                    ? (payload !== null ? payload.message : undefined)
                     : event.payload;
                 const m = _normalizeMessage(raw);
                 if (!m || typeof m.channel_id !== 'string' || typeof m.message_id !== 'string') return state;
                 const localIdFromConfirm = event.type === 'sync/messages_store/send_confirmed'
-                    && event.payload
-                    && typeof (event.payload as Record<string, any>).localId === 'string'
-                    && (event.payload as Record<string, any>).localId !== ''
-                    ? (event.payload as Record<string, any>).localId
+                    && payload !== null
+                    && typeof payload.localId === 'string'
+                    && payload.localId !== ''
+                    ? payload.localId
                     : null;
                 const localId = localIdFromConfirm
                     || (typeof m.local_id === 'string' && m.local_id !== '' ? m.local_id : null);
@@ -467,7 +497,7 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/message/updated': {
-                const m = _normalizeMessage(event.payload as Record<string, any> | null);
+                const m = _normalizeMessage(payloadRecord(event));
                 if (!m || typeof m.channel_id !== 'string' || typeof m.message_id !== 'string') return state;
                 return updateChannel(m.channel_id, (cur) => {
                     const idx = cur.items.findIndex((x) => x.message_id === m.message_id);
@@ -477,7 +507,7 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/message/deleted': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channel_id !== 'string' || typeof p.message_id !== 'string') return state;
                 return updateChannel(p.channel_id, (cur) => ({
                     ...cur,
@@ -485,7 +515,7 @@ export const messagesStoreSlice = createSlice({
                 }));
             }
             case 'sync/message/reaction_changed': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channel_id !== 'string' || typeof p.message_id !== 'string') return state;
                 const reactions = Array.isArray(p.reactions) ? p.reactions : [];
                 return updateChannel(p.channel_id, (cur) => {
@@ -496,7 +526,7 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/message/status_changed': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channel_id !== 'string' || typeof p.message_id !== 'string') return state;
                 return updateChannel(p.channel_id, (cur) => {
                     const idx = cur.items.findIndex((x) => x.message_id === p.message_id);
@@ -506,7 +536,7 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/messages_store/reply_mode_set': {
-                const messageId = (event.payload as Record<string, any> | null)?.messageId;
+                const messageId = (payloadRecord(event))?.messageId;
                 return {
                     ...s,
                     replyToMessageId: typeof messageId === 'string' ? messageId : null,
@@ -514,7 +544,7 @@ export const messagesStoreSlice = createSlice({
                 };
             }
             case 'sync/messages_store/edit_mode_set': {
-                const messageId = (event.payload as Record<string, any> | null)?.messageId;
+                const messageId = (payloadRecord(event))?.messageId;
                 return {
                     ...s,
                     editMessageId: typeof messageId === 'string' ? messageId : null,
@@ -522,7 +552,7 @@ export const messagesStoreSlice = createSlice({
                 };
             }
             case 'sync/messages_store/context_menu_requested': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.messageId !== 'string') return state;
                 if (typeof p.channelId !== 'string' || p.channelId === '') return state;
                 return {
@@ -539,7 +569,7 @@ export const messagesStoreSlice = createSlice({
                 return { ...s, contextMenuTarget: null };
             }
             case 'sync/messages_store/optimistic_added': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || !p.item) return state;
                 const item = _normalizeMessage(p.item);
                 if (!item || typeof item.local_id !== 'string') return state;
@@ -552,24 +582,26 @@ export const messagesStoreSlice = createSlice({
                 }));
             }
             case 'sync/messages_store/flash_requested': {
-                const p = event.payload as Record<string, any> | null;
+                const p = payloadRecord(event);
                 if (!p || typeof p.messageId !== 'string' || p.messageId === '') return state;
                 return { ...s, flashMessageId: p.messageId, flashSeq: s.flashSeq + 1 };
             }
             case 'sync/messages_store/flash_cleared':
                 return { ...s, flashMessageId: null };
             case 'sync/messages_store/optimistic_failed': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.channelId !== 'string' || typeof p.localId !== 'string') return state;
+                const p = payloadRecord(event);
+                if (p === null) return state;
+                const localId = p.localId;
+                if (typeof p.channelId !== 'string' || typeof localId !== 'string') return state;
                 return updateChannel(p.channelId, (cur) => {
-                    if (!cur.pendingByLocalId[p.localId]) return cur;
+                    if (!cur.pendingByLocalId[localId]) return cur;
                     const errorMessage = typeof p.message === 'string' && p.message !== '' ? p.message : 'failed';
                     return {
                         ...cur,
                         pendingByLocalId: Object.freeze({
                             ...cur.pendingByLocalId,
-                            [p.localId]: Object.freeze({
-                                ...cur.pendingByLocalId[p.localId],
+                            [localId]: Object.freeze({
+                                ...cur.pendingByLocalId[localId],
                                 _pending: false,
                                 _error: errorMessage,
                             }),
@@ -578,16 +610,18 @@ export const messagesStoreSlice = createSlice({
                 });
             }
             case 'sync/messages_store/optimistic_resend_requested': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.channelId !== 'string' || typeof p.localId !== 'string') return state;
+                const p = payloadRecord(event);
+                if (p === null) return state;
+                const localId = p.localId;
+                if (typeof p.channelId !== 'string' || typeof localId !== 'string') return state;
                 return updateChannel(p.channelId, (cur) => {
-                    if (!cur.pendingByLocalId[p.localId]) return cur;
+                    if (!cur.pendingByLocalId[localId]) return cur;
                     return {
                         ...cur,
                         pendingByLocalId: Object.freeze({
                             ...cur.pendingByLocalId,
-                            [p.localId]: Object.freeze({
-                                ...cur.pendingByLocalId[p.localId],
+                            [localId]: Object.freeze({
+                                ...cur.pendingByLocalId[localId],
                                 _pending: true,
                                 _error: null,
                                 status: 'sending',
@@ -603,3 +637,22 @@ export const messagesStoreSlice = createSlice({
 });
 
 export { _getChannelData, _emptyChannelData };
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/messages': typeof messagesResource;
+        'sync/messages_load_older': typeof messagesLoadOlderOp;
+        'sync/messages_load_newer': typeof messagesLoadNewerOp;
+        'sync/messages_send': typeof messagesSendOp;
+        'sync/messages_edit': typeof messagesEditOp;
+        'sync/messages_delete': typeof messagesDeleteOp;
+        'sync/messages_forward': typeof messagesForwardOp;
+        'sync/messages_react': typeof messagesReactOp;
+        'sync/messages_pin': typeof messagesPinOp;
+        'sync/messages_mark_read': typeof messagesMarkReadOp;
+        'sync/messages_transcribe_audio': typeof messagesTranscribeAudioOp;
+        'sync/messages_transcribe_video': typeof messagesTranscribeVideoOp;
+        'sync/messages_transcribe_call': typeof messagesTranscribeCallOp;
+        'sync/messages_store': typeof messagesStoreSlice;
+    }
+}

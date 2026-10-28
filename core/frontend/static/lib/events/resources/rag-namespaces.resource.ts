@@ -69,3 +69,10 @@ export const namespaceCreateForm = createForm({
         };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'rag/namespaces': typeof namespacesResource;
+        'rag/namespace_create_form': typeof namespaceCreateForm;
+    }
+}

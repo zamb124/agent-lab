@@ -8,6 +8,7 @@ import type {
     PmStateLike,
     PmDispatch,
 } from './pm-types.js';
+import { attrString } from './wiki-schema-builder.js';
 
 type RxMatch = RegExpMatchArray & Record<number, string>;
 
@@ -41,7 +42,7 @@ export function buildInputRules(pm: PmPluginApiLike, schema: PmSchemaLike): unkn
         })),
     );
     rules.push(pm.textblockTypeInputRule(/^```([a-zA-Z0-9+-]*)\s$/, nt(schema, 'code_block'), (match: RxMatch) => ({
-        language: match[1] || '',
+        language: match[1],
     })));
     rules.push(pm.wrappingInputRule(/^\s*>\s$/, nt(schema, 'blockquote')));
     rules.push(pm.wrappingInputRule(/^\s*([-+*])\s$/, nt(schema, 'bullet_list')));
@@ -248,7 +249,7 @@ export function insertMentionCommand(schema: PmSchemaLike, mention: MentionPaylo
         const node = nt(schema, 'platform_mention').create({
             mention_kind: mention.mentionKind,
             target_id: mention.targetId,
-            label: mention.label || '',
+            label: attrString(mention.label),
         });
         if (dispatch) dispatch(state.tr.replaceSelectionWith(node, false).scrollIntoView());
         return true;
@@ -271,8 +272,8 @@ export function insertPlatformFileCommand(schema: PmSchemaLike, file: PlatformFi
     return (state: PmStateLike, dispatch?: PmDispatch) => {
         const node = nt(schema, 'platform_file').create({
             file_id: file.fileId,
-            original_name: file.originalName || '',
-            content_type: file.contentType || '',
+            original_name: attrString(file.originalName),
+            content_type: attrString(file.contentType),
         });
         if (dispatch) dispatch(state.tr.replaceSelectionWith(node).scrollIntoView());
         return true;
@@ -302,8 +303,8 @@ export function insertImageCommand(schema: PmSchemaLike, image: ImagePayload): P
         }
         const node = nt(schema, 'image').create({
             src: image.src,
-            alt: image.alt || '',
-            title: image.title || '',
+            alt: attrString(image.alt),
+            title: attrString(image.title),
             file_id: image.fileId,
         });
         if (dispatch) dispatch(state.tr.replaceSelectionWith(node).scrollIntoView());

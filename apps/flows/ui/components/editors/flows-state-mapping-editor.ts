@@ -1,0 +1,494 @@
+/**
+ * flows-state-mapping-editor — маппинг для нод.
+ *
+ * Бэкенд (apps/flows/src/mapping.py):
+ * - input / input_mapping: { target_param: "@state:path" | "@var:path" | "constant" }
+ * - output / output_mapping и state_mapping (MCP, external_api): { result_key: state_field }
+ *
+ * kind: "input" — три поля: источник (путь), тип (@state / @var / const), параметр ноды.
+ * kind: "output" — два поля + стрелка: ключ результата, поле в state.
+ */
+
+import { html, css } from 'lit';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-segmented-control.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
+
+function _parseInputSource(raw: any, allowPlatform: any) {
+    const s = String(raw);
+    if (s === '@state') {
+        return { sourceType: 'const', sourcePath: '@state' };
+    }
+    if (s.startsWith('@state:')) {
+        return { sourceType: 'state', sourcePath: s.slice(7) };
+    }
+    if (s.startsWith('@var:')) {
+        return { sourceType: 'var', sourcePath: s.slice(5) };
+    }
+    if (allowPlatform === true && s.startsWith('@platform:')) {
+        return { sourceType: 'platform', sourcePath: s.slice(10) };
+    }
+    return { sourceType: 'const', sourcePath: s };
+}
+
+function _buildInputSource(sourceType: any, sourcePath: any) {
+    const p = typeof sourcePath === 'string' ? sourcePath : '';
+    if (sourceType === 'state') {
+        return `@state:${p}`;
+    }
+    if (sourceType === 'var') {
+        return `@var:${p}`;
+    }
+    if (sourceType === 'platform') {
+        return `@platform:${p}`;
+    }
+    return p;
+}
+
+export class FlowsStateMappingEditor extends PlatformElement {
+    static i18nNamespace = 'flows';
+
+    static override properties: PropertyDeclarations = {
+        /** Сброс локальных строк при смене ноды или вкладки Input/Output (не при каждом emit). */
+        syncKey: { type: String },
+        mapping: { type: Object },
+        /** "input" — input_mapping; "output" — output_mapping / state_mapping. */
+        kind: { type: String },
+        title: { type: String },
+        /** guest_env: четвёртый тип @platform:KEY. */
+        allowPlatform: { type: Boolean, reflect: true, attribute: 'allow-platform' },
+        stateSuggestions: { type: Array },
+        varSuggestions: { type: Array },
+        resultSuggestions: { type: Array },
+        platformSuggestions: { type: Array },
+        _rows: { state: true },
+    }
+    declare syncKey: string;
+    declare mapping: Record<string, any> | null;
+    declare kind: string;
+    declare title: string;
+    declare allowPlatform: boolean;
+    declare stateSuggestions: any[];
+    declare varSuggestions: any[];
+    declare resultSuggestions: any[];
+    declare platformSuggestions: any[];
+    declare _rows: any[];
+;
+
+    static override styles: CSSResultGroup = [
+        PlatformElement.styles,
+        css`
+            :host {
+                display: block;
+            }
+            .toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+            }
+            .hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .map-wrap {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .map-row {
+                display: grid;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 0;
+                box-sizing: border-box;
+            }
+            .map-row.input-grid {
+                grid-template-columns: 1fr minmax(0, 10px) 114px minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .map-row.output-grid {
+                grid-template-columns: 1fr minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .sep {
+                text-align: center;
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                user-select: none;
+            }
+            .arrow {
+                text-align: center;
+                color: var(--text-secondary);
+                font-size: var(--text-lg);
+                user-select: none;
+            }
+            .map-row platform-field {
+                min-width: 0;
+            }
+            .source-type-segment {
+                width: 114px;
+            }
+            :host([allow-platform]) .source-type-segment {
+                width: 152px;
+            }
+            :host([allow-platform]) .map-row.input-grid,
+            :host([allow-platform]) .head-row.input-grid {
+                grid-template-columns: 1fr minmax(0, 10px) 152px minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .head-row {
+                display: grid;
+                gap: var(--space-2);
+                padding: 0 var(--space-3) var(--space-1);
+            }
+            .head-row.input-grid {
+                grid-template-columns: 1fr minmax(0, 10px) 114px minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .head-row.output-grid {
+                grid-template-columns: 1fr minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .head-row label {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .empty {
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                padding: var(--space-3);
+            }
+        `,
+    ];
+    private _parentMappingSettled: boolean;
+
+    constructor() {
+        super();
+        this.syncKey = '';
+        this.mapping = null;
+        this.kind = 'input';
+        this.title = '';
+        this.allowPlatform = false;
+        this.stateSuggestions = [];
+        this.varSuggestions = [];
+        this.resultSuggestions = [];
+        this.platformSuggestions = [];
+        this._rows = [];
+        /** Не тянуть `mapping` с родителя после первого init (иначе пропадут незаполненные новые строки). */
+        this._parentMappingSettled = false;
+    }
+
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate(changed);
+        if (changed.has('syncKey') || changed.has('kind')) {
+            this._parentMappingSettled = true;
+            this._syncRowsFromMapping();
+            return;
+        }
+        if (changed.has('mapping') && this._parentMappingSettled === false) {
+            this._parentMappingSettled = true;
+            this._syncRowsFromMapping();
+        }
+    }
+
+    override firstUpdated() {
+        if (this._parentMappingSettled === false) {
+            this._parentMappingSettled = true;
+            this._syncRowsFromMapping();
+        }
+    }
+
+    get _isOutput() {
+        return this.kind === 'output';
+    }
+
+    _syncRowsFromMapping() {
+        const m = this.mapping;
+        this._rows = [];
+        if (!m || typeof m !== 'object') {
+            return;
+        }
+        if (this._isOutput) {
+            for (const [k, v] of Object.entries(m)) {
+                (this._rows.push as any)({
+                    resultKey: k,
+                    stateField: String(v),
+                });
+            }
+        } else {
+            for (const [param, source] of Object.entries(m)) {
+                const parsed = _parseInputSource(source, this.allowPlatform === true);
+                (this._rows.push as any)({
+                    param,
+                    sourceType: parsed.sourceType,
+                    sourcePath: parsed.sourcePath,
+                });
+            }
+        }
+    }
+
+    _buildMappingFromRows() {
+        if (this._isOutput) {
+            const mapping = {};
+            for (const r of (this._rows as any)) {
+                const a = typeof r.resultKey === 'string' ? r.resultKey.trim() : '';
+                const b = typeof r.stateField === 'string' ? r.stateField.trim() : '';
+                if (a.length === 0 || b.length === 0) {
+                    continue;
+                }
+                (mapping as any)[a] = b;
+            }
+            return mapping;
+        }
+        const mapping = {};
+        for (const r of (this._rows as any)) {
+            const param = typeof r.param === 'string' ? r.param.trim() : '';
+            if (param.length === 0) {
+                continue;
+            }
+            (mapping as any)[param] = _buildInputSource(r.sourceType, r.sourcePath);
+        }
+        return mapping;
+    }
+
+    /**
+     * Актуальный mapping из локальных строк (для Save, когда DOM-событие не дошло до родителя).
+     * @returns {Record<string, string>}
+     */
+    getMapping() {
+        return this._buildMappingFromRows();
+    }
+
+    _emitChange() {
+        this.emit('change', { mapping: this._buildMappingFromRows() });
+    }
+
+    _addRow() {
+        if (this._isOutput) {
+            this._rows = [...this._rows, { resultKey: '', stateField: '' }];
+        } else {
+            this._rows = [
+                ...this._rows,
+                { param: '', sourceType: 'state', sourcePath: '' },
+            ];
+        }
+    }
+
+    _removeRow(idx: number) {
+        this._rows = (this._rows.filter as any)((_: any, i: number) => i !== idx);
+        this._emitChange();
+    }
+
+    _updateInputRow(idx: number, patch: any) {
+        this._rows = (this._rows.map as any)((r: any, i: number) => (i === idx ? { ...r, ...patch } : r));
+        this._emitChange();
+    }
+
+    _updateOutputRow(idx: number, patch: any) {
+        this._rows = (this._rows.map as any)((r: any, i: number) => (i === idx ? { ...r, ...patch } : r));
+        this._emitChange();
+    }
+
+    _suggestionsForInputSource(sourceType: any) {
+        if (sourceType === 'var') {
+            return Array.isArray(this.varSuggestions) ? this.varSuggestions : [];
+        }
+        if (sourceType === 'state') {
+            return Array.isArray(this.stateSuggestions) ? this.stateSuggestions : [];
+        }
+        if (sourceType === 'platform') {
+            return Array.isArray(this.platformSuggestions) ? this.platformSuggestions : [];
+        }
+        return [];
+    }
+
+    _normalizedSuggestions(suggestions: any) {
+        return Array.isArray(suggestions)
+            ? suggestions.filter((item) => typeof item === 'string' && item.length > 0).slice(0, 120)
+            : [];
+    }
+
+    _renderInputText(value: unknown, suggestions: any, onInput: any, placeholder = '') {
+        const values = this._normalizedSuggestions(suggestions);
+        return html`
+            <platform-field
+                type="string"
+                mode="edit"
+                label=""
+                .value=${typeof value === 'string' ? value : ''}
+                .placeholder=${placeholder}
+                .suggestions=${values}
+                @change=${(e: CustomEvent) => onInput(typeof e.detail.value === 'string' ? e.detail.value : '')}
+            ></platform-field>
+        `;
+    }
+
+    _sourceTypeOptions() {
+        const options = [
+            {
+                value: 'state',
+                icon: 'database',
+                label: this.t('state_mapping_editor.type_state_label'),
+                hint: this.t('state_mapping_editor.type_state_hint'),
+            },
+            {
+                value: 'var',
+                icon: 'key',
+                label: this.t('state_mapping_editor.type_var_label'),
+                hint: this.t('state_mapping_editor.type_var_hint'),
+            },
+            {
+                value: 'const',
+                icon: 'text-fields',
+                label: this.t('state_mapping_editor.type_const_label'),
+                hint: this.t('state_mapping_editor.type_const_hint'),
+            },
+        ];
+        if (this.allowPlatform === true) {
+            options.push({
+                value: 'platform',
+                icon: 'server',
+                label: this.t('state_mapping_editor.type_platform_label'),
+                hint: this.t('state_mapping_editor.type_platform_hint'),
+            });
+        }
+        return options;
+    }
+
+    _renderSourceTypeSwitch(value: unknown, onChange: any) {
+        const allowed = this.allowPlatform === true
+            ? ['state', 'var', 'const', 'platform']
+            : ['state', 'var', 'const'];
+        const current = allowed.includes(value as string) ? value : 'state';
+        const items = this._sourceTypeOptions().map((option) => ({
+            value: option.value,
+            icon: option.icon,
+            title: `${option.label}: ${option.hint}`,
+        }));
+        return html`
+            <platform-segmented-control
+                class="source-type-segment"
+                icon-only
+                density="compact"
+                .value=${current}
+                .items=${items}
+                aria-label=${this.t('state_mapping_editor.col_type')}
+                @change=${(e: CustomEvent) => onChange(e.detail.value)}
+            ></platform-segmented-control>
+        `;
+    }
+
+    override render(): TemplateResult {
+        const isOut = this._isOutput;
+        const empty = (this._rows.length as any) === 0;
+        return html`
+            ${this.title
+                ? html`<div class="title" style="margin-bottom: var(--space-2); font-weight: var(--font-medium)">${this.title}</div>`
+                : ''}
+            <div class="toolbar">
+                <span class="hint">${isOut
+                    ? this.t('state_mapping_editor.hint_legend_output')
+                    : this.allowPlatform === true
+                        ? this.t('state_mapping_editor.hint_legend_guest_env')
+                        : this.t('state_mapping_editor.hint_legend_input')}</span>
+                <platform-button variant="ghost" density="compact" @click=${this._addRow}>
+                    + ${this.t('state_mapping_editor.add')}
+                </platform-button>
+            </div>
+            ${empty
+                ? html`<div class="empty">${this.t('state_mapping_editor.empty')}</div>`
+                : ''}
+            ${!empty && !isOut
+                ? html`
+                    <div class="head-row input-grid" aria-hidden="true">
+                        <label>${this.t('state_mapping_editor.col_source')}</label>
+                        <span></span>
+                        <label>${this.t('state_mapping_editor.col_type')}</label>
+                        <span></span>
+                        <label>${this.t('state_mapping_editor.col_parameter')}</label>
+                        <span></span>
+                    </div>
+                `
+                : ''}
+            ${!empty && isOut
+                ? html`
+                    <div class="head-row output-grid" aria-hidden="true">
+                        <label>${this.t('state_mapping_editor.col_result_key')}</label>
+                        <span></span>
+                        <label>${this.t('state_mapping_editor.col_state_field')}</label>
+                        <span></span>
+                    </div>
+                `
+                : ''}
+            <div class="map-wrap">
+                ${isOut
+                    ? (this._rows.map as any)((r: any, i: number) => html`
+                        <div class="map-row output-grid">
+                            ${this._renderInputText(
+                                r.resultKey,
+                                this.resultSuggestions,
+                                (value: unknown) => this._updateOutputRow(i, { resultKey: value }),
+                                this.t('state_mapping_editor.placeholder_result_key'),
+                            )}
+                            <span class="arrow" title="">→</span>
+                            ${this._renderInputText(
+                                r.stateField,
+                                this.stateSuggestions,
+                                (value: unknown) => this._updateOutputRow(i, { stateField: value }),
+                                this.t('state_mapping_editor.placeholder_state_field'),
+                            )}
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
+                                danger
+                                aria-label=${this.t('state_mapping_editor.remove_row')}
+                                @click=${() => this._removeRow(i)}
+                            >
+                                <platform-icon name="close" size="14"></platform-icon>
+                            </platform-button>
+                        </div>
+                    `)
+                    : (this._rows.map as any)((r: any, i: number) => html`
+                        <div class="map-row input-grid">
+                            ${this._renderInputText(
+                                r.sourcePath,
+                                this._suggestionsForInputSource(r.sourceType),
+                                (value: unknown) => this._updateInputRow(i, { sourcePath: value }),
+                                r.sourceType === 'platform'
+                                    ? this.t('state_mapping_editor.placeholder_platform_key')
+                                    : this.t('state_mapping_editor.placeholder_source_path'),
+                            )}
+                            <span class="sep" aria-hidden="true">|</span>
+                            ${this._renderSourceTypeSwitch(
+                                r.sourceType,
+                                (sourceType: any) => this._updateInputRow(i, { sourceType }),
+                            )}
+                            <span class="arrow" aria-hidden="true">→</span>
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                label=""
+                                .value=${r.param}
+                                @change=${(e: CustomEvent) => this._updateInputRow(i, { param: typeof e.detail.value === 'string' ? e.detail.value : '' })}
+                            ></platform-field>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
+                                danger
+                                aria-label=${this.t('state_mapping_editor.remove_row')}
+                                @click=${() => this._removeRow(i)}
+                            >
+                                <platform-icon name="close" size="14"></platform-icon>
+                            </platform-button>
+                        </div>
+                    `)}
+            </div>
+        `;
+    }
+}
+
+customElements.define('flows-state-mapping-editor', FlowsStateMappingEditor);

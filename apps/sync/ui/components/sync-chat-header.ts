@@ -6,15 +6,15 @@
  *   - `header-mode="list"`: тот же ряд (меню, иконка, title/subtitle), без действий канала — список каналов, встречи, настройки
  *   - баннер активного звонка (свёрнутого) — открывает overlay.
  *
- * Источники: useResource('sync/channels') as SyncChannelsController, useResource('sync/company_members'),
+ * Источники: useResource('sync/channels') as ControllerFor<'sync/channels'>, useResource('sync/company_members'),
  *            select syncPresence (typing), syncCallUi.
  * Действия: openModal('platform.user_info', ...), openModal('sync.channel_edit'),
  *           useOp('sync/calls_invite'), dispatch overlay_expanded.
  */
 
-import type { SyncCallUiController, SyncChannelsController, SyncCallUiSlice, SyncPresenceSlice } from '../events/sync.types.js';
+import type { SyncCallUiSlice, SyncPresenceSlice } from '../events/sync.types.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -281,12 +281,12 @@ export class SyncChatHeader extends PlatformElement {
     `,
         mobileStickyHeaderSyncChatHostStyles,
     ];
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
     private _members: ResourceController;
     private _authSel: SelectController<Record<string, any> | null>;
     private _presenceSel: SelectController<SyncPresenceSlice | undefined>;
     private _callUiSel: SelectController<SyncCallUiSlice | undefined>;
-    private _callUi: SyncCallUiController;
+    private _callUi: ControllerFor<'sync/call_ui'>;
     private _wsSel: SelectController<{ connected?: boolean; connecting?: boolean } | undefined>;
     private _callInvite: OpController;
     private _callHangup: OpController;
@@ -308,15 +308,16 @@ export class SyncChatHeader extends PlatformElement {
             && window.matchMedia('(max-width: 767px)').matches;
         this._headerAvatarFailed = false;
         this._headerAvatarSig = '';
-        this._channels = this.useResource('sync/channels', { autoload: true }) as SyncChannelsController;
+        this._channels = this.useResource('sync/channels', { autoload: true });
         this._members = this.useResource('sync/company_members');
         this._authSel = this.select((s) => {
             const auth = s.auth as { user?: Record<string, any> | null } | undefined;
-            return auth ? auth.user ?? null : null;
+            if (!auth) return null;
+            return auth.user === undefined ? null : auth.user;
         });
         this._presenceSel = this.select((s) => s.syncPresence as SyncPresenceSlice | undefined);
         this._callUiSel = this.select((s) => s.syncCallUi as SyncCallUiSlice | undefined);
-        this._callUi = this.useSlice('sync/call_ui') as SyncCallUiController;
+        this._callUi = this.useSlice('sync/call_ui');
         this._wsSel = this.select((s) => s.network as { connected?: boolean; connecting?: boolean } | undefined);
         this._callInvite = this.useOp('sync/calls_invite');
         this._callHangup = this.useOp('sync/calls_hangup');

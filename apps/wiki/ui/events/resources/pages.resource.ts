@@ -217,3 +217,22 @@ export const wikiPageMarkdownCreateOp = createAsyncOp({
     commandType: 'wiki/pages/markdown_create_requested',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/import/markdown' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'wiki/pages': typeof wikiPagesResource;
+        'wiki/page_read': typeof wikiPageReadOp;
+        'wiki/page_create': typeof wikiPageCreateOp;
+        'wiki/page_save': typeof wikiPageSaveOp;
+        'wiki/page_properties': typeof wikiPagePropertiesOp;
+        'wiki/page_move': typeof wikiPageMoveOp;
+        'wiki/page_move_namespace': typeof wikiPageMoveNamespaceOp;
+        'wiki/page_delete': typeof wikiPageDeleteOp;
+        'wiki/page_restore': typeof wikiPageRestoreOp;
+        'wiki/pages_deleted': typeof wikiDeletedPagesOp;
+        'wiki/page_markdown': typeof wikiPageMarkdownOp;
+        'wiki/page_markdown_import': typeof wikiPageMarkdownImportOp;
+        'wiki/markdown_parse': typeof wikiMarkdownParseOp;
+        'wiki/page_markdown_create': typeof wikiPageMarkdownCreateOp;
+    }
+}

@@ -13,6 +13,11 @@ import { chromeIconButtonStyles } from './chrome-icon-button.styles.js';
 
 const IDLE_SHARE = Object.freeze({ loading: false, url: '', grantId: '', permission: 'viewer', copied: false, error: '' });
 
+function presentText(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
 interface ShareState {
     loading: boolean;
     url: string;
@@ -110,7 +115,7 @@ export class FlowUIShareMenu extends LitElement {
             const host = this.host;
         if (!host) return;
         const result = await host.createShare({ permission, redactedPaths: [] });
-            this._share = { ...IDLE_SHARE, url: result.share_url, grantId: String(result.grant.grant_id ?? ''), permission };
+            this._share = { ...IDLE_SHARE, url: result.share_url, grantId: presentText(result.grant.grant_id), permission };
             this.dispatchEvent(new CustomEvent('flow-ui-share-created', { bubbles: true, composed: true, detail: result }));
         } catch (error) {
             this._share = { ...IDLE_SHARE, permission, error: error instanceof Error ? error.message : String(error) };
@@ -118,7 +123,7 @@ export class FlowUIShareMenu extends LitElement {
     }
 
     async _revokeShare() {
-        const grantId = String(this._share.grantId ?? '');
+        const grantId = this._share.grantId;
         if (!grantId) throw new Error('flow-ui: no active share grant to revoke');
         this._share = { ...this._share, loading: true, error: '' };
         try {
@@ -130,14 +135,9 @@ export class FlowUIShareMenu extends LitElement {
         }
     }
 
-    private async _copy(text: string, onCopied: (copied: boolean) => void, selector: string) {
-        try {
-            await copyTextToClipboard(text);
-            onCopied(true);
-        } catch {
-            (this.renderRoot.querySelector(selector) as HTMLInputElement | null)?.select();
-            onCopied(false);
-        }
+    private async _copy(text: string, onCopied: (copied: boolean) => void) {
+        await copyTextToClipboard(text);
+        onCopied(true);
     }
 
     _shareMenu() {
@@ -145,7 +145,7 @@ export class FlowUIShareMenu extends LitElement {
         const locale = this.locale;
         const share = this._share;
         return html`<details class="share">
-            <summary class="chrome-icon-btn" aria-label=${flowUIText(locale, 'share_aria')} title=${flowUIText(locale, 'share')}>${flowUIGlyph('share', 18, this.host?.platformUiOrigin ?? '')}</summary>
+            <summary class="chrome-icon-btn" aria-label=${flowUIText(locale, 'share_aria')} title=${flowUIText(locale, 'share')}>${flowUIGlyph('share', 18, this.host === null ? '' : this.host.platformUiOrigin)}</summary>
             <div class="card share-card">
                 <div><div class="title">${flowUIText(locale, 'share_title')}</div><div class="copy">${flowUIText(locale, 'share_description')}</div></div>
                 <div class="options">
@@ -156,7 +156,7 @@ export class FlowUIShareMenu extends LitElement {
                 ${share.url ? html`
                     <div class="result share-result">
                         <input readonly .value=${share.url} aria-label=${flowUIText(locale, 'share_link')}>
-                        <button type="button" class="share-btn secondary" @click=${() => this._copy(share.url, (copied: boolean) => { this._share = { ...this._share, copied }; }, '.share-result input')}>${flowUIText(locale, share.copied ? 'share_copied' : 'share_copy')}</button>
+                        <button type="button" class="share-btn secondary" @click=${() => this._copy(share.url, (copied: boolean) => { this._share = { ...this._share, copied }; })}>${flowUIText(locale, share.copied ? 'share_copied' : 'share_copy')}</button>
                     </div>
                     <button type="button" class="share-btn ghost" ?disabled=${share.loading} @click=${() => this._revokeShare()}>${flowUIText(locale, 'share_revoke')}</button>
                 ` : nothing}
@@ -170,12 +170,12 @@ export class FlowUIShareMenu extends LitElement {
         if (pageUrl === '') return nothing;
         const locale = this.locale;
         return html`<details class="embed">
-            <summary class="chrome-icon-btn" aria-label=${flowUIText(locale, 'embed_aria')} title=${flowUIText(locale, 'embed')}>${flowUIGlyph('globe', 18, this.host?.platformUiOrigin ?? '')}</summary>
+            <summary class="chrome-icon-btn" aria-label=${flowUIText(locale, 'embed_aria')} title=${flowUIText(locale, 'embed')}>${flowUIGlyph('globe', 18, this.host === null ? '' : this.host.platformUiOrigin)}</summary>
             <div class="card embed-card">
                 <div><div class="title">${flowUIText(locale, 'embed_title')}</div><div class="copy">${flowUIText(locale, 'embed_page_description')}</div></div>
                 <div class="result embed-result">
                     <input readonly .value=${pageUrl} aria-label=${flowUIText(locale, 'embed_page_url')}>
-                    <button type="button" class="share-btn secondary" @click=${() => this._copy(pageUrl, (copied: boolean) => { this._embedCopied = copied; }, '.embed-result input')}>${flowUIText(locale, this._embedCopied ? 'embed_copied' : 'embed_copy')}</button>
+                    <button type="button" class="share-btn secondary" @click=${() => this._copy(pageUrl, (copied: boolean) => { this._embedCopied = copied; })}>${flowUIText(locale, this._embedCopied ? 'embed_copied' : 'embed_copy')}</button>
                 </div>
             </div>
         </details>`;

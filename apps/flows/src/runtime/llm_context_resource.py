@@ -52,7 +52,7 @@ async def infer_unique_llm_context_resource_key_from_merged_maps(
         if resource_id is None:
             raise ValueError(f"Resource '{key}': shared reference without resource_id")
         definition = await ResourceDefinition.get(
-            ResourceDefinition.row_id(resource_id)
+            ResourceDefinition.resource_row_id_for_active_company(resource_id)
         )
         if definition is not None and definition.type == ResourceType.LLM_CONTEXT:
             context_keys.append(key)
@@ -100,7 +100,7 @@ async def resolve_llm_context_resource_patch(
     if resource_id is None:
         raise ValueError(f"Resource '{key}': shared reference without resource_id")
     definition = await ResourceDefinition.get(
-        ResourceDefinition.row_id(resource_id)
+        ResourceDefinition.resource_row_id_for_active_company(resource_id)
     )
     if definition is None:
         raise ValueError(f"Shared resource '{resource_id}' not found in the database")

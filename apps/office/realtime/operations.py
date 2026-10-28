@@ -807,7 +807,7 @@ async def load_binding(
     allow_deleted: bool = False,
     require_trashed: bool = False,
 ) -> FileRecord:
-    row = await FileRecord.for_company(file_id, scope.company_id)
+    row = await FileRecord.by_file_id(file_id, scope.company_id)
     if row is None or row.catalog_id is None:
         raise WsCommandError("not_found", "Binding not found", error_code="not_found")
     catalog = await DocumentCatalog.catalog_in_namespace(
@@ -1459,7 +1459,7 @@ async def op_documents_create_from_file(
         meta.original_name,
         (meta.content_type or "application/octet-stream").split(";")[0].strip(),
     )
-    existing = await FileRecord.for_company(
+    existing = await FileRecord.by_file_id(
         file_id,
         scope.company_id,
     )
@@ -1843,7 +1843,7 @@ async def op_documents_remove(
         raise WsCommandError("not_found", "Binding not found", error_code='not_found')
     now = datetime.now(timezone.utc)
     _ = await FileRecord.mark_trashed(row, user_id=scope.user_id, deleted_at=now)
-    await OfficeDocumentEvent.record_document_event(
+    await OfficeDocumentEvent.append_new_event(
         file_id=payload.file_id,
         company_id=scope.company_id,
         event_type="deleted",
@@ -1860,7 +1860,7 @@ async def op_documents_deleted_list(
 ) -> OfficeDocumentListResponse:
     _ = payload, user
     scope = await namespace_scope(di)
-    catalogs = await DocumentCatalog.list_in_namespace(scope.company_id, scope.namespace)
+    catalogs = await DocumentCatalog.list_by_title_key_in_namespace(scope.company_id, scope.namespace)
     rows = await FileRecord.trashed_in_namespace(
         scope.company_id,
         [catalog.catalog_id for catalog in catalogs],
@@ -1880,7 +1880,7 @@ async def op_documents_restore(
     row = await load_binding(scope, payload.file_id, require_trashed=True)
     row = await FileRecord.clear_trash(row)
     await require_binding_catalog_access(di, row, scope.user_id)
-    await OfficeDocumentEvent.record_document_event(
+    await OfficeDocumentEvent.append_new_event(
         file_id=payload.file_id,
         company_id=scope.company_id,
         event_type="restored",
@@ -1946,7 +1946,7 @@ async def op_documents_move(
         moved,
         old_catalog_id=source_catalog_id,
     )
-    await OfficeDocumentEvent.record_document_event(
+    await OfficeDocumentEvent.append_new_event(
         file_id=payload.file_id,
         company_id=scope.company_id,
         event_type="moved",
@@ -2002,7 +2002,7 @@ async def op_documents_copy(
         content_type=meta.content_type,
         content_sha256_hex=hashlib.sha256(file_bytes).hexdigest(),
     )
-    await OfficeDocumentEvent.record_document_event(
+    await OfficeDocumentEvent.append_new_event(
         file_id=created.file_id,
         company_id=scope.company_id,
         event_type="copied",
@@ -2041,8 +2041,8 @@ async def op_documents_search(
     if needle == "":
         rows = []
     else:
-        catalogs = await DocumentCatalog.list_in_namespace(scope.company_id, scope.namespace)
-        rows = await FileRecord.search_alive(
+        catalogs = await DocumentCatalog.list_by_title_key_in_namespace(scope.company_id, scope.namespace)
+        rows = await FileRecord.list_alive_by_original_name(
             scope.company_id,
             [catalog.catalog_id for catalog in catalogs],
             needle,
@@ -2155,7 +2155,7 @@ async def op_documents_share_create(
             public_url = access_response.public_url
     except ValueError as exc:
         raise_invalid(exc)
-    await OfficeDocumentEvent.record_document_event(
+    await OfficeDocumentEvent.append_new_event(
         file_id=payload.file_id,
         company_id=scope.company_id,
         event_type="shared",
@@ -2214,7 +2214,7 @@ async def op_documents_revisions_list(
     scope = await namespace_scope(di)
     row = await load_binding(scope, payload.file_id)
     await require_binding_catalog_access(di, row, scope.user_id)
-    revisions = await OfficeDocumentRevision.list_for_file(payload.file_id, limit=10)
+    revisions = await OfficeDocumentRevision.list_by_revision_number_desc(payload.file_id, limit=10)
     return ListResponse[OfficeDocumentRevision](items=revisions)
 
 
@@ -2228,12 +2228,12 @@ async def op_documents_revision_create(
     scope = await namespace_scope(di)
     row = await load_binding(scope, payload.file_id)
     await require_binding_catalog_access(di, row, scope.user_id)
-    revision = await OfficeDocumentRevision.append_document_revision(
+    revision = await OfficeDocumentRevision.append(
         file_id=payload.file_id,
         revision_file_id=row.file_id,
         created_by_user_id=scope.user_id,
     )
-    await OfficeDocumentEvent.record_document_event(
+    await OfficeDocumentEvent.append_new_event(
         file_id=payload.file_id,
         company_id=scope.company_id,
         event_type="revision_created",
@@ -2253,7 +2253,7 @@ async def op_documents_events_list(
     scope = await namespace_scope(di)
     row = await load_binding(scope, payload.file_id, allow_deleted=True)
     await require_binding_catalog_access(di, row, scope.user_id)
-    events = await OfficeDocumentEvent.list_for_file(payload.file_id, limit=50)
+    events = await OfficeDocumentEvent.list_by_created_at_desc_for_file(payload.file_id, limit=50)
     return ListResponse[OfficeDocumentEvent](items=events)
 
 

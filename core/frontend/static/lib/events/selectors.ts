@@ -8,6 +8,8 @@
  * только если хотя бы один из входов изменился по reference.
  */
 
+import { isPlainRecord } from './payload.js';
+
 function _identityEqual(a: unknown, b: unknown): boolean {
     return a === b;
 }
@@ -32,15 +34,21 @@ export function createSelector<S, R>(
         throw new Error('createSelector: projector must be a function');
     }
     let lastArgs: unknown[] | null = null;
-    let lastResult: R | null = null;
+    let cached: { result: R } | null = null;
     return function memoized(state: S): R {
         const args = inputs.map((sel) => sel(state));
-        if (lastArgs && lastArgs.length === args.length && lastArgs.every((v, i) => _identityEqual(v, args[i]))) {
-            return lastResult as R;
+        if (
+            cached
+            && lastArgs
+            && lastArgs.length === args.length
+            && lastArgs.every((value, index) => _identityEqual(value, args[index]))
+        ) {
+            return cached.result;
         }
+        const result = projector(...args);
         lastArgs = args;
-        lastResult = projector(...args);
-        return lastResult;
+        cached = { result };
+        return result;
     };
 }
 
@@ -61,7 +69,11 @@ export function selectorFamily<A, Sel>({ key, build }: {
         if (!cache.has(k)) {
             cache.set(k, build(arg));
         }
-        return cache.get(k)!;
+        const cached = cache.get(k);
+        if (cached === undefined) {
+            throw new Error('selectorFamily: cached selector missing');
+        }
+        return cached;
     };
 }
 
@@ -73,8 +85,8 @@ export function pluck(path: string): (state: unknown) => unknown {
     return function pluckSelector(state) {
         let cur: unknown = state;
         for (const s of segs) {
-            if (cur === null || cur === undefined) return undefined;
-            cur = (cur as Record<string, unknown>)[s];
+            if (!isPlainRecord(cur)) return undefined;
+            cur = cur[s];
         }
         return cur;
     };

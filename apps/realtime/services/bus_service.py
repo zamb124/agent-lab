@@ -128,7 +128,7 @@ class RealtimeBusService:
             updated_at=now,
         )
         try:
-            _ = await PlatformEventLog.create_platform_event_log(row)
+            _ = await PlatformEventLog.create(row)
         except IntegrityError:
             return False
         return True
@@ -150,14 +150,14 @@ class RealtimeBusService:
     async def _expired_commands(self, *, now: datetime, limit: int) -> list[PlatformEvent]:
         if limit < 1:
             raise ValueError("limit must be >= 1")
-        rows = await PlatformEventLog.expired_command_logs(now=now, limit=limit)
+        rows = await PlatformEventLog.list_expired_commands(now=now, limit=limit)
         return [row.platform_event() for row in rows]
 
     async def _has_terminal(self, causation_id: str) -> bool:
-        return await PlatformEventLog.terminal_event_logs(causation_id).first() is not None
+        return await PlatformEventLog.terminal_query(causation_id).first() is not None
 
     async def _terminal(self, causation_id: str) -> PlatformEvent | None:
-        row = await PlatformEventLog.terminal_event_logs(causation_id).order_by("-created_at").first()
+        row = await PlatformEventLog.terminal_query(causation_id).order_by("-created_at").first()
         if row is None:
             return None
         return row.platform_event()

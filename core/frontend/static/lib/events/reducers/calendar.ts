@@ -36,6 +36,7 @@ export const CALENDAR_EVENTS = Object.freeze({
 });
 
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, payloadFields } from '../payload.js';
 
 export interface CalendarEventRecord extends Record<string, unknown> {
     event_id?: string;
@@ -59,23 +60,58 @@ export const initialCalendarState: CalendarState = Object.freeze({
     syncing: false,
 });
 
-function requireItems<T>(payload: unknown, eventType: string): T[] {
-    const items = (payload as { items?: unknown } | null)?.items;
-    if (!Array.isArray(items)) {
+function payloadItems(payload: unknown, eventType: string): unknown[] {
+    if (!isPlainRecord(payload) || !Array.isArray(payload.items)) {
         throw new Error(`${eventType}: payload.items must be an array`);
     }
-    return items as T[];
+    const items: unknown[] = [];
+    for (const item of payload.items) items.push(item);
+    return items;
 }
 
-function requireCalendarEventId(event: unknown, eventType: string): string {
-    if (!event || typeof event !== 'object') {
-        throw new Error(`${eventType}: payload.event must be an object`);
+function isCalendarEventListItem(value: unknown): value is CalendarEventRecord {
+    if (!isPlainRecord(value)) return false;
+    const eventId = value.event_id;
+    return eventId === undefined || typeof eventId === 'string';
+}
+
+function isCalendarIntegrationListItem(value: unknown): value is CalendarIntegrationRecord {
+    if (!isPlainRecord(value)) return false;
+    const integrationId = value.integration_id;
+    return integrationId === undefined || typeof integrationId === 'string';
+}
+
+function requireCalendarEvents(payload: unknown, eventType: string): CalendarEventRecord[] {
+    const records: CalendarEventRecord[] = [];
+    for (const item of payloadItems(payload, eventType)) {
+        if (!isCalendarEventListItem(item)) {
+            throw new Error(`${eventType}: payload item must be an event object`);
+        }
+        records.push(item);
     }
-    const eventId = (event as { event_id?: unknown }).event_id;
-    if (typeof eventId !== 'string' || eventId.length === 0) {
+    return records;
+}
+
+function requireCalendarIntegrations(payload: unknown, eventType: string): CalendarIntegrationRecord[] {
+    const records: CalendarIntegrationRecord[] = [];
+    for (const item of payloadItems(payload, eventType)) {
+        if (!isCalendarIntegrationListItem(item)) {
+            throw new Error(`${eventType}: payload item must be an integration object`);
+        }
+        records.push(item);
+    }
+    return records;
+}
+
+function isCalendarEventRecord(value: unknown): value is CalendarEventRecord & { event_id: string } {
+    return isPlainRecord(value) && typeof value.event_id === 'string' && value.event_id.length > 0;
+}
+
+function requireCalendarEvent(value: unknown, eventType: string): CalendarEventRecord & { event_id: string } {
+    if (!isCalendarEventRecord(value)) {
         throw new Error(`${eventType}: payload.event.event_id must be a non-empty string`);
     }
-    return eventId;
+    return value;
 }
 
 export function calendarReducer(state: CalendarState = initialCalendarState, event: PlatformEvent): CalendarState {
@@ -83,13 +119,12 @@ export function calendarReducer(state: CalendarState = initialCalendarState, eve
         case CALENDAR_EVENTS.EVENTS_LOAD_REQUESTED:
             return { ...state, loading: true };
         case CALENDAR_EVENTS.EVENTS_LOADED:
-            return { ...state, loading: false, events: requireItems<CalendarEventRecord>(event.payload, event.type) };
+            return { ...state, loading: false, events: requireCalendarEvents(event.payload, event.type) };
         case CALENDAR_EVENTS.EVENTS_LOAD_FAILED:
             return { ...state, loading: false };
         case CALENDAR_EVENTS.EVENT_CREATED: {
-            const ev = ((event.payload || {}) as { event?: CalendarEventRecord }).event;
-            if (!ev) return state;
-            const eventId = requireCalendarEventId(ev, event.type);
+            const ev = requireCalendarEvent(payloadFields(event).event, event.type);
+            const eventId = ev.event_id;
             const exists = state.events.some((item) => item.event_id === eventId);
             if (exists) {
                 return {
@@ -100,9 +135,8 @@ export function calendarReducer(state: CalendarState = initialCalendarState, eve
             return { ...state, events: [...state.events, ev] };
         }
         case CALENDAR_EVENTS.EVENT_UPDATED: {
-            const ev = ((event.payload || {}) as { event?: CalendarEventRecord }).event;
-            if (!ev) return state;
-            const eventId = requireCalendarEventId(ev, event.type);
+            const ev = requireCalendarEvent(payloadFields(event).event, event.type);
+            const eventId = ev.event_id;
             const exists = state.events.some((item) => item.event_id === eventId);
             if (!exists) {
                 return { ...state, events: [...state.events, ev] };
@@ -113,14 +147,14 @@ export function calendarReducer(state: CalendarState = initialCalendarState, eve
             };
         }
         case CALENDAR_EVENTS.EVENT_DELETED: {
-            const eventId = ((event.payload || {}) as { event_id?: unknown }).event_id;
+            const eventId = (payloadFields(event)).event_id;
             if (typeof eventId !== 'string' || !eventId) return state;
             return { ...state, events: state.events.filter((item) => item.event_id !== eventId) };
         }
         case CALENDAR_EVENTS.INTEGRATIONS_LOADED:
-            return { ...state, integrations: requireItems<CalendarIntegrationRecord>(event.payload, event.type) };
+            return { ...state, integrations: requireCalendarIntegrations(event.payload, event.type) };
         case CALENDAR_EVENTS.INTEGRATION_DISCONNECTED: {
-            const integrationId = ((event.payload || {}) as { integration_id?: unknown }).integration_id;
+            const integrationId = (payloadFields(event)).integration_id;
             if (typeof integrationId !== 'string' || !integrationId) return state;
             return {
                 ...state,

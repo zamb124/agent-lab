@@ -258,10 +258,10 @@ export class HumanitecModelsPage extends PlatformPage {
                     : ''}
 
                 <div class="actions">
-                    <button class="btn btn-secondary" @click=${() => this._retryModel(String(item.model_id ?? ''))}>
+                    <button class="btn btn-secondary" @click=${() => this._retryModel(item.model_id === undefined || item.model_id === null ? '' : String(item.model_id))}>
                         ${this.t('models.retry')}
                     </button>
-                    <button class="btn btn-danger" @click=${() => this._deleteModel(String(item.model_id ?? ''))}>
+                    <button class="btn btn-danger" @click=${() => this._deleteModel(item.model_id === undefined || item.model_id === null ? '' : String(item.model_id))}>
                         ${this.t('models.delete')}
                     </button>
                 </div>

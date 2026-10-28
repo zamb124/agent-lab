@@ -15,13 +15,10 @@ export function resolveVoiceHttpOriginFromFlowsBaseUrl(flowsBaseUrl: string): st
     if (root.toLowerCase().endsWith('/flows')) {
         return `${root.slice(0, -'/flows'.length)}/voice`;
     }
-    let parsed: URL;
-    try {
-        parsed = new URL(root);
-    } catch {
+    if (!URL.canParse(root)) {
         throw new Error('resolveVoiceHttpOriginFromFlowsBaseUrl: invalid flowsBaseUrl');
     }
-    return `${parsed.origin}/voice`;
+    return `${new URL(root).origin}/voice`;
 }
 
 /**

@@ -89,7 +89,7 @@ async def _landing_flow_config(
     company_id: str,
     flow_id: str,
 ) -> FlowConfig | None:
-    return await FlowConfig.get_current_for_company(company_id, flow_id)
+    return await FlowConfig.current_for_company(company_id, flow_id)
 
 
 def _effective_landing_card_image_url(
@@ -152,7 +152,7 @@ async def _collect_landing_cards(
 @router.get("", response_model=PublicLandingAgentsResponse)
 async def list_public_landing_agents() -> PublicLandingAgentsResponse:
     await ensure_system_landing_demo_embeds()
-    configs = await EmbedConfig.list_for_company(
+    configs = await EmbedConfig.list_unordered_window_for_company(
         SYSTEM_COMPANY_ID,
         limit=2000,
         offset=0,
@@ -160,7 +160,7 @@ async def list_public_landing_agents() -> PublicLandingAgentsResponse:
     cards = await _collect_landing_cards(configs)
     if not cards:
         await ensure_system_landing_demo_embeds()
-        configs = await EmbedConfig.list_for_company(
+        configs = await EmbedConfig.list_unordered_window_for_company(
             SYSTEM_COMPANY_ID,
             limit=2000,
             offset=0,

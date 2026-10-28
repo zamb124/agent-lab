@@ -13,8 +13,16 @@ import { PlatformElement } from '../platform-element/index.js';
 import { resolveDocumentationHref } from '../utils/documentation-url.js';
 import './platform-popover.js';
 import type { PlatformPopover } from './platform-popover.js';
-import type { I18nState } from '../events/reducers/i18n.js';
 import type { SelectController } from '../events/select-controller.js';
+
+function relatedNode(event: FocusEvent): Node | null {
+    const related = event.relatedTarget;
+    if (related === null) return null;
+    if (!(related instanceof Node)) {
+        throw new Error('platform-help-hint: focus moved to a non-node target');
+    }
+    return related;
+}
 
 const PORTAL_GAP_PX = 8;
 const VIEWPORT_SIDE_INSET_PX = 8;
@@ -196,7 +204,7 @@ export class PlatformHelpHint extends PlatformElement {
         this._scheduleClose = this._scheduleClose.bind(this);
         this._closeNow = this._closeNow.bind(this);
         this._onPortalFocusOut = this._onPortalFocusOut.bind(this);
-        this._localeSelect = this.select((s) => (s.i18n as I18nState).locale);
+        this._localeSelect = this.select((s) => s.i18n.locale);
     }
 
     override disconnectedCallback(): void {
@@ -322,7 +330,7 @@ export class PlatformHelpHint extends PlatformElement {
     }
 
     _onRootFocusOut(e: FocusEvent): void {
-        const related = e.relatedTarget as Node | null;
+        const related = relatedNode(e);
         if (related && this._bubbleNode()?.contains(related)) {
             return;
         }
@@ -330,7 +338,7 @@ export class PlatformHelpHint extends PlatformElement {
     }
 
     _onPortalFocusOut(e: FocusEvent): void {
-        const related = e.relatedTarget as Node | null;
+        const related = relatedNode(e);
         const root = this.renderRoot?.querySelector('.hint-root');
         if ((related && this._bubbleNode()?.contains(related)) || (root && related && root.contains(related))) {
             return;

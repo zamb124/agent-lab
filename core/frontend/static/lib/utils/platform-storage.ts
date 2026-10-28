@@ -38,18 +38,22 @@ export function storageRemove(key: string): void {
     globalThis.localStorage.removeItem(key);
 }
 
-/** Прочитать JSON-значение; null при отсутствии, ошибка при битом JSON. */
-export function storageGetJson<T>(key: string): T | null {
+function thrownMessage(err: unknown): string {
+    if (err instanceof Error && err.message.length > 0) return err.message;
+    throw new Error('storageGetJson: failure has no message');
+}
+
+/** Прочитать JSON-значение; null при отсутствии ключа, ошибка при битом JSON. */
+export function storageGetJson(key: string): unknown {
     const raw = storageGet(key);
     if (raw === null) {
         return null;
     }
     try {
-        return JSON.parse(raw) as T;
+        const value: unknown = JSON.parse(raw);
+        return value;
     } catch (err) {
-        throw new Error(
-            `storageGetJson: broken JSON at ${key}: ${(err as Error).message}`,
-        );
+        throw new Error(`storageGetJson: broken JSON at ${key}: ${thrownMessage(err)}`);
     }
 }
 

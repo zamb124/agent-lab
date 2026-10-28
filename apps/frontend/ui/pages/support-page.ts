@@ -88,7 +88,8 @@ export class SupportPage extends PlatformPage {
     }
 
     _supportEmail() {
-        return getPlatformBrandBootstrap()?.supportEmail || '';
+        const brand = getPlatformBrandBootstrap();
+        return brand === undefined || brand === null || typeof brand.supportEmail !== 'string' ? '' : brand.supportEmail;
     }
 
     _submit(e: Event) {

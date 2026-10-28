@@ -1,3 +1,4 @@
+import { isPlainRecord } from '../../events/payload.js';
 import { INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES } from './constants.js';
 
 export type A2aJsonObject = Record<string, unknown>;
@@ -35,21 +36,44 @@ function clone<T>(value: T): T {
 }
 
 function eventIdentity(event: A2aJsonObject | null | undefined): unknown {
-    const metadata = event?.metadata as A2aJsonObject | undefined;
-    return metadata?.platformEventId || metadata?.platform_event_id || null;
+    if (!isPlainRecord(event?.metadata)) return null;
+    const camel = event.metadata.platformEventId;
+    if (typeof camel === 'string' && camel.length > 0) return camel;
+    const snake = event.metadata.platform_event_id;
+    if (typeof snake === 'string' && snake.length > 0) return snake;
+    return null;
 }
 
 function unwrap(result: unknown): { kind: A2aWrappedKind; value: A2aJsonObject } | null {
-    if (!result || typeof result !== 'object') return null;
-    const record = result as A2aJsonObject;
+    if (!isPlainRecord(result)) return null;
     for (const kind of ['statusUpdate', 'artifactUpdate', 'task', 'message'] as const) {
-        const value = record[kind];
-        if (value && typeof value === 'object') return { kind, value: value as A2aJsonObject };
+        const value = result[kind];
+        if (isPlainRecord(value)) return { kind, value };
     }
-    if (typeof record.id === 'string' && record.status && typeof record.status === 'object') {
-        return { kind: 'task', value: record };
+    if (typeof result.id === 'string' && isPlainRecord(result.status)) {
+        return { kind: 'task', value: result };
     }
     return null;
+}
+
+function streamErrorMessage(error: unknown): string {
+    if (isPlainRecord(error) && typeof error.message === 'string' && error.message.length > 0) {
+        return error.message;
+    }
+    return 'A2A stream error';
+}
+
+function artifactIdOf(record: A2aJsonObject): string | null {
+    const camel = record.artifactId;
+    if (typeof camel === 'string' && camel.length > 0) return camel;
+    const snake = record.artifact_id;
+    if (typeof snake === 'string' && snake.length > 0) return snake;
+    return null;
+}
+
+function statusState(status: unknown): unknown {
+    if (!isPlainRecord(status)) return undefined;
+    return status.state;
 }
 
 function taskIdOf(kind: A2aWrappedKind, value: A2aJsonObject): string | null {
@@ -64,10 +88,10 @@ function contextIdOf(value: A2aJsonObject): string | null {
 }
 
 function mergeMetadata(current: unknown, update: unknown): A2aJsonObject {
-    if (!current || typeof current !== 'object') return clone(update || {}) as A2aJsonObject;
-    if (!update || typeof update !== 'object') return clone(current) as A2aJsonObject;
-    const merged = { ...clone(current) } as A2aJsonObject;
-    for (const [key, value] of Object.entries(update as A2aJsonObject)) {
+    if (!isPlainRecord(current)) return clone(isPlainRecord(update) ? update : {});
+    if (!isPlainRecord(update)) return clone(current);
+    const merged: A2aJsonObject = { ...clone(current) };
+    for (const [key, value] of Object.entries(update)) {
         const existing = merged[key];
         merged[key] = (
             value && typeof value === 'object' && !Array.isArray(value)
@@ -135,7 +159,7 @@ function rememberEvent(accumulator: A2aTaskAccumulator, event: A2aJsonObject, id
 }
 
 export function applyA2AFrame(accumulator: A2aTaskAccumulator, frame: A2aJsonObject | null | undefined): A2aFrameResult {
-    if (frame?.error) throw new Error((frame.error as A2aJsonObject).message as string || 'A2A stream error');
+    if (frame?.error) throw new Error(streamErrorMessage(frame.error));
     const wrapped = unwrap(frame?.result || frame);
     if (!wrapped) return { accumulator, changedTaskId: null, frameKind: null };
     const { kind, value } = wrapped;
@@ -152,17 +176,16 @@ export function applyA2AFrame(accumulator: A2aTaskAccumulator, frame: A2aJsonObj
         if (!taskId) throw new Error('flow-ui: Task snapshot has no id');
         const target = ensureTask(accumulator, taskId, contextIdOf(value));
         target.contextId = contextIdOf(value) || target.contextId;
-        target.status = clone(value.status || null);
+        target.status = clone(value.status === undefined || value.status === null ? null : value.status);
         target.history = (Array.isArray(value.history) ? value.history : []).map(clone);
-        target.metadata = clone((value.metadata || {}) as A2aJsonObject);
+        target.metadata = clone(isPlainRecord(value.metadata) ? value.metadata : {});
         target.artifacts = [];
         target.artifactsById = {};
         for (const artifact of Array.isArray(value.artifacts) ? value.artifacts : []) {
-            if (!artifact || typeof artifact !== 'object') continue;
-            const record = artifact as A2aJsonObject;
-            const id = record.artifactId || record.artifact_id;
+            if (!isPlainRecord(artifact)) continue;
+            const id = artifactIdOf(artifact);
             if (typeof id !== 'string' || !id) continue;
-            const snapshot = clone(record);
+            const snapshot = clone(artifact);
             target.artifacts.push(snapshot);
             target.artifactsById[id] = snapshot;
         }
@@ -174,13 +197,13 @@ export function applyA2AFrame(accumulator: A2aTaskAccumulator, frame: A2aJsonObj
     if (!taskId || !contextId) throw new Error(`flow-ui: ${kind} scope is incomplete`);
     const task = ensureTask(accumulator, taskId, contextId);
     if (kind === 'statusUpdate') {
-        task.status = clone(value.status || null);
+        task.status = clone(isPlainRecord(value.status) ? value.status : null);
         if (value.metadata && typeof value.metadata === 'object') {
             task.metadata = mergeMetadata(task.metadata, value.metadata);
         }
     } else {
-        const artifact = (value.artifact && typeof value.artifact === 'object') ? value.artifact as A2aJsonObject : null;
-        const id = artifact?.artifactId || artifact?.artifact_id;
+        const artifact = isPlainRecord(value.artifact) ? value.artifact : null;
+        const id = artifact === null ? null : artifactIdOf(artifact);
         if (typeof id !== 'string' || !id || !artifact) throw new Error('flow-ui: artifact update has no artifactId');
         if (task.closedArtifactIds.has(id)) throw new Error(`flow-ui: artifact ${id} is closed`);
         const merged = mergeArtifact(task.artifactsById[id], artifact, value.append === true);
@@ -195,7 +218,7 @@ export function applyA2AFrame(accumulator: A2aTaskAccumulator, frame: A2aJsonObj
 }
 
 export function taskBoundary(task: { status?: unknown } | null | undefined): 'terminal' | 'interrupted' | null {
-    const state = (task?.status as A2aJsonObject | undefined)?.state;
+    const state = statusState(task?.status);
     if (typeof state === 'string' && TERMINAL_TASK_STATES.has(state)) return 'terminal';
     if (typeof state === 'string' && INTERRUPTED_TASK_STATES.has(state)) return 'interrupted';
     return null;
@@ -203,7 +226,9 @@ export function taskBoundary(task: { status?: unknown } | null | undefined): 'te
 
 export function serializableTask(task: A2aAccumulatedTask | null | undefined): A2aJsonObject | null {
     if (!task) return null;
-    const copy = clone(task) as A2aJsonObject;
-    copy.closedArtifactIds = [...task.closedArtifactIds];
-    return copy;
+    const copy = clone(task);
+    const record: A2aJsonObject = {};
+    for (const [key, value] of Object.entries(copy)) record[key] = value;
+    record.closedArtifactIds = [...task.closedArtifactIds];
+    return record;
 }

@@ -283,7 +283,7 @@ async def office_download(
     company_id = claims.company_id
     viewer_scope = claims.viewer_scope
     if viewer_scope == "catalog":
-        binding_row = await FileRecord.for_company(
+        binding_row = await FileRecord.by_file_id(
             file_id,
             company_id,
         )
@@ -412,7 +412,7 @@ async def onlyoffice_callback(
         document_binding: FileRecord | None = None
 
         if viewer_scope == "catalog":
-            document_binding = await FileRecord.for_company(
+            document_binding = await FileRecord.by_file_id(
                 file_id,
                 company_id,
             )

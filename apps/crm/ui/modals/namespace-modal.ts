@@ -20,6 +20,34 @@
  */
 
 import { html, css, nothing } from 'lit';
+
+function grantUserId(user: { user_id: string } | null): string {
+    if (user === null || user.user_id.length === 0) {
+        throw new Error('namespace-modal: grant user required');
+    }
+    return user.user_id;
+}
+
+function anyRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
+
+function recordList(value: unknown): Record<string, any>[] {
+    if (!Array.isArray(value)) return [];
+    const rows: Record<string, any>[] = [];
+    for (const item of value) {
+        if (!isPlainRecord(item)) {
+            throw new Error('namespace-modal: list item must be an object');
+        }
+        const row: Record<string, any> = {};
+        for (const [key, field] of Object.entries(item)) row[key] = field;
+        rows.push(row);
+    }
+    return rows;
+}
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-namespace.js';
@@ -40,6 +68,7 @@ import type {
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const CREATE_FORM = 'crm/namespace_create_form';
 const EDIT_FORM = 'crm/namespace_edit_form';
@@ -567,7 +596,14 @@ export class CRMNamespaceModal extends PlatformFormModal {
         if (this.mode === MODE_CREATE) {
             this._createForm.openForm({ template_id: '', name: '', description: '' });
             this._templates.load();
-            this.useEvent(this._namespaces.resource.events.CREATED, (event) => this._onCreated((event.payload as Record<string, any>)?.item));
+            this.useEvent(this._namespaces.resource.events.CREATED, (event) => {
+                const payload = anyRecord(event.payload);
+                const item = payload === null ? null : anyRecord(payload.item);
+                if (item === null) {
+                    throw new Error('namespace-modal: created item required');
+                }
+                this._onCreated(item);
+            });
             this.useEvent(this._namespaces.resource.events.CREATE_FAILED, () => {
                 this._createForm.openForm(this._createForm.draft);
             });
@@ -582,9 +618,9 @@ export class CRMNamespaceModal extends PlatformFormModal {
 
         this.useEvent(this._grantCreateOp.op.events.SUCCEEDED, () => this._resetGrantForm());
         this.useEvent(this._grantCreateOp.op.events.FAILED, (event) => {
-            const p = (event && event.payload) as Record<string, any> | null;
-            const message = p && typeof p.message === 'string'
-                ? p.message
+            const payload = anyRecord(event.payload);
+            const message = payload !== null && typeof payload.message === 'string'
+                ? payload.message
                 : this.t('namespace_modal.grants_submit_failed');
             this._grantSubmitError = message;
         });
@@ -629,9 +665,9 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     _grants(): Record<string, any>[] {
-        const result = this._grantsListOp.lastResult as { items?: unknown } | null;
-        if (!result || !Array.isArray(result.items)) return [];
-        return result.items as Record<string, any>[];
+        const result = anyRecord(this._grantsListOp.lastResult);
+        if (result === null || !Array.isArray(result.items)) return [];
+        return recordList(result.items);
     }
 
     _hasPublicGrant() {
@@ -647,8 +683,12 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._grantRole = role;
     }
 
-    _onUserQueryInput(e: CustomEvent) {
-        const value = (e.target as HTMLInputElement).value;
+    _onUserQueryInput(e: Event) {
+        const input = e.target;
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('namespace-modal: user query input required');
+        }
+        const value = input.value;
         this._grantUserQuery = value;
         this._teamSearch.search('users', value);
     }
@@ -699,7 +739,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 resource_type: 'namespace',
                 resource_id: this.name,
                 subject: SUBJECT_USER,
-                user_id: this._grantSelectedUser!.user_id,
+                user_id: grantUserId(this._grantSelectedUser),
                 role: this._grantRole,
             });
             return;
@@ -751,7 +791,11 @@ export class CRMNamespaceModal extends PlatformFormModal {
             this._templateSeeded = true;
             return;
         }
-        this._createForm.setField('template_id', (items[0] as Record<string, any>).template_id);
+        const first = items[0];
+        if (!isPlainRecord(first) || typeof first.template_id !== 'string' || first.template_id.length === 0) {
+            throw new Error('namespace-modal: template_id required');
+        }
+        this._createForm.setField('template_id', first.template_id);
         this._templateSeeded = true;
     }
 
@@ -889,7 +933,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
         const draft = this._createForm.draft;
         return html`
             <div class="template-grid">
-                ${(items as Record<string, any>[]).map((template) => html`
+                ${recordList(items).map((template) => html`
                     <button
                         type="button"
                         class="template-card ${draft.template_id === template.template_id ? 'active' : ''}"
@@ -919,8 +963,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
         if (this._isCreate() || typeof this.name !== 'string' || this.name.length === 0) {
             return null;
         }
-        const item = this._namespaces.byId[this.name] as Record<string, any> | undefined;
-        return item === undefined ? null : item;
+        return anyRecord(this._namespaces.byId[this.name]);
     }
 
     _connectedIntegrationBadges(item: Record<string, any> | null): Record<string, any>[] {
@@ -982,7 +1025,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     _renderEditabilityBadge() {
-        const result = this._editability.lastResult as Record<string, any> | null;
+        const result = anyRecord(this._editability.lastResult);
         if (this._editability.busy && !result) {
             return html`<div class="meta-loading"><glass-spinner></glass-spinner></div>`;
         }
@@ -1243,7 +1286,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     _renderUserPicker() {
-        const items = this._teamSearch.items('users') as Record<string, any>[];
+        const items = recordList(this._teamSearch.items('users'));
         const loading = this._teamSearch.loading('users');
         return html`
             <div>

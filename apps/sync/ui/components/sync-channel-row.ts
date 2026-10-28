@@ -2,7 +2,7 @@
  * sync-channel-row — строка канала / DM в sidebar.
  *
  * Источники:
- *   useResource('sync/channels') as SyncChannelsController      — выбранный канал, для подсветки.
+ *   useResource('sync/channels') as ControllerFor<'sync/channels'>      — выбранный канал, для подсветки.
  *   select syncPresence                — typing preview.
  *   useResource('sync/company_members') — online-dot DM.
  *   select syncCallUi.activeCallChannels — pill «Войти» (как баннер свёрнутого звонка).
@@ -12,14 +12,9 @@
  * группы — sync.channel_edit, личные — platform.user_info.
  */
 
-import type {
-    SyncCallUiController,
-    SyncCallUiSlice,
-    SyncChannelsSlice,
-    SyncPresenceSlice,
-} from '../events/sync.types.js';
+import type { SyncCallUiSlice, SyncChannelsSlice, SyncPresenceSlice } from '../events/sync.types.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -292,7 +287,7 @@ export class SyncChannelRow extends PlatformElement {
     `;
     private _presenceSel: SelectController<SyncPresenceSlice | undefined>;
     private _callUiSel: SelectController<SyncCallUiSlice | undefined>;
-    private _callUi: SyncCallUiController;
+    private _callUi: ControllerFor<'sync/call_ui'>;
     private _modalsSel: SelectController<readonly Record<string, any>[] | undefined>;
     private _channelsSel: SelectController<SyncChannelsSlice | undefined>;
     private _authSel: SelectController<Record<string, any> | null>;
@@ -307,12 +302,13 @@ export class SyncChannelRow extends PlatformElement {
         this._avatarRowSig = '';
         this._presenceSel = this.select((s) => s.syncPresence as SyncPresenceSlice | undefined);
         this._callUiSel = this.select((s) => s.syncCallUi as SyncCallUiSlice | undefined);
-        this._callUi = this.useSlice('sync/call_ui') as SyncCallUiController;
+        this._callUi = this.useSlice('sync/call_ui');
         this._modalsSel = this.select((s) => (s.modals as { stack?: readonly Record<string, any>[] } | undefined)?.stack);
         this._channelsSel = this.select((s) => s.syncChannels as SyncChannelsSlice | undefined);
         this._authSel = this.select((s) => {
             const auth = s.auth as { user?: Record<string, any> | null } | undefined;
-            return auth ? auth.user ?? null : null;
+            if (!auth) return null;
+            return auth.user === undefined ? null : auth.user;
         });
         this._members = this.useResource('sync/company_members');
     }

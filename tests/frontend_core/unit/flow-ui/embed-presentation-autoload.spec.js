@@ -11,7 +11,7 @@ describe('Flow UI embed autoload presentation', () => {
             join(root, 'core/frontend/static/lib/flow-ui/shell/embed-autoload.ts'),
             'utf8',
         );
-        expect(source).toContain("import './page-host.js'");
+        expect(source).toContain("from './page-host.js'");
         expect(source).toContain('resolvePresentation');
         expect(source).toContain("createElement('flow-ui-page-host')");
         expect(source).toContain("createElement('flow-ui-drawer')");

@@ -12,6 +12,7 @@ from core.crawl.models.contracts import (
     CrawlProfileCreateRequest,
     CrawlProfilePatchRequest,
 )
+from core.errors.boundary import PlatformNotFoundError
 from core.models import StrictBaseModel
 from core.models.platform_model import PlatformModel
 from core.pagination import OffsetPage
@@ -52,15 +53,15 @@ class CrawlProfile(PlatformModel):
     enrichment_model: str | None = DbField(default=None, max_length=128)
 
     @classmethod
-    async def get_with_index(cls, crawl_profile_id: str) -> CrawlProfileWithIndex:
+    async def require_with_index(cls, crawl_profile_id: str) -> CrawlProfileWithIndex:
         profile = await cls.objects.filter(crawl_profile_id=crawl_profile_id).get_or_none()
         if profile is None:
-            raise ValueError(f"crawl profile not found: {crawl_profile_id}")
+            raise PlatformNotFoundError(f"crawl profile not found: {crawl_profile_id}")
         search_index = await SearchIndexDefinition.objects.filter(
             search_index_id=profile.search_index_id,
         ).get_or_none()
         if search_index is None:
-            raise ValueError(f"search index not found: {profile.search_index_id}")
+            raise PlatformNotFoundError(f"search index not found: {profile.search_index_id}")
         return CrawlProfileWithIndex(profile=profile, search_index=search_index)
 
     @classmethod
@@ -87,17 +88,18 @@ class CrawlProfile(PlatformModel):
                 updated_at=now,
             )
         )
-        return await cls.get_with_index(body.crawl_profile_id)
+        return await cls.require_with_index(body.crawl_profile_id)
 
     @classmethod
-    async def patch(
+    async def patch_with_index(
         cls,
         crawl_profile_id: str,
         body: CrawlProfilePatchRequest,
     ) -> CrawlProfileWithIndex:
+        """Частичная запись полей patch. Поле None не пишется, кроме enrichment_model: он пишется, когда llm_enrichment_enabled is not None. Нет профиля — PlatformNotFoundError. Возврат — require_with_index."""
         profile = await cls.objects.filter(crawl_profile_id=crawl_profile_id).get_or_none()
         if profile is None:
-            raise ValueError(f"crawl profile not found: {crawl_profile_id}")
+            raise PlatformNotFoundError(f"crawl profile not found: {crawl_profile_id}")
         if body.enabled is not None:
             profile.enabled = body.enabled
         if body.refresh_interval_seconds is not None:
@@ -127,28 +129,32 @@ class CrawlProfile(PlatformModel):
             profile.enrichment_model = body.enrichment_model
         profile.updated_at = datetime.now(UTC)
         _ = await profile.save()
-        return await cls.get_with_index(crawl_profile_id)
+        return await cls.require_with_index(crawl_profile_id)
 
     @classmethod
-    async def list_page(cls, *, limit: int, offset: int) -> OffsetPage[CrawlProfileWithIndex]:
+    async def with_index_page_by_crawl_profile_id(
+        cls, *, limit: int, offset: int
+    ) -> OffsetPage[CrawlProfileWithIndex]:
+        """Страница всех профилей с индексом, ORDER BY crawl_profile_id. total — COUNT всех профилей."""
         total = await cls.objects.count()
         rows = await (
             cls.objects.order_by("crawl_profile_id").limit(limit).offset(offset).all()
         )
-        items = [await cls.get_with_index(row.crawl_profile_id) for row in rows]
+        items = [await cls.require_with_index(row.crawl_profile_id) for row in rows]
         return OffsetPage[CrawlProfileWithIndex](items=items, total=total, limit=limit, offset=offset)
 
     @classmethod
-    async def set_llm_enrichment(
+    async def update_llm_enrichment_enabled_and_model(
         cls,
         crawl_profile_id: str,
         *,
         llm_enrichment_enabled: bool,
         enrichment_model: str | None,
     ) -> None:
+        """Пишет llm_enrichment_enabled, enrichment_model и updated_at. None в enrichment_model записывается. Нет профиля — PlatformNotFoundError."""
         profile = await cls.objects.filter(crawl_profile_id=crawl_profile_id).get_or_none()
         if profile is None:
-            raise ValueError(f"crawl profile not found: {crawl_profile_id}")
+            raise PlatformNotFoundError(f"crawl profile not found: {crawl_profile_id}")
         profile.llm_enrichment_enabled = llm_enrichment_enabled
         profile.enrichment_model = enrichment_model
         profile.updated_at = datetime.now(UTC)

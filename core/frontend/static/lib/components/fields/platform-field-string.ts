@@ -55,8 +55,12 @@ export class PlatformFieldString extends PlatformElement {
     }
 
     _onInput(e: InputEvent): void {
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('platform-field-string: input target must be an input');
+        }
         this.dispatchEvent(new CustomEvent('change', {
-            detail: { value: (e.target as HTMLInputElement).value },
+            detail: { value: target.value },
             bubbles: true,
             composed: true,
         }));
@@ -113,7 +117,7 @@ export class PlatformFieldString extends PlatformElement {
             <input
                 type=${t}
                 class="field-pill-input"
-                .value=${this.value ?? ''}
+                .value=${this.value === null || this.value === undefined ? '' : this.value}
                 placeholder=${this.placeholder}
                 list=${suggestions.length > 0 ? this._listId : nothing}
                 ?disabled=${this.disabled}

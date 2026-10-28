@@ -75,7 +75,8 @@ class EvaluationCase(CompanyScopedModel):
         return self
 
     @classmethod
-    async def list_for_suite(cls, suite_id: str) -> list[Self]:
+    async def list_by_sort_order_created_at_and_case_id(cls, suite_id: str) -> list[Self]:
+        """Кейсы набора, ORDER BY sort_order, created_at, case_id. Предела нет. Пустой suite_id — ValueError."""
         if suite_id == "":
             raise ValueError("suite_id is required")
         return await (

@@ -68,7 +68,7 @@ class TestReconcile:
         )
         # Ломаем резерв руками (дрейф), затем reconcile чинит.
 
-        quants = await StockQuant.list_for_warehouse(
+        quants = await StockQuant.list_unordered_for_warehouse(
             env.company_id, env.warehouse.warehouse_id
         )
         drifted = [q for q in quants if q.reserved_quantity > Decimal("0")]
@@ -81,7 +81,7 @@ class TestReconcile:
             warehouse_id=env.warehouse.warehouse_id,
         )
         assert report.reserved_fixed >= 1
-        for q in await StockQuant.list_for_warehouse(
+        for q in await StockQuant.list_unordered_for_warehouse(
             env.company_id, env.warehouse.warehouse_id
         ):
             assert q.reserved_quantity <= Decimal("3")
@@ -119,7 +119,7 @@ class TestClaimsGc:
             company_id=env.company_id, transfer_id=transfer.transfer_id
         )
 
-        lines = await StockMoveLine.list_open_for_warehouse(
+        lines = await StockMoveLine.list_unordered_open_for_warehouse(
             env.company_id, env.warehouse.warehouse_id
         )
         assert lines
@@ -135,7 +135,7 @@ class TestClaimsGc:
             claimed_before=utcnow() - timedelta(hours=8),
         )
         assert report.released == len(lines)
-        for line in await StockMoveLine.list_open_for_warehouse(
+        for line in await StockMoveLine.list_unordered_open_for_warehouse(
             env.company_id, env.warehouse.warehouse_id
         ):
             assert line.assigned_user_id is None
@@ -148,7 +148,7 @@ class TestReorder:
     ) -> None:
         env = await _env(stock_di, unique_id)
         incoming = env.op_types[StockOperationCode.INCOMING]
-        rule = await StockReorderRule.create_rule(
+        rule = await StockReorderRule.create(
             company_id=env.company_id,
             warehouse_id=env.warehouse.warehouse_id,
             product_id=env.product.product_id,
@@ -179,7 +179,7 @@ class TestReorder:
         env = await _env(stock_di, unique_id)
         await _receipt(env, Decimal("50"), Decimal("1"))
         incoming = env.op_types[StockOperationCode.INCOMING]
-        _ = await StockReorderRule.create_rule(
+        _ = await StockReorderRule.create(
             company_id=env.company_id,
             warehouse_id=env.warehouse.warehouse_id,
             product_id=env.product.product_id,
@@ -211,7 +211,7 @@ class TestCycleCount:
         assert report.lines_created >= 1
         count_lines = [
             ln
-            for ln in await StockMoveLine.list_open_for_warehouse(
+            for ln in await StockMoveLine.list_unordered_open_for_warehouse(
                 env.company_id, env.warehouse.warehouse_id
             )
             if ln.kind == StockMoveLineKind.COUNT

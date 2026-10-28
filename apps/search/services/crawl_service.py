@@ -23,6 +23,7 @@ from core.crawl.models import (
     SeedImportResult,
     UpsertStats,
 )
+from core.errors.boundary import PlatformNotFoundError
 from core.pagination import OffsetPage
 
 
@@ -38,17 +39,17 @@ class SearchCrawlService:
         crawl_profile_id: str,
         body: CrawlProfilePatchRequest,
     ) -> CrawlProfileWithIndex:
-        return await CrawlProfile.patch(crawl_profile_id, body)
+        return await CrawlProfile.patch_with_index(crawl_profile_id, body)
 
     async def list_profiles(self, *, limit: int, offset: int) -> OffsetPage[CrawlProfileWithIndex]:
-        return await CrawlProfile.list_page(limit=limit, offset=offset)
+        return await CrawlProfile.with_index_page_by_crawl_profile_id(limit=limit, offset=offset)
 
     async def create_domain(
         self,
         crawl_profile_id: str,
         body: CrawlDomainCreateRequest,
     ) -> CrawlDomain:
-        _ = await CrawlProfile.get_with_index(crawl_profile_id)
+        _ = await CrawlProfile.require_with_index(crawl_profile_id)
         domain = await CrawlDomain.create(
             crawl_profile_id,
             body,
@@ -69,7 +70,7 @@ class SearchCrawlService:
     ) -> CrawlDomain:
         domain = await CrawlDomain.get(crawl_domain_id)
         if domain is None:
-            raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
         if domain.crawl_profile_id != crawl_profile_id:
             raise ValueError("crawl_domain_id does not belong to crawl_profile_id")
         return await CrawlDomain.patch(crawl_domain_id, body)
@@ -77,12 +78,12 @@ class SearchCrawlService:
     async def delete_domain(self, crawl_domain_id: str, crawl_profile_id: str) -> None:
         domain = await CrawlDomain.get(crawl_domain_id)
         if domain is None:
-            raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
         if domain.crawl_profile_id != crawl_profile_id:
             raise ValueError("crawl_domain_id does not belong to crawl_profile_id")
         deleted = await CrawlDomain.delete_by_id(crawl_domain_id)
         if not deleted:
-            raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
 
     async def add_domain_urls(
         self,
@@ -92,13 +93,13 @@ class SearchCrawlService:
     ) -> UpsertStats:
         domain = await CrawlDomain.get(crawl_domain_id)
         if domain is None:
-            raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
         if domain.crawl_profile_id != crawl_profile_id:
             raise ValueError("crawl_domain_id does not belong to crawl_profile_id")
         return await CrawlUrl.add_manual_urls(crawl_domain_id, body.urls)
 
     async def recrawl_url(self, crawl_url_id: str, crawl_profile_id: str) -> CrawlUrl:
-        _, _, _ = await CrawlUrl.get_for_profile(crawl_url_id, crawl_profile_id)
+        _, _, _ = await CrawlUrl.require_for_profile(crawl_url_id, crawl_profile_id)
         return await CrawlUrl.requeue_url(crawl_url_id)
 
     async def start_job(self, body: CrawlJobCreateRequest) -> CrawlOrchestratorTickResult:
@@ -111,7 +112,7 @@ class SearchCrawlService:
     async def get_job(self, crawl_job_id: str) -> CrawlJob:
         row = await CrawlJob.get(crawl_job_id)
         if row is None:
-            raise ValueError(f"crawl job not found: {crawl_job_id}")
+            raise PlatformNotFoundError(f"crawl job not found: {crawl_job_id}")
         return row
 
     async def import_seed(self, body: SeedImportRequest) -> SeedImportResult:

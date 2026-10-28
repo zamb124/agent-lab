@@ -20,16 +20,38 @@ import { CoreEvents } from '../events/contract.js';
 import { NOTIFICATIONS_EVENTS } from '../events/reducers/notifications.js';
 import type { NotificationItem } from '../events/reducers/notifications.js';
 import type { PwaState } from '../events/reducers/pwa.js';
-import type { I18nStateLike } from '../events/effects/i18n.effect.js';
+import type { I18nState } from '../events/reducers/i18n.js';
 import type { SelectController } from '../events/select-controller.js';
-import type { PlatformPopover } from './platform-popover.js';
+import { PlatformPopover } from './platform-popover.js';
 import { MAIL_EVENTS } from '../events/reducers/mail.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
 import { translate } from '../events/effects/i18n.effect.js';
+import { isPlainRecord } from '../events/payload.js';
 import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
 import './platform-icon.js';
-import './platform-popover.js';
 import './platform-work-item-badge.js';
+
+function firstHref(raw: Record<string, unknown>): unknown {
+    if (typeof raw.url === 'string' && raw.url.length > 0) return raw.url;
+    if (typeof raw.href === 'string' && raw.href.length > 0) return raw.href;
+    return raw.action_url;
+}
+
+function notificationVars(primary: unknown, fallback: unknown): Record<string, string | number> | undefined {
+    const source = isPlainRecord(primary) ? primary : (isPlainRecord(fallback) ? fallback : null);
+    if (source === null) return undefined;
+    const vars: Record<string, string | number> = {};
+    for (const [key, value] of Object.entries(source)) {
+        if (typeof value === 'string' || typeof value === 'number') {
+            vars[key] = value;
+        }
+    }
+    return vars;
+}
+
+function presentString(value: string | null): string | undefined {
+    return value === null || value.length === 0 ? undefined : value;
+}
 
 const PANEL_WIDTH = 360;
 const PANEL_GAP = 8;
@@ -138,7 +160,7 @@ export class PlatformNotificationManager extends PlatformElement {
 
     private _notifSelect: SelectController<{ list: NotificationItem[]; unread: number }>;
     private _pushSelect: SelectController<{ permission: PwaState['pushPermission']; registered: boolean }>;
-    private _i18nSelect: SelectController<I18nStateLike>;
+    private _i18nSelect: SelectController<I18nState>;
 
     static override styles: CSSResultGroup = [
         PlatformElement.styles,
@@ -173,25 +195,22 @@ export class PlatformNotificationManager extends PlatformElement {
     constructor() {
         super();
         this._panelOpen = false;
-        this._notifSelect = this.select((s) => {
-            const notif = s.notifications as { list?: NotificationItem[]; unread?: number } | undefined;
-            return { list: notif?.list || [], unread: notif?.unread || 0 };
-        });
-        this._pushSelect = this.select((s) => {
-            const pwa = s.pwa as PwaState | undefined;
-            return {
-                permission: pwa?.pushPermission || 'default',
-                registered: pwa?.pushRegistered === true,
-            };
-        });
-        this._i18nSelect = this.select((s) => s.i18n as I18nStateLike);
+        this._notifSelect = this.select((s) => ({
+            list: s.notifications.list,
+            unread: s.notifications.unread,
+        }));
+        this._pushSelect = this.select((s) => ({
+            permission: s.pwa.pushPermission,
+            registered: s.pwa.pushRegistered,
+        }));
+        this._i18nSelect = this.select((s) => s.i18n);
         this._anchor = null;
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
         const push = this._pushSelect.value;
-        if (push && push.permission === 'default') {
+        if (push.permission === 'default') {
             this.dispatch(PWA_EVENTS.PUSH_PERMISSION_REQUEST_REQUESTED, null);
         }
     }
@@ -205,8 +224,11 @@ export class PlatformNotificationManager extends PlatformElement {
             }
         }
         if (this._panelOpen) {
-            const popover = this.renderRoot?.querySelector?.('platform-popover') as PlatformPopover | null;
-            popover?.reposition();
+            const popover = this.renderRoot.querySelector('platform-popover');
+            if (!(popover instanceof PlatformPopover)) {
+                throw new Error('platform-notification-manager: open panel popover is missing');
+            }
+            popover.reposition();
         }
     }
 
@@ -274,7 +296,7 @@ export class PlatformNotificationManager extends PlatformElement {
         if (!parsed) return '';
         const state = this._i18nSelect.value;
         if (!state) return '';
-        return translate(state, parsed.key, mergePlatformI18nVars(vars || undefined), parsed.namespace);
+        return translate(state, parsed.key, mergePlatformI18nVars(vars), parsed.namespace);
     }
 
     _looksLikeI18nKey(value: unknown): boolean {
@@ -283,7 +305,7 @@ export class PlatformNotificationManager extends PlatformElement {
     }
 
     _resolveNotifText(item: NotificationItem, field: 'title' | 'message'): string {
-        const i18nVars = (item[`${field}_i18n_vars`] || item.data || undefined) as Record<string, string | number> | undefined;
+        const i18nVars = notificationVars(item[`${field}_i18n_vars`], item.data);
         const text = typeof item[field] === 'string' ? item[field] : '';
         const keyRaw = item[`${field}_i18n_key`];
         const key = typeof keyRaw === 'string' ? keyRaw : '';
@@ -326,28 +348,45 @@ export class PlatformNotificationManager extends PlatformElement {
         return typeof workItemId === 'string' ? workItemId : '';
     }
 
-    _resolveActionLabel(action: NotificationAction): string {
-        const key = typeof action.label_i18n_key === 'string' ? action.label_i18n_key : '';
-        const vars = (action.label_i18n_vars || action.data || undefined) as Record<string, string | number> | undefined;
+    _resolveActionLabel(action: Record<string, unknown>): string {
+        const keyRaw = action.label_i18n_key;
+        const key = typeof keyRaw === 'string' ? keyRaw : '';
+        const vars = notificationVars(action.label_i18n_vars, action.data);
         if (key.length > 0) {
             const resolved = this._translateKey(key, vars);
             if (resolved.length > 0 && resolved !== key) return resolved;
         }
-        if (typeof action.label === 'string' && action.label.trim().length > 0) {
-            return action.label.trim();
+        const label = action.label;
+        if (typeof label === 'string' && label.trim().length > 0) {
+            return label.trim();
         }
         return this.t('notifications.open');
+    }
+
+    _actionFrom(raw: Record<string, unknown>, href: string): NotificationAction {
+        const action: NotificationAction = {
+            href,
+            label: this._resolveActionLabel(raw),
+        };
+        if (typeof raw.url === 'string') action.url = raw.url;
+        if (typeof raw.action_url === 'string' || raw.action_url === null) action.action_url = raw.action_url;
+        if (typeof raw.label_i18n_key === 'string' || raw.label_i18n_key === null) action.label_i18n_key = raw.label_i18n_key;
+        const vars = raw.label_i18n_vars;
+        if (isPlainRecord(vars)) action.label_i18n_vars = vars;
+        else if (vars === null) action.label_i18n_vars = null;
+        if (isPlainRecord(raw.data)) action.data = raw.data;
+        return action;
     }
 
     _notificationActions(item: NotificationItem): NotificationAction[] {
         const out: NotificationAction[] = [];
         const seen = new Set<string>();
-        const add = (raw: Partial<NotificationAction> | null | undefined) => {
-            if (!raw || typeof raw !== 'object') return;
-            const href = this._safeHref(raw.url || raw.href || raw.action_url);
-            if (!href || seen.has(href)) return;
+        const add = (raw: unknown) => {
+            if (!isPlainRecord(raw)) return;
+            const href = this._safeHref(firstHref(raw));
+            if (href.length === 0 || seen.has(href)) return;
             seen.add(href);
-            out.push({ ...raw, href, label: this._resolveActionLabel(raw as NotificationAction) } as NotificationAction);
+            out.push(this._actionFrom(raw, href));
         };
         if (item.scope === 'mail' && item.kind === 'mail_new_message') {
             add({
@@ -358,18 +397,18 @@ export class PlatformNotificationManager extends PlatformElement {
             return out;
         }
         if (Array.isArray(item.actions)) {
-            for (const action of item.actions) add(action as Partial<NotificationAction>);
+            for (const action of item.actions) add(action);
         }
         add({
-            url: item.action_url || undefined,
+            url: presentString(item.action_url),
             label: item.action_label,
-            label_i18n_key: item.action_label_i18n_key || undefined,
+            label_i18n_key: presentString(item.action_label_i18n_key),
         });
         return out;
     }
 
     _renderPanel(): TemplateResult {
-        const { list = [], unread: _unread = 0 } = this._notifSelect.value || {};
+        const { list } = this._notifSelect.value;
         const title = this.t('notifications.title');
         const dismissAll = this.t('notifications.dismiss_all');
         const empty = this.t('notifications.empty');
@@ -426,7 +465,7 @@ export class PlatformNotificationManager extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const { unread = 0 } = this._notifSelect.value || {};
+        const { unread } = this._notifSelect.value;
         return html`
             <button class="bell"
                     @click=${this._togglePanel}

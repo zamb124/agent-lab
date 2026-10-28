@@ -245,7 +245,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         this._viewMode = '';
         this._viewModeFileId = '';
         this._editor = this.useOp('office/document_editor_config');
-        this._routerSearchSel = this.select((s) => (s.router as Record<string, unknown>).search);
+        this._routerSearchSel = this.select((s) => s.router.search);
         this._accessModalOpened = false;
     }
     private _pulseTimer: ReturnType<typeof setTimeout> | null;
@@ -270,7 +270,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
             this._dirty = false;
             this._viewMode = '';
             this._viewModeFileId = '';
-            const id = (this.fileId || '').trim();
+            const id = this.fileId.trim();
             if (!_isPlausibleFileId(id)) {
                 this._editorError = this.t('editor.errInvalidFileId');
                 return;
@@ -285,7 +285,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         if (this._accessModalOpened || this.embedded) {
             return;
         }
-        const fileId = (this.fileId || '').trim();
+        const fileId = this.fileId.trim();
         if (!_isPlausibleFileId(fileId)) {
             return;
         }
@@ -328,7 +328,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     private _syncViewModeFromOpenConfig() {
         const openConfig = this._editor.lastResult as Record<string, unknown> | null;
         const presentation = this._textPresentation(openConfig);
-        const fileId = (this.fileId || '').trim();
+        const fileId = this.fileId.trim();
         if (!presentation) {
             if (this._viewMode.length > 0) {
                 this._viewMode = '';
@@ -360,7 +360,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     }
 
     private _onEditorError(e: CustomEvent<{ code?: unknown }>) {
-        const detail = e.detail || {};
+        const detail = e.detail === undefined || e.detail === null ? {} : e.detail;
         const code = typeof detail.code === 'string' ? detail.code : '';
         const messageMap = {
             bad_config:    this.t('editor.errBadConfig'),
@@ -373,7 +373,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     }
 
     private _onDocumentState(e: CustomEvent<{ dirty?: unknown }>) {
-        const detail = e.detail || {};
+        const detail = e.detail === undefined || e.detail === null ? {} : e.detail;
         const dirty = detail.dirty === true;
         const wasDirty = this._dirty;
         this._dirty = dirty;

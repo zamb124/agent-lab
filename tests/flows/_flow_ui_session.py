@@ -141,7 +141,7 @@ async def ensure_flow(
     """Code-flow из одной ноды с явным интерфейсом; authz синхронизируется как при сохранении."""
     context = require_context()
     resolved_flow_id = flow_id if flow_id is not None else f"flow-ui-{uuid.uuid4().hex}"
-    config = await FlowConfig.get_latest(resolved_flow_id)
+    config = await FlowConfig.current_for_flow(resolved_flow_id)
     if config is None:
         config = FlowConfig(
             flow_id=resolved_flow_id,

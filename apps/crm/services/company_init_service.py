@@ -149,7 +149,7 @@ class CompanyInitService:
             if existing is not None:
                 if not reseed:
                     continue
-                await EntityType.update_fields(
+                await EntityType.update_field_patch(
                     template["type_id"],
                     namespace=init_namespace,
                     company_id=company_id,
@@ -234,7 +234,7 @@ class CompanyInitService:
                 existing.color = template.get("color")
                 existing.is_system = True
                 existing.weight_default = template.get("weight_default", 1.0)
-                _ = await RelationshipType.update_by_company_and_type_id(existing)
+                _ = await RelationshipType.update_loaded_by_company_and_type_id(existing)
                 continue
 
             rel_type = RelationshipType(
@@ -365,14 +365,14 @@ class CompanyInitService:
         )
 
     async def _check_existing_relationship_types(self, company_id: str) -> list[RelationshipType]:
-        return await RelationshipType.in_company(
+        return await RelationshipType.query_by_system_in_company(
             company_id,
             include_system=True,
         ).order_by("type_id").all()
 
     async def _ensure_company_entity(self, company_id: str, *, reseed: bool) -> str:
         """Идемпотентно создает CRM-сущность для компании-тенанта."""
-        existing = await CRMEntity.all_by_entity_type_and_attribute(
+        existing = await CRMEntity.list_by_entity_type_and_attribute(
             entity_type=COMPANY_ENTITY_TYPE,
             attribute_key=PLATFORM_COMPANY_ID_ATTR,
             attribute_value=company_id,
@@ -402,7 +402,7 @@ class CompanyInitService:
             await index_crm_entity(self._rag, entity, replace=False)
         except UniqueViolationError:
             logger.info("crm.entity.worker.company", entity_id=entity.entity_id, company=company_id)
-            raced = await CRMEntity.all_by_entity_type_and_attribute(
+            raced = await CRMEntity.list_by_entity_type_and_attribute(
                 entity_type=COMPANY_ENTITY_TYPE,
                 attribute_key=PLATFORM_COMPANY_ID_ATTR,
                 attribute_value=company_id,
@@ -415,7 +415,7 @@ class CompanyInitService:
         try:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
-            removed = await CRMEntity.take_by_id(entity.entity_id)
+            removed = await CRMEntity.delete_returning(entity.entity_id)
             if removed is not None:
                 _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
@@ -458,7 +458,7 @@ class CompanyInitService:
         reseed: bool = False,
     ) -> str:
         """Идемпотентно создает CRM-сущность для namespace."""
-        existing = await CRMEntity.all_by_entity_type_and_attribute(
+        existing = await CRMEntity.list_by_entity_type_and_attribute(
             entity_type=NAMESPACE_ENTITY_TYPE,
             attribute_key=PLATFORM_NAMESPACE_ATTR,
             attribute_value=namespace_name,
@@ -489,7 +489,7 @@ class CompanyInitService:
             await index_crm_entity(self._rag, entity, replace=False)
         except UniqueViolationError:
             logger.info("crm.namespace.entity.worker.company", entity_id=entity.entity_id, company=company_id)
-            raced = await CRMEntity.all_by_entity_type_and_attribute(
+            raced = await CRMEntity.list_by_entity_type_and_attribute(
                 entity_type=NAMESPACE_ENTITY_TYPE,
                 attribute_key=PLATFORM_NAMESPACE_ATTR,
                 attribute_value=namespace_name,
@@ -502,7 +502,7 @@ class CompanyInitService:
         try:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
-            removed = await CRMEntity.take_by_id(entity.entity_id)
+            removed = await CRMEntity.delete_returning(entity.entity_id)
             if removed is not None:
                 _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
@@ -585,7 +585,7 @@ class CompanyInitService:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
             if created_now:
-                removed = await CRMEntity.take_by_id(entity.entity_id)
+                removed = await CRMEntity.delete_returning(entity.entity_id)
                 if removed is not None:
                     _ = await self._rag.delete_document(
                         entity_namespace(removed),

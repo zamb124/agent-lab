@@ -14,3 +14,9 @@ export const integrationStatusOp = createAsyncOp({
     commandType: 'office/integration/status_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/integration/status' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/integration_status': typeof integrationStatusOp;
+    }
+}

@@ -6,6 +6,7 @@
 import { html, css, nothing } from '../lit-shim.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
 import './platform-icon.js';
 
 const STATUS_ICON = {
@@ -16,7 +17,9 @@ const STATUS_ICON = {
     failed: 'alert-triangle',
 };
 
-const KNOWN_STATUSES: ReadonlySet<string> = new Set(Object.keys(STATUS_ICON));
+function isKnownStatus(value: string): value is keyof typeof STATUS_ICON {
+    return Object.prototype.hasOwnProperty.call(STATUS_ICON, value);
+}
 
 interface AgentPlanStep {
     status?: string;
@@ -30,20 +33,20 @@ interface AgentPlanValue {
     [key: string]: unknown;
 }
 
+function isAgentPlan(value: unknown): value is AgentPlanValue {
+    if (!isPlainRecord(value)) return false;
+    const steps = value.steps;
+    return Array.isArray(steps) && steps.length > 0;
+}
+
 function _asPlan(value: unknown): AgentPlanValue | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return null;
-    }
-    const steps = Array.isArray((value as AgentPlanValue).steps) ? (value as AgentPlanValue).steps : null;
-    if (steps === null || steps.length === 0) {
-        return null;
-    }
-    return value as AgentPlanValue;
+    return isAgentPlan(value) ? value : null;
 }
 
 function _stepStatus(step: AgentPlanStep): keyof typeof STATUS_ICON {
-    const raw = step && typeof step.status === 'string' ? step.status : 'pending';
-    return (KNOWN_STATUSES.has(raw) ? raw : 'pending') as keyof typeof STATUS_ICON;
+    const raw = typeof step.status === 'string' ? step.status : '';
+    if (raw.length > 0 && isKnownStatus(raw)) return raw;
+    return 'pending';
 }
 
 export class PlatformAgentPlan extends PlatformElement {

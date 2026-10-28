@@ -7,20 +7,18 @@
 import { html, css } from 'lit';
 import { PlatformBottomSheet } from '@platform/lib/components/layout/platform-bottom-sheet.js';
 import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
-import { catalogsResource } from '../../events/resources/catalogs.resource.js';
-import type { DocumentsOpController } from '../../events/documents.types.js';
 import '@platform/lib/components/platform-icon.js';
 import type { CSSResultGroup, TemplateResult } from 'lit';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 
-const CATALOGS_NAME = catalogsResource.name;
+const CATALOGS_NAME = 'office/catalogs';
 const DOCUMENTS_OP = 'office/documents';
 
 export class OfficeCatalogPickerSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'office.catalog_picker';
     static i18nNamespace = 'documents';
     private _catalogs: ResourceController;
-    private _documents: DocumentsOpController;
+    private _documents: ControllerFor<'office/documents'>;
 
     static override styles: CSSResultGroup = [
         PlatformBottomSheet.styles,
@@ -62,7 +60,7 @@ export class OfficeCatalogPickerSheet extends PlatformBottomSheet {
         super();
         this.snap = 'half';
         this._catalogs = this.useResource(CATALOGS_NAME);
-        this._documents = this.useOp(DOCUMENTS_OP) as unknown as DocumentsOpController;
+        this._documents = this.useOp(DOCUMENTS_OP);
     }
 
     override connectedCallback(): void {
@@ -111,7 +109,7 @@ export class OfficeCatalogPickerSheet extends PlatformBottomSheet {
                     <button
                         class="item ${catalog.catalog_id === activeId ? 'active' : ''}"
                         type="button"
-                        @click=${() => this._select(String(catalog.catalog_id ?? ''))}
+                        @click=${() => this._select(catalog.catalog_id === undefined || catalog.catalog_id === null ? '' : String(catalog.catalog_id))}
                     >
                         <span>${catalog.title}</span>
                         <span class="count">${typeof catalog.file_count === 'number' ? catalog.file_count : 0}</span>

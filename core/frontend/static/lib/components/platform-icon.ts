@@ -12,7 +12,7 @@ import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResu
 import { unsafeHTML } from '../../assets/js/lit/directives/unsafe-html.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { ICON_EVENTS } from '../events/reducers/icon.js';
-import type { IconState } from '../events/reducers/icon.js';
+import type { PlatformBusState } from '../events/bus-state.js';
 import type { SelectController } from '../events/select-controller.js';
 import { resolveFileIconBasename } from '../utils/file-icons.js';
 
@@ -79,20 +79,16 @@ export class PlatformIcon extends PlatformElement {
         this._requestLoad();
     }
 
-    _selectIconSvg(state: Record<string, unknown>): string {
+    _selectIconSvg(state: PlatformBusState): string {
         if (!this.name) {
             return '';
         }
         if (this.fileIcon) {
-            try {
-                const basename = resolveFileIconBasename(this.name);
-                const svg = (state.icon as IconState).fileCache[basename];
-                return typeof svg === 'string' ? svg : '';
-            } catch {
-                return '';
-            }
+            const basename = resolveFileIconBasename(this.name);
+            const svg = state.icon.fileCache[basename];
+            return typeof svg === 'string' ? svg : '';
         }
-        const svg = (state.icon as IconState).uiCache[this.name];
+        const svg = state.icon.uiCache[this.name];
         return typeof svg === 'string' ? svg : '';
     }
 
@@ -105,12 +101,8 @@ export class PlatformIcon extends PlatformElement {
             return;
         }
         if (this.fileIcon) {
-            try {
-                const basename = resolveFileIconBasename(this.name);
-                this.dispatch(ICON_EVENTS.FILE_LOAD_REQUESTED, { basename });
-            } catch (err) {
-                console.warn(`[platform-icon] file icon "${this.name}":`, (err as Error).message);
-            }
+            const basename = resolveFileIconBasename(this.name);
+            this.dispatch(ICON_EVENTS.FILE_LOAD_REQUESTED, { basename });
             return;
         }
         this.dispatch(ICON_EVENTS.UI_LOAD_REQUESTED, { name: this.name });

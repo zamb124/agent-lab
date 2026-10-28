@@ -69,7 +69,7 @@ class ResourceLoader:
             ResourceNotFoundError: если flow не найден
         """
         resolved_flow_id = extract_resource_id(flow_id)
-        config = await FlowConfig.get_latest(resolved_flow_id)
+        config = await FlowConfig.current_for_flow(resolved_flow_id)
 
         if not config:
             raise ResourceNotFoundError(
@@ -93,7 +93,7 @@ class ResourceLoader:
             ResourceNotFoundError: Если нода не найдена
         """
         resolved_node_id = extract_resource_id(node_id)
-        config = await NodeConfig.get(NodeConfig.row_id(resolved_node_id))
+        config = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(resolved_node_id))
 
         if not config:
             raise ResourceNotFoundError(
@@ -119,7 +119,7 @@ class ResourceLoader:
         """
         resolved_tool_id = extract_resource_id(tool_id)
 
-        config = await ToolReference.get(ToolReference.row_id(resolved_tool_id))
+        config = await ToolReference.get(ToolReference.row_id_for_active_company(resolved_tool_id))
         if not config:
             raise ResourceNotFoundError(
                 resource_type="Tool",

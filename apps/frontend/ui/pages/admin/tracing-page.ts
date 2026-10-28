@@ -5,6 +5,20 @@
  * Доступно только при активной компании system. 503 → unavailable state.
  */
 import { html, css } from 'lit';
+
+function displayText(value: unknown): string {
+    if (value === undefined || value === null || value === false || value === 0 || value === '') return '';
+    if (typeof value === 'number' && !Number.isFinite(value)) return '';
+    return String(value);
+}
+
+function firstText(values: readonly unknown[]): string {
+    for (const value of values) {
+        const text = displayText(value);
+        if (text.length > 0) return text;
+    }
+    return '';
+}
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
@@ -13,7 +27,7 @@ import '@platform/lib/components/platform-trace-viewer.js';
 import '@platform/lib/components/platform-span-attributes-viewer.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
-import type { OpController, CursorListController, FacetsController} from '@platform/lib/base/use-resource.js';
+import type { ControllerFor, CursorListController, FacetsController } from '@platform/lib/base/use-resource.js';
 
 const FACETS = Object.freeze([
     { key: 'companies',   field: 'company_id',     labelKey: 'tracing_page.filter_company' },
@@ -210,7 +224,7 @@ export class FrontendTracingPage extends PlatformPage {
     }
     private _spans: CursorListController;
     private _facets: FacetsController;
-    private _trace: OpController;
+    private _trace: ControllerFor<'frontend/tracing_trace_load'>;
 
 
     _filters() {
@@ -262,7 +276,8 @@ export class FrontendTracingPage extends PlatformPage {
     _renderFacetField({ key, field, labelKey }: { key: string; field: string; labelKey: string }, filters: Record<string, any>) {
         const raw = filters[field];
         const value = typeof raw === 'string' ? raw : '';
-        const items = this._facets.items(key) || [];
+        const rawItems = this._facets.items(key);
+        const items = rawItems === undefined ? [] : rawItems;
         const isOpen = this._activeFacet === key && value.length >= 2;
         return html`
             <div class="field">
@@ -385,10 +400,10 @@ export class FrontendTracingPage extends PlatformPage {
                     ${records.map((r: Record<string, any>) => html`
                         <tr class="row" @click=${() => this._open(r.trace_id)}>
                             <td>${r.start_time ? new Date(r.start_time).toLocaleString() : (r.created_at ? new Date(r.created_at).toLocaleString() : '')}</td>
-                            <td>${r.service_name || ''}</td>
-                            <td>${r.operation_name || ''}</td>
-                            <td>${r.event_type || ''}</td>
-                            <td>${r.company_name || r.company_id || ''}</td>
+                            <td>${displayText(r.service_name)}</td>
+                            <td>${displayText(r.operation_name)}</td>
+                            <td>${displayText(r.event_type)}</td>
+                            <td>${firstText([r.company_name, r.company_id])}</td>
                             <td>${this._spanUserColumn(r)}</td>
                             <td class="mono">${r.trace_id ? r.trace_id.slice(0, 16) : ''}</td>
                         </tr>
@@ -469,7 +484,7 @@ export class FrontendTracingPage extends PlatformPage {
 
     _close() {
         this._traceDrawerSpan = null;
-        (this._trace.closeTrace as (...args: any[]) => any)(null);
+        this._trace.closeTrace(null);
     }
 
     override render(): TemplateResult {

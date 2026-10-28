@@ -130,3 +130,13 @@ export const namespaceEditForm = createForm({
         };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/namespaces': typeof namespacesResource;
+        'crm/namespace_update': typeof namespaceUpdateOp;
+        'crm/namespace_editability': typeof namespaceEditabilityOp;
+        'crm/namespace_create_form': typeof namespaceCreateForm;
+        'crm/namespace_edit_form': typeof namespaceEditForm;
+    }
+}

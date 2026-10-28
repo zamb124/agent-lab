@@ -56,3 +56,10 @@ export const gitResourceGetOp = createAsyncOp({
         return { ...s, byId, lastResult };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/git_resources_upsert': typeof gitResourceUpsertOp;
+        'sync/git_resource_get': typeof gitResourceGetOp;
+    }
+}

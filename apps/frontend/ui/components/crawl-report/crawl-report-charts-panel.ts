@@ -128,7 +128,8 @@ export class CrawlReportChartsPanel extends PlatformElement {
         const counts = new Map<string, number>();
         for (const domain of this.domains) {
             const category = domain.category || 'unknown';
-            counts.set(category, (counts.get(category) || 0) + 1);
+            const stored = counts.get(category);
+            counts.set(category, (stored === undefined ? 0 : stored) + 1);
         }
         const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
         return entries.map(([category, value], index) => ({

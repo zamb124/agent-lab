@@ -264,7 +264,7 @@ class PlatformTracer:
             events=_serialize_span_events(readable_span),
         )
 
-        await Span.insert_once(span_data)
+        await Span.insert_span_once(span_data)
 
         log_operation_finished(
             operation_name=operation_name,

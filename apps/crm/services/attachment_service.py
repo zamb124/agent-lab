@@ -147,7 +147,7 @@ class AttachmentService:
             )
 
         entity.updated_at = datetime.now(UTC)
-        merged = await CRMEntity.save_loaded(entity)
+        merged = await CRMEntity.update_loaded(entity)
         await index_crm_entity(self._entity_rag, merged, replace=True)
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             note_date_iso = merged.note_date.isoformat() if merged.note_date is not None else None
@@ -225,7 +225,7 @@ class AttachmentService:
 
         entity.attachment_ids.remove(document_id)
         entity.updated_at = datetime.now(UTC)
-        entity = await CRMEntity.save_loaded(entity)
+        entity = await CRMEntity.update_loaded(entity)
         await index_crm_entity(self._entity_rag, entity, replace=True)
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None

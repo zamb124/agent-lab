@@ -115,7 +115,7 @@ export class PlatformMailHtmlBody extends PlatformElement {
     }
 
     _onIframeLoad(event: Event): void {
-        const iframe = event.currentTarget as unknown;
+        const iframe = event.currentTarget;
         if (!(iframe instanceof HTMLIFrameElement)) {
             throw new Error('platform-mail-html-body: iframe load target required');
         }

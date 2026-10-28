@@ -152,12 +152,13 @@ class WorkflowInstance(PlatformModel):
         return instance, execution_branch_id
 
     @classmethod
-    async def get_instance(
+    async def any_by_company_and_session(
         cls,
         *,
         company_id: str,
         session_id: str,
     ) -> WorkflowInstance | None:
+        """Первая попавшаяся голова сессии. Порядка нет. Несколько строк — какая именно, не задано. Нет строки — None. Пустые идентификаторы не проверяются."""
         return await WorkflowInstance.objects.filter(
             company_id=company_id,
             session_id=session_id,
@@ -211,7 +212,7 @@ class WorkflowInstance(PlatformModel):
         return [cls._workflow_event_record(row) for row in rows], total
 
     @classmethod
-    async def get_event_by_type(
+    async def event_by_type(
         cls,
         *,
         company_id: str,
@@ -242,7 +243,7 @@ class WorkflowInstance(PlatformModel):
         company_id: str,
         session_id: str,
     ) -> list[WorkflowBranchRecord]:
-        instance = await cls.get_instance(company_id=company_id, session_id=session_id)
+        instance = await cls.any_by_company_and_session(company_id=company_id, session_id=session_id)
         active_branch_id = instance.active_execution_branch_id if instance is not None else None
         rows = await (
             ExecutionBranch.objects.filter(company_id=company_id, session_id=session_id)
@@ -519,7 +520,7 @@ class WorkflowInstance(PlatformModel):
         if source_sequence < 0:
             raise ValueError("source_sequence must be non-negative")
 
-        instance = await cls.get_instance(company_id=company_id, session_id=session_id)
+        instance = await cls.any_by_company_and_session(company_id=company_id, session_id=session_id)
         if instance is None:
             raise ValueError(f"Workflow instance not found: {session_id!r}")
         resolved_source_branch_id = source_execution_branch_id or instance.active_execution_branch_id
@@ -674,7 +675,7 @@ class WorkflowInstance(PlatformModel):
         company_id: str,
         session_id: str,
     ) -> tuple[ExecutionState, WorkflowInstance] | None:
-        instance = await cls.get_instance(company_id=company_id, session_id=session_id)
+        instance = await cls.any_by_company_and_session(company_id=company_id, session_id=session_id)
         if instance is None:
             return None
         state = await cls.load_state_at(
@@ -746,7 +747,7 @@ class WorkflowInstance(PlatformModel):
         lookup_id: str,
     ) -> str | None:
         direct_session_id = f"{flow_id}:{lookup_id}"
-        direct = await cls.get_instance(company_id=company_id, session_id=direct_session_id)
+        direct = await cls.any_by_company_and_session(company_id=company_id, session_id=direct_session_id)
         if direct is not None:
             return direct_session_id
 

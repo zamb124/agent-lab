@@ -163,7 +163,8 @@ export class NamespacePage extends PlatformPage {
     override render() {
         const namespace = this._findNamespace();
         const uploading = this._upload.busy;
-        const documents = (this._docs.state as { items?: RagDocument[] }).items ?? [];
+        const rawDocuments = (this._docs.state as { items?: RagDocument[] }).items;
+        const documents = rawDocuments === undefined ? [] : rawDocuments;
         const loading = this._docs.busy;
 
         if (!namespace && !this._namespaces.loading) {
@@ -230,17 +231,17 @@ export class NamespacePage extends PlatformPage {
                             <div class="document-header">
                                 <div>
                                     <div class="document-name">
-                                        <platform-icon file-icon name=${resolveFileIconKey(String(doc.name ?? ''), '')} size="16"></platform-icon>
+                                        <platform-icon file-icon name=${resolveFileIconKey(doc.name === undefined || doc.name === null ? '' : String(doc.name), '')} size="16"></platform-icon>
                                         ${doc.name}
                                     </div>
                                     <div class="document-meta">
-                                        <span>${this.t('namespace_detail.created_at_label')} ${new Date(doc.created_at ?? '').toLocaleDateString()}</span>
+                                        <span>${this.t('namespace_detail.created_at_label')} ${new Date(doc.created_at === undefined || doc.created_at === null ? '' : doc.created_at).toLocaleDateString()}</span>
                                         ${typeof doc.pages === 'number' ? html`<span>${this.t('namespace_detail.pages_count', { count: doc.pages })}</span>` : ''}
                                     </div>
                                 </div>
                                 <div class="document-actions">
                                     <button class="btn-icon danger"
-                                            @click=${() => this._deleteDocument(String(doc.document_id ?? ''))}
+                                            @click=${() => this._deleteDocument(doc.document_id === undefined || doc.document_id === null ? '' : String(doc.document_id))}
                                             title=${this.t('namespace_detail.delete_button_title')}>
                                         <platform-icon name="trash" size="16"></platform-icon>
                                     </button>

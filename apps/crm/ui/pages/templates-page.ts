@@ -43,13 +43,14 @@ import {
     normalizeSchemaRows,
     buildSchemaFromRows,
 } from '../components/schema-field-builder.js';
-import type { SchemaFieldRow } from '../components/schema-field-builder.js';
+import { isSchemaFieldRow, type SchemaFieldRow } from '../components/schema-field-builder.js';
 import { entityTypeNoteSubtreeLocked } from '../_helpers/entity-type-note-subtree-lock.js';
 import {
     CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN,
     CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED,
 } from '../_helpers/entity-type-create-events.js';
 import { buildEntityTypeDraftFromTemplateTypeItem } from '../_helpers/entity-type-draft-from-preset.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
     CSSResultGroup,
     PropertyDeclarations,
@@ -59,6 +60,13 @@ import type {
     OpController,
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
+
+function anyRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
 
 const DEFAULT_TYPE_DRAFT = Object.freeze({
     type_id: '',
@@ -77,6 +85,17 @@ const DEFAULT_TYPE_DRAFT = Object.freeze({
     is_voice_target: false,
     weight_coefficient: '1.0',
 });
+
+function displayText(value: unknown): string {
+    if (value === undefined || value === null || value === false || value === 0 || value === '') return '';
+    if (typeof value === 'number' && !Number.isFinite(value)) return '';
+    return String(value);
+}
+
+function blankToNull(value: string): string | null {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed;
+}
 
 interface CrmTemplateTypeDraft {
     type_id: string;
@@ -104,14 +123,49 @@ interface CrmTemplateMetaDraft {
     show_note_voice_ui: boolean;
 }
 
-function makeTypeDraft(overrides: Partial<CrmTemplateTypeDraft> = {}): CrmTemplateTypeDraft {
-    return {
+function schemaRows(value: unknown): SchemaFieldRow[] {
+    if (!Array.isArray(value)) return [];
+    if (!value.every(isSchemaFieldRow)) {
+        throw new Error('entity type draft: schema rows are invalid');
+    }
+    return value;
+}
+
+function isStringItem(value: unknown): value is string {
+    return typeof value === 'string';
+}
+
+function stringList(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    if (!value.every(isStringItem)) {
+        throw new Error('entity type draft: namespace_ids must be strings');
+    }
+    return value;
+}
+
+function makeTypeDraft(overrides: Record<string, unknown> = {}): CrmTemplateTypeDraft {
+    const draft: CrmTemplateTypeDraft = {
         ...DEFAULT_TYPE_DRAFT,
         required_fields_rows: [],
         optional_fields_rows: [],
         namespace_ids: [],
-        ...overrides,
     };
+    if (typeof overrides.type_id === 'string') draft.type_id = overrides.type_id;
+    if (typeof overrides.name === 'string') draft.name = overrides.name;
+    if (typeof overrides.description === 'string') draft.description = overrides.description;
+    if (typeof overrides.prompt === 'string') draft.prompt = overrides.prompt;
+    if (typeof overrides.parent_type_id === 'string') draft.parent_type_id = overrides.parent_type_id;
+    if (typeof overrides.icon === 'string') draft.icon = overrides.icon;
+    if (typeof overrides.color === 'string') draft.color = overrides.color;
+    if (typeof overrides.is_event === 'boolean') draft.is_event = overrides.is_event;
+    if (typeof overrides.check_duplicates === 'boolean') draft.check_duplicates = overrides.check_duplicates;
+    if (typeof overrides.is_context_anchor === 'boolean') draft.is_context_anchor = overrides.is_context_anchor;
+    if (typeof overrides.is_voice_target === 'boolean') draft.is_voice_target = overrides.is_voice_target;
+    if (typeof overrides.weight_coefficient === 'string') draft.weight_coefficient = overrides.weight_coefficient;
+    draft.required_fields_rows = schemaRows(overrides.required_fields_rows);
+    draft.optional_fields_rows = schemaRows(overrides.optional_fields_rows);
+    draft.namespace_ids = stringList(overrides.namespace_ids);
+    return draft;
 }
 
 const DEFAULT_NEW_TEMPLATE_DRAFT = Object.freeze({
@@ -590,17 +644,23 @@ export class CRMTemplatesPage extends PlatformPage {
         super.connectedCallback();
         this._schemaOptionsOp.run(null);
         this.useEvent(this._schemaOptionsOp.op.events.SUCCEEDED, (event) => {
-            if (!event.payload || typeof (event.payload as Record<string, any>).result !== 'object') {
+            const payload = anyRecord(event.payload);
+            if (payload === null) return;
+            if (payload.result === null) {
+                this._schemaOptions = null;
                 return;
             }
-            this._schemaOptions = (event.payload as Record<string, any>).result;
+            const result = anyRecord(payload.result);
+            if (result === null) return;
+            this._schemaOptions = result;
         });
         this.useEvent(this._templates.resource.events.LIST_LOADED, () => {
             this._maybeAutoSelect();
         });
         this.useEvent(this._templates.resource.events.CREATED, (event) => {
-            const item = event.payload && (event.payload as Record<string, any>).item;
-            if (!item || typeof item.template_id !== 'string') {
+            const payload = anyRecord(event.payload);
+            const item = payload === null ? null : anyRecord(payload.item);
+            if (item === null || typeof item.template_id !== 'string') {
                 return;
             }
             this._creatingTemplate = false;
@@ -612,7 +672,8 @@ export class CRMTemplatesPage extends PlatformPage {
             this._creatingTemplate = false;
         });
         this.useEvent(this._templates.resource.events.REMOVED, (event) => {
-            const removedId = event.payload && (event.payload as Record<string, any>).template_id;
+            const payload = anyRecord(event.payload);
+            const removedId = payload === null ? undefined : payload.template_id;
             if (removedId === this._selectedTemplateId) {
                 this._selectedTemplateId = '';
                 this._metaDraft = null;
@@ -623,11 +684,13 @@ export class CRMTemplatesPage extends PlatformPage {
             this._deletingTemplate = false;
         });
         this.useEvent(this._templates.resource.events.ITEM_LOADED, (event) => {
-            this._hydrateMetaDraft(event.payload && (event.payload as Record<string, any>).item);
+            const payload = anyRecord(event.payload);
+            this._hydrateMetaDraft(payload === null ? null : anyRecord(payload.item));
         });
         this.useEvent(this._updateMetaOp.op.events.SUCCEEDED, (event) => {
             this._savingMeta = false;
-            this._hydrateMetaDraft(event.payload && (event.payload as Record<string, any>).result);
+            const payload = anyRecord(event.payload);
+            this._hydrateMetaDraft(payload === null ? null : anyRecord(payload.result));
         });
         this.useEvent(this._updateMetaOp.op.events.FAILED, () => {
             this._savingMeta = false;
@@ -653,8 +716,8 @@ export class CRMTemplatesPage extends PlatformPage {
             }
         });
         this.useEvent(CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN, (event) => {
-            const p = event.payload as Record<string, any> | null;
-            if (!p || typeof p !== 'object') {
+            const p = anyRecord(event.payload);
+            if (p === null) {
                 throw new Error('CRMTemplatesPage: create_mode_chosen payload required');
             }
             if (p.mode === 'blank') {
@@ -668,21 +731,21 @@ export class CRMTemplatesPage extends PlatformPage {
             throw new Error('CRMTemplatesPage: create_mode_chosen unknown mode');
         });
         this.useEvent(CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED, (event) => {
-            const p = event.payload as Record<string, any> | null;
-            if (!p || typeof p !== 'object') {
+            const p = anyRecord(event.payload);
+            if (p === null) {
                 throw new Error('CRMTemplatesPage: preset_picker_applied payload required');
             }
-            const snap = p.type_snapshot;
-            if (!snap || typeof snap !== 'object' || typeof snap.type_id !== 'string') {
+            const snap = anyRecord(p.type_snapshot);
+            if (snap === null || typeof snap.type_id !== 'string') {
                 throw new Error('CRMTemplatesPage: preset_picker_applied type_snapshot required');
             }
             this._editingTypeId = '';
             this._typeDraft = buildEntityTypeDraftFromTemplateTypeItem(
                 snap,
                 this._templateDetailTypeCatalogRows(),
-                (overrides?: Record<string, unknown>) => makeTypeDraft(overrides as Partial<CrmTemplateTypeDraft>) as unknown as Record<string, unknown>,
+                makeTypeDraft,
                 { namespaceIds: true },
-            ) as unknown as CrmTemplateTypeDraft;
+            );
             this._typeFormOpen = true;
         });
     }
@@ -694,7 +757,11 @@ export class CRMTemplatesPage extends PlatformPage {
             return;
         }
         if (!this._selectedTemplateId || !list.some((t: Record<string, any>) => t.template_id === this._selectedTemplateId)) {
-            this._selectTemplate((list[0] as Record<string, any>).template_id);
+            const first = list[0];
+            if (!isPlainRecord(first) || typeof first.template_id !== 'string') {
+                throw new Error('CRMTemplatesPage: template_id required');
+            }
+            this._selectTemplate(first.template_id);
         }
     }
 
@@ -706,7 +773,7 @@ export class CRMTemplatesPage extends PlatformPage {
         this._typeFormOpen = false;
         this._typeDraft = makeTypeDraft();
         this._editingTypeId = '';
-        const cached = this._templates.byId[templateId] as Record<string, any> | undefined;
+        const cached = anyRecord(this._templates.byId[templateId]);
         if (cached && Array.isArray(cached.types)) {
             const cs =
                 cached.crm_settings !== undefined
@@ -716,8 +783,8 @@ export class CRMTemplatesPage extends PlatformPage {
                     : null;
             const p = parseNoteVoiceDefaultsFromCrmSettings(cs);
             this._metaDraft = {
-                name: cached.name || '',
-                description: cached.description || '',
+                name: displayText(cached.name),
+                description: displayText(cached.description),
                 icon: cached.icon || 'folder',
                 default_note_voice: p.defaultNoteVoiceMode,
                 show_note_voice_ui: p.showNoteVoiceUi,
@@ -756,8 +823,8 @@ export class CRMTemplatesPage extends PlatformPage {
         this._templates.create({
             template_id: templateId,
             name,
-            description: this._newDraft.description.trim() || null,
-            icon: this._newDraft.icon.trim() || null,
+            description: blankToNull(this._newDraft.description),
+            icon: blankToNull(this._newDraft.icon),
         });
     }
 
@@ -848,8 +915,8 @@ export class CRMTemplatesPage extends PlatformPage {
         this._updateMetaOp.run({
             template_id: this._selectedTemplateId,
             name,
-            description: this._metaDraft.description.trim() || null,
-            icon: this._metaDraft.icon.trim() || null,
+            description: blankToNull(this._metaDraft.description),
+            icon: blankToNull(this._metaDraft.icon),
             crm_settings: {
                 default_note_voice: voiceMode,
                 show_note_voice_ui: this._metaDraft.show_note_voice_ui === true,
@@ -914,8 +981,8 @@ export class CRMTemplatesPage extends PlatformPage {
                 : null;
         const p = parseNoteVoiceDefaultsFromCrmSettings(cs);
         this._metaDraft = {
-            name: item.name || '',
-            description: item.description || '',
+            name: displayText(item.name),
+            description: displayText(item.description),
             icon: item.icon || 'folder',
             default_note_voice: p.defaultNoteVoiceMode,
             show_note_voice_ui: p.showNoteVoiceUi,
@@ -954,15 +1021,15 @@ export class CRMTemplatesPage extends PlatformPage {
         );
         this._typeDraft = {
             type_id: item.type_id,
-            name: item.name || '',
-            description: item.description || '',
-            prompt: item.prompt || '',
+            name: displayText(item.name),
+            description: displayText(item.description),
+            prompt: displayText(item.prompt),
             required_fields_rows: normalizeSchemaRows(item.required_fields && typeof item.required_fields === 'object' ? item.required_fields : {}),
             optional_fields_rows: normalizeSchemaRows(item.optional_fields && typeof item.optional_fields === 'object' ? item.optional_fields : {}),
             namespace_ids: Array.isArray(item.namespace_ids) ? [...item.namespace_ids] : [],
             parent_type_id: parentId,
-            icon: item.icon || '',
-            color: item.color || '',
+            icon: displayText(item.icon),
+            color: displayText(item.color),
             is_event: item.is_event === true,
             check_duplicates: item.check_duplicates !== false,
             is_context_anchor: noteLocked ? false : item.is_context_anchor === true,
@@ -1029,15 +1096,15 @@ export class CRMTemplatesPage extends PlatformPage {
         this._upsertTypeOp.run({
             template_id: this._selectedTemplateId,
             type_id: typeId,
-            parent_type_id: this._typeDraft.parent_type_id.trim() || null,
+            parent_type_id: blankToNull(this._typeDraft.parent_type_id),
             name,
-            description: this._typeDraft.description.trim() || null,
-            prompt: this._typeDraft.prompt.trim() || null,
+            description: blankToNull(this._typeDraft.description),
+            prompt: blankToNull(this._typeDraft.prompt),
             required_fields: requiredFields,
             optional_fields: optionalFields,
             namespace_ids: [...new Set(normalizedNamespaceIds)],
-            icon: this._typeDraft.icon.trim() || null,
-            color: this._typeDraft.color.trim() || null,
+            icon: blankToNull(this._typeDraft.icon),
+            color: blankToNull(this._typeDraft.color),
             is_event: this._typeDraft.is_event === true,
             check_duplicates: this._typeDraft.check_duplicates !== false,
             is_context_anchor: noteLocked ? false : this._typeDraft.is_context_anchor === true,

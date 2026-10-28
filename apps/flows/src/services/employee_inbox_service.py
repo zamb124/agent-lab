@@ -169,7 +169,7 @@ class EmployeeInboxService:
         previous_context = get_context()
         _ = set_context(initiator_context)
         try:
-            flow_config = await FlowConfig.get_latest(flow_id)
+            flow_config = await FlowConfig.current_for_flow(flow_id)
             if flow_config is None:
                 raise ValueError(f"employee inbox: flow {flow_id} not found")
 

@@ -107,7 +107,7 @@ export class PlatformMailCalendarRail extends PlatformElement {
         super();
         this.surface = 'mail';
         this.showSettings = false;
-        this._mailSelect = this.select((s) => s.mail as MailState);
+        this._mailSelect = this.select((s) => s.mail);
     }
 
     _selectMailbox(mailboxBindingId: unknown): void {

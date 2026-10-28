@@ -13,6 +13,13 @@
  */
 
 import { ICON_EVENTS } from '../reducers/icon.js';
+import { isPlainRecord, payloadFields, stringField } from '../payload.js';
+
+function errorMessage(err: unknown): string {
+    if (err instanceof Error && err.message.length > 0) return err.message;
+    if (isPlainRecord(err) && typeof err.message === 'string' && err.message.length > 0) return err.message;
+    throw new Error('icon: failure has no message');
+}
 import type { PlatformEvent, EffectCtx } from '../contract.js';
 import {
     isUiIconKnown, resolveUiIconFile, normalizeSvg, FILE_ICON_BASENAME_SET,
@@ -35,8 +42,8 @@ export function createIconEffect({ platformApexOrigin }: { platformApexOrigin?: 
     return async function iconEffect(event: PlatformEvent, ctx: EffectCtx<{ icon?: { uiCache?: Record<string, string>; fileCache?: Record<string, string> } }>): Promise<void> {
         switch (event.type) {
             case ICON_EVENTS.UI_LOAD_REQUESTED: {
-                const name = ((event.payload ?? {}) as { name?: unknown }).name;
-                if (typeof name !== 'string' || !name) return;
+                const name = stringField(payloadFields(event).name);
+                if (name === null) return;
                 const state = ctx.getState();
                 if (state.icon?.uiCache?.[name]) return;
                 const fileName = isUiIconKnown(name) ? resolveUiIconFile(name) : name;
@@ -56,15 +63,15 @@ export function createIconEffect({ platformApexOrigin }: { platformApexOrigin?: 
                     }
                     ctx.dispatch(
                         ICON_EVENTS.UI_FAILED,
-                        { name, message: String(recoveredErr && (recoveredErr as Error).message ? (recoveredErr as Error).message : recoveredErr) },
+                        { name, message: errorMessage(recoveredErr) },
                         { causation_id: event.id, source: 'http' },
                     );
                 }
                 return;
             }
             case ICON_EVENTS.FILE_LOAD_REQUESTED: {
-                const basename = ((event.payload ?? {}) as { basename?: unknown }).basename;
-                if (typeof basename !== 'string' || !basename) return;
+                const basename = stringField(payloadFields(event).basename);
+                if (basename === null) return;
                 const state = ctx.getState();
                 if (state.icon?.fileCache?.[basename]) return;
                 if (!FILE_ICON_BASENAME_SET.has(basename)) {
@@ -75,7 +82,7 @@ export function createIconEffect({ platformApexOrigin }: { platformApexOrigin?: 
                     const svg = await _fetchSvg(`${fileBase}/${encodeURIComponent(basename)}.svg`);
                     ctx.dispatch(ICON_EVENTS.FILE_LOADED, { basename, svg }, { causation_id: event.id, source: 'http' });
                 } catch (err) {
-                    ctx.dispatch(ICON_EVENTS.FILE_FAILED, { basename, message: String(err && (err as Error).message ? (err as Error).message : err) }, { causation_id: event.id, source: 'http' });
+                    ctx.dispatch(ICON_EVENTS.FILE_FAILED, { basename, message: errorMessage(err) }, { causation_id: event.id, source: 'http' });
                 }
                 return;
             }

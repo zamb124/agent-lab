@@ -297,7 +297,7 @@ class AuthService:
         if norm(email) != norm(demo.email):
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
-        matched = await User.find_all_by_email_ci(demo.email)
+        matched = await User.list_by_email_ci(demo.email)
         if len(matched) != 1:
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
@@ -413,7 +413,7 @@ class AuthService:
                 raise ValueError(
                     f"Provider {provider.value} did not return email; cannot register a new user"
                 )
-            existing_list = await User.find_all_by_email_ci(user_info.email)
+            existing_list = await User.list_by_email_ci(user_info.email)
             if len(existing_list) > 1:
                 raise ValueError(
                     f"Multiple users with email {user_info.email}: "
@@ -449,7 +449,7 @@ class AuthService:
             return user
 
     async def _find_user_by_provider_id(self, provider_user_id: str) -> str | None:
-        row = await UserProviderRecord.find_by_provider_user_id(provider_user_id)
+        row = await UserProviderRecord.any_by_provider_user_id(provider_user_id)
         if row is None:
             return None
         return row.user_id
@@ -533,7 +533,7 @@ class AuthService:
         self, user_id: str
     ) -> dict[str, UserProviderRecord] | None:
         """Получает информацию о всех провайдерах пользователя"""
-        rows = await UserProviderRecord.list_by_user_id(user_id)
+        rows = await UserProviderRecord.list_unordered_by_user_id(user_id)
         if not rows:
             return None
         return {row.provider_user_id: row for row in rows}

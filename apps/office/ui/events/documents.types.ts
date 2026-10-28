@@ -36,23 +36,3 @@ export interface DocumentsSlice extends AsyncOpSlice {
 export type DocumentsAction = (payload?: unknown) => void;
 
 /** Динамические actions `documentsOp` (см. `actions:` в documents.resource). */
-export interface DocumentsOpController extends OpController {
-    readonly state: DocumentsSlice;
-    setActiveCatalog: DocumentsAction;
-    setCatalogExpanded: DocumentsAction;
-    setFilterCatalogs: DocumentsAction;
-    clearFilter: DocumentsAction;
-    setViewMode: DocumentsAction;
-    setSearchQuery: DocumentsAction;
-    setSearchMode: DocumentsAction;
-    setSort: DocumentsAction;
-    setSelectedFile: DocumentsAction;
-    setSelectedCatalog: DocumentsAction;
-    toggleFileSelection: DocumentsAction;
-    setFileSelection: DocumentsAction;
-    clearFileSelection: DocumentsAction;
-    setExplorerView: DocumentsAction;
-    toggleStarred: DocumentsAction;
-    recordRecentOpen: DocumentsAction;
-    patchRagIndexStatuses: DocumentsAction;
-}

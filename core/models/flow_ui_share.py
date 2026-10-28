@@ -56,7 +56,7 @@ class FlowUIShareGrant(PlatformModel):
         return self
 
     @classmethod
-    async def get_active(cls, grant_id: str) -> Self | None:
+    async def active_for_grant(cls, grant_id: str) -> Self | None:
         if grant_id == "":
             raise ValueError("grant_id is required")
         return await cls.objects.filter(
@@ -97,13 +97,14 @@ class FlowUIShareGrant(PlatformModel):
         return await query.all()
 
     @classmethod
-    async def revoke(
+    async def revoke_by_creator(
         cls,
         *,
         grant_id: str,
         company_id: str,
         created_by_user_id: str,
     ) -> bool:
+        """Нет гранта, чужая компания, другой автор или уже отозванный — False. Иначе пишет revoked_at и возвращает True."""
         grant = await cls.get(grant_id)
         if grant is None:
             return False

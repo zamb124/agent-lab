@@ -1,5 +1,6 @@
 import { formatPlatformError } from '../../utils/platform-error-message.js';
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, payloadFields } from '../payload.js';
 
 /**
  * Слайс mail (кроссервисный, как calendar).
@@ -230,12 +231,127 @@ export const initialMailState: MailState = Object.freeze({
     errorMessage: null,
 });
 
-function requireItems<T extends Record<string, unknown>>(payload: unknown, eventType: string): T[] {
-    const items = (payload as { items?: unknown } | null)?.items;
+function copyFields(blank: Record<string, unknown>, value: Record<string, unknown>): void {
+    for (const [key, field] of Object.entries(value)) {
+        blank[key] = field;
+    }
+}
+
+function mailMessage(value: unknown, label: string): MailMessageRecord {
+    if (!isPlainRecord(value)) {
+        throw new Error(`${label}: message must be an object`);
+    }
+    const message: MailMessageRecord = {};
+    copyFields(message, value);
+    if (message.uid !== undefined && typeof message.uid !== 'string') {
+        throw new Error(`${label}: uid must be a string`);
+    }
+    if (message.folder !== undefined && typeof message.folder !== 'string') {
+        throw new Error(`${label}: folder must be a string`);
+    }
+    if (message.unread !== undefined && typeof message.unread !== 'boolean') {
+        throw new Error(`${label}: unread must be a boolean`);
+    }
+    if (message.flagged !== undefined && typeof message.flagged !== 'boolean') {
+        throw new Error(`${label}: flagged must be a boolean`);
+    }
+    if (message.rag_index_status !== undefined && typeof message.rag_index_status !== 'string') {
+        throw new Error(`${label}: rag_index_status must be a string`);
+    }
+    return message;
+}
+
+function messageWith(item: MailMessageRecord, patch: { unread?: boolean; flagged?: boolean; folder?: string | null; rag_index_status?: string }): MailMessageRecord {
+    const next = mailMessage(item, 'mail message');
+    if (patch.unread !== undefined) next.unread = patch.unread;
+    if (patch.flagged !== undefined) next.flagged = patch.flagged;
+    if (patch.folder === null) {
+        next.folder = undefined;
+    } else if (typeof patch.folder === 'string') {
+        next.folder = patch.folder;
+    }
+    if (patch.rag_index_status !== undefined) next.rag_index_status = patch.rag_index_status;
+    Object.freeze(next);
+    return next;
+}
+
+function mailFolder(value: unknown, label: string): MailFolderRecord {
+    if (!isPlainRecord(value)) {
+        throw new Error(`${label}: folder must be an object`);
+    }
+    const folder: MailFolderRecord = {};
+    copyFields(folder, value);
+    if (folder.name !== undefined && typeof folder.name !== 'string') {
+        throw new Error(`${label}: name must be a string`);
+    }
+    if (folder.role !== undefined && typeof folder.role !== 'string') {
+        throw new Error(`${label}: role must be a string`);
+    }
+    if (folder.unseen_count !== undefined && typeof folder.unseen_count !== 'number') {
+        throw new Error(`${label}: unseen_count must be a number`);
+    }
+    if (folder.selectable !== undefined && typeof folder.selectable !== 'boolean') {
+        throw new Error(`${label}: selectable must be a boolean`);
+    }
+    return folder;
+}
+
+function mailFolders(items: readonly unknown[], label: string): MailFolderRecord[] {
+    return items.map((item, index) => mailFolder(item, `${label}[${index}]`));
+}
+
+function mailBinding(value: unknown, label: string): MailBindingRecord {
+    if (!isPlainRecord(value)) {
+        throw new Error(`${label}: binding must be an object`);
+    }
+    const binding: MailBindingRecord = {};
+    copyFields(binding, value);
+    if (binding.mailbox_binding_id !== undefined && typeof binding.mailbox_binding_id !== 'string') {
+        throw new Error(`${label}: mailbox_binding_id must be a string`);
+    }
+    if (binding.is_default !== undefined && typeof binding.is_default !== 'boolean') {
+        throw new Error(`${label}: is_default must be a boolean`);
+    }
+    if (binding.user_id !== undefined && typeof binding.user_id !== 'string') {
+        throw new Error(`${label}: user_id must be a string`);
+    }
+    return binding;
+}
+
+function messageBindingDefault(item: MailBindingRecord, isDefault: boolean): MailBindingRecord {
+    const next = mailBinding(item, 'mail binding');
+    next.is_default = isDefault;
+    Object.freeze(next);
+    return next;
+}
+
+function requireItems<T extends Record<string, unknown>>(
+    payload: unknown,
+    eventType: string,
+    read: (value: unknown, label: string) => T,
+): T[] {
+    if (!isPlainRecord(payload)) {
+        throw new Error(`${eventType}: payload.items must be an array`);
+    }
+    const items = payload.items;
     if (!Array.isArray(items)) {
         throw new Error(`${eventType}: payload.items must be an array`);
     }
-    return items as T[];
+    return items.map((item, index) => read(item, `${eventType}.items[${index}]`));
+}
+
+function mailErrorParams(value: unknown): Record<string, string | number | boolean> | null {
+    if (!isPlainRecord(value)) {
+        return null;
+    }
+    const params: Record<string, string | number | boolean> = {};
+    for (const [key, field] of Object.entries(value)) {
+        if (typeof field !== 'string' && typeof field !== 'number' && typeof field !== 'boolean') {
+            throw new Error('mail failure: error_params values must be string, number, or boolean');
+        }
+        params[key] = field;
+    }
+    return params;
 }
 
 function adjustFolderUnseen(folders: readonly MailFolderRecord[], folderName: unknown, delta: number): readonly MailFolderRecord[] {
@@ -282,10 +398,10 @@ function normalizeAttachments(raw: unknown): readonly MailAttachment[] {
         throw new Error('mail.compose: attachments must be an array');
     }
     return Object.freeze(raw.map((rawItem): MailAttachment => {
-        const item = rawItem as Record<string, unknown> | null;
-        if (!item || typeof item !== 'object') {
+        if (!isPlainRecord(rawItem)) {
             throw new Error('mail.compose: attachment must be object');
         }
+        const item = rawItem;
         if (typeof item.filename !== 'string' || item.filename.length === 0) {
             throw new Error('mail.compose: attachment.filename required');
         }
@@ -314,23 +430,17 @@ function normalizeAttachments(raw: unknown): readonly MailAttachment[] {
 }
 
 function _mailFailureMessage(payload: unknown): string {
-    if (!payload || typeof payload !== 'object') {
+    if (!isPlainRecord(payload)) {
         throw new Error('mail failure payload required');
     }
-    const p = payload as { error_code?: unknown; error_params?: unknown };
-    if (typeof p.error_code === 'string' && p.error_code.length > 0) {
-        const errorParams = p.error_params
-            && typeof p.error_params === 'object'
-            && !Array.isArray(p.error_params)
-            ? p.error_params as Record<string, string | number | boolean>
-            : null;
-        return formatPlatformError(p.error_code, errorParams);
+    if (typeof payload.error_code === 'string' && payload.error_code.length > 0) {
+        return formatPlatformError(payload.error_code, mailErrorParams(payload.error_params));
     }
     throw new Error('mail failure payload.error_code required');
 }
 
 export function mailReducer(state: MailState = initialMailState, event: PlatformEvent): MailState {
-    const p = ((event.payload || null)) as Record<string, unknown> | null;
+    const p = payloadFields(event);
     switch (event.type) {
         case MAIL_EVENTS.BINDINGS_LOAD_REQUESTED:
         case MAIL_EVENTS.FOLDERS_LOAD_REQUESTED:
@@ -347,7 +457,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
                 errorMessage: null,
             };
         case MAIL_EVENTS.BINDINGS_LOADED: {
-            const items = requireItems<MailBindingRecord>(p, event.type);
+            const items = requireItems(p, event.type, mailBinding);
             if (typeof p?.can_admin !== 'boolean') {
                 throw new Error(`${event.type}: payload.can_admin must be a boolean`);
             }
@@ -404,14 +514,14 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             return {
                 ...state,
                 loading: false,
-                companyBindings: requireItems<MailBindingRecord>(p, event.type),
+                companyBindings: requireItems(p, event.type, mailBinding),
             };
         case MAIL_EVENTS.CONNECTION_LOADED:
         case MAIL_EVENTS.CONNECTION_SAVED:
             return {
                 ...state,
                 loading: false,
-                connection: ((p?.connection || null)) as Record<string, unknown> | null,
+                connection: isPlainRecord(p.connection) ? p.connection : null,
             };
         case MAIL_EVENTS.OPEN_FROM_NOTIFICATION: {
             const id = p && p.mailbox_binding_id;
@@ -463,7 +573,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             if (!payload || !Array.isArray(payload.folders)) {
                 throw new Error(`${event.type}: payload.folders must be an array`);
             }
-            const folders = payload.folders as MailFolderRecord[];
+            const folders = mailFolders(payload.folders, `${event.type}.folders`);
             const missing = Array.isArray(payload.missing_standard_roles)
                 ? payload.missing_standard_roles as string[]
                 : [];
@@ -493,7 +603,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             }
             return {
                 ...state,
-                folders: Object.freeze(payload.folders as MailFolderRecord[]),
+                folders: Object.freeze(mailFolders(payload.folders, `${event.type}.folders`)),
             };
         }
         case MAIL_EVENTS.FOLDER_SELECT: {
@@ -515,7 +625,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             };
         }
         case MAIL_EVENTS.MESSAGES_LOADED: {
-            const items = requireItems<MailMessageRecord>(p, event.type);
+            const items = requireItems(p, event.type, mailMessage);
             return {
                 ...state,
                 loading: false,
@@ -528,7 +638,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             };
         }
         case MAIL_EVENTS.MESSAGES_APPEND_LOADED: {
-            const items = requireItems<MailMessageRecord>(p, event.type);
+            const items = requireItems(p, event.type, mailMessage);
             const existingUids = new Set(state.messages.map((item) => item.uid));
             const merged = [
                 ...state.messages,
@@ -565,11 +675,11 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             };
         }
         case MAIL_EVENTS.THREAD_LOADED: {
-            const thread = ((p?.thread || null)) as { items?: unknown; thread_id?: unknown } | null;
+            const thread = isPlainRecord(p.thread) ? p.thread : null;
             if (!thread || !Array.isArray(thread.items)) {
                 throw new Error(`${event.type}: payload.thread.items must be an array`);
             }
-            const items = thread.items as MailMessageRecord[];
+            const items = thread.items.map((item, index) => mailMessage(item, `${event.type}.thread.items[${index}]`));
             const threadId = typeof thread.thread_id === 'string' ? thread.thread_id : null;
             const folderName = state.folder;
             const inboxUnreadUids = new Set(
@@ -587,14 +697,14 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
                     return item;
                 }
                 newlyRead += 1;
-                return Object.freeze({ ...item, unread: false }) as MailMessageRecord;
+                return messageWith(item, { unread: false });
             });
             const focusUid = typeof state.selectedUid === 'string' ? state.selectedUid : null;
             const focus = focusUid
                 ? items.find((item) => item.uid === focusUid) || items[items.length - 1]
                 : items[items.length - 1];
             const selectedMessage = focus
-                ? Object.freeze({ ...focus, unread: false }) as MailMessageRecord
+                ? messageWith(focus, { unread: false })
                 : null;
             const threadMessages = items.map((item) => {
                 if (
@@ -602,7 +712,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
                     && item.folder === folderName
                     && item.unread === true
                 ) {
-                    return Object.freeze({ ...item, unread: false }) as MailMessageRecord;
+                    return messageWith(item, { unread: false });
                 }
                 return Object.freeze(item);
             });
@@ -631,7 +741,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
                     : 'mail thread load failed',
             };
         case MAIL_EVENTS.MESSAGE_LOADED: {
-            const loaded = ((p?.message || null)) as MailMessageRecord | null;
+            const loaded = p.message === undefined || p.message === null ? null : mailMessage(p.message, `${event.type}.message`);
             const loadedUid = loaded && typeof loaded.uid === 'string' ? loaded.uid : null;
             const previous = loadedUid
                 ? state.messages.find((item) => item.uid === loadedUid)
@@ -640,7 +750,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             const messages = loadedUid
                 ? state.messages.map((item): MailMessageRecord => (
                     item.uid === loadedUid
-                        ? Object.freeze({ ...item, unread: false }) as MailMessageRecord
+                        ? messageWith(item, { unread: false })
                         : item
                 ))
                 : state.messages;
@@ -650,7 +760,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
                 pendingOpenUid: null,
                 selectedMessage: loaded,
                 selectedThreadMessages: loaded
-                    ? Object.freeze([Object.freeze({ ...loaded, folder: state.folder }) as MailMessageRecord])
+                    ? Object.freeze([messageWith(loaded, { folder: state.folder })])
                     : Object.freeze([]),
                 messages: Object.freeze(messages),
                 folders: wasUnread
@@ -665,15 +775,15 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             const alreadyUnread = Boolean(previous && previous.unread === true);
             const messages = state.messages.map((item): MailMessageRecord => (
                 item.uid === uid
-                    ? Object.freeze({ ...item, unread: true }) as MailMessageRecord
+                    ? messageWith(item, { unread: true })
                     : item
             ));
             const selectedMessage = state.selectedMessage && state.selectedMessage.uid === uid
-                ? Object.freeze({ ...state.selectedMessage, unread: true }) as MailMessageRecord
+                ? messageWith(state.selectedMessage, { unread: true })
                 : state.selectedMessage;
             const selectedThreadMessages = state.selectedThreadMessages.map((item): MailMessageRecord => (
                 item.uid === uid
-                    ? Object.freeze({ ...item, unread: true }) as MailMessageRecord
+                    ? messageWith(item, { unread: true })
                     : item
             ));
             return {
@@ -719,21 +829,15 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
                 compose: EMPTY_COMPOSE,
             };
         case MAIL_EVENTS.DEFAULT_SET: {
-            const binding = ((p?.binding || null)) as MailBindingRecord | null;
+            const binding = p.binding === undefined || p.binding === null ? null : mailBinding(p.binding, `${event.type}.binding`);
             if (!binding || typeof binding.mailbox_binding_id !== 'string') return state;
             const ownerUserId = typeof binding.user_id === 'string' ? binding.user_id : null;
             const applyDefaultFlags = (items: readonly MailBindingRecord[]): MailBindingRecord[] => items.map((item) => {
                 if (ownerUserId !== null) {
                     if (item.user_id !== ownerUserId) return item;
-                    return {
-                        ...item,
-                        is_default: item.mailbox_binding_id === binding.mailbox_binding_id,
-                    } as MailBindingRecord;
+                    return messageBindingDefault(item, item.mailbox_binding_id === binding.mailbox_binding_id);
                 }
-                return {
-                    ...item,
-                    is_default: item.mailbox_binding_id === binding.mailbox_binding_id,
-                } as MailBindingRecord;
+                return messageBindingDefault(item, item.mailbox_binding_id === binding.mailbox_binding_id);
             });
             const bindings = applyDefaultFlags(state.bindings);
             const companyBindings = applyDefaultFlags(state.companyBindings);
@@ -751,7 +855,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
         }
         case MAIL_EVENTS.BINDING_CREATED:
         case MAIL_EVENTS.BINDING_PATCHED: {
-            const binding = ((p?.binding || null)) as MailBindingRecord | null;
+            const binding = p.binding === undefined || p.binding === null ? null : mailBinding(p.binding, `${event.type}.binding`);
             if (!binding || typeof binding.mailbox_binding_id !== 'string') return state;
             const exists = state.companyBindings.some(
                 (item) => item.mailbox_binding_id === binding.mailbox_binding_id,
@@ -798,7 +902,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             return {
                 ...state,
                 loading: false,
-                health: ((p?.health || null)) as Record<string, unknown> | null,
+                health: isPlainRecord(p.health) ? p.health : null,
             };
         case MAIL_EVENTS.MESSAGE_UPSERTED: {
             const payload = p;
@@ -807,7 +911,9 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             }
             const mailboxBindingId = payload.mailbox_binding_id;
             const folder = payload.folder;
-            const listItem = payload.list_item as MailMessageRecord | null;
+            const listItem = payload.list_item === undefined || payload.list_item === null
+                ? null
+                : mailMessage(payload.list_item, 'mail/message/upserted.list_item');
             if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
                 throw new Error('mail/message/upserted: mailbox_binding_id required');
             }
@@ -831,7 +937,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             ) {
                 messages = Object.freeze(state.messages.map((item): MailMessageRecord => (
                     item.uid === payload.uid
-                        ? Object.freeze({ ...item, flagged: payload.flagged as boolean }) as MailMessageRecord
+                        ? messageWith(item, { flagged: payload.flagged === true })
                         : item
                 )));
             }
@@ -850,7 +956,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
         case MAIL_EVENTS.MESSAGE_TRASH_COMPLETED:
         case MAIL_EVENTS.MESSAGE_ARCHIVE_COMPLETED:
         case MAIL_EVENTS.MESSAGE_DELETE_COMPLETED: {
-            const payload = (p || {});
+            const payload = p;
             const uid = typeof payload.uid === 'string' ? payload.uid : null;
             if (!uid) return state;
             const messages = state.messages.filter((item) => item.uid !== uid);
@@ -867,7 +973,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             };
         }
         case MAIL_EVENTS.MESSAGE_MOVED: {
-            const payload = (p || {});
+            const payload = p;
             const uid = typeof payload.uid === 'string' ? payload.uid : null;
             if (!uid) return state;
             return {
@@ -882,10 +988,10 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             return {
                 ...state,
                 messages: Object.freeze(state.messages.map((item): MailMessageRecord => (
-                    item.uid === uid ? Object.freeze({ ...item, flagged }) as MailMessageRecord : item
+                    item.uid === uid ? messageWith(item, { flagged }) : item
                 ))),
                 selectedMessage: state.selectedMessage && state.selectedMessage.uid === uid
-                    ? Object.freeze({ ...state.selectedMessage, flagged }) as MailMessageRecord
+                    ? messageWith(state.selectedMessage, { flagged })
                     : state.selectedMessage,
             };
         }
@@ -897,7 +1003,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
                 ...state,
                 messages: Object.freeze(state.messages.map((item): MailMessageRecord => (
                     item.uid === uid
-                        ? Object.freeze({ ...item, rag_index_status: status }) as MailMessageRecord
+                        ? messageWith(item, { rag_index_status: status })
                         : item
                 ))),
             };
@@ -911,7 +1017,12 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
         }
         case MAIL_EVENTS.BINDING_MEMBERS_LOADED: {
             const mailboxBindingId = p && p.mailbox_binding_id;
-            const items = requireItems<Record<string, unknown>>(p, event.type);
+            const items = requireItems(p, event.type, (value, label) => {
+                if (!isPlainRecord(value)) {
+                    throw new Error(`${label}: member must be an object`);
+                }
+                return value;
+            });
             if (typeof mailboxBindingId !== 'string') return state;
             return {
                 ...state,
@@ -922,7 +1033,7 @@ export function mailReducer(state: MailState = initialMailState, event: Platform
             };
         }
         case MAIL_EVENTS.BINDING_MEMBER_ADDED: {
-            const member = ((p?.member || null)) as MailBindingRecord | null;
+            const member = p.member === undefined || p.member === null ? null : mailBinding(p.member, `${event.type}.member`);
             if (!member || typeof member.mailbox_binding_id !== 'string') return state;
             const currentRaw = state.bindingMembers[member.mailbox_binding_id];
             const current = Array.isArray(currentRaw) ? currentRaw : [];

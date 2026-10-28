@@ -35,6 +35,17 @@ import type { CompaniesState } from '@platform/lib/events/reducers/companies.js'
 import type { CompanyListEntry } from '@platform/lib/utils/company-host-guard.js';
 import { buildRagAssistantContext } from '../_helpers/platform-assistant-context.js';
 
+function companyListEntries(list: readonly { company_id?: unknown; subdomain?: unknown }[]): readonly CompanyListEntry[] {
+    return list.map((company) => {
+        if (typeof company.company_id !== 'string' || company.company_id.length === 0) {
+            throw new Error('companies.list: company_id required');
+        }
+        const entry: CompanyListEntry = { company_id: company.company_id };
+        if (typeof company.subdomain === 'string') entry.subdomain = company.subdomain;
+        return entry;
+    });
+}
+
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/rag-sidebar.js';
 import '../pages/namespaces-page.js';
@@ -76,7 +87,7 @@ export class RagApp extends PlatformApp {
 
     constructor() {
         super();
-        this._companiesListSel = this.select((s) => (s.companies as CompaniesState).list as unknown as readonly CompanyListEntry[]);
+        this._companiesListSel = this.select((s) => companyListEntries((s.companies as CompaniesState).list));
         this._companiesLoadingSel = this.select((s) => Boolean((s.companies as CompaniesState).loading));
     }
 
@@ -145,7 +156,7 @@ export class RagApp extends PlatformApp {
     }
 
     override async getPlatformAssistantContextVariables(routeKey: string | null, params: Record<string, string>) {
-        return buildRagAssistantContext(String(routeKey ?? ''), params);
+        return buildRagAssistantContext(routeKey === undefined || routeKey === null ? '' : routeKey, params);
     }
 
     override updated(changed: PropertyValues<this>) {
@@ -153,7 +164,7 @@ export class RagApp extends PlatformApp {
         const auth = this._authSelect.value;
         applyCompanyHostRedirectIfNeeded(
             auth,
-            (this._companiesListSel.value ?? []),
+            this._companiesListSel.value,
             Boolean(this._companiesLoadingSel.value),
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );

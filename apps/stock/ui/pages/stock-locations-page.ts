@@ -56,7 +56,7 @@ export class StockLocationsPage extends PlatformPage {
                                     <tr>
                                         <td>${row.name}</td>
                                         <td>${row.usage}</td>
-                                        <td>${row.parent_id || ''}</td>
+                                        <td>${typeof row.parent_id === 'string' ? row.parent_id : ''}</td>
                                         <td>${row.removal_method}</td>
                                     </tr>
                                 `)}

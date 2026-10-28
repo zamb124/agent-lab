@@ -8,6 +8,7 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent } from '../contract.js';
+import { payloadFields } from '../payload.js';
 
 export interface ThemeState {
     mode: 'dark' | 'light';
@@ -22,7 +23,7 @@ export const initialThemeState: ThemeState = Object.freeze({
 export function themeReducer(state: ThemeState = initialThemeState, event: PlatformEvent): ThemeState {
     switch (event.type) {
         case CoreEvents.THEME_CHANGED: {
-            const p = (event.payload || {}) as { mode?: unknown; source?: unknown };
+            const p = payloadFields(event);
             const mode = p.mode;
             const source = p.source === 'user' || p.source === 'system' || p.source === 'storage' ? p.source : 'user';
             if (mode !== 'dark' && mode !== 'light') return state;
@@ -31,7 +32,7 @@ export function themeReducer(state: ThemeState = initialThemeState, event: Platf
         }
         case CoreEvents.THEME_SYSTEM_CHANGED: {
             if (state.source !== 'system') return state;
-            const p = (event.payload || {}) as { mode?: unknown };
+            const p = payloadFields(event);
             const mode = p.mode;
             if (mode !== 'dark' && mode !== 'light') return state;
             if (state.mode === mode) return state;

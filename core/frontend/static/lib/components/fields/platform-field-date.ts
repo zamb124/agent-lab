@@ -8,7 +8,27 @@ import {
     normalizeIsoDateTimeForField,
 } from '../../utils/format-platform-date.js';
 import '../platform-date-picker.js';
-import type { I18nState } from '../../events/reducers/i18n.js';
+import { isPlainRecord } from '../../events/payload.js';
+
+function changeValue(event: Event): string | null {
+    if (!(event instanceof CustomEvent) || !isPlainRecord(event.detail)) {
+        throw new Error('platform-field-date: change detail must be an object');
+    }
+    const value = event.detail.value;
+    if (value === null) return null;
+    if (typeof value !== 'string') {
+        throw new Error('platform-field-date: change value must be a string');
+    }
+    return value;
+}
+
+function inputValue(event: Event): string {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-field-date: input target must be an input');
+    }
+    return target.value;
+}
 
 const ISO_DATE_VALUE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_DATETIME_VALUE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
@@ -60,15 +80,14 @@ export class PlatformFieldDate extends PlatformElement {
 
     _onChange(e: Event): void {
         this.dispatchEvent(new CustomEvent('change', {
-            detail: { value: (e.target as HTMLElement & { value: string }).value },
+            detail: { value: changeValue(e) },
             bubbles: true,
             composed: true,
         }));
     }
 
     _onFreeformDateInput(e: InputEvent): void {
-        const t = e.target as HTMLInputElement | null;
-        const v = t && typeof t.value === 'string' ? t.value : '';
+        const v = inputValue(e);
         this.dispatchEvent(new CustomEvent('change', {
             detail: { value: v },
             bubbles: true,
@@ -100,7 +119,7 @@ export class PlatformFieldDate extends PlatformElement {
         if (val === null || val === undefined || typeof val !== 'string' || val.length === 0) {
             return null;
         }
-        const locale = this.select((state) => (state.i18n as I18nState).locale).value;
+        const locale = this.select((state) => state.i18n.locale).value;
         const normalized = this._normalizeFieldValue(val);
         if (this.datetime) {
             return formatPlatformDateTime(normalized, locale ?? 'ru');
@@ -137,7 +156,7 @@ export class PlatformFieldDate extends PlatformElement {
             <platform-date-picker
                 mode=${pickerMode}
                 value-format="iso"
-                .value=${raw || null}
+                .value=${raw.length === 0 ? null : raw}
                 .placeholder=${this.placeholder}
                 ?disabled=${this.disabled}
                 ?embedded=${true}

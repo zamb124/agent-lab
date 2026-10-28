@@ -614,7 +614,7 @@ class TestPutawayRuleCrud:
         env = await _env(stock_di, unique_id)
         bin_a = await _bin(env, f"K{unique_id}")
         bin_b = await _bin(env, f"L{unique_id}")
-        _ = await StockPutawayRule.create_rule(
+        _ = await StockPutawayRule.create(
             company_id=env.company_id,
             warehouse_id=env.warehouse.warehouse_id,
             location_in_id=env.warehouse.view_location_id,
@@ -638,14 +638,14 @@ class TestPutawayRuleCrud:
         env = await _env(stock_di, unique_id)
         bin_a = await _bin(env, f"M{unique_id}")
         bin_b = await _bin(env, f"N{unique_id}")
-        rule = await StockPutawayRule.create_rule(
+        rule = await StockPutawayRule.create(
             company_id=env.company_id,
             warehouse_id=env.warehouse.warehouse_id,
             location_in_id=env.warehouse.view_location_id,
             location_out_id=bin_b,
             product_id=env.product.product_id,
         )
-        updated = await StockPutawayRule.update_rule(
+        updated = await StockPutawayRule.update_locations_filters_and_sequence(
             env.company_id, rule.rule_id, location_out_id=bin_a
         )
         assert updated is not None and updated.location_out_id == bin_a
@@ -662,14 +662,14 @@ class TestPutawayRuleCrud:
     async def test_set_active_off_drops_rule(self, stock_di, unique_id: str) -> None:
         env = await _env(stock_di, unique_id)
         bin_b = await _bin(env, f"O{unique_id}")
-        rule = await StockPutawayRule.create_rule(
+        rule = await StockPutawayRule.create(
             company_id=env.company_id,
             warehouse_id=env.warehouse.warehouse_id,
             location_in_id=env.warehouse.view_location_id,
             location_out_id=bin_b,
             product_id=env.product.product_id,
         )
-        await StockPutawayRule.set_active(env.company_id, rule.rule_id, False)
+        await StockPutawayRule.update_is_active(env.company_id, rule.rule_id, False)
         _, move_id = await _draft_receipt(env, Decimal("2"))
         move = await StockMove.by_id(env.company_id, move_id)
         assert move is not None
@@ -684,7 +684,7 @@ class TestPutawayRuleCrud:
     async def test_delete_rule(self, stock_di, unique_id: str) -> None:
         env = await _env(stock_di, unique_id)
         bin_b = await _bin(env, f"P{unique_id}")
-        rule = await StockPutawayRule.create_rule(
+        rule = await StockPutawayRule.create(
             company_id=env.company_id,
             warehouse_id=env.warehouse.warehouse_id,
             location_in_id=env.warehouse.view_location_id,
@@ -693,7 +693,7 @@ class TestPutawayRuleCrud:
         )
         await StockPutawayRule.delete_rule(env.company_id, rule.rule_id)
         assert await StockPutawayRule.by_id(env.company_id, rule.rule_id) is None
-        listed = await StockPutawayRule.list_for_warehouse(
+        listed = await StockPutawayRule.list_by_sequence_and_rule_id_for_warehouse(
             env.company_id, env.warehouse.warehouse_id
         )
         assert all(r.rule_id != rule.rule_id for r in listed)

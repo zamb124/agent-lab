@@ -2,8 +2,8 @@
 description: "Поля форм — только <platform-field>: модель диспетчера, whitelist сырых тегов, pill-стили, core-виджеты, новый тип данных. Читать при правке форм и полей"
 globs:
   - "core/frontend/static/lib/components/fields/**"
-  - "core/frontend/static/lib/styles/shared/field-pill.styles.js"
-  - "core/frontend/static/lib/styles/shared/form.styles.js"
+  - "core/frontend/static/lib/styles/shared/field-pill.styles.ts"
+  - "core/frontend/static/lib/styles/shared/form.styles.ts"
   - "apps/*/ui/pages/**"
   - "apps/*/ui/modals/**"
   - "apps/*/ui/components/**"
@@ -12,18 +12,18 @@ alwaysApply: false
 
 # Поля форм
 
-`<platform-field>` (`core/frontend/static/lib/components/fields/platform-field.js`) — единственный способ ввести и показать поле формы в любом сервисе: имя, email, url, пароль, запрос, описание, комментарий, типизированный атрибут CRM. Модалки и формы → `ui_components.mdc` § Модалки; состояние формы → `ui_factories.mdc` (`createForm`).
+`<platform-field>` (`core/frontend/static/lib/components/fields/platform-field.ts`) — единственный способ ввести и показать поле формы в любом сервисе: имя, email, url, пароль, запрос, описание, комментарий, типизированный атрибут CRM. Модалки и формы → `ui_components.mdc` § Модалки; состояние формы → `ui_factories.mdc` (`createForm`).
 
 ## Модель
 
-- Диспетчер по `type` выбирает подкомпонент `platform-field-<type>.js` из `core/frontend/static/lib/components/fields/`; набор типов — ключи `FIELD_TYPE_MAP` в `platform-field.js`. Импорт `@platform/lib/components/fields/platform-field.js` подключает все подкомпоненты.
+- Диспетчер по `type` выбирает подкомпонент `platform-field-<type>.js` из `core/frontend/static/lib/components/fields/`; набор типов — ключи `FIELD_TYPE_MAP` в `platform-field.ts`. Импорт `@platform/lib/components/fields/platform-field.ts` подключает все подкомпоненты.
 - Props, слоты (`prefix`, `suffix`) и события (`change`, `platform-field-managed-focus-in|out`) — файл компонента и UIKDS-карточки `tests/ui/design-system/components/platform-field*/`.
 - `@change` отдаёт типизированный `detail.value`: `number` для `number`/`integer`, `boolean`, `Array` для `array`.
 - `mode="edit"` — ввод, `mode="view"` — показ. Диспетчер рендерит подкомпонент внутри `<platform-field-shell>`; `pill-embed` убирает вторую плашку внутри `.form-group` или карточки.
 
 ### platform-field-shell
 
-`<platform-field-shell>` (`core/frontend/static/lib/components/fields/platform-field-shell.js`) — единственная pill-оболочка поля платформы: floating label (Material outlined), notch в бордере через `<fieldset>`+`<legend>`, фокус-ринг, hint и error-сообщение.
+`<platform-field-shell>` (`core/frontend/static/lib/components/fields/platform-field-shell.ts`) — единственная pill-оболочка поля платформы: floating label (Material outlined), notch в бордере через `<fieldset>`+`<legend>`, фокус-ринг, hint и error-сообщение.
 
 - Пустое значение + без фокуса: label покоится внутри поля на месте текста; фокус (`:focus-within`) или `floated` (значение, view-режим) поднимают label на верхний бордер, бордер физически размыкается под ним.
 - Props: `label`, `floated`, `density` (`default|compact|dense`), `embed`, `editable`, `disabled`, `multiline`, `fill`, `error`, `hint`/`hintSummary`/`hintDetails`/`hintDocHref`/`hintDocLabel`; слоты — default (контрол), `prefix`, `suffix`.
@@ -56,7 +56,7 @@ alwaysApply: false
 
 ### Стили
 
-- Классы `.field-pill*` и `.form-*` задают только `core/frontend/static/lib/styles/shared/field-pill.styles.js` (`fieldPillStyles`) и `form.styles.js` (`formStyles`, входит в `PlatformElement.styles`); настройка — токены `--field-pill-*` в `core/frontend/static/assets/css/tokens.css`.
+- Классы `.field-pill*` и `.form-*` задают только `core/frontend/static/lib/styles/shared/field-pill.styles.ts` (`fieldPillStyles`) и `form.styles.ts` (`formStyles`, входит в `PlatformElement.styles`); настройка — токены `--field-pill-*` в `core/frontend/static/assets/css/tokens.css`.
 - Локальные CSS-правила `.form-input|textarea|select|group|label` и `.field-pill*` в `apps/**` запрещены.
 - Список вложений поля — классы `.field-pill-file-ref-*` и `.field-pill-file-refs-*` из `fieldPillStyles`; свои `.file-*` стили в `apps/**` запрещены. `[без гейта]`
 - Подкомпонент стилизуется `PlatformElement.styles` и узким `css` в `static styles`; pill-режим единственный — атрибут `flat` у `<tag-input>` и подкомпонентов запрещён. `[без гейта]`

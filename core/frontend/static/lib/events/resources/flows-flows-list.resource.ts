@@ -13,3 +13,9 @@ export const flowsListOp = createAsyncOp({
     commandType: 'flows/flows/list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/flows/' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'flows/flows_list': typeof flowsListOp;
+    }
+}

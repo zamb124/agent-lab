@@ -100,7 +100,7 @@ export class StockHomePage extends PlatformPage {
                                 <th class="num">${this.t('fields.value')}</th>
                             </tr></thead>
                             <tbody>
-                                ${(pulse.quants || []).map((row: PulseQuantRow) => html`
+                                ${(pulse.quants === undefined ? [] : pulse.quants).map((row: PulseQuantRow) => html`
                                     <tr>
                                         <td>${row.product_id}</td>
                                         <td>${row.location_id}</td>
@@ -123,7 +123,7 @@ export class StockHomePage extends PlatformPage {
                                 <th>${this.t('fields.state')}</th>
                             </tr></thead>
                             <tbody>
-                                ${(pulse.transfers || []).map((row: PulseTransferRow) => html`
+                                ${(pulse.transfers === undefined ? [] : pulse.transfers).map((row: PulseTransferRow) => html`
                                     <tr>
                                         <td>${row.name}</td>
                                         <td>${row.operation_code}</td>

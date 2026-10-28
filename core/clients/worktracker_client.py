@@ -58,7 +58,7 @@ class WorktrackerClient:
         limit: int = 200,
         offset: int = 0,
     ) -> list[WorkItem]:
-        return await WorkItem.list_work_items(
+        return await WorkItem.list_created_desc(
             company_id,
             board_id=board_id,
             namespace=namespace,
@@ -227,7 +227,7 @@ class WorktrackerClient:
         company_id: str,
         work_item_id: str,
     ) -> list[WorkItemComment]:
-        return await WorkItemComment.list_comments(company_id, work_item_id)
+        return await WorkItemComment.list_for_work_item(company_id, work_item_id)
 
     async def get_queue_by_slug(self, company_id: str, slug: str) -> WorkQueue:
         return await self._service.get_queue_by_slug(company_id, slug)
@@ -308,7 +308,7 @@ class WorktrackerClient:
         return await self._service.list_boards(company_id, namespace=namespace)
 
     async def get_board(self, company_id: str, board_id: str) -> Board:
-        return await Board.get_board(company_id, board_id)
+        return await Board.require_in_company(company_id, board_id)
 
     async def create_board(
         self,

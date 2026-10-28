@@ -162,13 +162,14 @@ class StoredMailMessage(PlatformModel):
         return _mail_messages(rows)
 
     @classmethod
-    async def list_by_thread(
+    async def list_by_date_at_and_uid(
         cls,
         mailbox_binding_id: str,
         *,
         thread_id: str,
         limit: int = 200,
     ) -> list[StoredMailMessage]:
+        """Письма ящика в треде, ORDER BY date_at ASC NULLS LAST, uid ASC, не больше limit. Пустой thread_id и limit < 1 — ValueError."""
         if thread_id.strip() == "":
             raise ValueError("thread_id is required")
         if limit < 1:
@@ -191,23 +192,7 @@ class StoredMailMessage(PlatformModel):
         return _mail_messages(rows)
 
     @classmethod
-    async def set_unread(
-        cls,
-        mailbox_binding_id: str,
-        *,
-        folder: str,
-        uid: int,
-        unread: bool,
-    ) -> Self | None:
-        return await cls.set_flags(
-            mailbox_binding_id,
-            folder=folder,
-            uid=uid,
-            unread=unread,
-        )
-
-    @classmethod
-    async def set_flags(
+    async def update_flags(
         cls,
         mailbox_binding_id: str,
         *,
@@ -218,8 +203,9 @@ class StoredMailMessage(PlatformModel):
         answered: bool | None = None,
         draft: bool | None = None,
     ) -> Self | None:
+        """Пишет только переданные флаги. Все None — ValueError. Нет письма — None."""
         if unread is None and flagged is None and answered is None and draft is None:
-            raise ValueError("set_flags requires at least one flag field")
+            raise ValueError("update_flags requires at least one flag field")
         message = await cls.by_binding_folder_uid(mailbox_binding_id, folder=folder, uid=uid)
         if message is None:
             return None
@@ -322,7 +308,7 @@ class StoredMailMessage(PlatformModel):
         return _mail_messages(rows)
 
     @classmethod
-    async def search_local(
+    async def list_query_page(
         cls,
         mailbox_binding_id: str,
         *,
@@ -332,6 +318,7 @@ class StoredMailMessage(PlatformModel):
         before_date: datetime | None = None,
         before_uid: int | None = None,
     ) -> list[StoredMailMessage]:
+        """Письма ящика, где subject, from_address, snippet, body_text или to_addresses содержит q. Порядок — date_at по убыванию, затем uid. Не больше limit+1."""
         if q.strip() == "":
             raise ValueError("q is required")
         if limit < 1:

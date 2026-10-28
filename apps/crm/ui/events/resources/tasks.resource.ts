@@ -339,3 +339,18 @@ export const taskRetryOp = createAsyncOp({
         );
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/task_get': typeof taskGetOp;
+        'crm/tasks': typeof tasksResource;
+        'crm/task_created_entities': typeof taskCreatedEntitiesOp;
+        'crm/task_knowledge_import_start': typeof taskKnowledgeImportStartOp;
+        'crm/task_daily_summary_start': typeof taskDailySummaryStartOp;
+        'crm/task_period_summary_start': typeof taskPeriodSummaryStartOp;
+        'crm/task_review_complete': typeof taskReviewCompleteOp;
+        'crm/task_cancel': typeof taskCancelOp;
+        'crm/task_rollback': typeof taskRollbackOp;
+        'crm/task_retry': typeof taskRetryOp;
+    }
+}

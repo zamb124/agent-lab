@@ -123,21 +123,21 @@ async def test_delete_by_source_and_types_returns_count(unique_id: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_target_by_source_and_type_returns_one_target(unique_id: str) -> None:
+async def test_any_target_entity_id_by_source_and_type_returns_one_target(unique_id: str) -> None:
     company_id = f"rel-tgt-{unique_id}"
     other_company_id = f"rel-tgt-other-{unique_id}"
     source_id = f"src-tgt-{unique_id}"
     edge = await _edge(company_id, f"edge-tgt-{unique_id}", source_id)
     assert (
-        await Relationship.target_by_source_and_type(company_id, source_id, "link")
+        await Relationship.any_target_entity_id_by_source_and_type(company_id, source_id, "link")
         == edge.target_entity_id
     )
     assert (
-        await Relationship.target_by_source_and_type(other_company_id, source_id, "link") is None
+        await Relationship.any_target_entity_id_by_source_and_type(other_company_id, source_id, "link") is None
     )
-    assert await Relationship.target_by_source_and_type(company_id, source_id, "other") is None
+    assert await Relationship.any_target_entity_id_by_source_and_type(company_id, source_id, "other") is None
     assert (
-        await Relationship.target_by_source_and_type(company_id, f"missing-{unique_id}", "link")
+        await Relationship.any_target_entity_id_by_source_and_type(company_id, f"missing-{unique_id}", "link")
         is None
     )
     assert (
@@ -304,14 +304,14 @@ async def test_ensure_edge_returns_existing_without_update(unique_id: str) -> No
 
 
 @pytest.mark.asyncio
-async def test_neighbors_for_entities_groups_both_ends(unique_id: str) -> None:
+async def test_incident_edges_by_entity_id_groups_both_ends(unique_id: str) -> None:
     company_id = f"rel-nb-{unique_id}"
     other_company_id = f"rel-nb-other-{unique_id}"
     left = f"left-{unique_id}"
     right = f"right-{unique_id}"
     _bind_company(company_id)
     try:
-        assert await Relationship.neighbors_for_entities([]) == {}
+        assert await Relationship.incident_edges_by_entity_id([]) == {}
         link = await Relationship.create(
             Relationship(
                 relationship_id=f"nb-link-{unique_id}",
@@ -342,15 +342,15 @@ async def test_neighbors_for_entities_groups_both_ends(unique_id: str) -> None:
                 namespace="default",
             )
         )
-        grouped = await Relationship.neighbors_for_entities([left, right])
+        grouped = await Relationship.incident_edges_by_entity_id([left, right])
         assert {row.relationship_id for row in grouped[left]} == {
             link.relationship_id,
             other_type.relationship_id,
         }
         assert {row.relationship_id for row in grouped[right]} == {link.relationship_id}
-        typed = await Relationship.neighbors_for_entities([left], relationship_types=["link"])
+        typed = await Relationship.incident_edges_by_entity_id([left], relationship_types=["link"])
         assert {row.relationship_id for row in typed[left]} == {link.relationship_id}
-        crossed = await Relationship.neighbors_for_entities([left], cross_company=True)
+        crossed = await Relationship.incident_edges_by_entity_id([left], cross_company=True)
         assert foreign.relationship_id in {row.relationship_id for row in crossed[left]}
         for owner, row in (
             (company_id, link),
@@ -438,7 +438,7 @@ async def test_graph_page_orders_by_created_at_and_hides_other_company(unique_id
 
 
 @pytest.mark.asyncio
-async def test_rewrite_entity_id_updates_both_ends(unique_id: str) -> None:
+async def test_update_source_and_target_entity_id_updates_both_ends(unique_id: str) -> None:
     company_id = f"rel-rw-{unique_id}"
     other_company_id = f"rel-rw-other-{unique_id}"
     old_id = f"old-{unique_id}"
@@ -473,7 +473,7 @@ async def test_rewrite_entity_id_updates_both_ends(unique_id: str) -> None:
             namespace="default",
         )
     )
-    updated = await Relationship.rewrite_entity_id(company_id, old_id, new_id)
+    updated = await Relationship.update_source_and_target_entity_id(company_id, old_id, new_id)
     assert updated == 2
     source_row = await Relationship.get(as_source.relationship_id)
     target_row = await Relationship.get(as_target.relationship_id)
@@ -481,9 +481,9 @@ async def test_rewrite_entity_id_updates_both_ends(unique_id: str) -> None:
     assert source_row is not None and source_row.source_entity_id == new_id
     assert target_row is not None and target_row.target_entity_id == new_id
     assert foreign_row is not None and foreign_row.source_entity_id == old_id
-    assert await Relationship.rewrite_entity_id(company_id, old_id, new_id) == 0
+    assert await Relationship.update_source_and_target_entity_id(company_id, old_id, new_id) == 0
     with pytest.raises(ValueError, match="old_entity_id and new_entity_id must differ"):
-        _ = await Relationship.rewrite_entity_id(company_id, new_id, new_id)
+        _ = await Relationship.update_source_and_target_entity_id(company_id, new_id, new_id)
     assert (
         await Relationship.delete_by_company_and_relationship_id(
             company_id,
@@ -508,7 +508,7 @@ async def test_rewrite_entity_id_updates_both_ends(unique_id: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_deduplicate_for_entity_drops_self_loop_and_keeps_edge(unique_id: str) -> None:
+async def test_delete_loops_and_duplicate_edges_drops_self_loop_and_keeps_edge(unique_id: str) -> None:
     company_id = f"rel-dedup-{unique_id}"
     other_company_id = f"rel-dedup-other-{unique_id}"
     entity_id = f"ent-dedup-{unique_id}"
@@ -544,11 +544,11 @@ async def test_deduplicate_for_entity_drops_self_loop_and_keeps_edge(unique_id: 
                 namespace="default",
             )
         )
-        await Relationship.deduplicate_for_entity(entity_id)
+        await Relationship.delete_loops_and_duplicate_edges(entity_id)
         assert await Relationship.get(loop.relationship_id) is None
         assert await Relationship.get(kept.relationship_id) is not None
         assert await Relationship.get(foreign_loop.relationship_id) is not None
-        await Relationship.deduplicate_for_entity(entity_id)
+        await Relationship.delete_loops_and_duplicate_edges(entity_id)
         assert await Relationship.get(kept.relationship_id) is not None
         assert (
             await Relationship.delete_by_company_and_relationship_id(

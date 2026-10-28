@@ -9,6 +9,17 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+function listOrEmpty(value: unknown, label: string): unknown[] {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+    return value;
+}
+
 interface TeamMemberLike {
     user_id?: unknown;
     name?: unknown;
@@ -154,12 +165,13 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
     }
 
     private _queue(): Record<string, unknown> | null {
-        const queues = this._queues.items || [];
-        return queues.find((row) => row && row.work_queue_id === this.workQueueId) ?? null;
+        const queues = this._queues.items;
+        const found = queues.find((row) => row && row.work_queue_id === this.workQueueId);
+        return found === undefined ? null : found;
     }
 
     private _memberUserIds(): Set<string> {
-        const members = this._membersOp.state.items || [];
+        const members = listOrEmpty(this._membersOp.state.items, 'worktracker queue members');
         const ids = new Set<string>();
         if (!Array.isArray(members)) {
             return ids;
@@ -214,7 +226,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
     }
 
     private _renderMembers() {
-        const members = this._membersOp.state.items || [];
+        const members = listOrEmpty(this._membersOp.state.items, 'worktracker queue members');
         if (!Array.isArray(members) || members.length === 0) {
             return html`<div class="empty">${this.t('queue_detail_page.empty_members')}</div>`;
         }
@@ -256,9 +268,9 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
                     <button
                         type="button"
                         class="candidate-row"
-                        @click=${() => this._addMember(String(m.user_id ?? ''))}
+                        @click=${() => this._addMember(missingAsEmpty(m.user_id))}
                     >
-                        <platform-user-chip user-id=${String(m.user_id ?? '')} size="sm" .interactive=${false}></platform-user-chip>
+                        <platform-user-chip user-id=${missingAsEmpty(m.user_id)} size="sm" .interactive=${false}></platform-user-chip>
                         <span>${this.t('queue_detail_page.add_member')}</span>
                     </button>
                 `)}
@@ -268,7 +280,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
 
     override render() {
         const queue = this._queue();
-        const items = this._workItems.items || [];
+        const items = this._workItems.items;
         const queueLabel = queue && typeof queue.name === 'string' ? queue.name : this.workQueueId;
         return html`
             <worktracker-page-header

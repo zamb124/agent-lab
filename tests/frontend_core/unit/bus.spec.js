@@ -166,13 +166,18 @@ describe('EventBus: effects', () => {
         bus.registerEffect((event) => {
             if (event.type === 'test/x/y') throw new Error('boom');
         });
-        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const previous = process.listeners('unhandledRejection');
+        process.removeAllListeners('unhandledRejection');
+        const unhandled = [];
+        process.on('unhandledRejection', (reason) => unhandled.push(reason));
         bus.dispatch('test/x/y', null);
         await new Promise((r) => setTimeout(r, 50));
+        process.removeAllListeners('unhandledRejection');
+        previous.forEach((listener) => process.on('unhandledRejection', listener));
+        expect(unhandled.map((e) => e.message)).toEqual(['boom']);
         const failed = log.snapshot().find((e) => e.type === 'ui/effect/failed');
         expect(failed).toBeTruthy();
         expect(failed.payload.event_type).toBe('test/x/y');
         expect(failed.payload.error).toContain('boom');
-        errSpy.mockRestore();
     });
 });

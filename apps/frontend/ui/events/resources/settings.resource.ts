@@ -127,3 +127,18 @@ export const aiCustomProviderDeleteOp = createAsyncOp({
     restMirror: { method: 'DELETE', path: '/frontend/api/settings/ai-providers/custom/:provider_id' },
     onSuccess: _reloadAiProviders,
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/settings_load': typeof settingsLoadOp;
+        'frontend/settings_update': typeof settingsUpdateOp;
+        'frontend/ai_providers_load': typeof aiProvidersLoadOp;
+        'frontend/ai_provider_capability_put': typeof aiProviderCapabilityPutOp;
+        'frontend/ai_provider_capability_delete': typeof aiProviderCapabilityDeleteOp;
+        'frontend/ai_provider_llm_context_put': typeof aiProviderLlmContextPutOp;
+        'frontend/ai_provider_llm_context_delete': typeof aiProviderLlmContextDeleteOp;
+        'frontend/ai_custom_provider_create': typeof aiCustomProviderCreateOp;
+        'frontend/ai_custom_provider_update': typeof aiCustomProviderUpdateOp;
+        'frontend/ai_custom_provider_delete': typeof aiCustomProviderDeleteOp;
+    }
+}

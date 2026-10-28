@@ -14,12 +14,20 @@ import { formatFileSize } from '../utils/format-file-size.js';
 import './platform-icon.js';
 import './platform-user-chip.js';
 
-const RAG_INDEX_ICON_BY_STATUS = {
+const RAG_INDEX_ICON_BY_STATUS: Readonly<Record<string, string>> = {
     ready: 'check',
     pending: 'hourglass-top',
     failed: 'alert-triangle',
     absent: 'database',
 };
+
+function checkboxChecked(event: Event): boolean {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-file-row: checkbox target must be an input');
+    }
+    return target.checked;
+}
 
 const ITEM_KIND_FILE = 'file';
 const ITEM_KIND_CATALOG = 'catalog';
@@ -248,7 +256,7 @@ export class PlatformFileRow extends PlatformElement {
     }
 
     _onCheckboxChange(e: Event) {
-        const checked = (e.target as HTMLInputElement).checked;
+        const checked = checkboxChecked(e);
         this.emit('select-toggle', { itemKey: this.itemKey, selected: checked });
     }
 
@@ -295,7 +303,7 @@ export class PlatformFileRow extends PlatformElement {
 
     _renderIndexStatus() {
         const status = typeof this.indexStatus === 'string' ? this.indexStatus.trim() : '';
-        const iconName = (RAG_INDEX_ICON_BY_STATUS as Record<string, string | undefined>)[status];
+        const iconName = RAG_INDEX_ICON_BY_STATUS[status];
         if (!iconName) {
             return nothing;
         }

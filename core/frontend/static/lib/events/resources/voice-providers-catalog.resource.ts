@@ -33,3 +33,10 @@ export const flowsVoiceProvidersCatalogLoadOp = createAsyncOp({
         path: '/flows/api/v1/voice-providers/catalog',
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'voice/voice_providers_catalog_load': typeof companyVoiceProvidersCatalogLoadOp;
+        'flows/voice_providers_catalog_load': typeof flowsVoiceProvidersCatalogLoadOp;
+    }
+}

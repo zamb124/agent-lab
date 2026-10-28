@@ -37,21 +37,6 @@ export interface SyncChatUiSlice extends Record<string, unknown> {
     sidebarSearchScope: string;
 }
 
-export interface SyncChatUiController extends SliceController {
-    readonly value: SyncChatUiSlice | undefined;
-    toggleSelectionMode: SyncAction;
-    toggleMessageSelection: SyncAction;
-    clearSelection: SyncAction;
-    startDeletion: SyncAction;
-    finishDeletion: SyncAction;
-    openForward: SyncAction;
-    closeForward: SyncAction;
-    setPinnedIndex: SyncAction;
-    toggleSection: SyncAction;
-    hydrateSections: SyncAction;
-    setSidebarSearch: SyncAction;
-    setSidebarSearchScope: SyncAction;
-}
 
 // ============================================================================
 // sync/messages_store (messages.resource.ts)
@@ -82,25 +67,6 @@ export interface SyncMessagesStoreSlice extends Record<string, unknown> {
     flashSeq: number;
 }
 
-export interface SyncMessagesStoreController extends SliceController {
-    readonly value: SyncMessagesStoreSlice | undefined;
-    setReplyMode: SyncAction;
-    setEditMode: SyncAction;
-    showContextMenu: SyncAction;
-    dismissContextMenu: SyncAction;
-    addOptimistic: SyncAction;
-    failOptimistic: SyncAction;
-    resendOptimistic: SyncAction;
-    flash: SyncAction;
-    clearFlash: SyncAction;
-    startInitial: SyncAction;
-    loadedInitial: SyncAction;
-    failInitial: SyncAction;
-    startOlder: SyncAction;
-    startNewer: SyncAction;
-    loadedOlder: SyncAction;
-    loadedNewer: SyncAction;
-}
 
 // ============================================================================
 // sync/call_ui (calls.resource.ts)
@@ -119,16 +85,6 @@ export interface SyncCallUiSlice extends Record<string, unknown> {
     lastSignal: unknown;
 }
 
-export interface SyncCallUiController extends SliceController {
-    readonly value: SyncCallUiSlice | undefined;
-    openOverlay: SyncAction;
-    minimizeOverlay: SyncAction;
-    expandOverlay: SyncAction;
-    closeOverlay: SyncAction;
-    setOverlayChatOpen: SyncAction;
-    dismissIncoming: SyncAction;
-    setRecordingStatus: SyncAction;
-}
 
 // ============================================================================
 // sync/presence (presence.resource.ts)
@@ -151,15 +107,6 @@ export interface SyncCallPrefsSlice extends Record<string, unknown> {
     hydrated: boolean;
 }
 
-export interface SyncCallPrefsController extends SliceController {
-    readonly value: SyncCallPrefsSlice | undefined;
-    setCamera: SyncAction;
-    setNoiseSuppression: SyncAction;
-    setEchoCancellation: SyncAction;
-    setAutoGain: SyncAction;
-    setDeviceId: SyncAction;
-    setHydrated: SyncAction;
-}
 
 // ============================================================================
 // sync/threads (threads.resource.ts)
@@ -170,11 +117,6 @@ export interface SyncThreadsSlice extends ResourceCollectionSlice {
     byChannelId: Readonly<Record<string, readonly SyncItem[]>>;
 }
 
-export interface SyncThreadsController extends ResourceController {
-    readonly state: SyncThreadsSlice;
-    openThread: SyncAction;
-    closeThread: SyncAction;
-}
 
 // ============================================================================
 // Общие alias для `useOp`/`useResource` без специальных actions.
@@ -191,11 +133,4 @@ export interface SyncChannelsSlice extends ResourceCollectionSlice {
     membersByChannel: Readonly<Record<string, readonly SyncItem[]>>;
 }
 
-export interface SyncChannelsController extends ResourceController {
-    readonly state: SyncChannelsSlice;
-    selectChannel: SyncAction;
-    setOwnRead: SyncAction;
-}
 
-export type SyncOpController = OpController;
-export type SyncResourceController = ResourceController;

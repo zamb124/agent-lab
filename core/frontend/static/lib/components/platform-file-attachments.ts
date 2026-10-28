@@ -6,7 +6,17 @@
 import { html, css, nothing } from '../lit-shim.js';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
+
+function fileInput(event: Event): HTMLInputElement {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-file-attachments: file target must be an input');
+    }
+    return target;
+}
 import type { OpController } from '../base/use-resource.js';
+import type { FactoryNameOfKind } from '../events/factory-registry.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-icon.js';
@@ -26,37 +36,33 @@ interface FileAttachmentRef {
     [key: string]: unknown;
 }
 
-interface FileUploadResult {
-    file_id: string;
-    original_name: string;
-    content_type: string;
-    file_size: number;
-    url?: string;
-}
-
 function _fileRefFromUploadResult(result: unknown): FileAttachmentRef {
-    const res = result as Partial<FileUploadResult> | null | undefined;
-    if (!res || typeof res !== 'object') {
+    if (!isPlainRecord(result)) {
         throw new Error('platform-file-attachments: upload result must be object');
     }
-    if (typeof res.file_id !== 'string' || res.file_id.length === 0) {
+    const fileId = result.file_id;
+    const originalName = result.original_name;
+    const contentType = result.content_type;
+    const fileSize = result.file_size;
+    const url = result.url;
+    if (typeof fileId !== 'string' || fileId.length === 0) {
         throw new Error('platform-file-attachments: upload result.file_id required');
     }
-    if (typeof res.original_name !== 'string' || res.original_name.length === 0) {
+    if (typeof originalName !== 'string' || originalName.length === 0) {
         throw new Error('platform-file-attachments: upload result.original_name required');
     }
-    if (typeof res.content_type !== 'string' || res.content_type.length === 0) {
+    if (typeof contentType !== 'string' || contentType.length === 0) {
         throw new Error('platform-file-attachments: upload result.content_type required');
     }
-    if (typeof res.file_size !== 'number') {
+    if (typeof fileSize !== 'number') {
         throw new Error('platform-file-attachments: upload result.file_size required');
     }
     return {
-        file_id: res.file_id,
-        original_name: res.original_name,
-        content_type: res.content_type,
-        file_size: res.file_size,
-        url: typeof res.url === 'string' ? res.url : undefined,
+        file_id: fileId,
+        original_name: originalName,
+        content_type: contentType,
+        file_size: fileSize,
+        url: typeof url === 'string' ? url : undefined,
     };
 }
 
@@ -85,7 +91,7 @@ export class PlatformFileAttachments extends PlatformElement {
     };
     declare files: FileAttachmentRef[];
     declare readonly: boolean;
-    declare uploadOpName: string;
+    declare uploadOpName: FactoryNameOfKind<'async-op'>;
     declare uploadSpec: string;
     declare openSource: string;
     declare layout: string;
@@ -238,7 +244,7 @@ export class PlatformFileAttachments extends PlatformElement {
     }
 
     async _onFileSelected(event: Event): Promise<void> {
-        const input = event.target as HTMLInputElement;
+        const input = fileInput(event);
         const selected = input.files && input.files[0];
         input.value = '';
         if (!selected) {

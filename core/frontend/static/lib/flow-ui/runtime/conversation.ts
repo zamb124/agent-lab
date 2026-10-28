@@ -5,6 +5,7 @@
  * (``user_message`` / ``operator_reply`` в порядке артефактов), статус Task.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
 import { isSettledTaskState } from '../protocol/a2a-stream.js';
 import {
     CONVERSATION_SLOT_ID,
@@ -81,13 +82,26 @@ export interface ConversationTurn {
 type AnyRecord = Record<string, unknown>;
 
 function artifactsOf(task: FlowUiTask): AnyRecord[] {
-    return Array.isArray(task.artifacts) ? task.artifacts : [];
+    return Array.isArray(task.artifacts) ? task.artifacts.filter(isPlainRecord) : [];
 }
 
 function authorOf(artifact: AnyRecord): AnyRecord | null {
     const metadata = artifact.metadata;
-    const author = metadata && typeof metadata === 'object' ? (metadata as AnyRecord).author : null;
-    return author && typeof author === 'object' ? author as AnyRecord : null;
+    if (!isPlainRecord(metadata) || !isPlainRecord(metadata.author)) {
+        return null;
+    }
+    return metadata.author;
+}
+
+function taskStatus(task: FlowUiTask): AnyRecord | undefined {
+    return isPlainRecord(task.status) ? task.status : undefined;
+}
+
+function statusMessage(status: AnyRecord | undefined): AnyRecord | undefined {
+    if (status === undefined || !isPlainRecord(status.message)) {
+        return undefined;
+    }
+    return status.message;
 }
 
 /** FileRef из A2A file Part (клиентское вложение пользователя). */
@@ -104,8 +118,8 @@ function fileRefFromPart(file: { url: string; filename: string; mediaType: strin
 export function userMessageOfTask(task: FlowUiTask): ConversationTurnUser | null {
     const history = Array.isArray(task.history) ? task.history : [];
     for (const raw of history) {
-        if (!raw || typeof raw !== 'object') continue;
-        const message = raw as AnyRecord;
+        if (!isPlainRecord(raw)) continue;
+        const message = raw;
         if (message.role !== 'ROLE_USER') continue;
         if (typeof message.taskId === 'string' && message.taskId !== '' && message.taskId !== task.id) continue;
         const decoded = (Array.isArray(message.parts) ? message.parts : []).map(decodePart);
@@ -127,8 +141,8 @@ export function taskActivity(task: FlowUiTask, settings: FlowUiSettings, locale:
     const errors: FlowUiActivityItem[] = [];
     for (const artifact of artifactsOf(task)) {
         const name = typeof artifact.name === 'string' ? artifact.name : '';
-        const payload = firstDataFromParts(artifact.parts) as AnyRecord | null;
-        if (!payload || typeof payload !== 'object') continue;
+        const payload = firstDataFromParts(artifact.parts);
+        if (!isPlainRecord(payload)) continue;
         if (name.startsWith('node_error_')) {
             const detail = typeof payload.error === 'string' ? payload.error : '';
             errors.push({
@@ -149,9 +163,8 @@ export function taskActivity(task: FlowUiTask, settings: FlowUiSettings, locale:
         if (detailed && !isResult && payload.args && typeof payload.args === 'object') detail = JSON.stringify(payload.args);
         if (detailed && isResult && typeof payload.result === 'string') detail = payload.result.slice(0, 160);
         const args = payload.args;
-        const skillId = args && typeof args === 'object'
-            && typeof (args as AnyRecord).agent_skill_id === 'string'
-            ? (args as AnyRecord).agent_skill_id as string
+        const skillId = isPlainRecord(args) && typeof args.agent_skill_id === 'string'
+            ? args.agent_skill_id
             : '';
         byId.set(payload.tool_call_id, {
             id: payload.tool_call_id,
@@ -161,7 +174,7 @@ export function taskActivity(task: FlowUiTask, settings: FlowUiSettings, locale:
             status: isResult || (previous && previous.status === 'done') ? 'done' : 'running',
         });
     }
-    if (isSettledTaskState((task.status as AnyRecord | undefined)?.state)) {
+    if (isSettledTaskState(taskStatus(task)?.state)) {
         for (const item of byId.values()) if (item.status === 'running') item.status = 'done';
     }
     return [...byId.values(), ...errors];
@@ -169,12 +182,10 @@ export function taskActivity(task: FlowUiTask, settings: FlowUiSettings, locale:
 
 /** Карточки агента в ленте: рендеры одного ``block_id`` заменяют друг друга на месте первого. */
 export function taskCards(task: FlowUiTask): AnyRecord[] {
-    const byId = task.artifactsById && typeof task.artifactsById === 'object'
-        ? task.artifactsById as Record<string, unknown>
-        : null;
+    const byId = isPlainRecord(task.artifactsById) ? task.artifactsById : null;
     const artifact = byId ? byId[UI_ARTIFACT_ID] : null;
-    if (!artifact || typeof artifact !== 'object') return [];
-    const parts = (artifact as AnyRecord).parts;
+    if (!isPlainRecord(artifact)) return [];
+    const parts = artifact.parts;
     const cards = new Map<unknown, AnyRecord>();
     for (const part of Array.isArray(parts) ? parts : []) {
         const decoded = decodePart(part);
@@ -183,8 +194,8 @@ export function taskCards(task: FlowUiTask): AnyRecord[] {
         if (event.kind !== 'render' || event.slot_id !== CONVERSATION_SLOT_ID) continue;
         const blocks = Array.isArray(event.blocks) ? event.blocks : [];
         for (const block of blocks) {
-            if (!block || typeof block !== 'object') continue;
-            cards.set((block as AnyRecord).block_id, block as AnyRecord);
+            if (!isPlainRecord(block)) continue;
+            cards.set(block.block_id, block);
         }
     }
     return [...cards.values()];
@@ -211,10 +222,10 @@ export function taskDialogue(task: FlowUiTask): ConversationTurnDialogueItem[] {
 }
 
 export function taskErrorText(task: FlowUiTask, settings: FlowUiSettings, locale: string): string {
-    const status = task.status as AnyRecord | undefined;
+    const status = taskStatus(task);
     if (status?.state !== 'TASK_STATE_FAILED') return '';
     if (settings.errors === 'detailed') {
-        const message = status.message as AnyRecord | undefined;
+        const message = statusMessage(status);
         const detail = textFromParts(message?.parts);
         if (detail !== '') return detail;
     }
@@ -241,7 +252,7 @@ function interruptWithoutEcho(interrupt: FlowUiTaskInterrupt | null, text: strin
  * }}
  */
 export function conversationTurn(task: FlowUiTask, settings: FlowUiSettings, locale: string): ConversationTurn {
-    const status = task.status as AnyRecord | undefined;
+    const status = taskStatus(task);
     const state = typeof status?.state === 'string' ? status.state : 'TASK_STATE_SUBMITTED';
     const settled = isSettledTaskState(state);
     const responseArtifact = artifactsOf(task).find((artifact) => artifact.name === RESPONSE_ARTIFACT_NAME);
@@ -249,11 +260,11 @@ export function conversationTurn(task: FlowUiTask, settings: FlowUiSettings, loc
     let text = taskText(task, RESPONSE_ARTIFACT_NAME);
     if (text === '' && interrupt !== null && interrupt.kind === 'user_message') text = interrupt.question;
     if (text === '' && state === 'TASK_STATE_COMPLETED') {
-        const message = status?.message as AnyRecord | undefined;
+        const message = statusMessage(status);
         text = textFromParts(message?.parts);
     }
     return {
-        taskId: String(task.id || ''),
+        taskId: typeof task.id === 'string' ? task.id : '',
         state,
         settled,
         user: userMessageOfTask(task),
@@ -276,11 +287,12 @@ export function conversationTurns(store: FlowUiStoreLike, settings: FlowUiSettin
 export function sessionFiles(store: FlowUiStoreLike): AnyRecord[] {
     const byKey = new Map<string, AnyRecord>();
     const put = (ref: unknown) => {
-        if (!ref || typeof ref !== 'object') return;
-        const record = ref as AnyRecord;
+        if (!isPlainRecord(ref)) return;
+        const record = ref;
         const key = typeof record.file_id === 'string' && record.file_id !== '' ? record.file_id : record.url;
         if (typeof key !== 'string' || key === '') return;
-        byKey.set(key, { ...(byKey.get(key) || {}), ...record });
+        const previous = byKey.get(key);
+        byKey.set(key, { ...(previous === undefined ? {} : previous), ...record });
     };
     for (const task of store.orderedTasks()) {
         const user = userMessageOfTask(task);

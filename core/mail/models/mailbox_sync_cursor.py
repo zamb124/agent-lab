@@ -99,7 +99,8 @@ class MailboxSyncCursor(PlatformModel):
         return existing
 
     @classmethod
-    async def delete_by_mailbox_binding(cls, mailbox_binding_id: str, *, folder: str) -> bool:
+    async def delete_by_mailbox_binding_and_folder(cls, mailbox_binding_id: str, *, folder: str) -> bool:
+        """Удаляет курсор ящика в папке. Нет строки — False. Пустые mailbox_binding_id и folder — ValueError."""
         deleted = await cls.objects.filter(
             mailbox_binding_id=mail_required(mailbox_binding_id, "mailbox_binding_id"),
             folder=mail_required(folder, "folder"),

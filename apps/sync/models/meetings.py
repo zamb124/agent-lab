@@ -89,7 +89,8 @@ class SyncCallRecording(PlatformModel):
         _ = await query.update(using="sync", status=status)
 
     @classmethod
-    async def list_for_call(cls, call_id: str, company_id: str) -> list[Self]:
+    async def list_by_created_at_desc_for_call(cls, call_id: str, company_id: str) -> list[Self]:
+        """Записи звонка компании, ORDER BY created_at DESC. Предела нет."""
         return await cls.objects.filter(
             call_id=call_id,
             company_id=company_id,

@@ -318,7 +318,7 @@ class FlowsLoader:
         if flow_config is None:
             return None
 
-        previous = await FlowConfig.get_latest(flow_config.flow_id)
+        previous = await FlowConfig.current_for_flow(flow_config.flow_id)
         _ = await FlowConfig.create_version(flow_config)
         try:
             await self._sync_loaded_flow(flow_config)

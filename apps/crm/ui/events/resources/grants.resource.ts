@@ -12,17 +12,20 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function grantIdOf(value: unknown): string {
+    if (!isPlainRecord(value) || typeof value.grant_id !== 'string') return '';
+    return value.grant_id;
+}
 
 const GRANT_CREATE_SUCCEEDED = 'crm/grant_create/succeeded';
 const GRANT_REVOKE_SUCCEEDED = 'crm/grant_revoke/succeeded';
 
-function _sameResource(listRequest: unknown, grant: Record<string, any>) {
-    return (
-        listRequest !== null
-        && typeof listRequest === 'object'
-        && (listRequest as Record<string, unknown>).resource_type === grant.resource_type
-        && (listRequest as Record<string, unknown>).resource_id === grant.resource_id
-    );
+function _sameResource(listRequest: unknown, grant: Record<string, unknown>) {
+    if (!isPlainRecord(listRequest)) return false;
+    return listRequest.resource_type === grant.resource_type
+        && listRequest.resource_id === grant.resource_id;
 }
 
 /**
@@ -36,30 +39,35 @@ export const grantsListOp = createAsyncOp({
     commandType: 'crm/grants/list_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/grants' },
     extraReducer: (state, event) => {
-        const page = state.lastResult as { items?: unknown; total?: unknown } | null | undefined;
-        if (!page || !Array.isArray(page.items) || !state.lastRequest) {
+        const page = isPlainRecord(state.lastResult) ? state.lastResult : null;
+        const items = page === null ? undefined : page.items;
+        if (page === null || !Array.isArray(items) || !state.lastRequest) {
             return state;
         }
         if (event.type === GRANT_CREATE_SUCCEEDED) {
-            const grant = (event.payload as Record<string, any>).result;
-            if (!grant || typeof grant.grant_id !== 'string' || !_sameResource(state.lastRequest.payload, grant)) {
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const grant = payload !== null && isPlainRecord(payload.result) ? payload.result : null;
+            if (grant === null || typeof grant.grant_id !== 'string' || !_sameResource(state.lastRequest.payload, grant)) {
                 return state;
             }
-            if (page.items.some((item) => item && (item as Record<string, any>).grant_id === grant.grant_id)) {
+            if (items.some((item) => grantIdOf(item) === grant.grant_id)) {
                 return state;
             }
-            const total = typeof page.total === 'number' ? page.total + 1 : page.total;
-            return { ...state, lastResult: { ...page, items: [...page.items, grant], total } };
+            const totalValue = page.total;
+            const total = typeof totalValue === 'number' ? totalValue + 1 : totalValue;
+            return { ...state, lastResult: { ...page, items: [...items, grant], total } };
         }
         if (event.type === GRANT_REVOKE_SUCCEEDED) {
-            const request = (event.payload as Record<string, any>).request;
-            const grantId = request && typeof request.grant_id === 'string' ? request.grant_id : '';
-            if (grantId.length === 0 || !page.items.some((item) => item && (item as Record<string, any>).grant_id === grantId)) {
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const request = payload !== null && isPlainRecord(payload.request) ? payload.request : null;
+            const grantId = request !== null && typeof request.grant_id === 'string' ? request.grant_id : '';
+            if (grantId.length === 0 || !items.some((item) => grantIdOf(item) === grantId)) {
                 return state;
             }
-            const items = page.items.filter((item) => !item || (item as Record<string, any>).grant_id !== grantId);
-            const total = typeof page.total === 'number' ? Math.max(0, page.total - 1) : page.total;
-            return { ...state, lastResult: { ...page, items, total } };
+            const nextItems = items.filter((item) => grantIdOf(item) !== grantId);
+            const totalValue = page.total;
+            const total = typeof totalValue === 'number' ? Math.max(0, totalValue - 1) : totalValue;
+            return { ...state, lastResult: { ...page, items: nextItems, total } };
         }
         return state;
     },
@@ -93,3 +101,12 @@ export const grantRevokeOp = createAsyncOp({
     commandType: 'crm/grants/remove_requested',
     restMirror: { method: 'DELETE', path: '/crm/api/v1/grants/:grant_id' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/grants_list': typeof grantsListOp;
+        'crm/grant_create': typeof grantCreateOp;
+        'crm/grant_item': typeof grantItemOp;
+        'crm/grant_revoke': typeof grantRevokeOp;
+    }
+}

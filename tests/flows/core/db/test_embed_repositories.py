@@ -49,7 +49,7 @@ async def test_embed_config_list_is_company_scoped(unique_id: str) -> None:
     await EmbedConfig.set(_config(id_a, company_a, "A"))
     await EmbedConfig.set(_config(id_b, company_b, "B"))
     try:
-        listed = await EmbedConfig.list_for_company(company_a, limit=100, offset=0)
+        listed = await EmbedConfig.list_unordered_window_for_company(company_a, limit=100, offset=0)
         ids = {item.embed_id for item in listed}
         assert id_a in ids
         assert id_b not in ids

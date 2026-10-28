@@ -6,10 +6,12 @@
  * собранного бандла платформы.
  */
 
+import { isPlainRecord } from '../events/payload.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import { resolvePlatformFilesApiBase } from '../utils/platform-files-url.js';
 import type { CmCompartmentLike, CmEditorViewLike, CmModule } from '../codemirror/variable-extensions.js';
 import type { PmNodeLike, PmViewLike } from './pm-types.js';
+import { attrString } from './wiki-schema-builder.js';
 import '../components/platform-icon.js';
 
 export const CODEMIRROR_BUNDLE_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
@@ -30,9 +32,33 @@ export const CODE_BLOCK_LANGUAGES = Object.freeze([
 
 let _cmBundlePromise: Promise<CmModule> | null = null;
 
+function isOfMethod(value: unknown): boolean {
+    return isPlainRecord(value) && typeof value.of === 'function';
+}
+
+function isCmModule(value: unknown): value is CmModule {
+    if (!isPlainRecord(value)) return false;
+    if (!isPlainRecord(value.EditorState) || typeof value.EditorState.create !== 'function') return false;
+    if (!isOfMethod(value.EditorState.readOnly)) return false;
+    if (typeof value.EditorView !== 'function') return false;
+    if (!('theme' in value.EditorView) || typeof value.EditorView.theme !== 'function') return false;
+    if (!('updateListener' in value.EditorView) || !isOfMethod(value.EditorView.updateListener)) return false;
+    if (!('lineWrapping' in value.EditorView)) return false;
+    if (typeof value.Compartment !== 'function' || typeof value.json !== 'function') return false;
+    if (typeof value.history !== 'function' || typeof value.syntaxHighlighting !== 'function') return false;
+    if (!isPlainRecord(value.keymap) || typeof value.keymap.of !== 'function') return false;
+    if (!Array.isArray(value.defaultKeymap) || !Array.isArray(value.historyKeymap)) return false;
+    return 'defaultHighlightStyle' in value;
+}
+
 export function loadCodeMirrorBundle(): Promise<CmModule> {
     if (_cmBundlePromise === null) {
-        _cmBundlePromise = import(CODEMIRROR_BUNDLE_URL) as Promise<CmModule>;
+        _cmBundlePromise = import(CODEMIRROR_BUNDLE_URL).then((mod: unknown) => {
+            if (!isCmModule(mod)) {
+                throw new Error('wiki-editor-nodeviews: codemirror bundle is not CmModule');
+            }
+            return mod;
+        });
     }
     return _cmBundlePromise;
 }
@@ -252,7 +278,7 @@ class CodeBlockNodeView {
 
         this.dom = document.createElement('div');
         this.dom.className = 'pm-code-block';
-        this.dom.dataset.language = String(node.attrs.language || '');
+        this.dom.dataset.language = attrString(node.attrs.language);
 
         this.toolbar = document.createElement('div');
         this.toolbar.className = 'pm-code-block-toolbar';
@@ -266,7 +292,7 @@ class CodeBlockNodeView {
             option.textContent = language.label;
             this.select.appendChild(option);
         }
-        this.select.value = String(node.attrs.language || '');
+        this.select.value = attrString(node.attrs.language);
         this.select.disabled = !options.isEditable();
         this.select.addEventListener('mousedown', (event) => event.stopPropagation());
         this.select.addEventListener('change', (event) => {
@@ -330,7 +356,7 @@ class CodeBlockNodeView {
                 cm.keymap.of([...cm.defaultKeymap, ...cm.historyKeymap]),
                 cm.history(),
                 cm.EditorView.lineWrapping,
-                this.languageCompartment.of(languageExtension(cm, String(this.node.attrs.language || ''))),
+                this.languageCompartment.of(languageExtension(cm, attrString(this.node.attrs.language))),
                 this.readonlyCompartment.of(cm.EditorState.readOnly.of(!this.options.isEditable())),
                 ...themeExtensions,
                 cm.EditorView.updateListener.of((update) => {
@@ -356,10 +382,10 @@ class CodeBlockNodeView {
         }
         this.cm.dispatch({
             effects: this.languageCompartment.reconfigure(
-                languageExtension(this._cmModule, language || ''),
+                languageExtension(this._cmModule, language),
             ),
         });
-        this.dom.dataset.language = language || '';
+        this.dom.dataset.language = language;
     }
 
     _forwardToProseMirror(): void {
@@ -384,9 +410,9 @@ class CodeBlockNodeView {
             return false;
         }
         this.node = node;
-        this.select.value = String(node.attrs.language || '');
+        this.select.value = attrString(node.attrs.language);
         this.select.disabled = !this.options.isEditable();
-        this.dom.dataset.language = String(node.attrs.language || '');
+        this.dom.dataset.language = attrString(node.attrs.language);
 
         if (this.cm !== null && this.readonlyCompartment !== null && this._cmModule !== null) {
             this.cm.dispatch({
@@ -394,7 +420,7 @@ class CodeBlockNodeView {
                     this._cmModule.EditorState.readOnly.of(!this.options.isEditable()),
                 ),
             });
-            this._reconfigureLanguage(String(node.attrs.language || ''));
+            this._reconfigureLanguage(attrString(node.attrs.language));
             const text = node.textContent;
             if (this.cm.state.doc.toString() !== text) {
                 this.updating = true;
@@ -488,7 +514,7 @@ class PlatformFileNodeView {
     }
 
     _open(): void {
-        const fileId = String(this.node.attrs.file_id || '');
+        const fileId = attrString(this.node.attrs.file_id);
         if (typeof this.options.onOpenFile === 'function') {
             this.options.onOpenFile(fileId);
             return;
@@ -497,11 +523,11 @@ class PlatformFileNodeView {
     }
 
     _sync(): void {
-        const fileId = String(this.node.attrs.file_id || '');
+        const fileId = attrString(this.node.attrs.file_id);
         const name = String(this.node.attrs.original_name || fileId);
-        const contentType = String(this.node.attrs.content_type || '');
+        const contentType = attrString(this.node.attrs.content_type);
         this.dom.dataset.fileId = fileId;
-        this.dom.dataset.name = String(this.node.attrs.original_name || '');
+        this.dom.dataset.name = attrString(this.node.attrs.original_name);
         this.dom.dataset.contentType = contentType;
         this.dom.setAttribute('aria-label', name);
         this._name.textContent = name;

@@ -139,7 +139,7 @@ async def handle_call_invite(
     if existing is not None:
         now = datetime.now(UTC)
         await SyncCall.mark_call_status(existing.call_id, "ended", ended_at=now)
-        for participant_row in await SyncCallParticipant.list_for_call(existing.call_id):
+        for participant_row in await SyncCallParticipant.list_unordered_for_call(existing.call_id):
             if participant_row.status == "joined":
                 await SyncCallParticipant.mark_call_participant_status(
                     existing.call_id,
@@ -196,7 +196,7 @@ async def handle_call_invite(
         )
         _ = await SyncCallParticipant.set(participant)
 
-    participants = await SyncCallParticipant.list_for_call(call.call_id)
+    participants = await SyncCallParticipant.list_unordered_for_call(call.call_id)
     call_read = call_read_from_entities(call, participants)
 
     ch_entity = await SyncChannel.get(payload.channel_id)
@@ -255,7 +255,7 @@ async def handle_call_accept(
         await SyncCall.mark_call_status(payload.call_id, "active", started_at=now)
         became_active = True
 
-    participants = await SyncCallParticipant.list_for_call(payload.call_id)
+    participants = await SyncCallParticipant.list_unordered_for_call(payload.call_id)
     call_read = call_read_from_entities(
         await SyncCall.require_company_call(payload.call_id, company_id), participants
     )
@@ -294,7 +294,7 @@ async def handle_call_decline(
     await SyncCallParticipant.mark_call_participant_status(
         payload.call_id, actor_user_id, "declined"
     )
-    participants = await SyncCallParticipant.list_for_call(payload.call_id)
+    participants = await SyncCallParticipant.list_unordered_for_call(payload.call_id)
     call_read = call_read_from_entities(call, participants)
 
     recipients = await _call_event_recipients(
@@ -333,7 +333,7 @@ async def handle_call_hangup(
         left_at=now,
     )
 
-    participants = await SyncCallParticipant.list_for_call(payload.call_id)
+    participants = await SyncCallParticipant.list_unordered_for_call(payload.call_id)
     active_count = sum(1 for p in participants if p.status == "joined")
 
     recipients = await _call_event_recipients(
@@ -396,7 +396,7 @@ async def handle_call_hangup(
                 started_at=ended_call.started_at,
                 ended_at=ended_call.ended_at,
             )
-        final_participants = await SyncCallParticipant.list_for_call(payload.call_id)
+        final_participants = await SyncCallParticipant.list_unordered_for_call(payload.call_id)
         call_read = call_read_from_entities(ended_call, final_participants)
         events.append(
             event_call_ended(

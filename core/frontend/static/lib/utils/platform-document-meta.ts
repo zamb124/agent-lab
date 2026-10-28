@@ -11,8 +11,8 @@ export function applyPlatformDocumentMeta(brand: import('./platform-brand.js').P
     if (typeof document === 'undefined' || !brand) {
         return;
     }
-    const origin = (brand.apexOrigin ?? '').replace(/\/$/, '');
-    const platformName = brand.platformName ?? '';
+    const origin = brand.apexOrigin.replace(/\/$/, '');
+    const platformName = brand.platformName;
     document.title = `${platformName} — платформа автоматизации бизнеса`;
 
     const setMeta = (selector: string, attr: string, value: string) => {

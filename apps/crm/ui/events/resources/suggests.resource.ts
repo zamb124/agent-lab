@@ -80,3 +80,11 @@ export const suggestDismissOp = createAsyncOp({
         path: '/crm/api/v1/namespaces/:namespace/suggests/:suggest_id/dismiss',
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/suggests_list': typeof suggestsListOp;
+        'crm/suggest_resolve': typeof suggestResolveOp;
+        'crm/suggest_dismiss': typeof suggestDismissOp;
+    }
+}

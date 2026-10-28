@@ -12,6 +12,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 
 const CATALOG_ACCESS_GET = 'office/catalog_access_get';
 const CATALOG_ACCESS_PATCH = 'office/catalog_access_update';
@@ -194,6 +195,29 @@ export class OfficeAccessModal extends PlatformFormModal {
     private _accessRotate: OpController | null;
     private _companyMembers: OpController | null;
 
+    private _requireMembers(): OpController {
+        const op = this._companyMembers;
+        if (op === null) throw new Error('office.access: company members op required');
+        return op;
+    }
+
+    private _requireAccessGet(): OpController {
+        const op = this._accessGet;
+        if (op === null) throw new Error('office.access: access get op required');
+        return op;
+    }
+
+    private _requireAccessRotate(): OpController {
+        const op = this._accessRotate;
+        if (op === null) throw new Error('office.access: access rotate op required');
+        return op;
+    }
+
+    private _requireAccessPatch(): OpController {
+        const op = this._accessPatch;
+        if (op === null) throw new Error('office.access: access patch op required');
+        return op;
+    }
 
     override connectedCallback(): void {
         super.connectedCallback();
@@ -208,7 +232,7 @@ export class OfficeAccessModal extends PlatformFormModal {
         );
         this._companyMembers = this.useOp(COMPANY_MEMBERS);
         void this._loadAccess();
-        this._companyMembers!.run(null);
+        this._requireMembers().run(null);
     }
 
     private async _loadAccess() {
@@ -216,7 +240,7 @@ export class OfficeAccessModal extends PlatformFormModal {
         const payload = this.resourceKind === 'binding'
             ? { file_id: this.resourceId }
             : { catalog_id: this.resourceId };
-        const data = await this._accessGet!.run(payload) as Record<string, unknown> | null;
+        const data = await this._requireAccessGet().run(payload) as Record<string, unknown> | null;
         if (data) {
             this._companyVisible = data.company_visible === true;
             this._linkEnabled = data.link_enabled === true;
@@ -287,7 +311,7 @@ export class OfficeAccessModal extends PlatformFormModal {
     }
 
     private _companyMemberItems(): Array<Record<string, unknown>> {
-        const result = this._companyMembers!.lastResult as { items?: unknown } | null;
+        const result = this._requireMembers().lastResult as { items?: unknown } | null;
         if (result == null) {
             return [];
         }
@@ -311,16 +335,10 @@ export class OfficeAccessModal extends PlatformFormModal {
     }
 
     private async _copyPublicUrl() {
-        if (this._publicUrl.length === 0) return;
-        if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-            return;
+        if (this._publicUrl.length === 0) {
+            throw new Error('office.access: public url is empty');
         }
-        try {
-            await navigator.clipboard.writeText(this._publicUrl);
-        } catch {
-            // Permission denied / insecure context — URL уже показан в модалке.
-            return;
-        }
+        await copyTextToClipboard(this._publicUrl);
         this.toast('access.linkCopied', { namespace: 'documents' });
     }
 
@@ -328,7 +346,7 @@ export class OfficeAccessModal extends PlatformFormModal {
         const payload = this.resourceKind === 'binding'
             ? { file_id: this.resourceId, origin: window.location.origin }
             : { catalog_id: this.resourceId, origin: window.location.origin };
-        const result = await this._accessRotate!.run(payload) as Record<string, unknown> | null;
+        const result = await this._requireAccessRotate().run(payload) as Record<string, unknown> | null;
         if (!result || typeof result.public_url !== 'string' || result.public_url.length === 0) {
             return;
         }
@@ -354,7 +372,7 @@ export class OfficeAccessModal extends PlatformFormModal {
                 link_permission: this._linkPermission,
                 members: this._companyVisible ? null : this._buildMembersPayload(),
             };
-        const result = await this._accessPatch!.run(patchPayload) as Record<string, unknown> | null;
+        const result = await this._requireAccessPatch().run(patchPayload) as Record<string, unknown> | null;
         if (result) {
             if (typeof result.public_url === 'string' && result.public_url.length > 0) {
                 this._publicUrl = result.public_url;

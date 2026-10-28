@@ -61,7 +61,11 @@ export class PlatformFieldObject extends PlatformElement {
     }
 
     _onInput(e: InputEvent): void {
-        const raw = (e.target as HTMLTextAreaElement).value.trim();
+        const target = e.target;
+        if (!(target instanceof HTMLTextAreaElement)) {
+            throw new Error('platform-field-object: input target must be a textarea');
+        }
+        const raw = target.value.trim();
         if (raw === '') {
             this._jsonError = '';
             this.requestUpdate();
@@ -82,7 +86,8 @@ export class PlatformFieldObject extends PlatformElement {
                 bubbles: true,
                 composed: true,
             }));
-        } catch {
+        } catch (err) {
+            if (!(err instanceof SyntaxError)) throw err;
             this._jsonError = 'Invalid JSON';
             this.requestUpdate();
         }

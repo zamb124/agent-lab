@@ -176,7 +176,7 @@ async def _authorize_viewer_claims(
         return
 
     if claims.viewer_scope == "catalog":
-        binding_row = await FileRecord.for_company(claims.file_id, claims.company_id)
+        binding_row = await FileRecord.by_file_id(claims.file_id, claims.company_id)
         if binding_row is None or binding_row.catalog_id is None:
             raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
         return

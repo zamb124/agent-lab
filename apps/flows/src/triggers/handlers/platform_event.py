@@ -271,7 +271,7 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
         payload: JsonObject,
     ) -> JsonObject:
         """Ручной прогон триггера (тесты); боевой вход — consumer шины."""
-        flow_config = await FlowConfig.get_latest(flow_id)
+        flow_config = await FlowConfig.current_for_flow(flow_id)
         if flow_config is None:
             raise TriggerValidationError(f"Flow not found: {flow_id}")
         trigger = flow_config.triggers.get(trigger_id)
@@ -344,7 +344,7 @@ async def dispatch_platform_event_triggers(
                 continue
 
             index_key = platform_event_trigger_index_key(event.type)
-            flow_config = await FlowConfig.get_latest(flow_id)
+            flow_config = await FlowConfig.current_for_flow(flow_id)
             if flow_config is None:
                 logger.warning("flows.platform.event.trigger.dispatch.flow", flow_id=flow_id)
                 _ = await redis_client.srem(index_key, member)

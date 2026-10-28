@@ -702,8 +702,9 @@ def assemble_service_app(
     # Статические файлы
     if static_mounts:
         for mount_path, directory, name in static_mounts:
-            if Path(directory).exists():
-                app.mount(mount_path, StaticFiles(directory=directory), name=name)
+            if not Path(directory).is_dir():
+                raise FileNotFoundError(f"static mount {name}: directory not found: {directory}")
+            app.mount(mount_path, StaticFiles(directory=directory), name=name)
 
     if mount_repo_documentation:
         mount_documentation_static(
@@ -753,68 +754,6 @@ def assemble_service_app(
     async def root() -> JsonObject:
         return {"service": service_name, "version": version, "status": "running"}
     _ = root
-
-    # Тестовый endpoint (ТОЛЬКО в TESTING режиме)
-    if is_testing():
-
-        @app.get(f"/{service_name}/test", response_class=HTMLResponse)
-        async def test_page() -> str:
-            """
-            Универсальная пустая страница для E2E UI тестов.
-
-            Доступна ТОЛЬКО в TESTING режиме на всех сервисах:
-            - CRM: http://localhost:9003/crm/test
-            - Frontend: http://localhost:9004/frontend/test
-            - Agents: http://localhost:9001/agents/test
-            - RAG: http://localhost:9002/rag/test
-
-            Страница пустая для тестирования компонентов
-
-            Предоставляет:
-            - importmap для lit (локальные пути /static/core/assets/js/lit/)
-            - Доступ к /static/core/* (все core компоненты)
-            - Пустой контейнер #test-root
-            """
-            return """<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>E2E Test Page</title>
-    <script type="importmap">
-    {
-        "imports": {
-            "lit": "/static/core/assets/js/lit/lit.min.js",
-            "lit/decorators.js": "/static/core/assets/js/lit/decorators.min.js",
-            "lit/directives/class-map.js": "/static/core/assets/js/lit/directives/class-map.min.js",
-            "lit/directives/repeat.js": "/static/core/assets/js/lit/directives/repeat.min.js",
-            "lit/directives/unsafe-html.js": "/static/core/assets/js/lit/directives/unsafe-html.min.js",
-            "lit/directives/when.js": "/static/core/assets/js/lit/directives/when.min.js",
-            "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
-            "@platform/lib/": "/static/core/lib/"
-        }
-    }
-    </script>
-    <style>
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            padding: 2rem;
-        }
-        #test-root {
-            min-height: 200px;
-        }
-    </style>
-</head>
-<body>
-    <div id="test-root"></div>
-</body>
-</html>"""
-        _ = test_page
-
-        logger.info(
-            "service.test_endpoint_enabled",
-            service=service_name,
-            path=f"/{service_name}/test",
-        )
 
     if resolved_cors_allow_origin_regex is None:
         app.add_middleware(

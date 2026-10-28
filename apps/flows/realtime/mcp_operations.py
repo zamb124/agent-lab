@@ -87,7 +87,7 @@ async def _require_server(
     di: Di, server_id: str
 ) -> MCPServerConfig:
     _ = di
-    server = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+    server = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
     if server is None:
         raise_not_found(LookupError("Server not found"))
     return server
@@ -144,7 +144,7 @@ async def op_flows_mcp_servers_create(
 ) -> MCPServerConfig:
     _ = user
     _ = await require_company_member(di)
-    existing = await MCPServerConfig.get(MCPServerConfig.row_id(payload.server_id))
+    existing = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(payload.server_id))
     if existing is not None:
         raise_conflict(ValueError(f"Server {payload.server_id} already exists"))
     server = MCPServerConfig(
@@ -209,11 +209,11 @@ async def op_flows_mcp_servers_remove(
     server = await _require_server(di, payload.server_id)
     for tool_id in server.cached_tools:
         require_not_builtin_tool_id(tool_id, source="mcp cached_tools")
-        _ = await ToolReference.delete_by_id(ToolReference.row_id(tool_id))
+        _ = await ToolReference.delete_by_id(ToolReference.row_id_for_active_company(tool_id))
         await di.flow_access_service.sync_tool_deleted(
             tool_id, company_id=scope.company_id
         )
-    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(payload.server_id))
+    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.server_row_id_for_active_company(payload.server_id))
     return MCPServerDeletedResponse(status="deleted", server_id=payload.server_id)
 
 
@@ -296,7 +296,7 @@ async def op_flows_mcp_servers_reset_catalog_defaults(
         raise_upstream(exc)
     except ValueError as exc:
         raise_invalid(exc)
-    stored = await MCPServerConfig.get(MCPServerConfig.row_id(payload.server_id))
+    stored = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(payload.server_id))
     if stored is None:
         raise_not_found(LookupError("Server not found after reset"))
     return await attach_mcp_server_icon(di, stored)

@@ -9,6 +9,13 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function joinedLines(value: unknown, label: string): string {
+    if (value === undefined || value === null) return '';
+    if (!Array.isArray(value)) throw new Error(`crawl profile: ${label} must be an array`);
+    return value.map((item) => String(item)).join('\n');
+}
 
 export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
     static modalKind = 'frontend.crawl_profile_settings';
@@ -111,10 +118,10 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
             this._sitemapStale = String(p.sitemap_stale_after_seconds);
             this._browserFallback = p.browser_fallback_enabled;
             this._llmEnrichment = p.llm_enrichment_enabled;
-            this._denylistDomains = (p.denylist_domains || []).join('\n');
-            this._includePatterns = (p.include_url_patterns || []).join('\n');
-            this._excludePatterns = (p.exclude_url_patterns || []).join('\n');
-            this._excludeExtensions = (p.exclude_extensions || []).join('\n');
+            this._denylistDomains = joinedLines(p.denylist_domains, 'denylist_domains');
+            this._includePatterns = joinedLines(p.include_url_patterns, 'include_url_patterns');
+            this._excludePatterns = joinedLines(p.exclude_url_patterns, 'exclude_url_patterns');
+            this._excludeExtensions = joinedLines(p.exclude_extensions, 'exclude_extensions');
         }
     }
 
@@ -197,7 +204,11 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
                     mode="edit"
                     label=${this.t(labelKey)}
                     .value=${value}
-                    @change=${(e: CustomEvent) => setter(String(e.detail.value ?? ''))}
+                    @change=${(e: CustomEvent) => {
+                        if (!isPlainRecord(e.detail)) throw new Error('crawl profile: detail.value required');
+                        const raw = e.detail.value;
+                        setter(raw === undefined || raw === null ? '' : String(raw));
+                    }}
                 ></platform-field>
                 ${helpKey ? html`<div class="field-help">${this.t(helpKey)}</div>` : null}
             </div>

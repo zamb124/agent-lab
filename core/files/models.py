@@ -228,7 +228,8 @@ class FileRecord(PlatformModel):
         return affected == 1
 
     @classmethod
-    async def list_pending_authz(cls, *, limit: int) -> list[Self]:
+    async def list_pending_authz_with_catalog_by_created_at(cls, *, limit: int) -> list[Self]:
+        """Файлы с пустым authz_synced_at и непустым catalog_id, ORDER BY created_at, не больше limit."""
         return await (
             cls.objects.filter(authz_synced_at__isnull=True, catalog_id__isnull=False)
             .order_by("created_at")
@@ -253,7 +254,8 @@ class FileRecord(PlatformModel):
         return await cls.objects.filter(catalog_id=catalog_id).count()
 
     @classmethod
-    async def for_company(cls, file_id: str, company_id: str) -> Self | None:
+    async def by_file_id(cls, file_id: str, company_id: str) -> Self | None:
+        """Строка по file_id в компании. Нет строки — None. Пустые идентификаторы не проверяются."""
         return await cls.objects.filter(file_id=file_id, company_id=company_id).get_or_none()
 
     @classmethod
@@ -261,7 +263,14 @@ class FileRecord(PlatformModel):
         return await cls.objects.filter(company_id=company_id, deleted_at__isnull=True, catalog_id__isnull=False).count()
 
     @classmethod
-    async def search_alive(cls, company_id: str, catalog_ids: list[str], title_query: str, limit: int) -> list[Self]:
+    async def list_alive_by_original_name(
+        cls,
+        company_id: str,
+        catalog_ids: list[str],
+        title_query: str,
+        limit: int,
+    ) -> list[Self]:
+        """Живые файлы компании в каталогах, у которых original_name содержит title_query. Порядок — updated_at по убыванию, не больше limit. Пустой список каталогов — []."""
         if not catalog_ids:
             return []
         return await (
@@ -277,7 +286,8 @@ class FileRecord(PlatformModel):
         )
 
     @classmethod
-    async def search_by_name(cls, company_id: str, query: str, limit: int) -> list[Self]:
+    async def list_with_catalog_by_original_name(cls, company_id: str, query: str, limit: int) -> list[Self]:
+        """Живые файлы компании с каталогом по возрастанию original_name, не больше limit. Пустой query не фильтрует имя."""
         rows = cls.objects.filter(company_id=company_id, deleted_at__isnull=True, catalog_id__isnull=False)
         if query != "":
             rows = rows.filter(original_name__icontains=query)

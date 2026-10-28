@@ -41,7 +41,8 @@ class EvaluationAnnotation(CompanyScopedModel):
     payload: JsonObject = DbField(default_factory=dict, db_type="JSONB")
 
     @classmethod
-    async def list_for_run(cls, run_id: str) -> list[Self]:
+    async def list_by_created_at_and_annotation_id(cls, run_id: str) -> list[Self]:
+        """Аннотации запуска, ORDER BY created_at, annotation_id. Предела нет. Пустой run_id — ValueError."""
         if run_id == "":
             raise ValueError("run_id is required")
         return await (

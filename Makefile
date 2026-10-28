@@ -456,7 +456,7 @@ help:
 	@echo "============================================================================"
 	@echo "  make lint                  - Все линтеры (python + frontend)"
 	@echo "  make lint-ts               - Только frontend (UI/i18n/logging)"
-	@echo "  make lint FILE=<path>      - Точечно: .py → ruff+basedpyright, .js → lint-ts"
+	@echo "  make lint FILE=<path>      - Точечно: .py → ruff+basedpyright, .js/.ts → lint-ts (tsc + UI-канон)"
 	@echo "  make lint <path>           - То же: make lint apps/search/db/models.py"
 	@echo ""
 	@echo "============================================================================"
@@ -537,7 +537,7 @@ include mk/migrate.mk
 # Документация
 .PHONY: doc doc-serve doc-serve-zensical doc-docker doc-clean docs-build docs-serve docs-clean docs-docker-build
 
-doc:
+doc: ui-build
 	@echo "Локальная сборка документации (Zensical RU + EN)..."
 	rm -rf documentation-dist build/documentation-ru build/documentation-en build/zensical-en-out
 	uv run python scripts/extract_openapi.py

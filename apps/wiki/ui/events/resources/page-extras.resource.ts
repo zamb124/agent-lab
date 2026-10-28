@@ -202,3 +202,24 @@ export const wikiPublicSitePageOp = createAsyncOp({
         });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'wiki/access_read': typeof wikiAccessReadOp;
+        'wiki/company_visible': typeof wikiCompanyVisibleOp;
+        'wiki/member_add': typeof wikiMemberAddOp;
+        'wiki/member_remove': typeof wikiMemberRemoveOp;
+        'wiki/public_link': typeof wikiPublicLinkOp;
+        'wiki/revisions': typeof wikiRevisionsOp;
+        'wiki/revision_read': typeof wikiRevisionReadOp;
+        'wiki/revision_restore': typeof wikiRevisionRestoreOp;
+        'wiki/comments': typeof wikiCommentsOp;
+        'wiki/comment_create': typeof wikiCommentCreateOp;
+        'wiki/comment_resolve': typeof wikiCommentResolveOp;
+        'wiki/search': typeof wikiSearchOp;
+        'wiki/backlinks': typeof wikiBacklinksOp;
+        'wiki/public_page': typeof wikiPublicPageOp;
+        'wiki/public_tree': typeof wikiPublicTreeOp;
+        'wiki/public_site_page': typeof wikiPublicSitePageOp;
+    }
+}

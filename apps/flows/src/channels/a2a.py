@@ -282,13 +282,13 @@ class A2AChannel(BaseChannel):
         Owner filter would hide the customer's parked task from a queue member
         opening the WorkItem card. Share grants keep their own context path.
         """
-        task = await A2ATaskProjection.get_task(
+        task = await A2ATaskProjection.any_task_in_company(
             company_id=company_id,
             task_id=task_id,
         )
         if task is None:
             return None
-        scoped = await A2ATaskProjection.get_task_for_context(
+        scoped = await A2ATaskProjection.any_task_for_context(
             company_id=company_id,
             flow_id=self.flow_id,
             context_id=task.context_id,
@@ -318,7 +318,7 @@ class A2AChannel(BaseChannel):
                 context_id=share_context,
                 require_editor=False,
             )
-            task = await A2ATaskProjection.get_task_for_context(
+            task = await A2ATaskProjection.any_task_for_context(
                 company_id=company_id,
                 flow_id=self.flow_id,
                 context_id=share_context,
@@ -326,7 +326,7 @@ class A2AChannel(BaseChannel):
             )
         else:
             grant = None
-            task = await A2ATaskProjection.get_task_for_owner(
+            task = await A2ATaskProjection.any_task_for_owner(
                 company_id=company_id,
                 owner_user_id=owner_user_id,
                 task_id=task_id,
@@ -357,7 +357,7 @@ class A2AChannel(BaseChannel):
         Доступ уже проверен ``_projected_task``; здесь только чтение ledger в scope компании.
         """
         company_id, _ = self._task_access_scope()
-        snapshot = await A2ATaskEvent.get_submitted_task(
+        snapshot = await A2ATaskEvent.any_submitted_task(
             company_id=company_id,
             task_id=task_id,
         )
@@ -372,10 +372,11 @@ class A2AChannel(BaseChannel):
 
     async def _latest_sequence(self, task_id: str) -> int:
         company_id, _ = self._task_access_scope()
-        return await A2ATaskProjection.get_latest_sequence(
+        _, latest_sequence = await A2ATaskProjection.require_any_task_with_sequence(
             company_id=company_id,
             task_id=task_id,
         )
+        return latest_sequence
 
     async def _replay_durable_stream_events(
         self, task_id: str, *, grant: FlowUIShareGrant | None, after_sequence: int = 0
@@ -770,7 +771,7 @@ class A2AChannel(BaseChannel):
                 context_id=share_context,
                 require_editor=False,
             )
-            task = await A2ATaskProjection.get_task_for_context(
+            task = await A2ATaskProjection.any_task_for_context(
                 company_id=company_id,
                 flow_id=self.flow_id,
                 context_id=share_context,
@@ -790,13 +791,13 @@ class A2AChannel(BaseChannel):
                 task = shared_tasks[0] if shared_tasks else None
         else:
             grant = None
-            task = await A2ATaskProjection.get_task_for_owner(
+            task = await A2ATaskProjection.any_task_for_owner(
                 company_id=company_id,
                 owner_user_id=owner_user_id,
                 task_id=params.id,
             )
             if task is None:
-                task = await A2ATaskProjection.get_latest_for_context(
+                task = await A2ATaskProjection.latest_task_for_context(
                     company_id=company_id,
                     owner_user_id=owner_user_id,
                     flow_id=self.flow_id,
@@ -910,7 +911,7 @@ class A2AChannel(BaseChannel):
         try:
             _ = await ready_event.wait()
             snapshot, snapshot_sequence = (
-                await A2ATaskProjection.get_task_with_sequence(
+                await A2ATaskProjection.require_any_task_with_sequence(
                     company_id=company_id,
                     task_id=task.id,
                 )

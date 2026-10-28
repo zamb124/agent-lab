@@ -13,13 +13,14 @@ import {
 } from '../_helpers/public-search-files.js';
 import { takePublicSearchLandingTransition } from '../_helpers/public-search-transition.js';
 import { redirectToLogin } from '@platform/lib/utils/auth-redirect.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { marketingPageHostStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import { bindInputVisibleInVisualViewport } from '@platform/lib/utils/ensure-input-visible-in-visual-viewport.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { ControllerFor, OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
 const SEARCH_MODES = Object.freeze([
@@ -1987,15 +1988,14 @@ export class PublicSearchPage extends PlatformPage {
         this._serpObservedSentinel = null;
         this._serpLoadBlocked = false;
         this._lastSerpCacheKey = '';
-        /** @type {Map<string, DOMRect>} */
-        (this as Record<string, any>)._serpRects = new Map();
+        this._serpRects = new Map();
         /** @type {string | undefined} */
         this._serpOrderSignature = undefined;
         this._handleWindowScroll = this._handleWindowScroll.bind(this);
         /** @type {(() => void) | null} */
         this._releaseSearchInputViewport = null;
     }
-    private _search: OpController;
+    private _search: ControllerFor<'frontend/public_search_run'>;
     private _serpMore: OpController;
     private _serpClick: OpController;
     private _sourceDescribe: OpController;
@@ -2010,6 +2010,7 @@ export class PublicSearchPage extends PlatformPage {
     private _serpObservedSentinel: any;
     private _serpLoadBlocked: boolean;
     private _lastSerpCacheKey: string;
+    private _serpRects: Map<string, DOMRect>;
     private _serpOrderSignature: string | undefined;
     private _releaseSearchInputViewport: any;
 
@@ -2074,7 +2075,7 @@ export class PublicSearchPage extends PlatformPage {
     override updated(changedProperties: PropertyValues<this>): void {
         super.updated(changedProperties);
         this._syncFromRoute();
-        const stream = this._search.state.stream as Record<string, any>;
+        const stream = this._searchStream();
         if ((stream.serp_cache_key as string) !== this._lastSerpCacheKey) {
             this._lastSerpCacheKey = (stream.serp_cache_key as string);
             this._serpLoadBlocked = false;
@@ -2092,7 +2093,7 @@ export class PublicSearchPage extends PlatformPage {
      */
     _animateSerpReorder() {
         const cards = this.renderRoot.querySelectorAll('.source-card[data-url]');
-        const nextRects = new Map();
+        const nextRects = new Map<string, DOMRect>();
         const order: any[] = [];
         for (const el of cards) {
             const url = el.getAttribute('data-url');
@@ -2103,7 +2104,7 @@ export class PublicSearchPage extends PlatformPage {
             nextRects.set(url, el.getBoundingClientRect());
         }
         const orderSignature = order.join('|');
-        const prevRects = (this as Record<string, any>)._serpRects instanceof Map ? (this as Record<string, any>)._serpRects : new Map();
+        const prevRects = this._serpRects;
         const orderChanged = this._serpOrderSignature !== undefined
             && orderSignature !== this._serpOrderSignature;
         if (orderChanged) {
@@ -2131,7 +2132,7 @@ export class PublicSearchPage extends PlatformPage {
                 );
             }
         }
-        (this as Record<string, any>)._serpRects = nextRects;
+        this._serpRects = nextRects;
         this._serpOrderSignature = orderSignature;
     }
 
@@ -2160,7 +2161,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _syncSearchChromeForScroll() {
-        const stream = this._search.state.stream as Record<string, any>;
+        const stream = this._searchStream();
         const scrollY = Math.max(0, window.scrollY);
         if (this._isMobileSerpViewport()) {
             this._lastScrollY = scrollY;
@@ -2229,11 +2230,23 @@ export class PublicSearchPage extends PlatformPage {
             void this._runSearch(query, mode);
         } else {
             this._entryAnimation = 'direct';
-            (this._search.reset as (...args: any[]) => any)(null);
+            this._search.reset(null);
         }
     }
 
-    _isMode(value: unknown) {
+    _searchStream(): Record<string, any> {
+        const stream = this._search.state.stream;
+        if (!isPlainRecord(stream)) {
+            throw new Error('search-page: stream required');
+        }
+        const row: Record<string, any> = {};
+        for (const [key, field] of Object.entries(stream)) {
+            row[key] = field;
+        }
+        return row;
+    }
+
+    _isMode(value: unknown): value is 'quick' | 'deep' | 'research' {
         return value === 'quick' || value === 'deep' || value === 'research';
     }
 
@@ -2243,10 +2256,10 @@ export class PublicSearchPage extends PlatformPage {
 
     _handleInput(event: Event) {
         const target = event.target;
-        if (!target || typeof (target as Record<string, any>).value !== 'string') {
-            return;
+        if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
+            throw new Error('search-page: search field required');
         }
-        this._query = (target as Record<string, any>).value;
+        this._query = target.value;
     }
 
     _setMode(mode: string) {
@@ -2387,7 +2400,7 @@ export class PublicSearchPage extends PlatformPage {
         if (rank === 0) {
             return;
         }
-        const stream = this._search.state.stream as Record<string, any>;
+        const stream = this._searchStream();
         if (rank > (stream.results.length as number)) {
             return;
         }
@@ -2694,7 +2707,10 @@ export class PublicSearchPage extends PlatformPage {
     _renderSourceAiDescription(result: Record<string, any>) {
         const descriptions = this._sourceDescribe.state.descriptions;
         const activeUrl = this._sourceDescribe.state.active_url;
-        const description = (descriptions as Record<string, any>)[result.url];
+        if (!isPlainRecord(descriptions) || typeof result.url !== 'string') {
+            return nothing;
+        }
+        const description = descriptions[result.url];
         const isActive = activeUrl === result.url;
         if (isActive && typeof this._sourceDescribe.error === 'string' && this._sourceDescribe.error !== '') {
             return html`
@@ -2707,15 +2723,21 @@ export class PublicSearchPage extends PlatformPage {
                 </div>
             `;
         }
-        if (!description) {
+        if (!isPlainRecord(description)) {
             return nothing;
         }
-        const hasAnswer = description.answer.trim() !== '';
-        if (!hasAnswer && description.completed !== true && this._sourceDescribe.busy) {
+        if (typeof description.answer !== 'string') {
+            throw new Error('search-page: source description answer required');
+        }
+        const answer = description.answer;
+        const activity = typeof description.activity === 'string' ? description.activity : '';
+        const completed = description.completed === true;
+        const hasAnswer = answer.trim() !== '';
+        if (!hasAnswer && !completed && this._sourceDescribe.busy) {
             return html`
                 <div class="source-ai-panel">
                     <p class="source-ai-label"><span class="stream-dot"></span><span>AI</span></p>
-                    <div class="source-ai-markdown">${description.activity}</div>
+                    <div class="source-ai-markdown">${activity}</div>
                 </div>
             `;
         }
@@ -2725,11 +2747,11 @@ export class PublicSearchPage extends PlatformPage {
         return html`
             <div class="source-ai-panel">
                 <p class="source-ai-label">
-                    ${description.completed ? html`<platform-icon name="check" size="13"></platform-icon>` : html`<span class="stream-dot"></span>`}
+                    ${completed ? html`<platform-icon name="check" size="13"></platform-icon>` : html`<span class="stream-dot"></span>`}
                     <span>AI</span>
                 </p>
                 <div class="source-ai-markdown">
-                    ${this._markdownTemplate(description.answer)}
+                    ${this._markdownTemplate(answer)}
                 </div>
             </div>
         `;
@@ -2743,7 +2765,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _ensureSerpSentinelObserver() {
-        const stream = this._search.state.stream as Record<string, any>;
+        const stream = this._searchStream();
         const sentinel = this.renderRoot.querySelector('.source-scroll-sentinel');
         const shouldObserve = (stream.has_more as boolean)
             && (stream.serp_cache_key as string) !== ''
@@ -2778,7 +2800,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     async _loadMoreSerp() {
-        const stream = this._search.state.stream as Record<string, any>;
+        const stream = this._searchStream();
         if (
             !(stream.has_more as boolean)
             || this._serpMore.busy
@@ -2788,11 +2810,15 @@ export class PublicSearchPage extends PlatformPage {
             return;
         }
         const pageLimit = (stream.page_limit as number) > 0 ? (stream.page_limit as number) : 10;
+        const mode = stream.mode;
+        if (!this._isMode(mode)) {
+            throw new Error(`Invalid search mode: ${String(mode)}`);
+        }
         const result = await this._serpMore.run({
             serp_cache_key: (stream.serp_cache_key as string),
             offset: (stream.results.length as number),
             limit: pageLimit,
-            mode: (stream.mode as Record<string, any>),
+            mode,
         });
         if (result === null) {
             this._serpLoadBlocked = true;
@@ -2944,7 +2970,20 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _renderProviders(stream: Record<string, any>) {
-        const providers = Object.entries(stream.providers) as [string, Record<string, any>][];
+        if (!isPlainRecord(stream.providers)) {
+            return html``;
+        }
+        const providers: { name: string; ok: boolean; resultsCount: number }[] = [];
+        for (const [name, status] of Object.entries(stream.providers)) {
+            if (!isPlainRecord(status) || typeof status.results_count !== 'number') {
+                throw new Error('search-page: provider status required');
+            }
+            providers.push({
+                name,
+                ok: status.ok === true,
+                resultsCount: status.results_count,
+            });
+        }
         if (providers.length === 0) {
             return html``;
         }
@@ -2952,11 +2991,11 @@ export class PublicSearchPage extends PlatformPage {
             <section class="provider-panel">
                 <p class="panel-label"><platform-icon name="server" size="14"></platform-icon><span>${this.t('search_page.providers_label')}</span></p>
                 <div class="provider-list">
-                    ${providers.map(([name, status]) => html`
-                        <span class="provider-chip" data-ok=${(status.ok as boolean) ? 'true' : 'false'}>
+                    ${providers.map((provider) => html`
+                        <span class="provider-chip" data-ok=${provider.ok ? 'true' : 'false'}>
                             <span class="provider-state"></span>
-                            <span>${name}</span>
-                            <span class="provider-count">${status.results_count}</span>
+                            <span>${provider.name}</span>
+                            <span class="provider-count">${provider.resultsCount}</span>
                         </span>
                     `)}
                 </div>
@@ -3148,9 +3187,13 @@ export class PublicSearchPage extends PlatformPage {
         if (rank === 0) {
             return;
         }
-        const stream = this._search.state.stream as Record<string, any>;
-        const match = (stream.research_sources.find as (...args: any[]) => any)((item: Record<string, any>) => item.index === rank);
-        if (match === undefined) {
+        const stream = this._searchStream();
+        const sources = stream.research_sources;
+        if (!Array.isArray(sources)) {
+            return;
+        }
+        const match = sources.find((item) => isPlainRecord(item) && item.index === rank);
+        if (!isPlainRecord(match) || typeof match.url !== 'string' || match.url.length === 0) {
             return;
         }
         window.open(match.url, '_blank', 'noopener');
@@ -3231,7 +3274,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     override render(): TemplateResult {
-        const stream = this._search.state.stream as Record<string, any>;
+        const stream = this._searchStream();
         const active = this._isStreamActive(stream);
         const searchHeadClass = active
             ? `search-head is-active${this._searchChromeHidden ? ' is-chrome-hidden' : ''}`

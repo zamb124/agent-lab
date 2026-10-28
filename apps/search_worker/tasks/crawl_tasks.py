@@ -170,7 +170,7 @@ async def crawl_reclaim_stale_fetching(
         )
         requeued_failed = await CrawlUrl.requeue_failed_urls()
         crawl_profile_id = get_search_settings().crawl.default_crawl_profile_id
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         enrichment_backfill = 0
         if profile_bundle.profile.llm_enrichment_enabled:
             missing_ids = await CrawlUrl.list_indexed_missing_enrichment(

@@ -416,7 +416,7 @@ export class PlatformConfirmModal extends PlatformModal {
                                           }
                                       }}
                                       @input=${(e: InputEvent) => {
-                                          this.inputValue = (e.target as HTMLInputElement).value;
+                                          this.inputValue = inputText(e);
                                       }}
                                   ></platform-field>
                               `
@@ -476,13 +476,31 @@ export interface ConfirmModalOptions {
     [key: string]: unknown;
 }
 
-function getOrCreatePlatformConfirmModal(): PlatformConfirmModal {
-    let el = document.querySelector('platform-confirm-modal') as PlatformConfirmModal | null;
-    if (!el) {
-        el = document.createElement('platform-confirm-modal') as PlatformConfirmModal;
-        document.body.appendChild(el);
+function inputText(event: Event): string {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
+        throw new Error('platform-confirm-modal: input target must be an input');
     }
-    return el;
+    return target.value;
+}
+
+function confirmModalElement(node: Element | null): PlatformConfirmModal | null {
+    if (node === null) return null;
+    if (!(node instanceof PlatformConfirmModal)) {
+        throw new Error('platform-confirm-modal: existing element is not PlatformConfirmModal');
+    }
+    return node;
+}
+
+function getOrCreatePlatformConfirmModal(): PlatformConfirmModal {
+    const existing = confirmModalElement(document.querySelector('platform-confirm-modal'));
+    if (existing !== null) return existing;
+    const created = document.createElement('platform-confirm-modal');
+    if (!(created instanceof PlatformConfirmModal)) {
+        throw new Error('platform-confirm-modal: custom element is not registered');
+    }
+    document.body.appendChild(created);
+    return created;
 }
 
 /**

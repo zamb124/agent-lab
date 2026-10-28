@@ -251,7 +251,7 @@ class TestIntegrationCredential:
                 updated_at=now,
             ))
 
-        items = await IntegrationCredential.list_by_user(company_id=company_id, user_id=user_id)
+        items = await IntegrationCredential.list_by_created_at_for_user(company_id=company_id, user_id=user_id)
         assert len(items) == 2
         services = {c.service for c in items}
         assert services == {"calendar", "docs"}

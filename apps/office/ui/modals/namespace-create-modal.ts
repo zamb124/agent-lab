@@ -97,7 +97,7 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
         this._templates = this.useOp(TEMPLATES_NAME);
         this._namespaces = this.useResource(NAMESPACES_NAME);
         this._form = this.useForm(FORM_NAME);
-        this._authSel = this.select((s) => (s.auth as Record<string, unknown>).user);
+        this._authSel = this.select((s) => s.auth.user);
         this._templateSeeded = false;
     }
     private _templates: OpController;
@@ -147,7 +147,11 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
             this._templateSeeded = true;
             return;
         }
-        this._form.setField('template_id', items[0]!.template_id);
+        const first = items[0];
+        if (first === undefined) {
+            throw new Error('namespace-create-modal: template missing');
+        }
+        this._form.setField('template_id', first.template_id);
         this._templateSeeded = true;
     }
 

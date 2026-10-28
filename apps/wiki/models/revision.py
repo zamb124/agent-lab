@@ -36,11 +36,11 @@ class WikiRevision(PlatformModel):
     text_markdown: str = DbField(default="", db_type="TEXT")
 
     @classmethod
-    async def store_revision(cls, revision: Self) -> Self:
+    async def create(cls, revision: Self) -> Self:
         return await cls.objects.create(instance=revision)
 
     @classmethod
-    async def list_revisions(
+    async def list_recent_for_page(
         cls,
         company_id: str,
         namespace: str,
@@ -60,7 +60,7 @@ class WikiRevision(PlatformModel):
         )
 
     @classmethod
-    async def get_revision(
+    async def in_namespace(
         cls,
         company_id: str,
         namespace: str,

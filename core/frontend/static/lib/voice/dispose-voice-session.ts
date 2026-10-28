@@ -1,6 +1,14 @@
 import { clearStreamTtsTarget } from './stream-tts-registry.js';
-import type { VoiceMediaSession } from './voice-media-session.js';
-import type { VoiceAgentBridge } from './voice-agent-bridge.js';
+
+interface DisposableVoiceMedia {
+    readonly isConnected: boolean;
+    awaitRecordingFinalized(timeoutMs: number): Promise<void>;
+    close(): void;
+}
+
+interface DisposableVoiceBridge {
+    stop(): void;
+}
 
 /**
  * Унифицированное завершение сессии (media + VoiceAgentBridge):
@@ -15,8 +23,8 @@ import type { VoiceAgentBridge } from './voice-agent-bridge.js';
  * @returns {Promise<void>}
  */
 export async function disposeVoiceMediaThenBridge(
-    media: VoiceMediaSession | null,
-    bridge: VoiceAgentBridge | null,
+    media: DisposableVoiceMedia | null,
+    bridge: DisposableVoiceBridge | null,
     opts: { finalizeTimeoutMs?: number } = {},
 ): Promise<void> {
     clearStreamTtsTarget();
@@ -32,21 +40,12 @@ export async function disposeVoiceMediaThenBridge(
         ) {
             await media.awaitRecordingFinalized(finalizeTimeoutMs);
         }
-    } catch {
-        /* noop */
-    }
-    if (bridge) {
+    } finally {
+        // Каждый шаг завершения выполняется, даже если предыдущий бросил; первая ошибка не теряется.
         try {
-            bridge.stop();
-        } catch {
-            /* noop */
-        }
-    }
-    if (media) {
-        try {
-            media.close();
-        } catch {
-            /* noop */
+            bridge?.stop();
+        } finally {
+            media?.close();
         }
     }
 }

@@ -16,6 +16,8 @@ import {
     createGraphTextSprite,
     maxIncidentWeightOrOne,
     positionGraphLinkLabelMesh,
+    finiteOrZero,
+    firstGraphText,
 } from './graph-3d-helpers.js';
 import type {
     CSSResultGroup,
@@ -164,7 +166,8 @@ export class CRMGraphCanvas extends PlatformElement {
         if (changed.has('incidentWeightSubtitleFn') && this._graphInstance) {
             this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
         }
-        const themeName: string | null = this._themeSelect ? (this._themeSelect.value ?? null) : null;
+        const themeValue = this._themeSelect === null ? undefined : this._themeSelect.value;
+        const themeName: string | null = themeValue === undefined ? null : themeValue;
         if (this._lastAppliedTheme !== themeName) {
             this._lastAppliedTheme = themeName;
             if (this._graphInstance) {
@@ -198,9 +201,9 @@ export class CRMGraphCanvas extends PlatformElement {
                 targetNode = graphData.nodes.find((n: Record<string, any>) => n.id === node.id) || node;
             }
         }
-        const nx = targetNode.x || 0;
-        const ny = targetNode.y || 0;
-        const nz = targetNode.z || 0;
+        const nx = finiteOrZero(targetNode.x);
+        const ny = finiteOrZero(targetNode.y);
+        const nz = finiteOrZero(targetNode.z);
         const cam = this._graphInstance.cameraPosition();
         const dx = cam.x - nx;
         const dy = cam.y - ny;
@@ -252,7 +255,8 @@ export class CRMGraphCanvas extends PlatformElement {
         const maxWeight = maxIncidentWeightOrOne(weightByNodeId);
         const nodes = this.graphNodes.map((node: Record<string, any>) => {
             const nodeId = node.entity_id || node.id;
-            const totalWeight = weightByNodeId.get(nodeId) || 0;
+            const stored = weightByNodeId.get(nodeId);
+            const totalWeight = stored === undefined ? 0 : stored;
             const rawLevel = typeof node.level === 'number' && Number.isFinite(node.level) ? node.level : 1;
             const sizingLevel = rawLevel === 0 ? 0 : 1;
             return {
@@ -283,7 +287,7 @@ export class CRMGraphCanvas extends PlatformElement {
                 target,
                 relation_type: relationType,
                 directed,
-                path_kind: edge.path_kind || null,
+                path_kind: typeof edge.path_kind === 'string' && edge.path_kind.length > 0 ? edge.path_kind : null,
                 highlighted: highlightedEdgeIds.has(edgeId),
             };
         });
@@ -349,11 +353,11 @@ export class CRMGraphCanvas extends PlatformElement {
                     : 0;
                 let subtitle = '';
                 if (typeof this.incidentWeightSubtitleFn === 'function') {
-                    subtitle = this.incidentWeightSubtitleFn(weightSum) || '';
+                    subtitle = this.incidentWeightSubtitleFn(weightSum);
                 }
                 const sprite = subtitle
                     ? createGraphNodeLabelSprite({
-                        title: node.name || node.id || '',
+                        title: firstGraphText([node.name, node.id]),
                         subtitle,
                         titleColor: labelColor,
                         subtitleColor,
@@ -362,7 +366,7 @@ export class CRMGraphCanvas extends PlatformElement {
                         maxTitleLength: 28,
                         maxSubtitleLength: 32,
                     })
-                    : this._createTextSprite(node.name || node.id || '', labelColor, 24);
+                    : this._createTextSprite(firstGraphText([node.name, node.id]), labelColor, 24);
                 if (sprite) {
                     sprite.visible = this._shouldShowNodeLabel(node);
                     sprite.position.set(0, radius + 3, 0);
@@ -442,7 +446,7 @@ export class CRMGraphCanvas extends PlatformElement {
             .enableNodeDrag(true)
             .onNodeClick((node: any, event: unknown) => this._onCanvasNodeClick(node, event))
             .onNodeHover((node: any) => {
-                this._hoveredNodeId = node ? (node.id || '') : '';
+                this._hoveredNodeId = node ? firstGraphText([node.id]) : '';
             })
             .onLinkClick((link: any) => {
                 this.emit('link-click', { link });
@@ -640,7 +644,10 @@ export class CRMGraphCanvas extends PlatformElement {
 
     _getLinkEndpointId(endpoint: unknown): string {
         if (typeof endpoint === 'string') return endpoint;
-        if (endpoint && typeof endpoint === 'object') return (endpoint as Record<string, any>).id || (endpoint as Record<string, any>).entity_id || '';
+        if (endpoint && typeof endpoint === 'object') {
+            const record = endpoint as Record<string, unknown>;
+            return firstGraphText([record.id, record.entity_id]);
+        }
         return '';
     }
 

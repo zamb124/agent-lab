@@ -21,10 +21,7 @@ export function formatPlatformError(errorCode: string, errorParams?: Record<stri
     if (!hasPlatformBus()) {
         return errorCode;
     }
-    const i18nState = getPlatformBus().getState?.().i18n as Record<string, unknown> | undefined;
-    if (!i18nState) {
-        return errorCode;
-    }
+    const i18nState = getPlatformBus().getState().i18n;
     const named = translate(i18nState, `errors.${errorCode}`, params, 'platform');
     if (named !== `errors.${errorCode}`) {
         return named;

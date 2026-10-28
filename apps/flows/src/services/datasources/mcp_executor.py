@@ -40,7 +40,7 @@ class DatasourceMcpExecutor:
         if server_id is None or not server_id.strip():
             raise ValueError("mcp datasource requires mcp_server_id")
         tool_name = _mcp_tool_name(spec, operation, as_test=as_test)
-        server = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+        server = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
         if server is None:
             raise ValueError(f"MCP server not found: {server_id}")
         arguments: JsonObject = {

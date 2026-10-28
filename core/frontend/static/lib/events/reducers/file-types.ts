@@ -9,6 +9,7 @@
  */
 
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, payloadFields } from '../payload.js';
 
 export interface FileTypeEntry extends Record<string, unknown> {
     category: string;
@@ -18,7 +19,7 @@ export interface FileTypeEntry extends Record<string, unknown> {
 
 export interface FileTypesState {
     loaded: boolean;
-    categories: Record<string, unknown>[];
+    categories: string[];
     registry: FileTypeEntry[];
     error: string | null;
 }
@@ -38,19 +39,61 @@ export const initialFileTypesState: FileTypesState = Object.freeze({
     error: null,
 });
 
+function unknownItems(value: unknown, label: string): unknown[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`file_types/registry/loaded: ${label} must be an array`);
+    }
+    const items: unknown[] = [];
+    for (const item of value) items.push(item);
+    return items;
+}
+
+function categoryNames(value: unknown): string[] {
+    const names: string[] = [];
+    for (const item of unknownItems(value, 'categories')) {
+        if (typeof item !== 'string' || item.length === 0) {
+            throw new Error('file_types/registry/loaded: categories item must be a non-empty string');
+        }
+        names.push(item);
+    }
+    return names;
+}
+
+function isFileTypeEntry(value: unknown): value is FileTypeEntry {
+    if (!isPlainRecord(value)) return false;
+    if (typeof value.category !== 'string' || value.category.length === 0) return false;
+    if (typeof value.extension !== 'string' || value.extension.length === 0) return false;
+    if (!Array.isArray(value.mime_types)) return false;
+    for (const mime of value.mime_types) {
+        if (typeof mime !== 'string' || mime.length === 0) return false;
+    }
+    return true;
+}
+
+function registryEntries(value: unknown): FileTypeEntry[] {
+    const entries: FileTypeEntry[] = [];
+    for (const item of unknownItems(value, 'registry')) {
+        if (!isFileTypeEntry(item)) {
+            throw new Error('file_types/registry/loaded: registry item must be an object');
+        }
+        entries.push(item);
+    }
+    return entries;
+}
+
 export function fileTypesReducer(state: FileTypesState = initialFileTypesState, event: PlatformEvent): FileTypesState {
     switch (event.type) {
         case FILE_TYPES_EVENTS.LOADED: {
-            const p = (event.payload || {}) as { categories?: unknown; registry?: unknown };
+            const p = payloadFields(event);
             return {
                 loaded: true,
-                categories: Array.isArray(p.categories) ? p.categories as Record<string, unknown>[] : [],
-                registry: Array.isArray(p.registry) ? p.registry as FileTypeEntry[] : [],
+                categories: categoryNames(p.categories),
+                registry: registryEntries(p.registry),
                 error: null,
             };
         }
         case FILE_TYPES_EVENTS.LOAD_FAILED:
-            const msg = ((event.payload || {}) as { message?: unknown }).message;
+            const msg = (payloadFields(event)).message;
             return { ...state, error: typeof msg === 'string' && msg ? msg : 'failed' };
         default:
             return state;

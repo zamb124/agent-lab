@@ -35,11 +35,11 @@ class PulseService:
             raise PlatformNotFoundError(
                 "Warehouse not found", error_code="warehouse_not_found"
             )
-        op_types = await StockOperationType.list_for_warehouse(
+        op_types = await StockOperationType.list_by_code_for_warehouse(
             company_id, warehouse_id
         )
         op_code_by_id = {op.operation_type_id: op.code.value for op in op_types}
-        transfers = await StockTransfer.list_for_company(
+        transfers = await StockTransfer.list_by_created_at_desc(
             company_id, warehouse_id=warehouse_id, state=None, limit=200, offset=0
         )
         now = utcnow()
@@ -58,9 +58,9 @@ class PulseService:
             )
             for t in transfers
         ]
-        quants = await StockQuant.list_for_warehouse(company_id, warehouse_id)
+        quants = await StockQuant.list_unordered_for_warehouse(company_id, warehouse_id)
         product_ids = sorted({q.product_id for q in quants})
-        products = await StockProduct.by_ids(company_id, product_ids)
+        products = await StockProduct.found_in_company_by_ids(company_id, product_ids)
         last_moves = await StockMove.list_last_move_at(company_id, product_ids)
         avg_by_product = await self._avg_costs(company_id, product_ids, products)
         quant_rows = [

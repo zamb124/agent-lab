@@ -84,13 +84,15 @@ class PronunciationRule(PlatformModel):
         self.updated_at = datetime.now(timezone.utc)
 
     @classmethod
-    async def all_for_company_scope(cls, *, company_id: str | None) -> list[Self]:
+    async def list_for_company_scope(cls, *, company_id: str | None) -> list[Self]:
+        """Строки одного scope, ORDER BY created_at, без limit. company_id None — платформа (company_id IS NULL). Пустая строка — ValueError."""
         return await cls.objects.filter(
             company_id=_company_scope(company_id),
         ).order_by("created_at").all()
 
     @classmethod
-    async def all_enabled_for_company_scope(cls, *, company_id: str | None) -> list[Self]:
+    async def list_enabled_for_company_scope(cls, *, company_id: str | None) -> list[Self]:
+        """Включённые строки одного scope, ORDER BY created_at, без limit. company_id None — платформа. Пустая строка — ValueError."""
         return await cls.objects.filter(
             company_id=_company_scope(company_id),
             enabled=True,

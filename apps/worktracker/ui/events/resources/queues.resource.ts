@@ -22,6 +22,7 @@ interface WorkQueueMember {
 
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isJsonObject } from '@platform/lib/utils/json-object.js';
 
 interface MembersListPayload {
     result?: unknown;
@@ -47,7 +48,13 @@ export const workQueueMembersListOp = createAsyncOp({
     extraInitial: { items: [] },
     // Исходы add/remove мержатся в список участников открытой очереди.
     extraReducer: (state: AsyncOpSlice, event: PlatformEvent, events) => {
-        const payload = (event.payload ?? {}) as MembersListPayload;
+        if (event.type !== events.SUCCEEDED && event.type !== WORK_QUEUE_MEMBER_ADD_SUCCEEDED && event.type !== WORK_QUEUE_MEMBER_REMOVE_SUCCEEDED) {
+            return state;
+        }
+        if (!isJsonObject(event.payload)) {
+            throw new Error(`workQueueMembersListOp: ${event.type} payload object required`);
+        }
+        const payload = event.payload as MembersListPayload;
         const items = Array.isArray(state.items) ? state.items as WorkQueueMember[] : [];
         const lastRequest = state.lastRequest as { payload?: { work_queue_id?: unknown } } | undefined;
         if (event.type === events.SUCCEEDED) {
@@ -98,3 +105,11 @@ export const workQueueMemberRemoveOp = createAsyncOp({
     errorToastKey: 'worktracker:toast.queue_member_remove_failed',
     restMirror: { method: 'POST', path: '/worktracker/api/v1/work-queues/:work_queue_id/members/remove' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'worktracker/work_queue_members_list': typeof workQueueMembersListOp;
+        'worktracker/work_queue_member_add': typeof workQueueMemberAddOp;
+        'worktracker/work_queue_member_remove': typeof workQueueMemberRemoveOp;
+    }
+}

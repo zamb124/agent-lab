@@ -10,6 +10,7 @@
 
 import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { isPlainRecord } from '../events/payload.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-onlyoffice-host.js';
 import './platform-document-text-viewer.js';
@@ -28,6 +29,19 @@ interface DocumentOpenConfig extends Record<string, unknown> {
 
 type HandlerPayload = Record<string, unknown>;
 
+function textOrEmpty(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function firstText(primary: unknown, secondary: unknown): string {
+    if (typeof primary === 'string' && primary.length > 0) return primary;
+    return textOrEmpty(secondary);
+}
+
+function byteCount(value: unknown): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 function handlerPayload(openConfig: DocumentOpenConfig | null | undefined): HandlerPayload | null {
     if (!openConfig || typeof openConfig !== 'object') {
         return null;
@@ -37,10 +51,10 @@ function handlerPayload(openConfig: DocumentOpenConfig | null | undefined): Hand
         return null;
     }
     const payload = openConfig[handler];
-    if (!payload || typeof payload !== 'object') {
+    if (!isPlainRecord(payload)) {
         return null;
     }
-    return payload as HandlerPayload;
+    return payload;
 }
 
 export class PlatformDocumentViewerHost extends PlatformElement {
@@ -116,11 +130,11 @@ export class PlatformDocumentViewerHost extends PlatformElement {
     }
 
     _onEditorError(event: CustomEvent<unknown>): void {
-        this.emit('editor-error', event.detail || {});
+        this.emit('editor-error', isPlainRecord(event.detail) ? event.detail : {});
     }
 
     _onDocumentState(event: CustomEvent<unknown>): void {
-        this.emit('document-state', event.detail || {});
+        this.emit('document-state', isPlainRecord(event.detail) ? event.detail : {});
     }
 
     _renderNativeViewer(): TemplateResult | typeof nothing {
@@ -135,10 +149,10 @@ export class PlatformDocumentViewerHost extends PlatformElement {
         if (openConfig.handler === 'text') {
             return html`
                 <platform-document-text-viewer
-                    stream-url=${payload.stream_url || ''}
-                    save-url=${payload.save_url || ''}
-                    original-name=${openConfig.original_name || ''}
-                    content-type=${payload.content_type || openConfig.content_type || ''}
+                    stream-url=${textOrEmpty(payload.stream_url)}
+                    save-url=${textOrEmpty(payload.save_url)}
+                    original-name=${textOrEmpty(openConfig.original_name)}
+                    content-type=${firstText(payload.content_type, openConfig.content_type)}
                     presentation=${this._textPresentation(payload)}
                     view-mode=${this._textViewMode(payload)}
                     ?edit-mode=${payload.edit_mode === true}
@@ -150,27 +164,27 @@ export class PlatformDocumentViewerHost extends PlatformElement {
         if (openConfig.handler === 'image') {
             return html`
                 <platform-document-image-viewer
-                    stream-url=${payload.stream_url || ''}
-                    original-name=${openConfig.original_name || ''}
+                    stream-url=${textOrEmpty(payload.stream_url)}
+                    original-name=${textOrEmpty(openConfig.original_name)}
                 ></platform-document-image-viewer>
             `;
         }
         if (openConfig.handler === 'media') {
             return html`
                 <platform-document-media-viewer
-                    stream-url=${payload.stream_url || ''}
+                    stream-url=${textOrEmpty(payload.stream_url)}
                     kind=${payload.kind || 'audio'}
-                    original-name=${openConfig.original_name || ''}
+                    original-name=${textOrEmpty(openConfig.original_name)}
                 ></platform-document-media-viewer>
             `;
         }
         if (openConfig.handler === 'binary') {
             return html`
                 <platform-document-binary-viewer
-                    download-url=${payload.download_url || ''}
-                    original-name=${openConfig.original_name || ''}
-                    content-type=${payload.content_type || openConfig.content_type || ''}
-                    file-size=${payload.file_size || 0}
+                    download-url=${textOrEmpty(payload.download_url)}
+                    original-name=${textOrEmpty(openConfig.original_name)}
+                    content-type=${firstText(payload.content_type, openConfig.content_type)}
+                    file-size=${byteCount(payload.file_size)}
                 ></platform-document-binary-viewer>
             `;
         }
@@ -178,7 +192,7 @@ export class PlatformDocumentViewerHost extends PlatformElement {
             return html`
                 <platform-viz-host
                     .openConfig=${openConfig}
-                    .fileId=${openConfig.file_id || ''}
+                    .fileId=${textOrEmpty(openConfig.file_id)}
                     ?suspended=${this.suspended}
                     @editor-error=${this._onEditorError}
                     @document-state=${this._onDocumentState}
@@ -189,7 +203,7 @@ export class PlatformDocumentViewerHost extends PlatformElement {
             return html`
                 <platform-data-table-host
                     .openConfig=${openConfig}
-                    .fileId=${openConfig.file_id || ''}
+                    .fileId=${textOrEmpty(openConfig.file_id)}
                     ?suspended=${this.suspended}
                     @editor-error=${this._onEditorError}
                     @document-state=${this._onDocumentState}

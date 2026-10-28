@@ -166,7 +166,7 @@ class TaskService:
         if resource_type is None:
             chosen = candidates[0]
         else:
-            locations = await StockLocation.by_ids(
+            locations = await StockLocation.found_in_company_by_ids(
                 company_id,
                 sorted(
                     {

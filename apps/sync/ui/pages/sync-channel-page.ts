@@ -6,13 +6,12 @@
  * <sync-message-context-menu>.
  *
  * Mount-логика: при смене channelId — `useOp('sync/messages').run({ channel_id })`
- * + `useResource('sync/channels') as SyncChannelsController.selectChannel({ channelId })` (channel_selected)
+ * + `useResource('sync/channels') as ControllerFor<'sync/channels'>.selectChannel({ channelId })` (channel_selected)
  * + `useOp('sync/channel_mark_read').run` для обнуления unread.
  */
 
-import type { SyncMessagesStoreController, SyncChannelsController} from '../events/sync.types.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
@@ -56,9 +55,9 @@ export class SyncChannelPage extends PlatformPage {
             flex-direction: column;
         }
     `;
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
     private _messages: OpController;
-    private _messagesStore: SyncMessagesStoreController;
+    private _messagesStore: ControllerFor<'sync/messages_store'>;
     private _markRead: OpController;
     private _authSel: SelectController<Record<string, any> | undefined>;
     private _lastLoadedChannel: string;
@@ -67,9 +66,9 @@ export class SyncChannelPage extends PlatformPage {
     constructor() {
         super();
         this.channelId = '';
-        this._channels = this.useResource('sync/channels', { autoload: true }) as SyncChannelsController;
+        this._channels = this.useResource('sync/channels', { autoload: true });
         this._messages = this.useOp('sync/messages');
-        this._messagesStore = this.useSlice('sync/messages_store') as SyncMessagesStoreController;
+        this._messagesStore = this.useSlice('sync/messages_store');
         this._markRead = this.useOp('sync/channel_mark_read');
         this._authSel = this.select((s) => (s.auth as Record<string, any> | undefined)?.user);
         this._lastLoadedChannel = '';

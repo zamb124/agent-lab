@@ -35,6 +35,22 @@ export interface PlatformMenuItem {
     selected?: boolean;
 }
 
+function menuItemAt(items: readonly PlatformMenuItem[], index: number): PlatformMenuItem {
+    const item = items[index];
+    if (item === undefined) {
+        throw new Error('platform-menu: item missing');
+    }
+    return item;
+}
+
+function selectableAt(indexes: readonly number[], index: number): number {
+    const value = indexes[index];
+    if (value === undefined) {
+        throw new Error('platform-menu: selectable index missing');
+    }
+    return value;
+}
+
 export class PlatformMenu extends PlatformElement {
     static override properties: PropertyDeclarations = {
         items: { type: Array },
@@ -162,7 +178,7 @@ export class PlatformMenu extends PlatformElement {
     get _selectableIndexes(): number[] {
         const indexes: number[] = [];
         for (let index = 0; index < this.items.length; index += 1) {
-            const item = this.items[index]!;
+            const item = menuItemAt(this.items, index);
             const kind = item.kind ?? 'action';
             if (kind === 'action' && item.disabled !== true) {
                 indexes.push(index);
@@ -174,7 +190,7 @@ export class PlatformMenu extends PlatformElement {
     /** Поставить фокус на первый доступный пункт — вызывается при открытии меню. */
     focusFirstItem(): void {
         const selectable = this._selectableIndexes;
-        this._activeIndex = selectable.length > 0 ? selectable[0]! : -1;
+        this._activeIndex = selectable.length > 0 ? selectableAt(selectable, 0) : -1;
         this._focusActive();
     }
 
@@ -197,7 +213,7 @@ export class PlatformMenu extends PlatformElement {
         const next = current === -1
             ? (step > 0 ? 0 : selectable.length - 1)
             : (current + step + selectable.length) % selectable.length;
-        this._activeIndex = selectable[next]!;
+        this._activeIndex = selectableAt(selectable, next);
         this._focusActive();
     }
 
@@ -216,7 +232,7 @@ export class PlatformMenu extends PlatformElement {
             event.preventDefault();
             const selectable = this._selectableIndexes;
             if (selectable.length > 0) {
-                this._activeIndex = selectable[0]!;
+                this._activeIndex = selectableAt(selectable, 0);
                 this._focusActive();
             }
             return;
@@ -225,7 +241,7 @@ export class PlatformMenu extends PlatformElement {
             event.preventDefault();
             const selectable = this._selectableIndexes;
             if (selectable.length > 0) {
-                this._activeIndex = selectable[selectable.length - 1]!;
+                this._activeIndex = selectableAt(selectable, selectable.length - 1);
                 this._focusActive();
             }
             return;
@@ -255,7 +271,8 @@ export class PlatformMenu extends PlatformElement {
         }, 600);
 
         const match = this._selectableIndexes.find((index) => {
-            const label = String(this.items[index]!.label ?? '').toLowerCase();
+            const itemLabel = menuItemAt(this.items, index).label;
+            const label = (itemLabel === undefined ? '' : itemLabel).toLowerCase();
             return label.startsWith(this._typeahead);
         });
         if (match !== undefined) {

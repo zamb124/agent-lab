@@ -45,14 +45,16 @@ class AccessRequest(PlatformModel):
         return await cls.objects.create(instance=access_request)
 
     @classmethod
-    def in_company(cls, company_id: str, status: str | None) -> Query[Self]:
+    def query_by_status_in_company(cls, company_id: str, status: str | None) -> Query[Self]:
+        """Запрос заявок компании. status is None и пустая строка не фильтруют. Порядка нет."""
         rows = cls.objects.filter(company_id=company_id)
         if status is not None and status != "":
             rows = rows.filter(status=status)
         return rows
 
     @classmethod
-    async def deduplicate_pending_for_entity(cls, entity_id: str) -> None:
+    async def delete_duplicate_pending_for_entity(cls, entity_id: str) -> None:
+        """Удаляет повторные pending-заявки на сущность. Для пары (requester_id, resource_id) оставляет самую раннюю по created_at. Если удаление задело не одну строку — ValueError."""
         pending = await cls.objects.filter(
             resource_type="entity",
             resource_id=entity_id,
@@ -77,12 +79,13 @@ class AccessRequest(PlatformModel):
                     raise ValueError(f"Access request {access_request_id} was not deleted")
 
     @classmethod
-    async def rewrite_entity_resource_id(
+    async def update_entity_resource_id(
         cls,
         company_id: str,
         source_id: str,
         survivor_id: str,
     ) -> int:
+        """Пишет resource_id заявок компании с resource_type entity и resource_id source_id. Возвращает число строк. Нет таких — 0."""
         return await cls.objects.filter(
             company_id=company_id,
             resource_type="entity",

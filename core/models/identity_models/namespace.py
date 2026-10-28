@@ -125,7 +125,8 @@ class Namespace(CompanyScopedModel):
         return await cls.objects.filter(kind__in=kinds).count()
 
     @classmethod
-    async def list_for_authz(cls, *, limit: int | None) -> list[Self]:
+    async def partial_company_rows_by_namespace_id(cls, *, limit: int | None) -> list[Self]:
+        """Строки с company_id, только name, company_id, kind и owner_user_id, ORDER BY namespace_id. limit is None не ограничивает."""
         # Менеджер отрезал бы одну компанию — сырой запрос обходит scope.
         sql = (
             "SELECT name, company_id, kind, owner_user_id "

@@ -10,6 +10,7 @@ import '../platform-button.js';
 import '../platform-icon.js';
 import '../platform-json-editor.js';
 import './platform-schema-parameter-card.js';
+import { isPlainRecord } from '../../events/payload.js';
 import { formatJsonPretty } from '../../utils/json-format.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../../lit-shim.js';
 import {
@@ -20,7 +21,53 @@ import {
     parseSchemaForEditor,
     validateParameterRows,
 } from './schema-model.js';
-import type { ParameterRow } from './schema-model.js';
+import type { NestedParameterRow, NestedSchemaUiType, ParameterRow, SchemaUiType } from './schema-model.js';
+
+function isStringList(value: unknown): value is string[] {
+    if (!Array.isArray(value)) return false;
+    for (const item of value) {
+        if (typeof item !== 'string') return false;
+    }
+    return true;
+}
+
+function isSchemaUiType(value: unknown): value is SchemaUiType {
+    return value === 'string'
+        || value === 'number'
+        || value === 'integer'
+        || value === 'boolean'
+        || value === 'enum'
+        || value === 'object'
+        || value === 'array';
+}
+
+function isNestedSchemaUiType(value: unknown): value is NestedSchemaUiType {
+    return value === 'string'
+        || value === 'number'
+        || value === 'integer'
+        || value === 'boolean'
+        || value === 'enum';
+}
+
+function isNestedParameterRow(value: unknown): value is NestedParameterRow {
+    if (!isPlainRecord(value)) return false;
+    if (typeof value.key !== 'string' || typeof value.required !== 'boolean') return false;
+    if (!isNestedSchemaUiType(value.uiType) || typeof value.description !== 'string') return false;
+    return isStringList(value.enumValues) && isPlainRecord(value.extra);
+}
+
+function isParameterRow(value: unknown): value is ParameterRow {
+    if (!isPlainRecord(value)) return false;
+    if (typeof value.key !== 'string' || typeof value.required !== 'boolean') return false;
+    if (!isSchemaUiType(value.uiType) || typeof value.description !== 'string') return false;
+    if (!isStringList(value.enumValues) || !isNestedSchemaUiType(value.itemsUiType)) return false;
+    if (!isStringList(value.itemsEnumValues) || !isPlainRecord(value.extra)) return false;
+    if (!Array.isArray(value.nestedRows)) return false;
+    for (const nested of value.nestedRows) {
+        if (!isNestedParameterRow(nested)) return false;
+    }
+    return true;
+}
 
 export class PlatformSchemaEditor extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -424,11 +471,10 @@ export class PlatformSchemaEditor extends PlatformElement {
         }
         const index = e.detail?.index;
         const row = e.detail?.row;
-        if (typeof index !== 'number' || !row || typeof row !== 'object') {
+        if (typeof index !== 'number' || !isParameterRow(row)) {
             throw new Error('platform-schema-editor: row-change detail');
         }
-        const nextRow = row as ParameterRow;
-        this._rows = this._rows.map((item, i) => (i === index ? nextRow : item));
+        this._rows = this._rows.map((item, i) => (i === index ? row : item));
         this._emitFromRows();
     }
 

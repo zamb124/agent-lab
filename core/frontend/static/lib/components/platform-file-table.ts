@@ -125,7 +125,11 @@ export class PlatformFileTable extends PlatformElement {
     }
 
     _onSelectAll(e: Event): void {
-        this.emit('select-all-toggle', { selected: (e.target as HTMLInputElement).checked });
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('platform-file-table: select-all target must be an input');
+        }
+        this.emit('select-all-toggle', { selected: target.checked });
     }
 
     _renderHeaderCell(col: FileTableColumn): TemplateResult {

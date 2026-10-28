@@ -16,6 +16,28 @@ import { registerModalKind } from '../utils/modal-registry.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
 import type { AuthProvidersState, AuthState } from '../events/reducers/auth.js';
 import type { SelectController } from '../events/select-controller.js';
+import { isPlainRecord } from '../events/payload.js';
+
+function payloadMessage(payload: unknown): string | undefined {
+    if (!isPlainRecord(payload)) return undefined;
+    const message = payload.message;
+    return typeof message === 'string' && message.length > 0 ? message : undefined;
+}
+
+function providerI18nKey(name: string): string | undefined {
+    if (name === 'yandex' || name === 'google' || name === 'github' || name === 'apple') {
+        return PROVIDER_I18N_KEYS[name];
+    }
+    return undefined;
+}
+
+function inputValue(event: Event): string {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('auth-modal: input required');
+    }
+    return target.value;
+}
 import './platform-icon.js';
 
 /** Провайдеры с цветным брендовым SVG (не monochrome currentColor). */
@@ -124,8 +146,8 @@ export class AuthModal extends PlatformModal {
         this.error = '';
         this._demoPassword = '';
         this.size = 'sm';
-        this._demoSel = this.select((s) => (s.auth as AuthState).demo);
-        this._providersSel = this.select((s) => (s.auth as AuthState).providers);
+        this._demoSel = this.select((s) => s.auth.demo);
+        this._providersSel = this.select((s) => s.auth.providers);
     }
 
     override connectedCallback(): void {
@@ -140,11 +162,11 @@ export class AuthModal extends PlatformModal {
         }
         this.useEvent(CoreAuthEvents.OAUTH_FAILED, (event) => {
             this.loading = false;
-            this.error = (event.payload as { message?: string } | null)?.message || (this.t('auth.oauth_error') || 'OAuth error');
+            this.error = payloadMessage(event.payload) || (this.t('auth.oauth_error') || 'OAuth error');
         });
         this.useEvent(CoreAuthEvents.DEMO_LOGIN_FAILED, (event) => {
             this.loading = false;
-            this.error = (event.payload as { message?: string } | null)?.message || (this.t('auth.demo_error') || 'Demo login error');
+            this.error = payloadMessage(event.payload) || (this.t('auth.demo_error') || 'Demo login error');
         });
     }
 
@@ -205,7 +227,7 @@ export class AuthModal extends PlatformModal {
     }
 
     _providerLabel(name: string): string {
-        const key = (PROVIDER_I18N_KEYS as Record<string, string | undefined>)[name];
+        const key = providerI18nKey(name);
         if (typeof key === 'string') {
             return this.t(key) || key;
         }
@@ -284,7 +306,7 @@ export class AuthModal extends PlatformModal {
                     <label class="demo-label" for="demo-password">${this.t('auth.demo_password_label') || 'auth.demo_password_label'}</label>
                     <input id="demo-password" class="demo-input" type="password" name="password" autocomplete="current-password"
                         .value=${this._demoPassword}
-                        @input=${(ev: InputEvent) => { this._demoPassword = (ev.target as HTMLInputElement).value; }} />
+                        @input=${(ev: InputEvent) => { this._demoPassword = inputValue(ev); }} />
                     <button type="submit" class="provider-button" ?disabled=${this.loading}>
                         ${this.t('auth.demo_submit') || 'auth.demo_submit'}
                     </button>

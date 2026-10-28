@@ -92,9 +92,10 @@ class StockOperationType(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_warehouse(
+    async def list_by_code_for_warehouse(
         cls, company_id: str, warehouse_id: str
     ) -> list[Self]:
+        """Все типы операций склада, ORDER BY code. Предела нет."""
         return await cls.objects.filter(
             company_id=company_id, warehouse_id=warehouse_id
         ).order_by("code").all()

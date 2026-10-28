@@ -14,3 +14,9 @@ export const catalogItemsOp = createAsyncOp({
     commandType: 'office/catalogs/items_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/catalogs/:catalog_id/items' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/catalog_items': typeof catalogItemsOp;
+    }
+}

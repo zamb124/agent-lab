@@ -32,7 +32,8 @@ class OfficeDocumentRevision(PlatformModel):
         ]
 
     @classmethod
-    async def list_for_file(cls, file_id: str, *, limit: int) -> list[Self]:
+    async def list_by_revision_number_desc(cls, file_id: str, *, limit: int) -> list[Self]:
+        """Ревизии файла, ORDER BY revision_number DESC, не больше limit."""
         return await (
             cls.objects.filter(file_id=file_id)
             .order_by("-revision_number")
@@ -41,13 +42,14 @@ class OfficeDocumentRevision(PlatformModel):
         )
 
     @classmethod
-    async def append_document_revision(
+    async def append(
         cls,
         *,
         file_id: str,
         revision_file_id: str,
         created_by_user_id: str,
     ) -> Self:
+        """Добавляет следующую ревизию file_id под блокировкой. Первая — номер 1."""
         async with atomic(using="office"):
             _ = await execute_raw(
                 "SELECT pg_advisory_xact_lock(hashtext($1))",

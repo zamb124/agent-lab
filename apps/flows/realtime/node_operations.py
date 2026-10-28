@@ -34,10 +34,10 @@ async def _require_catalog_tool(
 ) -> None:
     if allow_node_id is not None and tool_id == allow_node_id:
         return
-    tool = await ToolReference.get(ToolReference.row_id(tool_id))
+    tool = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
     if tool is not None:
         return
-    node = await NodeConfig.get(NodeConfig.row_id(tool_id))
+    node = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(tool_id))
     if node is None:
         raise_invalid(ValueError(f"Tool '{tool_id}' not found"))
 
@@ -82,7 +82,7 @@ async def op_flows_nodes_catalog_item(
 ) -> NodeConfig:
     _ = user
     _ = await require_company_member(di)
-    node = await NodeConfig.get(NodeConfig.row_id(payload.node_id))
+    node = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(payload.node_id))
     if node is None:
         raise_not_found(LookupError("Node not found"))
     return node
@@ -96,7 +96,7 @@ async def op_flows_nodes_catalog_create(
 ) -> NodeConfig:
     _ = user
     _ = await require_company_member(di)
-    existing = await NodeConfig.get(NodeConfig.row_id(payload.node_id))
+    existing = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(payload.node_id))
     if existing is not None:
         raise_conflict(ValueError(f"Node '{payload.node_id}' already exists"))
     await _require_node_tools(payload, allow_node_id=None)
@@ -113,7 +113,7 @@ async def op_flows_nodes_catalog_update(
 ) -> NodeConfig:
     _ = user
     _ = await require_company_member(di)
-    existing = await NodeConfig.get(NodeConfig.row_id(payload.node_id))
+    existing = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(payload.node_id))
     if existing is None:
         raise_not_found(LookupError("Node not found"))
     await _require_node_tools(payload, allow_node_id=payload.node_id)
@@ -130,7 +130,7 @@ async def op_flows_nodes_catalog_remove(
 ) -> NodeDeletedResponse:
     _ = user
     _ = await require_company_member(di)
-    deleted = await NodeConfig.delete_by_id(NodeConfig.row_id(payload.node_id))
+    deleted = await NodeConfig.delete_by_id(NodeConfig.node_row_id_for_active_company(payload.node_id))
     if not deleted:
         raise_not_found(LookupError("Node not found"))
     logger.info("flows.node.deleted", node_id=payload.node_id)

@@ -12,6 +12,33 @@ const RETRIEVAL_VALUES = Object.freeze(['off', 'semantic', 'lexical', 'hybrid'])
 const COMPACTION_VALUES = Object.freeze(['off', 'auto', 'force']);
 const CACHE_VALUES = Object.freeze(['off', 'auto', 'provider_hints']);
 const BUDGET_CUSTOM_VALUE = '__custom__';
+function valueLabelFallback(value: string): string | undefined {
+    switch (value) {
+        case 'off': return VALUE_LABEL_FALLBACKS.off;
+        case 'compact': return VALUE_LABEL_FALLBACKS.compact;
+        case 'standard': return VALUE_LABEL_FALLBACKS.standard;
+        case 'agent': return VALUE_LABEL_FALLBACKS.agent;
+        case 'window': return VALUE_LABEL_FALLBACKS.window;
+        case 'smart': return VALUE_LABEL_FALLBACKS.smart;
+        case 'session': return VALUE_LABEL_FALLBACKS.session;
+        case 'node': return VALUE_LABEL_FALLBACKS.node;
+        case 'flow': return VALUE_LABEL_FALLBACKS.flow;
+        case 'company': return VALUE_LABEL_FALLBACKS.company;
+        case 'semantic': return VALUE_LABEL_FALLBACKS.semantic;
+        case 'lexical': return VALUE_LABEL_FALLBACKS.lexical;
+        case 'hybrid': return VALUE_LABEL_FALLBACKS.hybrid;
+        case 'tiny': return VALUE_LABEL_FALLBACKS.tiny;
+        case 'small': return VALUE_LABEL_FALLBACKS.small;
+        case 'medium': return VALUE_LABEL_FALLBACKS.medium;
+        case 'large': return VALUE_LABEL_FALLBACKS.large;
+        case 'max': return VALUE_LABEL_FALLBACKS.max;
+        case 'auto': return VALUE_LABEL_FALLBACKS.auto;
+        case 'force': return VALUE_LABEL_FALLBACKS.force;
+        case 'provider_hints': return VALUE_LABEL_FALLBACKS.provider_hints;
+        default: return undefined;
+    }
+}
+
 const VALUE_LABEL_FALLBACKS = Object.freeze({
     off: 'Disabled',
     compact: 'Window only',
@@ -367,7 +394,9 @@ export class PlatformLlmContextEditor extends PlatformElement {
         if (value === null || value === undefined || value === '') {
             return inherit;
         }
-        let display: string | number = typeof value === 'number' ? value : String(value ?? '');
+        let display: string | number = typeof value === 'number'
+            ? value
+            : (value === undefined || value === null ? '' : String(value));
         if (typeof value === 'boolean') {
             display = value
                 ? this.t('llm_context_editor.enabled')
@@ -385,9 +414,9 @@ export class PlatformLlmContextEditor extends PlatformElement {
     _valueLabel(value: string): string {
         const key = `llm_context_editor.value_${value}`;
         const translated = this.t(key);
-        return translated === key
-            ? ((VALUE_LABEL_FALLBACKS as Record<string, string>)[value] || value)
-            : translated;
+        if (translated !== key) return translated;
+        const fallback = valueLabelFallback(value);
+        return fallback === undefined ? value : fallback;
     }
 
     _clear(): void {

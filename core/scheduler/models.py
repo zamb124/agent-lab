@@ -181,25 +181,27 @@ class PlatformScheduledTask(PlatformModel):
 
     @classmethod
     async def upsert_by_schedule_task_id(cls, task: Self) -> Self:
-        existing = await cls.find_in_company(task.company_id, task.schedule_task_id)
+        existing = await cls.by_schedule_task_id(task.company_id, task.schedule_task_id)
         if existing is None:
             return await cls.objects.create(instance=task)
         _ = await task.save()
         return task
 
     @classmethod
-    async def find_in_company(
+    async def by_schedule_task_id(
         cls, company_id: str, schedule_task_id: str
     ) -> Self | None:
+        """Строка компании по schedule_task_id. Нет строки — None. Пустые company_id и schedule_task_id — ValueError."""
         return await cls.objects.filter(
             company_id=_required_schedule_field(company_id, "company_id"),
             schedule_task_id=_required_schedule_field(schedule_task_id, "schedule_task_id"),
         ).get_or_none()
 
     @classmethod
-    async def list_for_company(
+    async def list_filtered_by_created_at_desc(
         cls, company_id: str, filters: PlatformScheduleFilter
     ) -> list[Self]:
+        """Окно расписаний компании по PlatformScheduleFilter, ORDER BY created_at DESC. status, target_service и task_name равные None не фильтруют. limit и offset берутся из filters. Пустой company_id — ValueError."""
         return await (
             cls._filtered_schedule_tasks(company_id, filters)
             .order_by("-created_at")
@@ -209,7 +211,8 @@ class PlatformScheduledTask(PlatformModel):
         )
 
     @classmethod
-    async def count(cls, company_id: str, filters: PlatformScheduleFilter) -> int:
+    async def count_filtered(cls, company_id: str, filters: PlatformScheduleFilter) -> int:
+        """Число строк того же фильтра, что list_filtered_by_created_at_desc. status, target_service и task_name равные None не фильтруют. Пустой company_id — ValueError."""
         return await cls._filtered_schedule_tasks(company_id, filters).count()
 
     @classmethod
@@ -224,7 +227,7 @@ class PlatformScheduledTask(PlatformModel):
         return frozenset(schedule_ids)
 
     @classmethod
-    async def update_status(
+    async def update_status_schedule_runs_and_error(
         cls,
         company_id: str,
         schedule_task_id: str,
@@ -235,7 +238,8 @@ class PlatformScheduledTask(PlatformModel):
         next_run_at: datetime | None = None,
         error_message: str | None = None,
     ) -> bool:
-        task = await cls.find_in_company(company_id, schedule_task_id)
+        """Пишет status и updated_at. schedule_id, last_run_at, next_run_at и error_message пишутся только если не None. Нет строки — False."""
+        task = await cls.by_schedule_task_id(company_id, schedule_task_id)
         if task is None:
             return False
         task.status = _schedule_status(status)

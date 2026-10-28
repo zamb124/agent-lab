@@ -290,7 +290,7 @@ async def test_create_platform_event_trigger_rejects_bad_filters_with_400(
             },
         )
         assert response.status_code == 400, f"{label}: {response.text}"
-        saved = await FlowConfig.get_latest(flow_id)
+        saved = await FlowConfig.current_for_flow(flow_id)
         assert saved is not None
         assert f"bad_{label.replace(' ', '_')}" not in saved.triggers
 

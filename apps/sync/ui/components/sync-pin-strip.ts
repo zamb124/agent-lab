@@ -1,7 +1,7 @@
 /**
  * sync-pin-strip — горизонтальная полоска закреплённых сообщений канала.
  *
- * Источник message_id: useResource('sync/channels') as SyncChannelsController.items.find(...).pinned_message_ids.
+ * Источник message_id: useResource('sync/channels') as ControllerFor<'sync/channels'>.items.find(...).pinned_message_ids.
  * Превью текста: сообщение из slice `sync/messages_store.byChannelId[channelId].items`,
  * иначе подпись по умолчанию.
  * Индекс навигации: useSlice('sync/chat_ui').pinnedNavigateIndex.
@@ -10,8 +10,7 @@
  * для родителя (sync-channel-page).
  */
 
-import type { SyncChatUiController, SyncMessagesStoreController, SyncChannelsController} from '../events/sync.types.js';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -69,16 +68,16 @@ export class SyncPinStrip extends PlatformElement {
             font-weight: 500;
         }
     `;
-    private _channels: SyncChannelsController;
-    private _messagesStore: SyncMessagesStoreController;
-    private _chatUi: SyncChatUiController;
+    private _channels: ControllerFor<'sync/channels'>;
+    private _messagesStore: ControllerFor<'sync/messages_store'>;
+    private _chatUi: ControllerFor<'sync/chat_ui'>;
 
     constructor() {
         super();
         this.channelId = '';
-        this._channels = this.useResource('sync/channels') as SyncChannelsController;
-        this._messagesStore = this.useSlice('sync/messages_store') as SyncMessagesStoreController;
-        this._chatUi = this.useSlice('sync/chat_ui') as SyncChatUiController;
+        this._channels = this.useResource('sync/channels');
+        this._messagesStore = this.useSlice('sync/messages_store');
+        this._chatUi = this.useSlice('sync/chat_ui');
     }
 
     _channel() {

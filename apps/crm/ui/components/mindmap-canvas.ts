@@ -47,6 +47,14 @@ const NODE_H = 44;
 /** Скругление ноды в user space SVG и в CSS foreignObject; обводка рисуется отдельным inset-rect. */
 const MM_NODE_CORNER_RX = 12;
 
+function mindmapNeighbors(lists: Map<string, string[]>, id: string): string[] {
+    const list = lists.get(id);
+    if (list === undefined) {
+        throw new Error('Mindmap: adjacency list missing');
+    }
+    return list;
+}
+
 const BRANCH_PALETTE = [
     '#22c55e',
     '#eab308',
@@ -97,8 +105,8 @@ function _buildAdjacency(rootId: string, edges: unknown[]): Map<string, string[]
         }
         ensure(ep.source);
         ensure(ep.target);
-        adj.get(ep.source)!.push(ep.target);
-        adj.get(ep.target)!.push(ep.source);
+        mindmapNeighbors(adj, ep.source).push(ep.target);
+        mindmapNeighbors(adj, ep.target).push(ep.source);
     }
     return adj;
 }
@@ -114,7 +122,10 @@ function _bfsTree(rootId: string, adj: Map<string, string[]>): { treeChildren: M
     const queue = [rootId];
     reachable.add(rootId);
     while (queue.length > 0) {
-        const u = queue.shift()!;
+        const u = queue.shift();
+        if (u === undefined) {
+            throw new Error('Mindmap: bfs node missing');
+        }
         const nbrs = adj.get(u);
         if (!nbrs) {
             continue;
@@ -127,7 +138,7 @@ function _bfsTree(rootId: string, adj: Map<string, string[]>): { treeChildren: M
             if (!treeChildren.has(u)) {
                 treeChildren.set(u, []);
             }
-            treeChildren.get(u)!.push(v);
+            mindmapNeighbors(treeChildren, u).push(v);
             queue.push(v);
         }
     }
@@ -214,8 +225,11 @@ function _layoutSubtree(nodeId: string, depth: number, yTop: number, treeChildre
         _layoutSubtree(c, depth + 1, cursor, treeChildren, heights, labelMap, positions);
         cursor += block + V_GAP_SIBLINGS;
     }
-    const firstId = kids[0]!;
-    const lastId = kids[kids.length - 1]!;
+    const firstId = kids[0];
+    const lastId = kids[kids.length - 1];
+    if (firstId === undefined || lastId === undefined) {
+        throw new Error('Mindmap layout: child id missing');
+    }
     const firstPos = positions.get(firstId);
     const lastPos = positions.get(lastId);
     if (!firstPos || !lastPos) {
@@ -732,10 +746,16 @@ export class CRMMindmapCanvas extends PlatformElement {
             return strokeByNode;
         }
         kids.forEach((childId: string, idx: number) => {
-            const stroke = BRANCH_PALETTE[idx % BRANCH_PALETTE.length]!;
+            const stroke = BRANCH_PALETTE[idx % BRANCH_PALETTE.length];
+            if (stroke === undefined) {
+                throw new Error('Mindmap: branch color missing');
+            }
             const stack = [childId];
             while (stack.length > 0) {
-                const u = stack.pop()!;
+                const u = stack.pop();
+                if (u === undefined) {
+                    throw new Error('Mindmap: branch node missing');
+                }
                 strokeByNode.set(u, stroke);
                 const next = treeChildren.get(u);
                 if (next) {
@@ -889,12 +909,8 @@ export class CRMMindmapCanvas extends PlatformElement {
             return;
         }
         this._dragging = false;
-        if (e.currentTarget instanceof HTMLElement) {
-            try {
-                e.currentTarget.releasePointerCapture(e.pointerId);
-            } catch {
-                /* noop */
-            }
+        if (e.currentTarget instanceof HTMLElement && e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
         }
         this._schedulePersistMindmapView();
     }

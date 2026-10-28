@@ -4,7 +4,6 @@
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import type { I18nState } from '../events/reducers/i18n.js';
 import type { SelectController } from '../events/select-controller.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 
@@ -85,7 +84,7 @@ export class PlatformDocumentBinaryViewer extends PlatformElement {
         this.originalName = '';
         this.contentType = '';
         this.fileSize = 0;
-        this._localeSel = this.select((s) => (s.i18n as I18nState | undefined)?.locale ?? 'ru');
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
 
     override render(): TemplateResult {

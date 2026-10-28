@@ -12,6 +12,7 @@ import { EventLog } from './log.js';
 import { buildPlatformReducer } from './reducers/index.js';
 import { CoreEvents } from './contract.js';
 import { setPlatformBus, hasPlatformBus, getPlatformBus } from './bus-singleton.js';
+import type { PlatformBusLike } from './bus-singleton.js';
 import { maybeAttachDevtools } from './devtools.js';
 
 import { createAuthEffect } from './effects/auth.effect.js';
@@ -34,22 +35,17 @@ import { createMailEffect } from './effects/mail.effect.js';
 import { createUiEffect } from './effects/ui.effect.js';
 
 function _normalizePlatformApex(originStr: string | undefined): string {
-    const s = (originStr || '').trim();
+    const s = (originStr === undefined ? '' : originStr).trim();
     if (s === '') {
         return '';
     }
-    try {
-        const href = s.endsWith('/') ? s : `${s}/`;
-        return new URL(href).origin;
-    } catch {
-        return '';
-    }
+    const href = s.endsWith('/') ? s : `${s}/`;
+    return new URL(href).origin;
 }
 
 /**
  */
 import type { EventEffect } from './bus.js';
-import type { Reducer } from './bus.js';
 import type { SliceDef } from './reducers/index.js';
 import type { RouterRoute } from './reducers/router.js';
 
@@ -62,17 +58,16 @@ export interface BootstrapOptions {
     platformApexOrigin?: string;
 }
 
-export function bootstrapPlatformBus(options?: BootstrapOptions): EventBus {
+export function bootstrapPlatformBus(options: BootstrapOptions = {}): PlatformBusLike {
     if (hasPlatformBus()) {
-        return getPlatformBus() as EventBus<Record<string, unknown>>;
+        return getPlatformBus();
     }
-    const opts = options || {};
-    const baseUrl = opts.baseUrl || '';
-    const routes = Array.isArray(opts.routes) ? opts.routes : [];
-    const slices = opts.slices || {};
-    const extraEffects = Array.isArray(opts.effects) ? opts.effects : [];
-    const devMode = Boolean(opts.devMode);
-    const platformApex = _normalizePlatformApex(opts.platformApexOrigin || '');
+    const baseUrl = options.baseUrl === undefined ? '' : options.baseUrl;
+    const routes = Array.isArray(options.routes) ? options.routes : [];
+    const slices = options.slices === undefined ? {} : options.slices;
+    const extraEffects = Array.isArray(options.effects) ? options.effects : [];
+    const devMode = Boolean(options.devMode);
+    const platformApex = _normalizePlatformApex(options.platformApexOrigin === undefined ? '' : options.platformApexOrigin);
     let suppressHostIntegrationsForPwa = false;
     if (
         platformApex !== ''
@@ -85,11 +80,9 @@ export function bootstrapPlatformBus(options?: BootstrapOptions): EventBus {
 
     const { reducer, initialState } = buildPlatformReducer(slices);
     const log = new EventLog({ devMode });
-    // State шины открыт: слайсы сервисов подключаются динамически —
-    // честный тип состояния bus — Record<string, unknown>.
-    const bus = new EventBus<Record<string, unknown>>({
-        reducer: reducer as unknown as Reducer<Record<string, unknown>>,
-        initialState: initialState as Record<string, unknown>,
+    const bus = new EventBus({
+        reducer,
+        initialState,
         log,
     });
 

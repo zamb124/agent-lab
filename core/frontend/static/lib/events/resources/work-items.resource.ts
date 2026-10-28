@@ -5,10 +5,36 @@
 import { createAsyncOp, createForm, createResourceCollection } from '../index.js';
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 import type { ResourceCollectionSlice } from '../factories/resource-collection.js';
 import type { AsyncOpSlice } from '../factories/async-op.js';
 
 type JsonObject = Record<string, unknown>;
+
+function isWorkItemSlice(state: ResourceCollectionSlice): state is WorkItemSlice {
+    return Array.isArray(state.items) && isPlainRecord(state.byId);
+}
+
+function workItemRecord(value: unknown): JsonObject | null {
+    if (!isPlainRecord(value) || typeof value.work_item_id !== 'string') {
+        return null;
+    }
+    return value;
+}
+
+function payloadResult(payload: unknown): JsonObject | null {
+    if (!isPlainRecord(payload) || !('result' in payload) || !isPlainRecord(payload.result)) {
+        return null;
+    }
+    return payload.result;
+}
+
+function requireEventName(name: string | undefined, label: string): string {
+    if (name === undefined) {
+        throw new Error(`${label} missing`);
+    }
+    return name;
+}
 
 interface WorkItemSlice extends ResourceCollectionSlice {
     byId: Readonly<Record<string, JsonObject>>;
@@ -36,13 +62,11 @@ function _mergeWorkItem(state: WorkItemSlice, item: JsonObject): WorkItemSlice {
     const existing = state.byId[id];
     let merged = item;
     if (
-        existing
-        && typeof existing === 'object'
-        && existing.interaction_policy
-        && typeof existing.interaction_policy === 'object'
-        && (!item.interaction_policy || typeof item.interaction_policy !== 'object')
+        isPlainRecord(existing)
+        && isPlainRecord(existing.interaction_policy)
+        && !isPlainRecord(item.interaction_policy)
     ) {
-        const prev = existing.interaction_policy as JsonObject;
+        const prev = existing.interaction_policy;
         const isTerminal = item.state === 'done' || item.state === 'cancelled' || item.state === 'failed';
         merged = {
             ...item,
@@ -81,11 +105,11 @@ export const workItemCountsOp = createAsyncOp({
         work_queue_ids: [],
     },
     extraReducer: (state, event, events) => {
-        if (event.type !== events.SUCCEEDED || !event.payload || !('result' in (event.payload as object))) {
+        if (event.type !== events.SUCCEEDED || !isPlainRecord(event.payload) || !('result' in event.payload)) {
             return state;
         }
-        const result = (event.payload as { result?: unknown } | null)?.result as JsonObject | null | undefined;
-        if (!result || typeof result !== 'object') {
+        const result = event.payload.result;
+        if (!isPlainRecord(result)) {
             throw new Error('workItemCountsOp: SUCCEEDED result must be object');
         }
         if (typeof result.assigned_open_count !== 'number' || typeof result.queue_inbox_count !== 'number') {
@@ -152,56 +176,61 @@ export const workItemsResource = createResourceCollection({
     },
     extraReducer: (state, event) => {
         if (WORK_ITEM_MUTATION_SUCCEEDED.includes(event.type)) {
-            const payload = event.payload as { result?: unknown } | null;
-            if (!payload || !('result' in payload)) {
+            const item = payloadResult(event.payload);
+            if (item === null || typeof item.work_item_id !== 'string') {
                 return state;
             }
-            const item = payload.result as JsonObject | null;
-            if (!item || typeof item !== 'object' || typeof item.work_item_id !== 'string') {
-                return state;
+            if (!isWorkItemSlice(state)) {
+                throw new Error('worktracker/work_items: slice is invalid');
             }
-            return _mergeWorkItem(state as WorkItemSlice, item);
+            return _mergeWorkItem(state, item);
         }
         if (!WORK_ITEM_EVENTS.includes(event.type)) {
             return state;
         }
-        const payload = event.payload as JsonObject | null;
-        if (!payload || typeof payload !== 'object') {
+        if (!isPlainRecord(event.payload)) {
             return state;
         }
+        const payload = event.payload;
         if (event.type === 'worktracker/work_item/comment_created') {
             const workItemId = payload.work_item_id;
             if (typeof workItemId !== 'string') {
                 return state;
             }
-            const existing = (state as WorkItemSlice).byId[workItemId];
+            if (!isWorkItemSlice(state)) {
+                throw new Error('worktracker/work_items: slice is invalid');
+            }
+            const existing = state.byId[workItemId];
             if (!existing || typeof existing !== 'object') {
                 return state;
             }
             const commentCount = typeof existing.comment_count === 'number' ? existing.comment_count + 1 : 1;
             const updated = { ...existing, comment_count: commentCount };
-            return _mergeWorkItem(state as WorkItemSlice, updated);
+            return _mergeWorkItem(state, updated);
         }
-        const item = payload.work_item as JsonObject | null;
-        if (!item || typeof item !== 'object' || typeof item.work_item_id !== 'string') {
+        const item = workItemRecord(payload.work_item);
+        if (item === null) {
             return state;
         }
-        return _mergeWorkItem(state as WorkItemSlice, item);
+        if (!isWorkItemSlice(state)) {
+            throw new Error('worktracker/work_items: slice is invalid');
+        }
+        return _mergeWorkItem(state, item);
     },
     extraEffect: async (event, ctx, events) => {
         if (event.type !== 'flows/hitl_conversation/turn_appended') {
             return false;
         }
-        const payload = event.payload as JsonObject | null;
-        if (!payload || typeof payload !== 'object') {
+        if (!isPlainRecord(event.payload)) {
             return true;
         }
+        const payload = event.payload;
         const workItemId = typeof payload.work_item_id === 'string' ? payload.work_item_id : '';
         if (workItemId.length === 0) {
             return true;
         }
         ctx.dispatch(
-            events.ITEM_REQUESTED!,
+            requireEventName(events.ITEM_REQUESTED, 'worktracker/work_items ITEM_REQUESTED'),
             { work_item_id: workItemId },
             { causation_id: event.id, source: 'ws' },
         );
@@ -276,11 +305,11 @@ export const workItemCommentsListOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/worktracker/api/v1/work-items/:work_item_id/comments' },
     extraInitial: { items: [] },
     extraReducer: (state, event, events) => {
-        if (event.type !== events.SUCCEEDED || !event.payload || !('result' in (event.payload as object))) {
+        if (event.type !== events.SUCCEEDED || !isPlainRecord(event.payload) || !('result' in event.payload)) {
             return state;
         }
-        const result = (event.payload as { result?: unknown } | null)?.result as { items?: unknown } | null | undefined;
-        if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
+        const result = event.payload.result;
+        if (!isPlainRecord(result) || !Array.isArray(result.items)) {
             throw new Error('workItemCommentsListOp: expected {items: comment[]}');
         }
         return { ...state, items: result.items };
@@ -330,4 +359,20 @@ export function createWorktrackerWorkItemCountsAuthEffect(): (event: PlatformEve
             workItemCountsOp.run({}, ctx);
         }
     };
+}
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'worktracker/work_item_get': typeof workItemGetOp;
+        'worktracker/work_item_counts': typeof workItemCountsOp;
+        'worktracker/work_items': typeof workItemsResource;
+        'worktracker/work_item_move': typeof workItemMoveOp;
+        'worktracker/work_item_claim': typeof workItemClaimOp;
+        'worktracker/work_item_complete': typeof workItemCompleteOp;
+        'worktracker/work_item_cancel': typeof workItemCancelOp;
+        'worktracker/work_item_assign': typeof workItemAssignOp;
+        'worktracker/work_item_comment': typeof workItemCommentOp;
+        'worktracker/work_item_comments_list': typeof workItemCommentsListOp;
+        'worktracker/work_item_create_form': typeof workItemCreateForm;
+    }
 }

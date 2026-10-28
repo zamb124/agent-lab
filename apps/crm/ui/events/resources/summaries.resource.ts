@@ -147,3 +147,10 @@ export const periodSummaryOp = createAsyncOp({
         };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/daily_summary': typeof dailySummaryOp;
+        'crm/period_summary': typeof periodSummaryOp;
+    }
+}

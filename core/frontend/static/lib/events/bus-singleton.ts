@@ -7,13 +7,14 @@
  */
 
 import type { PlatformEvent, EventMetaInput } from './contract.js';
+import type { PlatformBusState } from './bus-state.js';
 
 export interface PlatformBusLike {
     dispatch: (event: PlatformEvent | string, payload?: unknown, meta?: EventMetaInput) => PlatformEvent | null;
-    getState: () => Record<string, unknown>;
+    getState: () => Readonly<PlatformBusState>;
     subscribeType: (type: string, callback: (event: PlatformEvent) => void) => () => void;
     subscribeSelector: <V>(
-        selector: (state: Record<string, unknown>) => V,
+        selector: (state: Readonly<PlatformBusState>) => V,
         callback: (value: V, prevValue: V | undefined) => void,
         opts?: { equality?: (a: V, b: V) => boolean },
     ) => () => void;

@@ -14,6 +14,11 @@ import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 
+function fieldText(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
 export class FrontendCrawlDomainAddModal extends PlatformFormModal {
     static modalKind = 'frontend.crawl_domain_add';
     static i18nNamespace = 'frontend';
@@ -103,7 +108,7 @@ export class FrontendCrawlDomainAddModal extends PlatformFormModal {
                         placeholder="example.com"
                         .value=${this._domain}
                         .error=${this.fieldError('domain')}
-                        @change=${(e: CustomEvent) => { this._domain = String(e.detail.value ?? ''); }}
+                        @change=${(e: CustomEvent) => { this._domain = fieldText(e.detail.value); }}
                     ></platform-field>
                 </div>
                 <div class="form-group">
@@ -112,7 +117,7 @@ export class FrontendCrawlDomainAddModal extends PlatformFormModal {
                         mode="edit"
                         label=${this.t('crawl_report_page.field_category')}
                         .value=${this._category}
-                        @change=${(e: CustomEvent) => { this._category = String(e.detail.value ?? ''); }}
+                        @change=${(e: CustomEvent) => { this._category = fieldText(e.detail.value); }}
                     ></platform-field>
                 </div>
                 <div class="form-group">
@@ -137,7 +142,7 @@ export class FrontendCrawlDomainAddModal extends PlatformFormModal {
                         label=${this.t('crawl_report_page.field_seed_urls')}
                         placeholder="https://example.com/page"
                         .value=${this._seedUrls}
-                        @change=${(e: CustomEvent) => { this._seedUrls = String(e.detail.value ?? ''); }}
+                        @change=${(e: CustomEvent) => { this._seedUrls = fieldText(e.detail.value); }}
                     ></platform-field>
                     <div class="field-help">${this.t('crawl_report_page.help_seed_urls')}</div>
                 </div>

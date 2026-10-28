@@ -152,7 +152,8 @@ class SearchIndexDefinition(PlatformModel):
         )
 
     @classmethod
-    async def find_in_company(cls, company_id: str, search_index_id: str) -> Self | None:
+    async def by_search_index_id(cls, company_id: str, search_index_id: str) -> Self | None:
+        """Строка компании по search_index_id. Нет строки — None. Пустые company_id и search_index_id — ValueError."""
         if company_id == "":
             raise ValueError("company_id cannot be empty.")
         if search_index_id == "":
@@ -163,7 +164,7 @@ class SearchIndexDefinition(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_page(
+    async def page_by_search_index_id(
         cls,
         *,
         company_id: str,
@@ -171,6 +172,7 @@ class SearchIndexDefinition(PlatformModel):
         limit: int,
         offset: int,
     ) -> OffsetPage[SearchIndexDefinition]:
+        """Страница индексов компании, ORDER BY search_index_id. enabled равный None не фильтрует. total — COUNT этого фильтра. Пустой company_id ValueError не даёт."""
         rows = cls.objects.filter(company_id=company_id)
         if enabled is not None:
             rows = rows.filter(enabled=enabled)

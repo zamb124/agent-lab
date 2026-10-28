@@ -112,7 +112,7 @@ class DatasourceService:
         company_id = _company_id()
         user_id = _user_id()
         await self._authz.require_can_view(AuthzObject.company(company_id))
-        candidates = await DatasourceConnection.list_by_company(company_id)
+        candidates = await DatasourceConnection.list_by_name_and_datasource_id(company_id)
         if not candidates:
             return []
         allowed = await self._authz.batch_check(

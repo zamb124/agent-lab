@@ -108,7 +108,7 @@ class LLMModelsService:
             raise RuntimeError(f"provider {provider} did not return models")
 
         for model in records:
-            existing = await AIModelRecord.get_provider_model(model.provider, model.model_id)
+            existing = await AIModelRecord.by_provider_and_model_id(model.provider, model.model_id)
             if (
                 existing is not None
                 and existing.artificial_analysis is not None

@@ -39,7 +39,8 @@ class EvaluationRubric(CompanyScopedModel):
     archived_at: datetime | None = DbField(default=None)
 
     @classmethod
-    async def list_for_flow(cls, flow_id: str) -> list[Self]:
+    async def list_by_updated_at_and_rubric_id(cls, flow_id: str) -> list[Self]:
+        """Рубрики flow, ORDER BY updated_at DESC, rubric_id. Предела нет. Пустой flow_id — ValueError."""
         if flow_id == "":
             raise ValueError("flow_id is required")
         return await cls.objects.filter(flow_id=flow_id).order_by("-updated_at", "rubric_id").all()

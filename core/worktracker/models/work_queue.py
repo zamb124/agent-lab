@@ -40,11 +40,13 @@ class WorkQueue(PlatformModel):
         return await query.all()
 
     @classmethod
-    async def list_for_company(cls, company_id: str) -> list[Self]:
+    async def list_unordered_for_company(cls, company_id: str) -> list[Self]:
+        """Все очереди компании. Порядка и limit нет."""
         return await cls.objects.filter(company_id=company_id).all()
 
     @classmethod
-    async def list_queues(cls, company_id: str) -> list[Self]:
+    async def list_by_created_at(cls, company_id: str) -> list[Self]:
+        """Все очереди компании, ORDER BY created_at. Предела нет."""
         return await (
             cls.objects.filter(company_id=company_id)
             .order_by("created_at")

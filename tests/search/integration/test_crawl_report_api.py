@@ -92,7 +92,7 @@ async def test_crawl_profile_summary_mixed_state(
         ],
         next_crawl_after=past,
     )
-    domains_page = await CrawlDomain.list_page(
+    domains_page = await CrawlDomain.page_by_domain(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=10,
@@ -172,7 +172,7 @@ async def test_list_crawl_domains_filter(
         [CrawlDomainSeed(domain="only-active.example.com", category="news")],
         next_crawl_after=now,
     )
-    domains_page = await CrawlDomain.list_page(
+    domains_page = await CrawlDomain.page_by_domain(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=10,
@@ -213,7 +213,7 @@ async def test_list_crawl_urls_fetching(
         next_crawl_after=now,
     )
     domain = (
-        await CrawlDomain.list_page(
+        await CrawlDomain.page_by_domain(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -309,7 +309,7 @@ async def test_run_crawl_domain_queues_discover(
         next_crawl_after=now + timedelta(days=1),
     )
     domain = (
-        await CrawlDomain.list_page(
+        await CrawlDomain.page_by_domain(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -351,7 +351,7 @@ async def _seed_crawl_urls(
         next_crawl_after=now,
     )
     domain = (
-        await CrawlDomain.list_page(
+        await CrawlDomain.page_by_domain(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -468,7 +468,7 @@ async def test_get_crawl_url_detail_with_rag_content(
 ):
     _ = search_system_context, provider_litserve_service, rag_worker
     crawl_profile_id = await _create_profile(search_di, unique_id)
-    profile = await CrawlProfile.get_with_index(crawl_profile_id)
+    profile = await CrawlProfile.require_with_index(crawl_profile_id)
     rag_namespace_id = profile.search_index.rag_namespace_id
     marker = f"crawl_detail_marker_{unique_id}"
     doc_text = (
@@ -494,7 +494,7 @@ async def test_get_crawl_url_detail_with_rag_content(
         next_crawl_after=now,
     )
     domain = (
-        await CrawlDomain.list_page(
+        await CrawlDomain.page_by_domain(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -567,7 +567,7 @@ async def test_patch_crawl_profile_updates_filters_and_limits(
     assert profile["exclude_extensions"] == ["pdf", "mp4"]
     assert profile["llm_enrichment_enabled"] is True
 
-    stored = await CrawlProfile.get_with_index(crawl_profile_id)
+    stored = await CrawlProfile.require_with_index(crawl_profile_id)
     assert stored.profile.refresh_interval_seconds == 3600
     assert stored.profile.exclude_extensions == ["pdf", "mp4"]
     assert stored.profile.llm_enrichment_enabled is True
@@ -643,7 +643,7 @@ async def test_patch_crawl_domain_pause_and_interval(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.list_page(
+        await CrawlDomain.page_by_domain(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -677,7 +677,7 @@ async def test_delete_crawl_domain(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.list_page(
+        await CrawlDomain.page_by_domain(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -712,7 +712,7 @@ async def test_add_crawl_domain_urls(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.list_page(
+        await CrawlDomain.page_by_domain(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,

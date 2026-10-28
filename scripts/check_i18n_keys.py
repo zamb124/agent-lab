@@ -3,7 +3,7 @@
 Cross-check ключей переводов: код ↔ JSON-бандлы.
 
 Что делает:
-  1. Сканирует JS (`apps/<svc>/ui/**/*.js` + `core/frontend/static/lib/**/*.js`)
+  1. Сканирует UI (`apps/<svc>/ui/**/*.ts` + `core/frontend/static/lib/**/*.ts`)
      и собирает все вызовы `t('key', vars?, namespace?)` / `this.t('key', ...)`.
   2. Загружает все `core/i18n/translations/{ru,en}/*.json` (без префикса `_`),
      каждый файл = namespace в корневом бандле.
@@ -74,7 +74,7 @@ TRANSLATIONS = ROOT / "core" / "i18n" / "translations"
 LOCALES = ("ru", "en")
 
 # I18nNs.X → строка namespace. Должно совпадать с
-# core/frontend/static/lib/utils/i18n-namespace.js.
+# core/frontend/static/lib/utils/i18n-namespace.ts.
 I18N_NS_MAP = {
     "BILLING": "billing",
     "LANDING": "landing",

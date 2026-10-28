@@ -93,23 +93,40 @@ export function assertEventType(type: unknown): string {
  * @param {{causation_id?: string, correlation_id?: string, trace_id?: string, source?: string, ts?: number}} [meta]
  * @returns {{id: string, type: string, payload: unknown, meta: object}}
  */
+function eventSource(value: string): EventSource {
+    switch (value) {
+        case 'local':
+        case 'ws':
+        case 'http':
+        case 'router':
+        case 'storage':
+        case 'timer':
+        case 'system':
+            return value;
+        default:
+            throw new Error(`Invalid event source "${value}". Allowed: ${[...EVENT_SOURCE_VALUES].join(', ')}`);
+    }
+}
+
+function metaText(meta: EventMetaInput | undefined, key: 'causation_id' | 'correlation_id' | 'trace_id'): string | null {
+    if (meta === undefined) return null;
+    const value = meta[key];
+    return typeof value === 'string' ? value : null;
+}
+
 export function createEvent(type: string, payload?: unknown, meta?: EventMetaInput): PlatformEvent {
     assertEventType(type);
-    const m = meta || {};
-    const source = m.source || 'local';
-    if (!EVENT_SOURCE_VALUES.has(source)) {
-        throw new Error(`Invalid event source "${source}". Allowed: ${[...EVENT_SOURCE_VALUES].join(', ')}`);
-    }
+    const source = eventSource(meta === undefined || meta.source === undefined ? 'local' : meta.source);
     return {
         id: _generateId(),
         type,
         payload: payload === undefined ? null : payload,
         meta: {
-            ts: typeof m.ts === 'number' ? m.ts : Date.now(),
-            source: source as EventSource,
-            causation_id: m.causation_id ?? null,
-            correlation_id: m.correlation_id ?? null,
-            trace_id: m.trace_id ?? null,
+            ts: meta !== undefined && typeof meta.ts === 'number' ? meta.ts : Date.now(),
+            source,
+            causation_id: metaText(meta, 'causation_id'),
+            correlation_id: metaText(meta, 'correlation_id'),
+            trace_id: metaText(meta, 'trace_id'),
         },
     };
 }

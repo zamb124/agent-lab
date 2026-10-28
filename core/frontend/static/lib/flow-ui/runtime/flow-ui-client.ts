@@ -5,6 +5,7 @@
  * Подписки: ``on('frame' | 'task' | 'ui' | 'state' | 'error', handler)`` → unsubscribe.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
 import {
     a2aEndpointUrl,
     buildCancelTaskBody,
@@ -23,6 +24,7 @@ import {
     isSettledTaskState,
     isTerminalTaskState,
     sendA2ARequest,
+    type A2aError,
 } from '../protocol/a2a-stream.js';
 import { STATE_ARTIFACT_ID } from '../protocol/constants.js';
 import type { A2aFileSource, A2aUiActionInput } from '../protocol/a2a-codec.js';
@@ -54,12 +56,35 @@ export interface FlowUiSendInput {
     taskId?: string | null;
 }
 
+function frameRecord(value: unknown, label: string): FlowUiRecord | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (!isPlainRecord(value)) {
+        throw new Error(`flow-ui: ${label} must be an object`);
+    }
+    return value;
+}
+
+function requireFrame(frame: unknown): FlowUiRecord {
+    if (!isPlainRecord(frame)) {
+        throw new Error('flow-ui: A2A frame must be an object');
+    }
+    return frame;
+}
+
+function statusState(status: unknown): unknown {
+    if (status === undefined || status === null) return undefined;
+    if (!isPlainRecord(status)) {
+        throw new Error('flow-ui: task status must be an object');
+    }
+    return status.state;
+}
+
 /** ``artifact.artifactId`` кадра artifactUpdate для сравнения со STATE_ARTIFACT_ID. */
 function frameArtifactId(frame: FlowUiRecord): unknown {
-    const result = frame.result as FlowUiRecord | undefined;
-    const update = result?.artifactUpdate as FlowUiRecord | undefined;
-    const artifact = update?.artifact as FlowUiRecord | undefined;
-    return artifact?.artifactId;
+    const result = frameRecord(frame.result, 'frame.result');
+    const update = result === undefined ? undefined : frameRecord(result.artifactUpdate, 'artifactUpdate');
+    const artifact = update === undefined ? undefined : frameRecord(update.artifact, 'artifact');
+    return artifact === undefined ? undefined : artifact.artifactId;
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -140,7 +165,9 @@ export class FlowUIClient {
     }
 
     private _emit(type: string, detail: unknown) {
-        for (const handler of [...(this._listeners.get(type) || [])]) handler(detail);
+        const handlers = this._listeners.get(type);
+        if (handlers === undefined) return;
+        for (const handler of [...handlers]) handler(detail);
     }
 
     private async _headers(): Promise<Record<string, string>> {
@@ -166,7 +193,7 @@ export class FlowUIClient {
             credentials: this.credentials,
         });
         if (!response.ok) {
-            const error = new Error(`flow-ui: interface HTTP ${response.status}`) as Error & { status: number };
+            const error: A2aError = new Error(`flow-ui: interface HTTP ${response.status}`);
             error.status = response.status;
             throw error;
         }
@@ -188,10 +215,24 @@ export class FlowUIClient {
                 headers: await this._headers(),
                 credentials: this.credentials,
             });
-            const result = frame.result as FlowUiRecord | undefined;
-            const tasks = Array.isArray(result?.tasks) ? result.tasks : [];
-            for (const task of tasks) this.applyFrame({ result: { task } });
-            pageToken = typeof result?.nextPageToken === 'string' ? result.nextPageToken : '';
+            const result = frameRecord(frame.result, 'ListTasks result');
+            if (result === undefined || !Array.isArray(result.tasks)) {
+                throw new Error('flow-ui: ListTasks result.tasks must be an array');
+            }
+            for (const task of result.tasks) {
+                if (!isPlainRecord(task)) {
+                    throw new Error('flow-ui: ListTasks task must be an object');
+                }
+                this.applyFrame({ result: { task } });
+            }
+            const nextPageToken = result.nextPageToken;
+            if (nextPageToken === undefined || nextPageToken === null || nextPageToken === '') {
+                pageToken = '';
+            } else if (typeof nextPageToken !== 'string') {
+                throw new Error('flow-ui: ListTasks nextPageToken must be a string');
+            } else {
+                pageToken = nextPageToken;
+            }
         } while (pageToken !== '');
         const last = this.store.orderedTasks().at(-1);
         if (last) {
@@ -203,7 +244,7 @@ export class FlowUIClient {
 
     /** Незавершённый Task или Task, ждущий оператора/OAuth/handoff, дочитывается после закрытия стрима. */
     private _tailIfOpen(task: A2aAccumulatedTask) {
-        const state = (task.status as FlowUiRecord | undefined)?.state;
+        const state = statusState(task.status);
         const interrupt = taskInterrupt(task);
         if (interrupt !== null && interrupt.continues) {
             if (!isTerminalTaskState(state)) this.tail(task.id, { untilTerminal: true });
@@ -245,16 +286,17 @@ export class FlowUIClient {
         this.store.setStreaming(true);
         this.stopTail();
         this.store.setPending({ text, files, action, messageId: message.messageId });
-        const fields = action ? Object.keys((action.fields as FlowUiRecord | undefined) || {}) : [];
+        const fields = action && isPlainRecord(action.fields) ? Object.keys(action.fields) : [];
         let editsCleared = fields.length === 0;
         try {
             await consumeA2AStream(
                 { url: this.endpoint, body, headers: await this._headers(), credentials: this.credentials, signal: abort.signal },
                 (frame: unknown) => {
                     if (abort.signal.aborted) return;
-                    const applied = this.applyFrame(frame as FlowUiRecord);
+                    const record = requireFrame(frame);
+                    const applied = this.applyFrame(record);
                     if (!editsCleared && applied?.frameKind === 'artifactUpdate'
-                        && frameArtifactId(frame as FlowUiRecord) === STATE_ARTIFACT_ID) {
+                        && frameArtifactId(record) === STATE_ARTIFACT_ID) {
                         editsCleared = true;
                         this.store.clearEdits(fields);
                     }
@@ -295,7 +337,7 @@ export class FlowUIClient {
     private async _runTail(taskId: string, abort: AbortController, untilTerminal: boolean) {
         const settled = (): boolean => {
             const status = this.store.task(taskId)?.status;
-            const state = (status as FlowUiRecord | undefined)?.state;
+            const state = statusState(status);
             return untilTerminal ? isTerminalTaskState(state) : isSettledTaskState(state);
         };
         while (!abort.signal.aborted && !settled()) {
@@ -309,7 +351,7 @@ export class FlowUIClient {
                         signal: abort.signal,
                     },
                     (frame: unknown) => {
-                        if (!abort.signal.aborted) this.applyFrame(frame as FlowUiRecord);
+                        if (!abort.signal.aborted) this.applyFrame(requireFrame(frame));
                     },
                 );
             } catch (error) {
@@ -320,8 +362,9 @@ export class FlowUIClient {
             if (abort.signal.aborted || settled()) break;
             try {
                 await sleep(800, abort.signal);
-            } catch {
-                break;
+            } catch (error) {
+                if (flowUIIsAbortError(error)) break;
+                throw error;
             }
         }
         if (this._tailAbort === abort) {
@@ -338,7 +381,10 @@ export class FlowUIClient {
 
     async cancel() {
         if (!this.store.taskRunning) throw new Error('flow-ui: no running task to cancel');
-        const taskId = this.store.activeTaskId ?? '';
+        const taskId = this.store.activeTaskId;
+        if (taskId === null || taskId.length === 0) {
+            throw new Error('flow-ui: running task has no id');
+        }
         const frame = await sendA2ARequest({
             url: this.endpoint,
             body: buildCancelTaskBody(taskId),

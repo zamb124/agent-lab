@@ -12,6 +12,12 @@ import { PlatformBottomSheet } from '@platform/lib/components/layout/platform-bo
 import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
 import '@platform/lib/components/platform-tree.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 export class WikiPublicTreeSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'wiki.public_tree';
     static i18nNamespace = 'wiki';
@@ -62,7 +68,7 @@ export class WikiPublicTreeSheet extends PlatformBottomSheet {
         if (typeof this.onSelect !== 'function') {
             throw new Error('wiki-public-tree-sheet: требуется onSelect');
         }
-        this.onSelect(String(event.detail.id ?? ''));
+        this.onSelect(missingAsEmpty(event.detail.id));
         this._requestClose();
     }
 

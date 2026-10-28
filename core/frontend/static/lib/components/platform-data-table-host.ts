@@ -5,6 +5,7 @@
 import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
 import { httpRequest } from '../events/http.js';
 import type { HttpRequestSpec } from '../events/http.js';
 import { hasPlatformBus } from '../events/bus-singleton.js';
@@ -45,19 +46,81 @@ interface EditingCell {
 
 type RowId = string | number;
 
-function handlerPayload(openConfig: unknown): Record<string, unknown> {
-    if (!openConfig || typeof openConfig !== 'object') {
-        throw new Error('platform-data-table-host: openConfig required');
+function requireRowId(rowId: string | number | undefined): RowId {
+    if (typeof rowId === 'string' && rowId.length > 0) return rowId;
+    if (typeof rowId === 'number' && Number.isFinite(rowId)) return rowId;
+    throw new Error('platform-data-table-host: row_id required');
+}
+
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        throw new Error(`platform-data-table-host: ${label} required`);
     }
-    const config = openConfig as Record<string, unknown>;
+    return value;
+}
+
+function isSchemaSnapshot(value: unknown): value is DataTableSchemaSnapshot {
+    if (!isPlainRecord(value)) return false;
+    if (value.tables === undefined) return true;
+    if (!Array.isArray(value.tables)) return false;
+    return value.tables.every((table) => (
+        isPlainRecord(table)
+        && typeof table.name === 'string'
+        && table.name.length > 0
+        && Array.isArray(table.columns)
+    ));
+}
+
+function isDataTableRow(value: unknown): value is DataTableRow {
+    if (!isPlainRecord(value)) return false;
+    if (value.row_id !== undefined && typeof value.row_id !== 'string' && typeof value.row_id !== 'number') {
+        return false;
+    }
+    if (value.values !== undefined && !isPlainRecord(value.values)) return false;
+    return true;
+}
+
+function dataTableRows(items: readonly unknown[]): DataTableRow[] {
+    return items.map((item, index) => {
+        if (!isDataTableRow(item)) {
+            throw new Error(`platform-data-table-host: rows[${index}] must be an object`);
+        }
+        return item;
+    });
+}
+
+function rowsPage(value: unknown): { items: DataTableRow[]; nextCursor: string | null; hasMore: boolean } {
+    if (!isPlainRecord(value) || !Array.isArray(value.items)) {
+        throw new Error('platform-data-table-host: rows page.items required');
+    }
+    return {
+        items: dataTableRows(value.items),
+        nextCursor: typeof value.next_cursor === 'string' ? value.next_cursor : null,
+        hasMore: value.has_more === true,
+    };
+}
+
+function inputValue(event: Event): string {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-data-table-host: text input required');
+    }
+    return target.value;
+}
+
+function httpMethod(value: string): NonNullable<HttpRequestSpec['method']> {
+    if (value === 'GET' || value === 'POST' || value === 'PUT' || value === 'PATCH' || value === 'DELETE') {
+        return value;
+    }
+    throw new Error(`platform-data-table-host: unsupported method ${value}`);
+}
+
+function handlerPayload(openConfig: unknown): Record<string, unknown> {
+    const config = requireRecord(openConfig, 'openConfig');
     if (config.handler !== 'data_table') {
         throw new Error('platform-data-table-host: handler must be data_table');
     }
-    const payload = config.data_table;
-    if (!payload || typeof payload !== 'object') {
-        throw new Error('platform-data-table-host: data_table payload required');
-    }
-    return payload as Record<string, unknown>;
+    return requireRecord(config.data_table, 'data_table payload');
 }
 
 function requireUrl(value: unknown, label: string): string {
@@ -446,10 +509,10 @@ export class PlatformDataTableHost extends PlatformElement {
     }
 
     _applySchema(snapshot: unknown): void {
-        if (!snapshot || typeof snapshot !== 'object') {
+        if (!isSchemaSnapshot(snapshot)) {
             throw new Error('platform-data-table-host: schema_snapshot required');
         }
-        const schemaSnapshot = snapshot as DataTableSchemaSnapshot;
+        const schemaSnapshot = snapshot;
         this._schema = schemaSnapshot;
         this._error = '';
         if (this.tableName.length === 0) {
@@ -480,8 +543,8 @@ export class PlatformDataTableHost extends PlatformElement {
             const snapshot = await this._fetchJson(
                 `/documents/api/v1/data-tables/${encodeURIComponent(fileId)}`,
             );
-            const snap = snapshot as { schema_snapshot?: unknown } | null;
-            if (!snap || typeof snap !== 'object' || !snap.schema_snapshot) {
+            const snap = requireRecord(snapshot, 'snapshot');
+            if (!snap.schema_snapshot) {
                 throw new Error('platform-data-table-host: snapshot.schema_snapshot required');
             }
             this._rowsBaseUrl = `/documents/api/v1/data-tables/${fileId}/tables`;
@@ -531,7 +594,7 @@ export class PlatformDataTableHost extends PlatformElement {
 
     async _fetchJson(url: string, options?: { method?: string; body?: unknown }): Promise<unknown> {
         const method = options && typeof options.method === 'string' ? options.method : 'GET';
-        const request: HttpRequestSpec = { method: method as HttpRequestSpec['method'], url };
+        const request: HttpRequestSpec = { method: httpMethod(method), url };
         if (options && Object.prototype.hasOwnProperty.call(options, 'body')) {
             request.body = options.body;
         }
@@ -540,8 +603,8 @@ export class PlatformDataTableHost extends PlatformElement {
 
     async refreshSchema(): Promise<void> {
         const snapshot = await this._fetchJson(this._mutateUrl());
-        const snap = snapshot as { schema_snapshot?: DataTableSchemaSnapshot } | null;
-        if (!snap || typeof snap !== 'object' || !snap.schema_snapshot) {
+        const snap = requireRecord(snapshot, 'snapshot');
+        if (!isSchemaSnapshot(snap.schema_snapshot)) {
             throw new Error('platform-data-table-host: snapshot.schema_snapshot required');
         }
         this._schema = snap.schema_snapshot;
@@ -560,13 +623,10 @@ export class PlatformDataTableHost extends PlatformElement {
         this._error = '';
         try {
             const url = `${this._rowsUrl()}/${encodeURIComponent(this.tableName)}/rows?${this._pageQuery()}`;
-            const page = await this._fetchJson(url) as { items?: unknown; next_cursor?: unknown; has_more?: unknown } | null;
-            if (!page || !Array.isArray(page.items)) {
-                throw new Error('platform-data-table-host: rows page.items required');
-            }
-            this._rows = page.items as DataTableRow[];
-            this._nextCursor = typeof page.next_cursor === 'string' ? page.next_cursor : null;
-            this._hasMore = page.has_more === true;
+            const page = rowsPage(await this._fetchJson(url));
+            this._rows = page.items;
+            this._nextCursor = page.nextCursor;
+            this._hasMore = page.hasMore;
         } catch (exc) {
             this._error = exc instanceof Error ? exc.message : String(exc);
             this.emit('editor-error', { message: this._error });
@@ -583,13 +643,10 @@ export class PlatformDataTableHost extends PlatformElement {
         try {
             const extra = `cursor=${encodeURIComponent(this._nextCursor)}`;
             const url = `${this._rowsUrl()}/${encodeURIComponent(this.tableName)}/rows?${this._pageQuery(extra)}`;
-            const page = await this._fetchJson(url) as { items?: unknown; next_cursor?: unknown; has_more?: unknown } | null;
-            if (!page || !Array.isArray(page.items)) {
-                throw new Error('platform-data-table-host: rows page.items required');
-            }
-            this._rows = [...this._rows, ...(page.items as DataTableRow[])];
-            this._nextCursor = typeof page.next_cursor === 'string' ? page.next_cursor : null;
-            this._hasMore = page.has_more === true;
+            const page = rowsPage(await this._fetchJson(url));
+            this._rows = [...this._rows, ...page.items];
+            this._nextCursor = page.nextCursor;
+            this._hasMore = page.hasMore;
         } catch (exc) {
             this._error = exc instanceof Error ? exc.message : String(exc);
             this.emit('editor-error', { message: this._error });
@@ -678,8 +735,8 @@ export class PlatformDataTableHost extends PlatformElement {
         }
         this._exporting = sourceFormat;
         try {
-            const exported = await this._fetchJson(this._exportUrl(sourceFormat)) as { download_url?: unknown } | null;
-            if (!exported || typeof exported.download_url !== 'string' || exported.download_url.length === 0) {
+            const exported = requireRecord(await this._fetchJson(this._exportUrl(sourceFormat)), 'export');
+            if (typeof exported.download_url !== 'string' || exported.download_url.length === 0) {
                 throw new Error('platform-data-table-host: export must return FileRecord.download_url');
             }
             const link = document.createElement('a');
@@ -702,7 +759,7 @@ export class PlatformDataTableHost extends PlatformElement {
             return null;
         }
         const found = table.columns.find((column) => column.name === columnName);
-        return found || null;
+        return found === undefined ? null : found;
     }
 
     _sameCellValue(left: unknown, right: unknown): boolean {
@@ -723,7 +780,7 @@ export class PlatformDataTableHost extends PlatformElement {
         const invalid = () => new Error(
             this._text('data_table_cell_invalid', {
                 column: column.name,
-                column_type: columnType || '',
+                column_type: columnType === undefined ? '' : columnType,
             }),
         );
         if (rawValue === null || rawValue === undefined) {
@@ -778,7 +835,8 @@ export class PlatformDataTableHost extends PlatformElement {
         if (columnType === 'json') {
             try {
                 return JSON.parse(trimmed);
-            } catch {
+            } catch (err) {
+                if (!(err instanceof SyntaxError)) throw err;
                 throw invalid();
             }
         }
@@ -817,7 +875,8 @@ export class PlatformDataTableHost extends PlatformElement {
             if (row.row_id !== rowId) {
                 return row;
             }
-            return { ...row, values: { ...(row.values || {}), [columnName]: typed } };
+            const values = row.values === undefined ? {} : row.values;
+            return { ...row, values: { ...values, [columnName]: typed } };
         });
         try {
             await this._fetchJson(
@@ -1290,7 +1349,7 @@ export class PlatformDataTableHost extends PlatformElement {
             <div class="schema-list">
                 <div class="schema-card">
                     <strong>${table.name}</strong>
-                    <span> · ${this._text('data_table_row_count', { count: table.row_count || 0 })}</span>
+                    <span> · ${this._text('data_table_row_count', { count: table.row_count === undefined ? 0 : table.row_count })}</span>
                     ${table.columns.map((column) => html`
                         <div>${column.name}: ${column.column_type}${column.not_null ? ' NOT NULL' : ''}</div>
                     `)}
@@ -1352,7 +1411,7 @@ export class PlatformDataTableHost extends PlatformElement {
                                             class="col-filter"
                                             placeholder=${this._text('data_table_column_filter_placeholder')}
                                             .value=${this._filterValue(column.name)}
-                                            @input=${(e: Event) => this._onColumnFilterInput(column.name, (e.target as HTMLInputElement).value)}
+                                            @input=${(e: Event) => this._onColumnFilterInput(column.name, inputValue(e))}
                                         />
                                     </div>
                                 </th>
@@ -1385,8 +1444,8 @@ export class PlatformDataTableHost extends PlatformElement {
                                     return html`<td
                                         class=${editable ? 'cell-editable' : ''}
                                         tabindex=${editable ? '0' : nothing}
-                                        @click=${editable ? () => this._beginEdit(row.row_id || '', column.name, { selectAll: true }) : undefined}
-                                        @keydown=${editable ? (e: KeyboardEvent) => this._onCellKeydown(e, row.row_id || '', column.name) : undefined}
+                                        @click=${editable ? () => this._beginEdit(requireRowId(row.row_id), column.name, { selectAll: true }) : undefined}
+                                        @keydown=${editable ? (e: KeyboardEvent) => this._onCellKeydown(e, requireRowId(row.row_id), column.name) : undefined}
                                     >${empty
                                         ? (editable
                                             ? html`<span class="cell-placeholder">${this._text('data_table_cell_edit_hint')}</span>`
@@ -1405,7 +1464,7 @@ export class PlatformDataTableHost extends PlatformElement {
                                             ?disabled=${this._deletingRowId === row.row_id || this._loading}
                                             @click=${(event: Event) => {
                                                 event.stopPropagation();
-                                                void this.deleteRow(row.row_id || '');
+                                                void this.deleteRow(requireRowId(row.row_id));
                                             }}
                                         >
                                             <platform-icon name="trash" size="14"></platform-icon>

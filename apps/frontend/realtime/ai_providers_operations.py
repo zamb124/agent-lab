@@ -499,7 +499,7 @@ async def _build_embedding_override(
         dimension = payload.dimension
         mrl_output_dimension = payload.mrl_output_dimension
     else:
-        catalog_model = await AIModelRecord.get_provider_model(
+        catalog_model = await AIModelRecord.by_provider_and_model_id(
             provider,
             model,
         )
@@ -554,7 +554,7 @@ async def _build_rerank_override(
         _ = validate_platform_provider_for_capability(provider, AICapability.RERANK)
         if not model:
             raise_invalid(ValueError("capability rerank: model is required"))
-        catalog_model = await AIModelRecord.get_provider_model(
+        catalog_model = await AIModelRecord.by_provider_and_model_id(
             provider,
             model,
         )

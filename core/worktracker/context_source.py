@@ -30,7 +30,7 @@ class WorkItemLLMContextSource:
         if context is None or context.active_company is None:
             return []
         company_id = context.active_company.company_id
-        items = await WorkItem.list_work_items(company_id, limit=_MAX_ITEMS)
+        items = await WorkItem.list_created_desc(company_id, limit=_MAX_ITEMS)
         active = [item for item in items if item.state not in TERMINAL_WORK_ITEM_STATES]
         if not active:
             return []

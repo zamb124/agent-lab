@@ -134,7 +134,7 @@ class WorkItem(PlatformModel):
         return await cls.objects.create(instance=item)
 
     @classmethod
-    async def list_work_items(
+    async def list_created_desc(
         cls,
         company_id: str,
         *,
@@ -151,6 +151,7 @@ class WorkItem(PlatformModel):
         limit: int = 200,
         offset: int = 0,
     ) -> list[WorkItem]:
+        """Окно задач компании, ORDER BY created_at DESC. None в фильтрах не сужает. Пустой work_queue_ids даёт пустой список. limit по умолчанию 200."""
         sql = work_item_sql(
             company_id,
             board_id=board_id,
@@ -177,7 +178,7 @@ class WorkItem(PlatformModel):
         return [_work_item_from_row(row) for row in rows]
 
     @classmethod
-    async def count_work_items(
+    async def count_for_filters(
         cls,
         company_id: str,
         *,
@@ -192,6 +193,7 @@ class WorkItem(PlatformModel):
         queue_unclaimed_only: bool = False,
         work_queue_ids: list[str] | None = None,
     ) -> int:
+        """Число задач компании с теми же фильтрами, что у list_created_desc, без окна. None не сужает. Пустой work_queue_ids — 0."""
         sql = work_item_sql(
             company_id,
             board_id=board_id,
@@ -216,10 +218,10 @@ class WorkItem(PlatformModel):
         return total
 
     @classmethod
-    async def find_work_item_by_correlation(
+    async def any_by_correlation_id(
         cls, company_id: str, correlation_id: str
     ) -> Self | None:
-        """Поиск WorkItem по correlation_id в hooks[].binding (идемпотентность HITL)."""
+        """Любая задача компании, у которой hooks[].binding.correlation_id совпал. Порядок строк не задан. Нет совпадения — None."""
         rows = await cls.objects.filter(company_id=company_id).all()
         for row in rows:
             for hook in row.hooks:
@@ -228,10 +230,10 @@ class WorkItem(PlatformModel):
         return None
 
     @classmethod
-    async def find_work_item_by_crm_entity(
+    async def any_crm_activity_by_entity_id(
         cls, company_id: str, entity_id: str
     ) -> Self | None:
-        """Поиск парного WorkItem по `CrmEntityLink.entity_id` (связь 1:1 с CRM-узлом)."""
+        """Любая задача kind=crm_activity, у которой CrmEntityLink.entity_id совпал. Порядок строк не задан. Нет совпадения — None."""
         rows = await cls.objects.filter(
             company_id=company_id,
             kind=WorkItemKind.CRM_ACTIVITY,
@@ -243,9 +245,10 @@ class WorkItem(PlatformModel):
         return None
 
     @classmethod
-    async def map_work_item_ids_by_crm_entities(
+    async def ids_by_crm_entity_id(
         cls, company_id: str, entity_ids: list[str]
     ) -> dict[str, str]:
+        """entity_id к work_item_id среди crm_activity. Пустой список — {}. Нет связи — ключа нет. Порядок строк не задан, повторный entity_id перезаписывает значение."""
         if len(entity_ids) == 0:
             return {}
         wanted = set(entity_ids)

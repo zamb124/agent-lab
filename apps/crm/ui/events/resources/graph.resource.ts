@@ -100,3 +100,16 @@ export const timelineBoundsOp = createAsyncOp({
         return false;
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/person_entity_self': typeof personEntitySelfOp;
+        'crm/overview_graph': typeof overviewGraphOp;
+        'crm/influence_graph': typeof influenceGraphOp;
+        'crm/related_entities': typeof relatedEntitiesOp;
+        'crm/entity_relationships': typeof entityRelationshipsOp;
+        'crm/shortest_path': typeof shortestPathOp;
+        'crm/exclusive_related': typeof exclusiveRelatedOp;
+        'crm/timeline_bounds': typeof timelineBoundsOp;
+    }
+}

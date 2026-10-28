@@ -1,5 +1,5 @@
 """
-Трейсинг: spans с pending settlement -> list_spans_pending_billing_settlement -> BillingService.
+Трейсинг: spans с pending settlement -> list_pending_billing_settlement -> BillingService.
 Реальная БД platform_tracing и shared storage.
 """
 
@@ -27,7 +27,7 @@ from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 async def test_list_spans_pending_billing_limit_invalid(frontend_di) -> None:
     now = datetime.now(timezone.utc)
     with pytest.raises(ValueError, match="limit"):
-        await Span.list_spans_pending_billing_settlement(
+        await Span.list_pending_billing_settlement(
             from_time=now - timedelta(hours=1),
             to_time=now,
             limit=0,
@@ -39,7 +39,7 @@ async def test_list_spans_pending_billing_naive_datetime_raises(frontend_di) -> 
     now = datetime.now(timezone.utc)
     naive = datetime.now()
     with pytest.raises(ValueError, match="timezone"):
-        await Span.list_spans_pending_billing_settlement(
+        await Span.list_pending_billing_settlement(
             from_time=naive,
             to_time=now,
             limit=10,
@@ -67,7 +67,7 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
     sid = f"pend_{unique_id}"
     tid = f"tr_{unique_id}"
     t0 = datetime.now(timezone.utc)
-    await Span.insert_once(
+    await Span.insert_span_once(
         Span(
             span_id=sid,
             trace_id=tid,
@@ -102,7 +102,7 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
 
     from_time = t0 - timedelta(seconds=30)
     to_time = t0 + timedelta(seconds=30)
-    pending = await Span.list_spans_pending_billing_settlement(
+    pending = await Span.list_pending_billing_settlement(
         from_time=from_time,
         to_time=to_time,
         limit=50,
@@ -178,7 +178,7 @@ async def test_pending_span_rules_engine_quantity_from_attr(
     tid = f"trr_{unique_id}"
     t0 = datetime.now(timezone.utc)
     tok_key = "platform.llm.input_tokens"
-    await Span.insert_once(
+    await Span.insert_span_once(
         Span(
             span_id=sid,
             trace_id=tid,
@@ -212,7 +212,7 @@ async def test_pending_span_rules_engine_quantity_from_attr(
 
     from_time = t0 - timedelta(seconds=30)
     to_time = t0 + timedelta(seconds=30)
-    pending = await Span.list_spans_pending_billing_settlement(
+    pending = await Span.list_pending_billing_settlement(
         from_time=from_time,
         to_time=to_time,
         limit=50,

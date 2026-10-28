@@ -27,7 +27,7 @@ import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../components/crm-mini-graph.js';
-import '../components/entity-card.js';
+import { CRMEntityCard } from '../components/entity-card.js';
 import '../components/crm-related-neighbor-rows.js';
 import { extractNeighborEdges } from '../_helpers/neighbor-edges.js';
 import { searchScorePercent, relationshipConfidencePercent } from '../_helpers/search-score-percent.js';
@@ -37,19 +37,62 @@ import type {
     PropertyValues,
     TemplateResult,
 } from 'lit';
-import type {
-    OpController,
-    ResourceController,
-} from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { CrmGraphViewController } from '../events/crm.types.js';
-import type { CRMEntityCard } from '../components/entity-card.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_CARD_OP = 'crm/entity_card';
 const ENTITY_TYPES_NAME = 'crm/entity_types';
 const REL_TYPES_NAME = 'crm/relationship_types';
+
+function catalogRows(items: readonly unknown[]): Record<string, unknown>[] {
+    const rows: Record<string, unknown>[] = [];
+    for (const item of items) {
+        if (!isPlainRecord(item)) {
+            throw new Error('CRMEntityDetailPage: entity type must be an object');
+        }
+        rows.push(item);
+    }
+    return rows;
+}
+
+function typeIdOf(row: Record<string, unknown>): string {
+    if (typeof row.type_id !== 'string' || row.type_id.length === 0) {
+        throw new Error('CRMEntityDetailPage: type_id required');
+    }
+    return row.type_id;
+}
+
+function copyRecord(value: Record<string, unknown>): Record<string, any> {
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) {
+        row[key] = field;
+    }
+    return row;
+}
+
+function eventDetail(ev: Event, label: string): Record<string, unknown> {
+    if (!(ev instanceof CustomEvent)) {
+        throw new Error(`${label}: CustomEvent required`);
+    }
+    if (!isPlainRecord(ev.detail)) {
+        throw new Error(`${label}: detail object required`);
+    }
+    return ev.detail;
+}
+
+function editCard(root: ParentNode): CRMEntityCard | null {
+    const card = root.querySelector('crm-entity-card[panel-mode="edit"]');
+    if (card === null) {
+        return null;
+    }
+    if (!(card instanceof CRMEntityCard)) {
+        throw new Error('CRMEntityDetailPage: edit card must be crm-entity-card');
+    }
+    return card;
+}
 
 const TAB_CARD = 'card';
 const TAB_RELATIONS = 'relations';
@@ -584,7 +627,7 @@ export class CRMEntityDetailPage extends PlatformPage {
     private _entityTypes: ResourceController;
     private _cardOp: OpController;
     private _relTypes: ResourceController;
-    private _graphView: CrmGraphViewController;
+    private _graphView: ControllerFor<'crm/graph_view'>;
     private _routerSearchSel: SelectController<string | undefined>;
     private _lastRequestedId: string;
     private _entityTypesQueryNs: string;
@@ -615,7 +658,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._entityTypes = this.useResource(ENTITY_TYPES_NAME, { autoload: false });
         this._cardOp = this.useOp(ENTITY_CARD_OP);
         this._relTypes = this.useResource(REL_TYPES_NAME, { autoload: true });
-        this._graphView = this.useSlice('crm/graph_view') as CrmGraphViewController;
+        this._graphView = this.useSlice('crm/graph_view');
         this._routerSearchSel = this.select((s: Record<string, any>) => s.router.search);
         this._mql = null;
         this._mqlListener = null;
@@ -641,26 +684,26 @@ export class CRMEntityDetailPage extends PlatformPage {
             if (this._isStaleEntityCardOpEvent(event)) {
                 return;
             }
-            const p = event.payload as Record<string, any> | null;
-            const result = p && p.result ? p.result : null;
-            if (!result || typeof result !== 'object') {
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const result = payload === null ? null : payload.result;
+            if (!isPlainRecord(result)) {
                 throw new Error('crm/entity_card SUCCEEDED: payload.result missing');
             }
-            this._card = result;
+            this._card = copyRecord(result);
             this._cardError = '';
         });
         this.useEvent(this._cardOp.op.events.FAILED, (event) => {
             if (this._isStaleEntityCardOpEvent(event)) {
                 return;
             }
-            const p = event.payload as Record<string, any> | null;
-            const err = p && p.error ? p.error : null;
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const err = payload !== null && isPlainRecord(payload.error) ? payload.error : null;
             this._card = null;
-            this._cardError = err && typeof err.message === 'string' ? err.message : 'load_failed';
+            this._cardError = err !== null && typeof err.message === 'string' ? err.message : 'load_failed';
         });
 
         this.useEvent(this._entities.resource.events.REMOVED, (event) => {
-            const payload = (event && event.payload) as Record<string, any> | null;
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
             const idField = this._entities.resource.idField;
             const removedId = payload && typeof payload[idField] === 'string' ? payload[idField] : null;
             if (removedId !== this.itemId) return;
@@ -684,8 +727,8 @@ export class CRMEntityDetailPage extends PlatformPage {
     }
 
     _onCardToolbarState(ev: Event) {
-        const d = (ev as CustomEvent).detail as Record<string, any> | null;
-        if (!d || typeof d.saveDisabled !== 'boolean' || typeof d.submitting !== 'boolean') {
+        const d = eventDetail(ev, 'crm-entity-card-toolbar-state');
+        if (typeof d.saveDisabled !== 'boolean' || typeof d.submitting !== 'boolean') {
             throw new Error('crm-entity-card-toolbar-state: invalid detail');
         }
         this._editToolbarSaveDisabled = d.saveDisabled;
@@ -693,8 +736,8 @@ export class CRMEntityDetailPage extends PlatformPage {
     }
 
     _onCardStorageTypeDraft(ev: Event) {
-        const d = (ev as CustomEvent).detail as Record<string, any> | null;
-        if (!d || typeof d.entity_type !== 'string' || typeof d.entity_subtype !== 'string') {
+        const d = eventDetail(ev, 'crm-entity-card-storage-type-draft');
+        if (typeof d.entity_type !== 'string' || typeof d.entity_subtype !== 'string') {
             throw new Error('crm-entity-card-storage-type-draft: invalid detail');
         }
         this._draftStorageTypePair = { entity_type: d.entity_type, entity_subtype: d.entity_subtype };
@@ -775,7 +818,13 @@ export class CRMEntityDetailPage extends PlatformPage {
     _entity(): Record<string, any> | null {
         const byId = this._entities.byId;
         const item = byId && byId[this.itemId];
-        return item === undefined ? null : (item as Record<string, any>);
+        if (item === undefined) {
+            return null;
+        }
+        if (!isPlainRecord(item)) {
+            throw new Error('CRMEntityDetailPage: entity must be an object');
+        }
+        return copyRecord(item);
     }
 
     _entityTypesCatalogRows(): Record<string, any>[] {
@@ -783,7 +832,14 @@ export class CRMEntityDetailPage extends PlatformPage {
         if (!ctrl || ctrl.items === undefined || !Array.isArray(ctrl.items)) {
             return [];
         }
-        return ctrl.items as Record<string, any>[];
+        const rows: Record<string, any>[] = [];
+        for (const item of ctrl.items) {
+            if (!isPlainRecord(item)) {
+                throw new Error('CRMEntityDetailPage: entity type must be an object');
+            }
+            rows.push(copyRecord(item));
+        }
+        return rows;
     }
 
     _onPickTab(tab: string) {
@@ -851,7 +907,10 @@ export class CRMEntityDetailPage extends PlatformPage {
     }
 
     _onMiniGraphEntityOpen(event: CustomEvent) {
-        const detail = event.detail as Record<string, any> | null;
+        if (!isPlainRecord(event.detail)) {
+            throw new Error('CRMEntityDetailPage: mini-graph entity-open detail required');
+        }
+        const detail = event.detail;
         const entityId = detail && typeof detail.entityId === 'string' ? detail.entityId : '';
         const entityType = detail && typeof detail.entity_type === 'string' ? detail.entity_type : '';
         this._navigateToLinkedEntity(entityId, entityType);
@@ -867,7 +926,10 @@ export class CRMEntityDetailPage extends PlatformPage {
     }
 
     _onRelatedClick(event: CustomEvent) {
-        const detail = (event.detail && typeof event.detail === 'object' ? event.detail : {}) as Record<string, any>;
+        if (!isPlainRecord(event.detail)) {
+            throw new Error('CRMEntityDetailPage: related click detail required');
+        }
+        const detail = event.detail;
         const entityId = typeof detail.entityId === 'string' ? detail.entityId : '';
         const entityType = typeof detail.entity_type === 'string' ? detail.entity_type : '';
         this._navigateToLinkedEntity(entityId, entityType);
@@ -1005,14 +1067,14 @@ export class CRMEntityDetailPage extends PlatformPage {
 
     _detailTemplateDisplayLabel(entity: Record<string, any>): string {
         const { entity_type: et, subtypeNorm } = this._detailStoragePairForTemplateUi(entity);
-        const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
-        for (const t of items as Record<string, any>[]) {
+        const items = catalogRows(this._entityTypes.items);
+        for (const t of items) {
             const rowSt = t.list_entity_subtype === undefined || t.list_entity_subtype === null || t.list_entity_subtype === ''
                 ? null
                 : t.list_entity_subtype;
             if (t.list_entity_type === et && rowSt === subtypeNorm) {
                 if (typeof t.name === 'string' && t.name.length > 0) return t.name;
-                return t.type_id;
+                return typeIdOf(t);
             }
         }
         return this._entityTemplateLabel(entity);
@@ -1020,12 +1082,12 @@ export class CRMEntityDetailPage extends PlatformPage {
 
     _detailTemplateSelectedTypeId(entity: Record<string, any>): string {
         const { entity_type: et, subtypeNorm } = this._detailStoragePairForTemplateUi(entity);
-        const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
-        for (const t of items as Record<string, any>[]) {
+        const items = catalogRows(this._entityTypes.items);
+        for (const t of items) {
             const rowSt = t.list_entity_subtype === undefined || t.list_entity_subtype === null || t.list_entity_subtype === ''
                 ? null
                 : t.list_entity_subtype;
-            if (t.list_entity_type === et && rowSt === subtypeNorm) return t.type_id;
+            if (t.list_entity_type === et && rowSt === subtypeNorm) return typeIdOf(t);
         }
         return '';
     }
@@ -1035,12 +1097,13 @@ export class CRMEntityDetailPage extends PlatformPage {
             throw new Error('CRMEntityDetailPage._detailTemplateEnumConfig: items must be an array');
         }
         const values = [{ value: '', label: this.t('entity_modal.entity_template_pick_placeholder') }];
-        for (const it of items as Record<string, any>[]) {
-            if (!it || typeof it.type_id !== 'string' || it.type_id.length === 0) {
+        for (const it of items) {
+            if (!isPlainRecord(it)) {
                 throw new Error('CRMEntityDetailPage._detailTemplateEnumConfig: type_id required');
             }
-            const label = typeof it.name === 'string' && it.name.length > 0 ? it.name : it.type_id;
-            values.push({ value: it.type_id, label });
+            const typeId = typeIdOf(it);
+            const label = typeof it.name === 'string' && it.name.length > 0 ? it.name : typeId;
+            values.push({ value: typeId, label });
         }
         return { values };
     }
@@ -1050,34 +1113,33 @@ export class CRMEntityDetailPage extends PlatformPage {
     }
 
     _onDetailTemplateSelect(ev: Event) {
-        const d = (ev as CustomEvent<{ value?: unknown }>).detail;
-        if (!d || typeof d.value !== 'string') {
+        const d = eventDetail(ev, 'CRMEntityDetailPage._onDetailTemplateSelect');
+        if (typeof d.value !== 'string') {
             throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: expected change detail.value string');
         }
         const typeId = d.value;
         if (typeId.length === 0) return;
-        const items = this._entityTypes.items;
-        const item = (items as Record<string, any>[]).find((it) => it.type_id === typeId);
-        if (!item) {
+        const item = catalogRows(this._entityTypes.items).find((it) => it.type_id === typeId);
+        if (item === undefined) {
             throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: type not found');
         }
         const root = this.shadowRoot;
         if (!root) {
             throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: shadowRoot missing');
         }
-        const card = root.querySelector('crm-entity-card[panel-mode="edit"]') as CRMEntityCard | null;
-        if (!card || typeof (card as any).setEditTemplateFromListRow !== 'function') {
+        const card = editCard(root);
+        if (card === null) {
             throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: edit card missing');
         }
-        (card as any).setEditTemplateFromListRow(item);
+        card.setEditTemplateFromListRow(copyRecord(item));
     }
 
     _renderEditTemplateBox(entity: Record<string, any>, isBusy: boolean): TemplateResult {
         const typesLoading = this._entityTypes.loading;
         const rawItems = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
-        const items = [...(rawItems as Record<string, any>[])].sort((a, b) => {
-            const na = typeof a.name === 'string' && a.name.length > 0 ? a.name : a.type_id;
-            const nb = typeof b.name === 'string' && b.name.length > 0 ? b.name : b.type_id;
+        const items = catalogRows(rawItems).sort((a, b) => {
+            const na = typeof a.name === 'string' && a.name.length > 0 ? a.name : typeIdOf(a);
+            const nb = typeof b.name === 'string' && b.name.length > 0 ? b.name : typeIdOf(b);
             return na.localeCompare(nb);
         });
         const displayLabel = this._detailTemplateDisplayLabel(entity);
@@ -1299,8 +1361,8 @@ export class CRMEntityDetailPage extends PlatformPage {
         if (!root) {
             throw new Error('CRMEntityDetailPage._onToolbarSave: shadowRoot missing');
         }
-        const card = root.querySelector('crm-entity-card[panel-mode="edit"]') as CRMEntityCard | null;
-        if (!card || typeof card.triggerSave !== 'function') {
+        const card = editCard(root);
+        if (card === null) {
             throw new Error('CRMEntityDetailPage._onToolbarSave: edit card not found');
         }
         card.triggerSave();
@@ -1311,9 +1373,9 @@ export class CRMEntityDetailPage extends PlatformPage {
         if (!root) {
             throw new Error('CRMEntityDetailPage._onToolbarCancelEdit: shadowRoot missing');
         }
-        const card = root.querySelector('crm-entity-card[panel-mode="edit"]') as CRMEntityCard | null;
-        if (card && typeof (card as any).triggerEditCancel === 'function') {
-            (card as any).triggerEditCancel();
+        const card = editCard(root);
+        if (card !== null) {
+            card.triggerEditCancel();
             return;
         }
         this._onCardEditCancelled();

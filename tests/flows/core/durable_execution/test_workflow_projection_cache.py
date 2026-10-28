@@ -119,7 +119,7 @@ async def test_get_state_returns_rehydrated_state_on_projection_mismatch(
     async def _load_state_at_head(**_kwargs: object) -> tuple[ExecutionState, MagicMock]:
         return state, instance
 
-    monkeypatch.setattr(WorkflowInstance, "get_instance", _get_instance)
+    monkeypatch.setattr(WorkflowInstance, "by_company_and_session", _get_instance)
     monkeypatch.setattr(WorkflowInstance, "load_state_at_head", _load_state_at_head)
 
     redis = _RecordingRedis()

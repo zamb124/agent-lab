@@ -265,7 +265,7 @@ async def op_llm_model_scores_upsert(
     payload: LLMModelScoreUpsertRequest, *, user: User, di: Di
 ) -> LLMModelScoreMutationResponse:
     _ = await require_system_admin(di.authz_service)
-    catalog_record = await AIModelRecord.get_provider_model(
+    catalog_record = await AIModelRecord.by_provider_and_model_id(
         payload.provider, payload.model_id
     )
     if catalog_record is None:

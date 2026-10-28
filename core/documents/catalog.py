@@ -132,14 +132,16 @@ class DocumentCatalog(PlatformModel):
         )
 
     @classmethod
-    async def search_by_title(cls, company_id: str, query: str, limit: int) -> list[Self]:
+    async def list_by_title(cls, company_id: str, query: str, limit: int) -> list[Self]:
+        """Каталоги компании по возрастанию title, не больше limit. Пустой query не фильтрует заголовок."""
         rows = cls.objects.filter(company_id=company_id)
         if query != "":
             rows = rows.filter(title__icontains=query)
         return await rows.order_by("title").limit(limit).all()
 
     @classmethod
-    async def list_in_namespace(cls, company_id: str, namespace: str) -> list[Self]:
+    async def list_by_title_key_in_namespace(cls, company_id: str, namespace: str) -> list[Self]:
+        """Каталоги компании в namespace, ORDER BY title_key. Предела нет."""
         return await (
             cls.objects.filter(company_id=company_id, namespace=namespace).order_by("title_key").all()
         )
@@ -149,13 +151,15 @@ class DocumentCatalog(PlatformModel):
         return await cls.objects.filter(parent_catalog_id=parent_catalog_id).count()
 
     @classmethod
-    async def list_pending_authz(cls, *, limit: int) -> list[Self]:
+    async def list_pending_authz_by_created_at(cls, *, limit: int) -> list[Self]:
+        """Каталоги с пустым authz_synced_at, ORDER BY created_at, не больше limit."""
         return await (
             cls.objects.filter(authz_synced_at__isnull=True).order_by("created_at").limit(limit).all()
         )
 
     @classmethod
-    async def list_by_created_at(cls, *, limit: int | None) -> list[Self]:
+    async def list_all_by_created_at(cls, *, limit: int | None) -> list[Self]:
+        """Все каталоги, ORDER BY created_at. limit is None не ограничивает. limit < 1 — ValueError."""
         query = cls.objects.order_by("created_at")
         if limit is not None:
             if limit < 1:

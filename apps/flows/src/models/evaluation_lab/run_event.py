@@ -42,7 +42,8 @@ class EvaluationRunEvent(CompanyScopedModel):
     case_run_id: str | None = DbField(default=None)
 
     @classmethod
-    async def list_for_run(cls, run_id: str) -> list[Self]:
+    async def list_by_sequence(cls, run_id: str) -> list[Self]:
+        """События запуска, ORDER BY sequence. Предела нет. Пустой run_id — ValueError."""
         if run_id == "":
             raise ValueError("run_id is required")
         return await cls.objects.filter(run_id=run_id).order_by("sequence").all()

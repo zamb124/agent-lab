@@ -15,9 +15,13 @@ import type { TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { getModalTag } from '../utils/modal-registry.js';
 import { CoreEvents } from '../events/contract.js';
-import type { ModalStackItem, ModalsState } from '../events/reducers/modals.js';
+import type { ModalStackItem } from '../events/reducers/modals.js';
 import type { SelectController } from '../events/select-controller.js';
 import { waitForPlatformMotion } from '../utils/motion.js';
+
+function isStackModal(node: unknown): node is StackModalElement {
+    return node instanceof HTMLElement;
+}
 
 interface StackModalElement extends HTMLElement {
     _modalId?: string;
@@ -35,7 +39,7 @@ export class PlatformModalStack extends PlatformElement {
 
     constructor() {
         super();
-        this._stackSel = this.select((s) => (s.modals as ModalsState).stack);
+        this._stackSel = this.select((s) => s.modals.stack);
         this._mounted = new Map();
         this._closing = new Set();
     }
@@ -45,7 +49,7 @@ export class PlatformModalStack extends PlatformElement {
     }
 
     override updated(): void {
-        const stack = this._stackSel ? this._stackSel.value || [] : [];
+        const stack = this._stackSel.value;
         const wantIds = new Set(stack.map((m) => m.id));
 
         for (const [id, el] of Array.from(this._mounted.entries())) {
@@ -64,7 +68,11 @@ export class PlatformModalStack extends PlatformElement {
                 continue;
             }
             const tag = getModalTag(item.kind);
-            const el = document.createElement(tag) as StackModalElement;
+            const created = document.createElement(tag);
+            if (!isStackModal(created)) {
+                throw new Error(`platform-modal-stack: ${tag} did not create an element`);
+            }
+            const el = created;
             this._applyProps(el, item);
             this.appendChild(el);
             this._mounted.set(item.id, el);
@@ -107,7 +115,7 @@ export class PlatformModalStack extends PlatformElement {
             } finally {
                 this._closing.delete(id);
             }
-            const stack = this._stackSel ? this._stackSel.value || [] : [];
+            const stack = this._stackSel.value;
             const item = stack.find((m) => m.id === id);
             if (!item || item.closing !== true) return;
             this.dispatch(CoreEvents.UI_MODAL_CLOSED, { id });

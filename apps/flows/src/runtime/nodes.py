@@ -2834,7 +2834,7 @@ class MCPNode(BaseNode):
         server_id = self.server_id
         tool_name = self.tool_name
 
-        server = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+        server = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
         if not server:
             raise ValueError(f"MCP server not found: {server_id}")
 
@@ -2842,7 +2842,7 @@ class MCPNode(BaseNode):
         request_server = server.model_copy(update={"headers": request_headers})
 
         tool_id = mcp_tool_reference_id(server_id, tool_name)
-        tool_ref = await ToolReference.get(ToolReference.row_id(tool_id))
+        tool_ref = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
         if tool_ref is None:
             logger.info("flows.mcpnode.syncing.missing.toolreference", node_id=self.node_id, tool_id=tool_id)
             try:
@@ -2855,7 +2855,7 @@ class MCPNode(BaseNode):
                 raise ValueError(
                     f"MCPNode '{self.node_id}' could not sync ToolReference '{tool_id}': {exc}"
                 ) from exc
-            tool_ref = await ToolReference.get(ToolReference.row_id(tool_id))
+            tool_ref = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
             if tool_ref is None:
                 raise ValueError(
                     f"MCPNode '{self.node_id}' requires synced ToolReference '{tool_id}'"
@@ -3201,7 +3201,7 @@ class HitlNode(BaseNode):
         company_id = ctx.active_company.company_id
         cid_resume = state.hitl_handoff_correlation_id
         if isinstance(cid_resume, str) and cid_resume.strip():
-            existing_resume = await WorkItem.find_work_item_by_correlation(
+            existing_resume = await WorkItem.any_by_correlation_id(
                 company_id, cid_resume.strip()
             )
             if existing_resume is None:

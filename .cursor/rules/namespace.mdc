@@ -11,7 +11,7 @@ alwaysApply: false
 
 ## Модель
 
-- `Namespace` — таблица `namespaces`, алиас `shared`; первичный ключ `namespace_id` = `{company_id}:{name}`, уникальность `(company_id, name)`; адрес внутри компании — `name`.
+- `Namespace` — таблица `namespaces`, алиас `shared`; первичный ключ `namespace_id` = `{company_id}:{name}`, уникальность `(company_id, name)`; адрес внутри компании — `name`. `partial_company_rows_by_namespace_id(*, limit) -> list[Namespace]` — строки с `company_id IS NOT NULL`, только `name`, `company_id`, `kind`, `owner_user_id`, `ORDER BY namespace_id`. `limit is None` не ограничивает. Сырой SQL обходит scope менеджера.
 - Поля домена: `kind`, `owner_user_id` (обязателен при `kind=personal`, иначе `null`), `is_default`, `sync_settings`, `crm_settings`.
 - `kind`:
 

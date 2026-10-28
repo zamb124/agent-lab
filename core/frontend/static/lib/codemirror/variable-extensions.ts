@@ -10,6 +10,7 @@ import {
     lookupPath,
     lookupPreviewValue,
     pathExistsInValues,
+    unwrapVariableNode,
 } from '../variables/variable-refs.js';
 
 export type VariableSyntaxMode = 'at-ref' | 'brace' | 'both';
@@ -556,15 +557,7 @@ function _buildVariableCompletions(
         const fullPath = path ? `${path}.${name}` : name;
 
         if (fullPath.toLowerCase().startsWith(lowerPartial)) {
-            let displayValue = value;
-            if (
-                displayValue !== null
-                && typeof displayValue === 'object'
-                && !Array.isArray(displayValue)
-                && Object.hasOwn(displayValue, 'value')
-            ) {
-                displayValue = (displayValue as Record<string, unknown>).value;
-            }
+            const displayValue = unwrapVariableNode(value);
 
             let detail: string = typeof displayValue;
             if (typeof displayValue === 'string') {
@@ -577,7 +570,7 @@ function _buildVariableCompletions(
             seen.add(fullPath);
         }
 
-        const actualValue = unwrapForNesting(value);
+        const actualValue = unwrapVariableNode(value);
         if (actualValue !== null && typeof actualValue === 'object' && !Array.isArray(actualValue)) {
             for (const [key, val] of Object.entries(actualValue)) {
                 addVariable(key, val, fullPath);
@@ -585,7 +578,7 @@ function _buildVariableCompletions(
         }
     };
 
-    for (const [name, value] of Object.entries(values || {})) {
+    for (const [name, value] of Object.entries(values)) {
         addVariable(name, value);
     }
 
@@ -645,18 +638,6 @@ function _buildStateCompletions(
     }
 
     return options;
-}
-
-function unwrapForNesting(value: unknown): unknown {
-    if (
-        value !== null
-        && typeof value === 'object'
-        && !Array.isArray(value)
-        && Object.hasOwn(value, 'value')
-    ) {
-        return (value as Record<string, unknown>).value;
-    }
-    return value;
 }
 
 function _isInterfacePath(path: string, catalog: unknown): boolean {

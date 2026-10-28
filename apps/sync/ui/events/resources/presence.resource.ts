@@ -82,3 +82,9 @@ export const presenceResource = createSlice({
 });
 
 export const TYPING_PRUNE_INTERVAL_MS = TYPING_TTL_MS;
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/presence': typeof presenceResource;
+    }
+}

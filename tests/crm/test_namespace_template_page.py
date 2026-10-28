@@ -92,3 +92,38 @@ async def test_page_for_company_orders_newest_first_and_skips_other_company(uniq
         _ = await NamespaceTemplate.page_for_company(company_id, limit=0, offset=0)
     with pytest.raises(ValueError, match="offset must be >= 0"):
         _ = await NamespaceTemplate.page_for_company(company_id, limit=1, offset=-1)
+
+
+async def test_update_name_description_icon_and_crm_settings_skips_unset_fields(unique_id: str) -> None:
+    company_id = f"tpl-upd-{unique_id}"
+    created = await NamespaceTemplate.create(
+        NamespaceTemplate(
+            template_key=f"key-upd-{unique_id}",
+            company_id=company_id,
+            template_id=f"id-upd-{unique_id}",
+            name="Before",
+            description="Keep",
+        )
+    )
+    renamed = await NamespaceTemplate.update_name_description_icon_and_crm_settings(
+        created,
+        name="After",
+        description=None,
+        icon="bolt",
+        crm_settings={"default_note_voice": "self"},
+        crm_settings_is_set=False,
+    )
+    assert renamed.name == "After"
+    assert renamed.description == "Keep"
+    assert renamed.icon == "bolt"
+    assert renamed.crm_settings is None
+    with_settings = await NamespaceTemplate.update_name_description_icon_and_crm_settings(
+        renamed,
+        name=None,
+        description=None,
+        icon=None,
+        crm_settings={"default_note_voice": "none"},
+        crm_settings_is_set=True,
+    )
+    assert with_settings.name == "After"
+    assert with_settings.crm_settings == {"default_note_voice": "none"}

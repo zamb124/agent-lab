@@ -6,6 +6,7 @@
  */
 
 import { isInterruptedTaskState, isSettledTaskState, unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-stream.js';
+import { isPlainRecord } from '../events/payload.js';
 import { extractSpeakableText } from './speakable.js';
 import type { VoiceMediaSession } from './voice-media-session.js';
 
@@ -17,39 +18,33 @@ import type { VoiceMediaSession } from './voice-media-session.js';
  * @returns {string|null}
  */
 export function extractSpeakableTextFromFinalStatusUpdate(statusUpdate: unknown): string | null {
-    if (statusUpdate === null || typeof statusUpdate !== 'object') {
+    if (!isPlainRecord(statusUpdate)) {
         return null;
     }
-    const update = statusUpdate as Record<string, unknown>;
-    const status = update.status;
-    if (status === null || typeof status !== 'object') {
+    const status = statusUpdate.status;
+    if (!isPlainRecord(status)) {
         return null;
     }
-    const statusRecord = status as Record<string, unknown>;
-    const taskState = typeof statusRecord.state === 'string' ? statusRecord.state : '';
-    const meta = update.metadata;
-    const hasInterruptMeta =
-        meta !== null &&
-        typeof meta === 'object' &&
-        'platform_interrupt' in meta &&
-        (meta as Record<string, unknown>).platform_interrupt != null;
+    const taskState = typeof status.state === 'string' ? status.state : '';
+    const meta = statusUpdate.metadata;
+    const hasInterruptMeta = isPlainRecord(meta)
+        && 'platform_interrupt' in meta
+        && meta.platform_interrupt != null;
     if (!isInterruptedTaskState(taskState) && !hasInterruptMeta) {
         return null;
     }
-    const message = statusRecord.message;
-    if (message === null || typeof message !== 'object') {
+    const message = status.message;
+    if (!isPlainRecord(message)) {
         return null;
     }
-    const parts = Array.isArray((message as Record<string, unknown>).parts)
-        ? (message as Record<string, unknown>).parts as unknown[]
-        : [];
+    const parts = Array.isArray(message.parts) ? message.parts : [];
     const chunks: string[] = [];
     for (const part of parts) {
-        if (part === null || typeof part !== 'object') {
+        if (!isPlainRecord(part)) {
             continue;
         }
         // A2A 1.0 Part: presence `text`, без kind / nested root
-        const text = (part as Record<string, unknown>).text;
+        const text = part.text;
         if (typeof text === 'string' && text !== '') {
             chunks.push(text);
         }
@@ -92,11 +87,8 @@ export function feedSpeakableTtsFromA2aResult(
     }
 
     if (unwrapped.frameKind === 'statusUpdate') {
-        const status = unwrapped.event.status as Record<string, unknown> | undefined;
-        const state =
-            status && typeof status.state === 'string'
-                ? status.state
-                : '';
+        const status = unwrapped.event.status;
+        const state = isPlainRecord(status) && typeof status.state === 'string' ? status.state : '';
         if (!isSettledTaskState(state)) {
             return;
         }

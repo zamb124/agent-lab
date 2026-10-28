@@ -49,8 +49,8 @@ from apps.provider_litserve.vad.api import VADLitAPI
 from apps.provider_litserve.worker_registry import resolved_enabled_workers
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
-from core.app.spa import resolve_ui_static_dir
 from core.app.server import serve
+from core.app.spa import mount_core_frontend, resolve_ui_static_dir
 from core.config.models import ProviderLitserveInfraConfig
 from core.di import recipe
 from core.imports import module_sdk
@@ -60,7 +60,6 @@ UI_PREFIX = "/litserve"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 UI_ROOT_PATH = resolve_ui_static_dir(Path(__file__).parent / "ui")
 UI_INDEX_PATH = UI_ROOT_PATH / "index.html"
-CORE_STATIC_PATH = PROJECT_ROOT / "core" / "frontend" / "static"
 
 
 class _CudaDeviceProperties(Protocol):
@@ -334,11 +333,11 @@ def build_app() -> FastAPI:
         api_version=None,
         documentation_gateway_prefix="litserve",
         static_mounts=[
-            ("/static/core", str(CORE_STATIC_PATH), "litserve-core-static"),
             (f"{UI_PREFIX}/ui/static", str(UI_ROOT_PATH), "litserve-ui-static"),
         ],
         mount_repo_documentation=False,
     )
+    mount_core_frontend(app)
     _register_ui_routes(app)
     _register_litserver_v1(app, provider_litserve_runtime)
     return app

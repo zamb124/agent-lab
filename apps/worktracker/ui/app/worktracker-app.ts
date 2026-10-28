@@ -152,7 +152,7 @@ export class WorktrackerApp extends PlatformApp {
         super();
         this._detailWorkItemId = '';
         this._countsOp = this.useOp('worktracker/work_item_counts');
-        this._routeSel = this.select((state) => (state.router as Record<string, unknown>).routeKey);
+        this._routeSel = this.select((state) => state.router.routeKey);
         this.useEvent(WorktrackerUiEvents.DETAIL_OPEN, (event: PlatformEvent) => {
             this._openWorkItemDetailPanel(event.payload as { work_item_id?: unknown });
         });

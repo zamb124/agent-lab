@@ -9,6 +9,7 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent } from '../contract.js';
+import { payloadFields } from '../payload.js';
 
 export type WsStatus = 'idle' | 'connecting' | 'open' | 'closed';
 
@@ -18,9 +19,13 @@ export interface NetworkState {
     pendingHttp: number;
 }
 
+function initialWs(): NetworkState['ws'] {
+    return { status: 'idle', lastError: null, attempts: 0 };
+}
+
 export const initialNetworkState: NetworkState = Object.freeze({
     online: typeof navigator !== 'undefined' ? Boolean(navigator.onLine) : true,
-    ws: { status: 'idle' as WsStatus, lastError: null, attempts: 0 },
+    ws: initialWs(),
     pendingHttp: 0,
 });
 
@@ -35,7 +40,7 @@ export function networkReducer(state: NetworkState = initialNetworkState, event:
         case CoreEvents.WS_CONNECTED:
             return { ...state, ws: { status: 'open', lastError: null, attempts: 0 } };
         case CoreEvents.WS_DISCONNECTED: {
-            const p = (event.payload || {}) as { reason?: unknown };
+            const p = payloadFields(event);
             const reason = p.reason ? String(p.reason) : null;
             return { ...state, ws: { ...state.ws, status: 'closed', lastError: reason } };
         }

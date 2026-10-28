@@ -90,7 +90,7 @@ async def _set_note_attachment_ids(
         note = await CRMEntity.get(note_id)
         assert note is not None
         note.attachment_ids = attachment_ids
-        note = await CRMEntity.save_loaded(note)
+        note = await CRMEntity.update_loaded(note)
         await index_crm_entity(
             get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
             note,

@@ -143,13 +143,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /flows/static
       - --static-path-mount
-      - apps/flows/ui
+      - apps/flows/ui-dist
       - --static-path-route
       - /static
       - --static-path-mount
@@ -184,13 +188,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /static/frontend
       - --static-path-mount
-      - apps/frontend/ui
+      - apps/frontend/ui-dist
     resources:
       requests:
         cpu: 200m
@@ -217,13 +225,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /crm/ui/static
       - --static-path-mount
-      - apps/crm/ui
+      - apps/crm/ui-dist
       - --static-path-route
       - /crm/ui/vendor/3d-force-graph
       - --static-path-mount
@@ -258,13 +270,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /rag/ui/static
       - --static-path-mount
-      - apps/rag/ui
+      - apps/rag/ui-dist
     resources:
       requests:
         cpu: 200m
@@ -291,13 +307,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /sync/ui/static
       - --static-path-mount
-      - apps/sync/ui
+      - apps/sync/ui-dist
     resources:
       requests:
         cpu: 200m
@@ -324,13 +344,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /worktracker/ui/static
       - --static-path-mount
-      - apps/worktracker/ui
+      - apps/worktracker/ui-dist
     resources:
       requests:
         cpu: 100m
@@ -357,13 +381,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /wiki/ui/static
       - --static-path-mount
-      - apps/wiki/ui
+      - apps/wiki/ui-dist
     resources:
       requests:
         cpu: 100m
@@ -390,13 +418,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /stock/ui/static
       - --static-path-mount
-      - apps/stock/ui
+      - apps/stock/ui-dist
     resources:
       requests:
         cpu: 100m
@@ -498,13 +530,17 @@ applications:
       - auto
       - --ws
       - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
       - /static/core
       - --static-path-mount
       - core/frontend/static
       - --static-path-route
       - /documents/ui/static
       - --static-path-mount
-      - apps/office/ui
+      - apps/office/ui-dist
     resources:
       requests:
         cpu: 100m

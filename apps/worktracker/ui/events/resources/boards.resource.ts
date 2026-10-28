@@ -42,3 +42,10 @@ export const boardCreateForm = createForm({
         board_key: 'generic',
     }),
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'worktracker/boards': typeof boardsResource;
+        'worktracker/board_create_form': typeof boardCreateForm;
+    }
+}

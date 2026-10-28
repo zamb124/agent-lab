@@ -39,12 +39,13 @@ class SyncChannelMember(PlatformModel):
     notifications_muted: bool = DbField(default=False)
 
     @classmethod
-    async def list_channel_member_user_ids(
+    async def list_user_ids(
         cls,
         channel_id: str,
         *,
         company_id: str,
     ) -> list[str]:
+        """user_id участников канала в компании. Порядка нет. Чужой канал — []."""
         rows = await cls.objects.filter(
             channel_id=channel_id,
             company_id=company_id,
@@ -52,13 +53,14 @@ class SyncChannelMember(PlatformModel):
         return [row.user_id for row in rows]
 
     @classmethod
-    async def ensure_channel_member_row(
+    async def ensure_member(
         cls,
         channel_id: str,
         user_id: str,
         *,
         company_id: str,
     ) -> None:
+        """Создаёт строку участника, если её нет. Существующую не меняет. Та же пара в другой компании — ValueError."""
         existing = await cls.objects.filter(
             channel_id=channel_id,
             user_id=user_id,
@@ -78,13 +80,14 @@ class SyncChannelMember(PlatformModel):
         _ = await cls.objects.create(instance=row)
 
     @classmethod
-    async def delete_channel_member(
+    async def delete_by_user(
         cls,
         channel_id: str,
         user_id: str,
         *,
         company_id: str,
     ) -> bool:
+        """Удаляет участника канала в компании. Нет строки — False. Удалена одна строка — True."""
         existing = await cls.objects.filter(
             channel_id=channel_id,
             user_id=user_id,
@@ -100,7 +103,7 @@ class SyncChannelMember(PlatformModel):
         return deleted == 1
 
     @classmethod
-    async def set_channel_member_last_read_at(
+    async def update_last_read_at(
         cls,
         channel_id: str,
         user_id: str,
@@ -108,6 +111,7 @@ class SyncChannelMember(PlatformModel):
         *,
         company_id: str,
     ) -> None:
+        """Пишет last_read_at участника в компании. Нет строки или чужая компания — ValueError."""
         existing = await cls.objects.filter(
             channel_id=channel_id,
             user_id=user_id,
@@ -131,13 +135,14 @@ class SyncChannelMember(PlatformModel):
             )
 
     @classmethod
-    async def channel_member_notifications_muted(
+    async def is_notifications_muted(
         cls,
         channel_id: str,
         user_id: str,
         *,
         company_id: str,
     ) -> bool:
+        """Флаг notifications_muted участника в компании. Нет строки — ValueError."""
         row = await cls.objects.filter(
             channel_id=channel_id,
             user_id=user_id,
@@ -150,7 +155,7 @@ class SyncChannelMember(PlatformModel):
         return row.notifications_muted
 
     @classmethod
-    async def set_channel_member_notifications_muted(
+    async def update_notifications_muted(
         cls,
         channel_id: str,
         user_id: str,
@@ -158,6 +163,7 @@ class SyncChannelMember(PlatformModel):
         *,
         company_id: str,
     ) -> None:
+        """Пишет notifications_muted участника в компании. Нет строки — ValueError. Обновление не одной строки — ValueError."""
         existing = await cls.objects.filter(
             channel_id=channel_id,
             user_id=user_id,
@@ -178,13 +184,14 @@ class SyncChannelMember(PlatformModel):
             )
 
     @classmethod
-    async def peer_channel_member_last_read_at(
+    async def peer_last_read_at(
         cls,
         channel_id: str,
         viewer_user_id: str,
         *,
         company_id: str,
     ) -> datetime | None:
+        """last_read_at одного другого участника канала. Нет другого участника — None. Какой именно, если их несколько, не задано."""
         rows = await cls.objects.filter(
             channel_id=channel_id,
             company_id=company_id,
@@ -194,7 +201,8 @@ class SyncChannelMember(PlatformModel):
         return rows[0].last_read_at
 
     @classmethod
-    async def list_for_authz(cls, *, limit: int | None) -> list[Self]:
+    async def list_all_by_channel_id_and_user_id(cls, *, limit: int | None) -> list[Self]:
+        """Все строки участников, ORDER BY channel_id, user_id. limit is None не ограничивает."""
         ordered = cls.objects.order_by("channel_id", "user_id")
         if limit is None:
             return await ordered.all()

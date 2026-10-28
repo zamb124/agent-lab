@@ -16,3 +16,9 @@ export const servicesStatusLoadOp = createAsyncOp({
         query: { limit: 100, offset: 0 },
     }),
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/services_status_load': typeof servicesStatusLoadOp;
+    }
+}

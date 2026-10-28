@@ -228,7 +228,7 @@ async def test_sync_empty_catalog_does_not_delete_existing_records(
         )
         with pytest.raises(RuntimeError, match="did not return models"):
             await di.llm_models_service.sync_models_by_provider("groq")
-        stored = await AIModelRecord.get_provider_model("groq", model_id)
+        stored = await AIModelRecord.by_provider_and_model_id("groq", model_id)
         assert stored is not None
         assert stored.model_id == model_id
     finally:
@@ -271,7 +271,7 @@ async def test_sync_http_500_does_not_empty_catalog(
         )
         with pytest.raises(AIProviderAdapterError, match="HTTP 500"):
             await di.llm_models_service.sync_models_by_provider("groq")
-        stored = await AIModelRecord.get_provider_model("groq", model_id)
+        stored = await AIModelRecord.by_provider_and_model_id("groq", model_id)
         assert stored is not None
         assert stored.model_id == model_id
     finally:

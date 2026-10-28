@@ -61,17 +61,15 @@ import {
     CursorListController,
     FacetsController,
     SliceController,
+    bindActions,
 } from '../base/use-resource.js';
+import type { OpControllerOf, ResourceControllerOf, SliceControllerOf } from '../base/use-resource.js';
 import { PLATFORM_MOBILE_VIEWPORT_CONTENT } from '../utils/platform-viewport-meta.js';
 import { isStandaloneOrNativeAppShell } from '../utils/native-app-shell.js';
 import type { EventMetaInput, PlatformEvent } from '../events/contract.js';
 import type { PlatformBusLike } from '../events/bus-singleton.js';
-import type { ResourceCollectionFactory } from '../events/factories/resource-collection.js';
-import type { AsyncOpFactory } from '../events/factories/async-op.js';
-import type { FormFactory } from '../events/factories/form.js';
-import type { CursorListFactory } from '../events/factories/cursor-list.js';
-import type { FacetsFactory } from '../events/factories/facets.js';
-import type { SliceFactory } from '../events/factories/slice.js';
+import type { PlatformBusState } from '../events/bus-state.js';
+import type { FactoryNameOfKind, PlatformFactoryRegistry } from '../events/factory-registry.js';
 const ZOOM_BLOCKED_KEYBOARD_KEYS = new Set(['+', '-', '=', '_', '0']);
 const ZOOM_BLOCKED_KEYBOARD_CODES = new Set(['NumpadAdd', 'NumpadSubtract', 'Digit0', 'Equal', 'Minus']);
 
@@ -98,8 +96,17 @@ export interface ToastOptions {
     namespace?: string | null;
 }
 
-interface PlatformElementCtor {
-    i18nNamespace?: string;
+function readI18nNamespace(ctor: unknown): string | undefined {
+    let current = ctor;
+    while (typeof current === 'function') {
+        const descriptor = Object.getOwnPropertyDescriptor(current, 'i18nNamespace');
+        if (descriptor !== undefined) {
+            const value = descriptor.value;
+            return typeof value === 'string' && value.length > 0 ? value : undefined;
+        }
+        current = Object.getPrototypeOf(current);
+    }
+    return undefined;
 }
 
 export class PlatformElement extends LitElement {
@@ -107,7 +114,7 @@ export class PlatformElement extends LitElement {
     static _standaloneNoZoomGuardRegistered = false;
 
     _busTypeUnsubs: Array<() => void>;
-    _i18nSelectController: SelectController<unknown> | null;
+    _i18nSelectController: SelectController<Record<string, unknown> | undefined> | null;
 
     constructor() {
         super();
@@ -127,7 +134,7 @@ export class PlatformElement extends LitElement {
         return this.bus.dispatch(type, payload, meta || { source: 'local' });
     }
 
-    select<V>(selector: (state: Record<string, unknown>) => V, opts?: { equality?: (a: V, b: V) => boolean }): SelectController<V> {
+    select<V>(selector: (state: Readonly<PlatformBusState>) => V, opts?: { equality?: (a: unknown, b: unknown) => boolean }): SelectController<V> {
         return new SelectController(this, selector, opts);
     }
 
@@ -152,32 +159,34 @@ export class PlatformElement extends LitElement {
         if (typeof key !== 'string' || key.length === 0) {
             throw new Error('PlatformElement.t: key required (non-empty string)');
         }
-        const ns = namespace || (this.constructor as PlatformElementCtor).i18nNamespace || getDefaultI18nNamespace();
+        const ns = namespace || readI18nNamespace(this.constructor) || getDefaultI18nNamespace();
         if (!ns) {
             throw new Error(`PlatformElement.t: cannot resolve i18n namespace for key "${key}". Provide explicit namespace, declare static i18nNamespace, or set PlatformApp.defaultI18nNamespace.`);
         }
         const i18nState = this.bus.getState().i18n;
-        return translate(i18nState as Parameters<typeof translate>[0], key, mergePlatformI18nVars(vars), ns);
+        return translate(i18nState, key, mergePlatformI18nVars(vars), ns);
     }
 
-    useResource(name: string, opts?: { autoload?: boolean; autoloadQuery?: Record<string, unknown> | null }): ResourceController {
-        return new ResourceController(this, getFactory<ResourceCollectionFactory>(name, 'resource-collection'), opts);
+    useResource<N extends FactoryNameOfKind<'resource-collection'>>(name: N, opts?: { autoload?: boolean; autoloadQuery?: Record<string, unknown> | null }): ResourceControllerOf<PlatformFactoryRegistry[N]> {
+        const factory = getFactory(name, 'resource-collection');
+        return bindActions(new ResourceController(this, factory, opts), factory.actions, 'ResourceController', factory.name);
     }
 
-    useOp(name: string): OpController {
-        return new OpController(this, getFactory<AsyncOpFactory>(name, 'async-op'));
+    useOp<N extends FactoryNameOfKind<'async-op'>>(name: N): OpControllerOf<PlatformFactoryRegistry[N]> {
+        const factory = getFactory(name, 'async-op');
+        return bindActions(new OpController(this, factory), factory.actions, 'OpController', factory.name);
     }
 
-    useForm(name: string): FormController {
-        return new FormController(this, getFactory<FormFactory>(name, 'form'));
+    useForm<N extends FactoryNameOfKind<'form'>>(name: N): FormController {
+        return new FormController(this, getFactory(name, 'form'));
     }
 
-    useCursorList(name: string, opts?: { autoload?: boolean; autoloadFilters?: Record<string, unknown> | null }): CursorListController {
-        return new CursorListController(this, getFactory<CursorListFactory>(name, 'cursor-list'), opts);
+    useCursorList<N extends FactoryNameOfKind<'cursor-list'>>(name: N, opts?: { autoload?: boolean; autoloadFilters?: Record<string, unknown> | null }): CursorListController {
+        return new CursorListController(this, getFactory(name, 'cursor-list'), opts);
     }
 
-    useFacets(name: string): FacetsController {
-        return new FacetsController(this, getFactory<FacetsFactory>(name, 'facets'));
+    useFacets<N extends FactoryNameOfKind<'facets'>>(name: N): FacetsController {
+        return new FacetsController(this, getFactory(name, 'facets'));
     }
 
     /**
@@ -189,15 +198,16 @@ export class PlatformElement extends LitElement {
      *
      * Имя фабрики — `<svc>/<entity>` (ровно 2 сегмента, snake_case).
      */
-    useSlice(name: string): SliceController {
-        return new SliceController(this, getFactory<SliceFactory>(name, 'slice'));
+    useSlice<N extends FactoryNameOfKind<'slice'>>(name: N): SliceControllerOf<PlatformFactoryRegistry[N]> {
+        const factory = getFactory(name, 'slice');
+        return bindActions(new SliceController(this, factory), factory.actions, 'SliceController', factory.name);
     }
 
     toast(i18n_key: string, options?: ToastOptions): void {
         if (typeof i18n_key !== 'string' || i18n_key.length === 0) {
             throw new Error('PlatformElement.toast: i18n_key required (non-empty string)');
         }
-        const opts = options || {};
+        const opts = options === undefined || options === null ? {} : options;
         const type = opts.type || 'success';
         if (!_ALLOWED_TOAST_TYPES.has(type)) {
             throw new Error(`PlatformElement.toast: invalid type "${type}" (allowed: success|error|warning|info)`);
@@ -208,7 +218,7 @@ export class PlatformElement extends LitElement {
             throw new Error('PlatformElement.toast: duration must be number or omitted');
         }
         const explicitNs = Object.prototype.hasOwnProperty.call(opts, 'namespace') ? opts.namespace : null;
-        const ns = explicitNs || (this.constructor as PlatformElementCtor).i18nNamespace || getDefaultI18nNamespace();
+        const ns = explicitNs || readI18nNamespace(this.constructor) || getDefaultI18nNamespace();
         const qualified_key = i18n_key.includes(':') || !ns ? i18n_key : `${ns}:${i18n_key}`;
         this.dispatch(CoreEvents.UI_TOAST_SHOW, {
             type,
@@ -223,7 +233,10 @@ export class PlatformElement extends LitElement {
         if (typeof kindOrClass === 'string' && kindOrClass.length > 0) {
             kind = kindOrClass;
         } else if (kindOrClass && typeof kindOrClass === 'function') {
-            kind = (kindOrClass as unknown as { modalKind?: string }).modalKind as string;
+            if (!('modalKind' in kindOrClass) || typeof kindOrClass.modalKind !== 'string') {
+                throw new Error('PlatformElement.openModal: modal class missing static modalKind');
+            }
+            kind = kindOrClass.modalKind;
             if (typeof kind !== 'string' || kind.length === 0) {
                 throw new Error('PlatformElement.openModal: modal class missing static modalKind');
             }
@@ -359,9 +372,7 @@ export class PlatformElement extends LitElement {
      * @returns {string|null}
      */
     getCurrentRouteKey(): string | null {
-        const state = this.bus.getState();
-        const router = (state ? state.router : null) as { routeKey?: unknown } | null | undefined;
-        const key = router ? router.routeKey : null;
+        const key = this.bus.getState().router.routeKey;
         return typeof key === 'string' && key.length > 0 ? key : null;
     }
 
@@ -451,7 +462,7 @@ export class PlatformElement extends LitElement {
         if (options !== undefined && (options === null || typeof options !== 'object')) {
             throw new Error('PlatformElement.startOAuth: options must be a plain object or omitted');
         }
-        const opts = options || {};
+        const opts = options === undefined || options === null ? {} : options;
         let return_path = null;
         if (typeof opts.returnPath === 'string' && opts.returnPath.length > 0) {
             return_path = opts.returnPath;
@@ -487,10 +498,7 @@ export class PlatformElement extends LitElement {
         // Production Flow UI iframe не бутстрапит PlatformApp — catalog может
         // монтировать PlatformElement (DataTable host); без bus подписка запрещена.
         if (hasPlatformBus() && !this._i18nSelectController) {
-            this._i18nSelectController = this.select((s) => {
-                const i18n = s.i18n as { translations: Record<string, unknown>; locale: string };
-                return i18n.translations[i18n.locale];
-            });
+            this._i18nSelectController = this.select((s) => s.i18n.translations[s.i18n.locale]);
         }
         PlatformElement._registerStandaloneNoZoomGuard();
     }

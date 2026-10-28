@@ -10,18 +10,29 @@ import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import { cookieConsentDecisionIsCurrent } from '../../_helpers/cookie-consent-analytics.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyValues, TemplateResult} from 'lit';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { SliceController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function bundleConsent(bundle: Record<string, unknown>): { version: string; analyticsConfigured: boolean } {
+    const version = bundle.cookie_consent_text_version;
+    if (typeof version !== 'string' || version === '') {
+        throw new Error('cookie-consent-banner: cookie_consent_text_version required');
+    }
+    const analyticsConfigured = bundle.analytics_configured;
+    if (typeof analyticsConfigured !== 'boolean') {
+        throw new Error('cookie-consent-banner: analytics_configured boolean required');
+    }
+    return { version, analyticsConfigured };
+}
+
+function analyticsAlreadyInjected(): boolean {
+    return Reflect.get(window, '__humanitecAnalyticsInjected') === true;
+}
 
 const COOKIE_CONSENT_STORAGE_KEY = platformStorageKey('frontend', 'cookie_consent');
 
-interface CookieConsentController extends SliceController {
-    hydrate(value: unknown): void;
-    decide(snapshot: Record<string, unknown>): void;
-    openSettings(): void;
-    setAnalyticsDraft(payload: { value: boolean }): void;
-}
 
 const PUBLIC_BANNER_ROUTES = new Set([
     'landing',
@@ -114,7 +125,7 @@ export class CookieConsentBanner extends PlatformElement {
 
     constructor() {
         super();
-        this._consent = this.useSlice('frontend/cookie_consent') as unknown as CookieConsentController;
+        this._consent = this.useSlice('frontend/cookie_consent');
         this._recordOp = this.useOp('frontend/cookie_consent_record');
         this._siteBundle = this.useOp('frontend/public_site_bundle');
         this._localeSel = this.select((s: Record<string, any>) => s.i18n.locale);
@@ -122,7 +133,7 @@ export class CookieConsentBanner extends PlatformElement {
         this._consentSel = this.select((s: Record<string, any>) => s.frontendCookieConsent);
         this.useEvent(CoreEvents.STORAGE_LOADED, (event) => this._onStorageLoaded(event));
     }
-    private _consent: CookieConsentController;
+    private _consent: ControllerFor<'frontend/cookie_consent'>;
     private _recordOp: OpController;
     private _siteBundle: OpController;
     private _localeSel: SelectController<any>;
@@ -144,8 +155,11 @@ export class CookieConsentBanner extends PlatformElement {
         this.toggleAttribute('visible', this._shouldShow());
     }
 
-    _onStorageLoaded(event: { payload?: Record<string, any> } | PlatformEvent) {
-        const payload = (event as Record<string, any>).payload;
+    _onStorageLoaded(event: PlatformEvent) {
+        if (!isPlainRecord(event.payload)) {
+            return;
+        }
+        const payload = event.payload;
         if (!payload || payload.key !== COOKIE_CONSENT_STORAGE_KEY) {
             return;
         }
@@ -159,12 +173,9 @@ export class CookieConsentBanner extends PlatformElement {
         this._consent.hydrate(payload.value);
     }
 
-    _bundle() {
+    _bundle(): Record<string, unknown> | null {
         const bundleRes = this._siteBundle.lastResult;
-        if (!bundleRes || typeof bundleRes !== 'object') {
-            return null;
-        }
-        return bundleRes;
+        return isPlainRecord(bundleRes) ? bundleRes : null;
     }
 
     _shouldShow() {
@@ -176,13 +187,7 @@ export class CookieConsentBanner extends PlatformElement {
         if (!bundle) {
             return false;
         }
-        const version = (bundle as Record<string, any>).cookie_consent_text_version;
-        if (typeof version !== 'string' || version === '') {
-            throw new Error('cookie-consent-banner: cookie_consent_text_version required');
-        }
-        if (typeof (bundle as Record<string, any>).analytics_configured !== 'boolean') {
-            throw new Error('cookie-consent-banner: analytics_configured boolean required');
-        }
+        const { version, analyticsConfigured } = bundleConsent(bundle);
         const consent = this._consentSel.value;
         if (consent.settingsOpen) {
             return true;
@@ -193,7 +198,7 @@ export class CookieConsentBanner extends PlatformElement {
             consentTextVersion: consent.consentTextVersion,
             analyticsOffered: consent.analyticsOffered,
             bundleVersion: version,
-            analyticsConfigured: (bundle as Record<string, any>).analytics_configured,
+            analyticsConfigured,
         });
     }
 
@@ -227,52 +232,56 @@ export class CookieConsentBanner extends PlatformElement {
         if (!bundle) {
             throw new Error('cookie-consent-banner: site bundle required');
         }
-        const version = (bundle as Record<string, any>).cookie_consent_text_version;
-        if (typeof version !== 'string' || version === '') {
-            throw new Error('cookie-consent-banner: cookie_consent_text_version required');
-        }
-        if (typeof (bundle as Record<string, any>).analytics_configured !== 'boolean') {
-            throw new Error('cookie-consent-banner: analytics_configured boolean required');
-        }
+        const { version, analyticsConfigured } = bundleConsent(bundle);
         const locale = this._localeSel.value;
         if (locale !== 'ru' && locale !== 'en') {
             throw new Error('cookie-consent-banner: locale must be ru or en');
         }
         const previousId = this._consentSel.value.cookieConsentId;
-        const payload = {
+        const payload: Record<string, unknown> = {
             decision,
             analytics_allowed: analyticsAllowed,
             consent_text_version: version,
             locale,
         };
         if (previousId !== '') {
-            (payload as Record<string, any>).supersedes_cookie_consent_id = previousId;
+            payload.supersedes_cookie_consent_id = previousId;
         }
         const recorded = await this._recordOp.run(payload);
-        if (!recorded || typeof recorded !== 'object') {
+        if (!isPlainRecord(recorded)) {
             throw new Error('cookie-consent-banner: consent journal write failed');
         }
-        const cookieConsentId = (recorded as Record<string, any>).cookie_consent_id;
-        const decidedAt = (recorded as Record<string, any>).created_at;
+        const cookieConsentId = recorded.cookie_consent_id;
+        const decidedAt = recorded.created_at;
+        const consentTextVersion = recorded.consent_text_version;
+        const recordedDecision = recorded.decision;
+        const recordedAnalytics = recorded.analytics_allowed;
         if (typeof cookieConsentId !== 'string' || cookieConsentId === '') {
             throw new Error('cookie-consent-banner: cookie_consent_id required');
         }
         if (typeof decidedAt !== 'string' || decidedAt === '') {
             throw new Error('cookie-consent-banner: created_at required');
         }
-        const analyticsWereInjected = typeof window !== 'undefined'
-            && (window as Record<string, any>).__humanitecAnalyticsInjected === true;
+        if (typeof consentTextVersion !== 'string' || consentTextVersion === '') {
+            throw new Error('cookie-consent-banner: consent_text_version required');
+        }
+        if (typeof recordedDecision !== 'string' || recordedDecision === '') {
+            throw new Error('cookie-consent-banner: decision required');
+        }
+        if (typeof recordedAnalytics !== 'boolean') {
+            throw new Error('cookie-consent-banner: analytics_allowed boolean required');
+        }
         const snapshot = {
             cookieConsentId,
-            consentTextVersion: (recorded as Record<string, any>).consent_text_version,
-            decision: (recorded as Record<string, any>).decision,
-            analyticsAllowed: (recorded as Record<string, any>).analytics_allowed,
-            analyticsOffered: (bundle as Record<string, any>).analytics_configured,
+            consentTextVersion,
+            decision: recordedDecision,
+            analyticsAllowed: recordedAnalytics,
+            analyticsOffered: analyticsConfigured,
             decidedAt,
         };
         this._consent.decide(snapshot);
         this._persistSnapshot(snapshot);
-        if (analyticsWereInjected && (recorded as Record<string, any>).analytics_allowed === false) {
+        if (analyticsAlreadyInjected() && recordedAnalytics === false) {
             window.location.reload();
         }
     }
@@ -294,7 +303,7 @@ export class CookieConsentBanner extends PlatformElement {
         void this._submit('custom', analyticsAllowed);
     }
 
-    _renderCategories(analyticsConfigured: Record<string, any>) {
+    _renderCategories(analyticsConfigured: boolean) {
         const consent = this._consentSel.value;
         return html`
             <div class="categories">
@@ -329,7 +338,7 @@ export class CookieConsentBanner extends PlatformElement {
         if (!bundle) {
             return html``;
         }
-        const analyticsConfigured = (bundle as Record<string, any>).analytics_configured;
+        const { analyticsConfigured } = bundleConsent(bundle);
         const consent = this._consentSel.value;
         const busy = this._recordOp.busy;
         const body = analyticsConfigured
@@ -363,7 +372,7 @@ export class CookieConsentBanner extends PlatformElement {
                                     ${this.t('banner.necessary_only')}
                                 </button>
                                 <button class="btn btn-secondary" type="button" ?disabled=${busy}
-                                    @click=${() => this._consent.openSettings()}>
+                                    @click=${() => this._consent.openSettings(null)}>
                                     ${this.t('banner.settings')}
                                 </button>
                             `

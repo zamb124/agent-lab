@@ -180,7 +180,7 @@ async def test_activity_task_create_places_on_task_board(
     board_id = work_item.get("board_id")
     assert isinstance(board_id, str) and board_id
 
-    board = await Board.get_board(
+    board = await Board.require_in_company(
         company_id="system",
         board_id=board_id,
     )
@@ -487,12 +487,12 @@ async def test_entities_create_task_still_pairs_and_enriches_work_item_id(
     entity_id = _require_str(body, "entity_id")
     work_item_id = _require_str(body, "work_item_id")
 
-    item = await WorkItem.find_work_item_by_crm_entity("system", entity_id)
+    item = await WorkItem.any_crm_activity_by_entity_id("system", entity_id)
     assert item is not None
     assert item.work_item_id == work_item_id
     assert item.kind is WorkItemKind.CRM_ACTIVITY
     assert item.board_id is not None
-    board = await Board.get_board(
+    board = await Board.require_in_company(
         company_id="system",
         board_id=item.board_id,
     )

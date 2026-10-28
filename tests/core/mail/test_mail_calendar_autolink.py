@@ -36,7 +36,7 @@ def mail_service_with_calendar(
 
 
 async def _calendar_credentials(company_id: str, user_id: str) -> list[IntegrationCredential]:
-    credentials = await IntegrationCredential.list_by_user(company_id, user_id)
+    credentials = await IntegrationCredential.list_by_created_at_for_user(company_id, user_id)
     return [item for item in credentials if item.service == "calendar"]
 
 
@@ -231,6 +231,6 @@ async def test_unlink_mailbox_calendar_keeps_mailbox_and_resets_status(
     assert updated.calendar_autolink_status == CalendarAutolinkStatus.DISABLED
     assert updated.calendar_autolink_detail == "disconnected by user"
     assert await _calendar_credentials(company_id, user_id) == []
-    stored = await MailboxBinding.find_in_company(company_id, binding.mailbox_binding_id)
+    stored = await MailboxBinding.by_mailbox_binding_id(company_id, binding.mailbox_binding_id)
     assert stored is not None
     assert stored.calendar_autolink_status == CalendarAutolinkStatus.DISABLED

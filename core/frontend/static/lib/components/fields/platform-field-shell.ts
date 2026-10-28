@@ -155,7 +155,7 @@ export class PlatformFieldShell extends PlatformElement {
             } else if (el.shadowRoot) {
                 target = deepFindFocusable(el.shadowRoot);
             } else {
-                target = el.querySelector?.(FOCUSABLE) ?? null;
+                target = typeof el.querySelector === 'function' ? el.querySelector(FOCUSABLE) : null;
             }
             if (target instanceof HTMLElement) {
                 e.preventDefault();

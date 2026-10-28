@@ -56,7 +56,22 @@ export function assertTraceSpanRaw(raw: unknown): TraceSpanRaw {
     if (typeof spanId !== 'string' || spanId.length === 0) {
         throw new Error('trace-view-model: span.span_id must be a non-empty string');
     }
-    return raw as unknown as TraceSpanRaw;
+    const span: TraceSpanRaw = { span_id: spanId };
+    if (typeof raw.trace_id === 'string') span.trace_id = raw.trace_id;
+    if (raw.parent_span_id === null || typeof raw.parent_span_id === 'string') span.parent_span_id = raw.parent_span_id;
+    if (typeof raw.operation_name === 'string') span.operation_name = raw.operation_name;
+    if (typeof raw.name === 'string') span.name = raw.name;
+    if (raw.kind === null || typeof raw.kind === 'string') span.kind = raw.kind;
+    if (raw.start_time === null || typeof raw.start_time === 'string') span.start_time = raw.start_time;
+    if (raw.end_time === null || typeof raw.end_time === 'string') span.end_time = raw.end_time;
+    if (raw.duration_ms === null || typeof raw.duration_ms === 'number') span.duration_ms = raw.duration_ms;
+    if (raw.status === null || typeof raw.status === 'string') span.status = raw.status;
+    if (raw.status_message === null || typeof raw.status_message === 'string') span.status_message = raw.status_message;
+    if (typeof raw.service_name === 'string') span.service_name = raw.service_name;
+    if (raw.event_type === null || typeof raw.event_type === 'string') span.event_type = raw.event_type;
+    if (isPlainObject(raw.attributes)) span.attributes = raw.attributes;
+    if (Array.isArray(raw.children)) span.children = raw.children;
+    return span;
 }
 
 /**

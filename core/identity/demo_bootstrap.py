@@ -69,7 +69,7 @@ async def ensure_demo_company_and_user(
         if updated:
             logger.info("identity.demo.bootstrap", company_id=company_id)
 
-    matched = await User.find_all_by_email_ci(demo.email)
+    matched = await User.list_by_email_ci(demo.email)
     if len(matched) > 1:
         raise ValueError(
             f"Multiple users with email {demo.email}: "

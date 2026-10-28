@@ -15,3 +15,9 @@ export const catalogRagSearchOp = createAsyncOp({
         path: '/documents/api/v1/catalogs/:catalog_id/rag-index/search',
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/catalog_rag_search': typeof catalogRagSearchOp;
+    }
+}

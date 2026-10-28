@@ -71,6 +71,12 @@ import '../modals/wiki-move-page-modal.js';
 import '../modals/wiki-page-access-modal.js';
 import '../modals/wiki-import-report-modal.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 const WIKI_ROUTES = [
     { key: 'wiki_home',         path: '',                     titleKey: 'routes.wiki_home' },
     { key: 'wiki_page',         path: 'p/:pageId',            parent: 'wiki_home', titleKey: 'routes.wiki_page' },
@@ -228,7 +234,8 @@ export class WikiApp extends PlatformApp {
     }
 
     override shouldRenderPlatformAssistant(routeKey: string | null) {
-        return !PUBLIC_ROUTE_KEYS.includes(routeKey ?? '');
+        const key = routeKey === undefined || routeKey === null ? '' : routeKey;
+        return !PUBLIC_ROUTE_KEYS.includes(key);
     }
 
     override async getPlatformAssistantContextVariables(routeKey: string | null, params: Record<string, string>) {
@@ -244,7 +251,7 @@ export class WikiApp extends PlatformApp {
         const trimmed = query.trim();
         if (trimmed === '') {
             return this._pages.items.slice(0, 12).map((page: ResourceItem) => ({
-                id: String(page.wiki_page_id ?? ''),
+                id: missingAsEmpty(page.wiki_page_id),
                 label: page.title,
                 icon: 'file',
                 group: this.t('palette.recent'),
@@ -256,7 +263,7 @@ export class WikiApp extends PlatformApp {
         }
         const items = result.items as { wiki_page_id?: unknown; title?: unknown; snippet?: unknown }[];
         return items.map((item) => ({
-            id: String(item.wiki_page_id ?? ''),
+            id: missingAsEmpty(item.wiki_page_id),
             label: item.title,
             description: item.snippet,
             icon: 'file',
@@ -265,7 +272,7 @@ export class WikiApp extends PlatformApp {
     };
 
     private _onPaletteSelect(event: CustomEvent<{ id?: unknown }>) {
-        this.navigate('wiki_page', { pageId: String(event.detail.id ?? '') });
+        this.navigate('wiki_page', { pageId: missingAsEmpty(event.detail.id) });
     }
 
     /** Свёрнутое дерево отдаёт свою ширину странице: split сжимается до полосы с логотипом. */
@@ -278,7 +285,7 @@ export class WikiApp extends PlatformApp {
     }
 
     override renderRoute(routeKey: string | null, params: Record<string, string>) {
-        if (PUBLIC_ROUTE_KEYS.includes(String(routeKey ?? ''))) {
+        if (PUBLIC_ROUTE_KEYS.includes(missingAsEmpty(routeKey))) {
             const publicPageId = typeof params.pageId === 'string' ? params.pageId : '';
             return html`
                 <div class="public">

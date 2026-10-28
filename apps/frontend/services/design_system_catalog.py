@@ -7,9 +7,12 @@ from pathlib import Path
 
 from core.types import JsonObject, JsonValue, parse_yaml_value, require_json_object
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _DS_ROOT = _REPO_ROOT / "tests" / "ui" / "design-system"
 _CATALOG_PATH = _DS_ROOT / "catalog.yaml"
+# Манифест ссылается на модуль по алиасу сборки; страница preview грузит собранный модуль из embed-dist по URL.
+_IMPORT_SPECIFIER_PREFIX = "@platform/lib/"
+_IMPORT_URL_PREFIX = "/static/core/lib/"
 
 
 @dataclass(frozen=True)
@@ -25,7 +28,7 @@ class UiKitManifest:
     tier: str
     title_ru: str
     title_en: str
-    import_path: str
+    import_url: str
     variants: tuple[UiKitVariant, ...]
 
 
@@ -94,9 +97,9 @@ def load_manifest(component: str) -> UiKitManifest:
         manifest_path.read_text(encoding="utf-8"),
         f"{component} manifest.yaml",
     )
-    import_path = manifest.get("import")
-    if not isinstance(import_path, str) or not import_path:
-        raise ValueError(f"{component}: manifest import is required")
+    import_specifier = manifest.get("import")
+    if not isinstance(import_specifier, str) or not import_specifier.startswith(_IMPORT_SPECIFIER_PREFIX):
+        raise ValueError(f"{component}: manifest import must start with {_IMPORT_SPECIFIER_PREFIX}")
     variants_raw = manifest.get("variants")
     if not isinstance(variants_raw, list) or not variants_raw:
         raise ValueError(f"{component}: manifest variants must be a non-empty list")
@@ -122,7 +125,7 @@ def load_manifest(component: str) -> UiKitManifest:
         tier=str(manifest["tier"]),
         title_ru=str(manifest["title_ru"]),
         title_en=str(manifest["title_en"]),
-        import_path=import_path,
+        import_url=f"{_IMPORT_URL_PREFIX}{import_specifier.removeprefix(_IMPORT_SPECIFIER_PREFIX)}",
         variants=tuple(variants),
     )
 

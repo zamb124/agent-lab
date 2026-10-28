@@ -50,14 +50,15 @@ class RelationshipType(PlatformModel):
     weight_default: float = DbField(default=1.0)
 
     @classmethod
-    def row_id(cls, company_id: str, type_id: str) -> str:
+    def row_id_by_company_and_type(cls, company_id: str, type_id: str) -> str:
+        """Ключ из company_id и type_id. Пустой company_id или type_id — ValueError."""
         if company_id == "" or type_id == "":
             raise ValueError("relationship type row requires company_id and type_id")
         return f"{len(company_id)}:{company_id}:{type_id}"
 
     @model_validator(mode="after")
     def bind_row_id(self) -> Self:
-        expected = type(self).row_id(self.company_id, self.type_id)
+        expected = type(self).row_id_by_company_and_type(self.company_id, self.type_id)
         if self.relationship_type_row_id == "":
             self.relationship_type_row_id = expected
         elif self.relationship_type_row_id != expected:
@@ -65,26 +66,29 @@ class RelationshipType(PlatformModel):
         return self
 
     @classmethod
-    def in_company(
+    def query_by_system_in_company(
         cls,
         company_id: str,
         *,
         include_system: bool,
     ) -> Query[Self]:
+        """Запрос типов связи компании. include_system=False оставляет только несистемные. Порядка нет."""
         rows = cls.objects.filter(company_id=company_id)
         if not include_system:
             return rows.filter(is_system=False)
         return rows
 
     @classmethod
-    async def all_with_prompt(cls, company_id: str) -> list[Self]:
+    async def list_with_prompt(cls, company_id: str) -> list[Self]:
+        """Типы связей компании, у которых prompt не NULL. Пустая строка входит. Порядка и limit нет."""
         return await cls.objects.filter(
             company_id=company_id,
             prompt__isnull=False,
         ).all()
 
     @classmethod
-    async def update_by_company_and_type_id(cls, row: Self) -> int:
+    async def update_loaded_by_company_and_type_id(cls, row: Self) -> int:
+        """Пишет name, description, prompt, is_directed, inverse_type_id, icon, color, is_system и weight_default строки с тем же company_id и type_id. Возвращает число строк. Нет строки — 0."""
         return await cls.objects.filter(
             company_id=row.company_id,
             type_id=row.type_id,

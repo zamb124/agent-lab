@@ -8,6 +8,22 @@
 # на общий image.
 
 ARG BASE_GPU_IMAGE=ghcr.io/zamb124/agent-lab-base-gpu:latest
+
+# UI собирается так же, как в основном Dockerfile: браузер получает только ui-dist и embed-dist.
+FROM node:24-bookworm-slim AS ui-builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json tsconfig.base.json ./
+COPY scripts/build_ui.mjs ./scripts/
+COPY core/frontend/static ./core/frontend/static
+COPY tests/ui/design-system/components ./tests/ui/design-system/components
+COPY apps/ ./apps/
+RUN npm run typecheck:ui \
+    && npm run build:ui \
+    && for d in apps/*/ui-dist; do mkdir -p "/out/$d" && cp -a "$d/." "/out/$d/"; done \
+    && mkdir -p /out/core/frontend && cp -a core/frontend/embed-dist /out/core/frontend/embed-dist
+
 FROM ${BASE_GPU_IMAGE} AS base-with-core
 
 ENV PYTHONUNBUFFERED=1
@@ -22,6 +38,8 @@ RUN uv pip install --python /opt/venv/bin/python --force-reinstall --no-deps \
 
 COPY core/ ./core/
 COPY apps/ ./apps/
+COPY --from=ui-builder /out/apps/ ./apps/
+COPY --from=ui-builder /out/core/frontend/embed-dist ./core/frontend/embed-dist
 COPY scripts/ ./scripts/
 COPY migrations/ ./migrations/
 

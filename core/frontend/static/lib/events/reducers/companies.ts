@@ -11,6 +11,7 @@
  */
 
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, payloadFields } from '../payload.js';
 
 export interface CompanyRecord extends Record<string, unknown> {}
 
@@ -40,28 +41,42 @@ export const initialCompaniesState: CompaniesState = Object.freeze({
     slugChecks: {},
 });
 
+function isCompanyRecord(value: unknown): value is CompanyRecord {
+    return isPlainRecord(value);
+}
+
+function companyRecords(value: unknown, eventType: string): CompanyRecord[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`${eventType}: payload.items must be an array`);
+    }
+    const records: CompanyRecord[] = [];
+    for (const item of value) {
+        if (!isCompanyRecord(item)) {
+            throw new Error(`${eventType}: company must be an object`);
+        }
+        records.push(item);
+    }
+    return records;
+}
+
 export function companiesReducer(state: CompaniesState = initialCompaniesState, event: PlatformEvent): CompaniesState {
     switch (event.type) {
         case COMPANIES_EVENTS.LOAD_REQUESTED:
             return { ...state, loading: true, error: null };
         case COMPANIES_EVENTS.LOADED: {
-            const items = ((event.payload || {}) as { items?: unknown }).items;
-            if (!Array.isArray(items)) {
-                throw new Error(`${event.type}: payload.items must be an array`);
-            }
-            return { ...state, loading: false, list: items as CompanyRecord[] };
+            return { ...state, loading: false, list: companyRecords(payloadFields(event).items, event.type) };
         }
         case COMPANIES_EVENTS.LOAD_FAILED:
-            const msg = ((event.payload || {}) as { message?: unknown }).message;
+            const msg = (payloadFields(event)).message;
             return { ...state, loading: false, error: typeof msg === 'string' ? msg : null };
         case COMPANIES_EVENTS.SLUG_CHECKED: {
-            const p = (event.payload || {}) as { slug?: unknown; available?: unknown };
+            const p = payloadFields(event);
             if (typeof p.slug !== 'string' || !p.slug) return state;
             return { ...state, slugChecks: { ...state.slugChecks, [p.slug]: { available: !!p.available } } };
         }
         case COMPANIES_EVENTS.CREATED: {
-            const company = ((event.payload || {}) as { company?: CompanyRecord }).company;
-            if (!company) return state;
+            const company = payloadFields(event).company;
+            if (!isPlainRecord(company)) return state;
             return { ...state, list: [...state.list, company] };
         }
         default:

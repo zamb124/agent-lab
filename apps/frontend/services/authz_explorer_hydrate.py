@@ -198,7 +198,7 @@ class AuthzExplorerHydrator:
         )
 
     async def _hydrate_crm_entity(self, entity_id: str, company_id: str) -> AuthzHydratedObject:
-        entity = await CRMEntity.find_in_company(company_id, entity_id)
+        entity = await CRMEntity.by_entity_id(company_id, entity_id)
         if entity is None:
             return _missing(AuthzObjectType.CRM_ENTITY, entity_id)
         title = _clean_title(entity.name)
@@ -228,7 +228,7 @@ class AuthzExplorerHydrator:
         )
 
     async def _hydrate_office_document(self, file_id: str, company_id: str) -> AuthzHydratedObject:
-        binding = await FileRecord.for_company(file_id, company_id)
+        binding = await FileRecord.by_file_id(file_id, company_id)
         if binding is None or binding.deleted_at is not None or binding.catalog_id is None:
             return _missing(AuthzObjectType.DOCUMENT_FILE, file_id)
         catalog = await DocumentCatalog.get(binding.catalog_id)
@@ -246,7 +246,7 @@ class AuthzExplorerHydrator:
         key_company_id, flow_id = parse_namespace_key(object_key)
         if key_company_id != company_id:
             return _missing(AuthzObjectType.FLOW, object_key)
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
         if config is None:
             return _missing(AuthzObjectType.FLOW, object_key)
         title = _clean_title(config.name)
@@ -282,7 +282,7 @@ class AuthzExplorerHydrator:
         )
 
     async def _hydrate_sync_channel(self, channel_id: str, company_id: str) -> AuthzHydratedObject:
-        channel = await SyncChannel.channel_for_company(channel_id, company_id)
+        channel = await SyncChannel.by_channel_id(company_id, channel_id)
         if channel is None:
             return _missing(AuthzObjectType.SYNC_CHANNEL, channel_id)
         title = _clean_title(channel.name)
@@ -310,7 +310,7 @@ class AuthzExplorerHydrator:
         )
 
     async def _hydrate_mailbox(self, mailbox_binding_id: str, company_id: str) -> AuthzHydratedObject:
-        binding = await MailboxBinding.find_in_company(company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(company_id, mailbox_binding_id)
         if binding is None:
             return _missing(AuthzObjectType.MAILBOX_BINDING, mailbox_binding_id)
         return _hydrated(
@@ -371,7 +371,7 @@ class AuthzExplorerHydrator:
         return []
 
     async def _search_wiki(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        pages = await WikiPage.search_alive_pages(company_id, query, _SEARCH_LIMIT)
+        pages = await WikiPage.list_alive_by_title(company_id, query, _SEARCH_LIMIT)
         return [
             _hit(AuthzObjectType.WIKI_PAGE, page.wiki_page_id, _clean_title(page.title), page.namespace)
             for page in pages
@@ -389,14 +389,14 @@ class AuthzExplorerHydrator:
         ]
 
     async def _search_office_documents(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        bindings = await FileRecord.search_by_name(company_id, query, _SEARCH_LIMIT)
+        bindings = await FileRecord.list_with_catalog_by_original_name(company_id, query, _SEARCH_LIMIT)
         return [
             _hit(AuthzObjectType.DOCUMENT_FILE, binding.file_id, _clean_title(binding.original_name), "")
             for binding in bindings
         ]
 
     async def _search_office_catalogs(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        catalogs = await DocumentCatalog.search_by_title(
+        catalogs = await DocumentCatalog.list_by_title(
             company_id,
             query,
             _SEARCH_LIMIT,
@@ -418,7 +418,7 @@ class AuthzExplorerHydrator:
         return hits
 
     async def _search_sync(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        channels = await SyncChannel.search_channels_by_name(
+        channels = await SyncChannel.list_by_name(
             company_id, query, limit=_SEARCH_LIMIT
         )
         return [
@@ -429,7 +429,7 @@ class AuthzExplorerHydrator:
     async def _search_work_queues(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
         needle = query.casefold()
         hits: list[AuthzExplorerObjectHit] = []
-        for queue in await WorkQueue.list_for_company(company_id):
+        for queue in await WorkQueue.list_unordered_for_company(company_id):
             title = _clean_title(queue.name)
             if needle != "" and needle not in (title or "").casefold():
                 continue

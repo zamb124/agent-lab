@@ -463,7 +463,7 @@ class MailService:
     async def list_my_bindings(self, company_id: str | None = None) -> list[MailboxBinding]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
         user_id = self._active_user_id()
-        candidates = await MailboxBinding.list_by_company(resolved_company_id)
+        candidates = await MailboxBinding.list_by_email_address_for_company(resolved_company_id)
         if not candidates:
             return []
         checks = [
@@ -484,7 +484,7 @@ class MailService:
 
     async def list_bindings(self, company_id: str | None = None) -> list[MailboxBinding]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        return await MailboxBinding.list_by_company(resolved_company_id)
+        return await MailboxBinding.list_by_email_address_for_company(resolved_company_id)
 
     async def get_or_create_user_binding(
         self,
@@ -497,7 +497,7 @@ class MailService:
         if not user_id.strip():
             raise ValueError("user_id is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        existing_list = await MailboxBinding.list_by_user(
+        existing_list = await MailboxBinding.list_user_kind_by_default_and_email(
             resolved_company_id, user_id
         )
         if existing_list:
@@ -532,7 +532,7 @@ class MailService:
         acting_as_admin: bool = False,
     ) -> MailboxBinding:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         if binding.kind != MailboxBindingKind.USER or binding.user_id is None:
@@ -561,7 +561,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailboxBinding:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
 
@@ -710,7 +710,7 @@ class MailService:
             and stored.kind == MailboxBindingKind.USER
             and stored.user_id is not None
         ):
-            existing_for_user = await MailboxBinding.list_by_user(
+            existing_for_user = await MailboxBinding.list_user_kind_by_default_and_email(
                 resolved_company_id, stored.user_id
             )
             if len(existing_for_user) == 1 and not stored.is_default:
@@ -825,7 +825,7 @@ class MailService:
         )
         _ = await CompanyMailConnection.upsert_by_company_mail_connection_id(connection)
 
-        existing_for_user = await MailboxBinding.list_by_user(
+        existing_for_user = await MailboxBinding.list_user_kind_by_default_and_email(
             resolved_company_id, acting_user_id
         )
         is_default = len(existing_for_user) == 0
@@ -894,7 +894,7 @@ class MailService:
         пользователю не нужно вводить app password заново.
         """
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_calendar_access(
@@ -918,7 +918,7 @@ class MailService:
     ) -> MailboxBinding:
         """Отключить календарь ящика, оставив саму почту подключённой."""
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_calendar_access(
@@ -1150,7 +1150,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailServerHealth:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         connection = await self._require_connection_for_binding(binding)
@@ -1364,7 +1364,7 @@ class MailService:
             elif payload.is_default is False:
                 is_default = False
             else:
-                siblings = await MailboxBinding.list_by_user(
+                siblings = await MailboxBinding.list_user_kind_by_default_and_email(
                     resolved_company_id, target_user_id
                 )
                 sibling_ids = {item.mailbox_binding_id for item in siblings}
@@ -1422,7 +1422,7 @@ class MailService:
             and previous_was_default
             and previous_user_id != target_user_id
         ):
-            remaining = await MailboxBinding.list_by_user(
+            remaining = await MailboxBinding.list_user_kind_by_default_and_email(
                 resolved_company_id, previous_user_id
             )
             if remaining and not any(item.is_default for item in remaining):
@@ -1444,7 +1444,7 @@ class MailService:
         acting_as_admin: bool = False,
     ) -> None:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         connection = await self._connection_for_binding(binding)
@@ -1482,7 +1482,7 @@ class MailService:
             and binding.user_id is not None
             and binding.is_default
         ):
-            remaining = await MailboxBinding.list_by_user(
+            remaining = await MailboxBinding.list_user_kind_by_default_and_email(
                 resolved_company_id, binding.user_id
             )
             if remaining:
@@ -1501,7 +1501,7 @@ class MailService:
         if not user_id.strip():
             raise ValueError("user_id is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        bindings = await MailboxBinding.list_by_user(resolved_company_id, user_id)
+        bindings = await MailboxBinding.list_user_kind_by_default_and_email(resolved_company_id, user_id)
         for binding in bindings:
             connection = await self._connection_for_binding(binding)
             if connection is not None and connection.scope == MailConnectionScope.PERSONAL:
@@ -1519,7 +1519,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageListResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -1563,7 +1563,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageListResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -1573,7 +1573,7 @@ class MailService:
         before_uid: int | None = None
         if payload.cursor is not None and payload.cursor.strip():
             before_date, before_uid = decode_mail_list_cursor(payload.cursor)
-        page = await StoredMailMessage.search_local(
+        page = await StoredMailMessage.list_query_page(
             payload.mailbox_binding_id,
             q=payload.q,
             folder=payload.folder,
@@ -1678,7 +1678,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailFolderListResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -1690,7 +1690,7 @@ class MailService:
         if len(names) != len(set(names)):
             raise ValueError("folder_names must not contain duplicates")
         folder_name_to_index = {name: index for index, name in enumerate(names)}
-        stored = await StoredMailboxFolder.set_sort_indices(
+        stored = await StoredMailboxFolder.replace_sort_indices(
             payload.mailbox_binding_id,
             folder_name_to_index=folder_name_to_index,
         )
@@ -1703,7 +1703,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailFolderListResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
@@ -1720,7 +1720,7 @@ class MailService:
     ) -> MailFolderListResult:
         """IMAP LIST+STATUS → folder cache. Для sync / ensure, не для open UI."""
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
@@ -1737,7 +1737,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailFolderListResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
@@ -1784,7 +1784,7 @@ class MailService:
         if not uid.strip():
             raise ValueError("uid is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
@@ -1800,7 +1800,7 @@ class MailService:
         if stored is None:
             raise MailMessageNotFoundError(mailbox_binding_id, uid)
         if stored.unread:
-            _ = await StoredMailMessage.set_unread(
+            _ = await StoredMailMessage.update_flags(
                 mailbox_binding_id,
                 folder=folder,
                 uid=int(uid),
@@ -1820,7 +1820,7 @@ class MailService:
         if not payload.folder.strip():
             raise ValueError("folder is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -1837,7 +1837,7 @@ class MailService:
         )
         if anchor is None:
             raise MailMessageNotFoundError(payload.mailbox_binding_id, payload.uid)
-        thread_rows = await StoredMailMessage.list_by_thread(
+        thread_rows = await StoredMailMessage.list_by_date_at_and_uid(
             payload.mailbox_binding_id,
             thread_id=anchor.thread_id,
         )
@@ -1851,7 +1851,7 @@ class MailService:
         subject: str | None = anchor.subject if anchor.subject.strip() else None
         for row in thread_rows:
             if row.folder == payload.folder and row.unread:
-                _ = await StoredMailMessage.set_unread(
+                _ = await StoredMailMessage.update_flags(
                     payload.mailbox_binding_id,
                     folder=payload.folder,
                     uid=row.uid,
@@ -1891,13 +1891,13 @@ class MailService:
         if not payload.uid.strip():
             raise ValueError("uid is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        _ = await StoredMailMessage.set_unread(
+        _ = await StoredMailMessage.update_flags(
             payload.mailbox_binding_id,
             folder=payload.folder,
             uid=int(payload.uid),
@@ -1914,13 +1914,13 @@ class MailService:
         if not payload.uid.strip():
             raise ValueError("uid is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        _ = await StoredMailMessage.set_unread(
+        _ = await StoredMailMessage.update_flags(
             payload.mailbox_binding_id,
             folder=payload.folder,
             uid=int(payload.uid),
@@ -1937,7 +1937,7 @@ class MailService:
         if not payload.uid.strip():
             raise ValueError("uid is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -1953,7 +1953,7 @@ class MailService:
             )
         except MailUidNotFoundError as exc:
             raise MailMessageNotFoundError(payload.mailbox_binding_id, payload.uid) from exc
-        _ = await StoredMailMessage.set_unread(
+        _ = await StoredMailMessage.update_flags(
             payload.mailbox_binding_id,
             folder=payload.folder,
             uid=int(payload.uid),
@@ -1970,7 +1970,7 @@ class MailService:
         if not payload.uid.strip():
             raise ValueError("uid is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -1986,7 +1986,7 @@ class MailService:
             )
         except MailUidNotFoundError as exc:
             raise MailMessageNotFoundError(payload.mailbox_binding_id, payload.uid) from exc
-        _ = await StoredMailMessage.set_unread(
+        _ = await StoredMailMessage.update_flags(
             payload.mailbox_binding_id,
             folder=payload.folder,
             uid=int(payload.uid),
@@ -2001,7 +2001,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailSyncNowResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2038,7 +2038,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageMoveResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2071,7 +2071,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageMoveResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2169,7 +2169,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageFlagResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2189,7 +2189,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageFlagResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2216,13 +2216,13 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageStarResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
             raise MailBindingNotFoundError(payload.mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        _ = await StoredMailMessage.set_flags(
+        _ = await StoredMailMessage.update_flags(
             payload.mailbox_binding_id,
             folder=payload.folder,
             uid=int(payload.uid),
@@ -2237,7 +2237,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageStarResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2263,7 +2263,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailDraftSaveResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2331,7 +2331,7 @@ class MailService:
         company_id: str | None = None,
     ) -> list[MailboxBindingMember]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         if binding.kind != MailboxBindingKind.ROLE:
@@ -2370,7 +2370,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailboxBindingMember:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         if binding.kind != MailboxBindingKind.ROLE:
@@ -2404,7 +2404,7 @@ class MailService:
         company_id: str | None = None,
     ) -> None:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id, level="admin")
@@ -2560,7 +2560,7 @@ class MailService:
     ) -> str:
         """Message-Id domain from binding connection (company or personal)."""
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
@@ -2578,7 +2578,7 @@ class MailService:
     ) -> MailSendResult:
         """Optimistic local Sent upsert before SMTP worker."""
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2666,7 +2666,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailSendResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -2793,7 +2793,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailSendResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         connection = await self._require_connection_for_binding(binding)
@@ -2808,7 +2808,7 @@ class MailService:
         company_id: str | None = None,
     ) -> list[InboundMailMessage]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         connection = await self._require_connection_for_binding(binding)
@@ -3218,7 +3218,7 @@ class MailService:
             secret, mailbox=folder, uids=uids
         )
         for uid, flags in flags_map.items():
-            _ = await StoredMailMessage.set_flags(
+            _ = await StoredMailMessage.update_flags(
                 binding.mailbox_binding_id,
                 folder=folder,
                 uid=int(uid),
@@ -3471,7 +3471,7 @@ class MailService:
         if self._rag_client is None:
             raise MailConfigError("rag client required for mail indexing")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(resolved_company_id, mailbox_binding_id)
+        binding = await MailboxBinding.by_mailbox_binding_id(resolved_company_id, mailbox_binding_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         stored = await StoredMailMessage.by_binding_folder_uid(
@@ -3552,7 +3552,7 @@ class MailService:
         company_id: str | None = None,
     ) -> MailMessageRagIndexResult:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        binding = await MailboxBinding.find_in_company(
+        binding = await MailboxBinding.by_mailbox_binding_id(
             resolved_company_id, payload.mailbox_binding_id
         )
         if binding is None:
@@ -3746,7 +3746,7 @@ class MailService:
                 company_id=SYSTEM_COMPANY_ID,
             )
             ensured.append(binding.email_address)
-        listed = await MailboxBinding.list_by_company(SYSTEM_COMPANY_ID)
+        listed = await MailboxBinding.list_by_email_address_for_company(SYSTEM_COMPANY_ID)
         for binding in listed:
             if binding.kind != MailboxBindingKind.USER:
                 continue

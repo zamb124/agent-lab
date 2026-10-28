@@ -28,6 +28,7 @@ import {
     requireField,
 } from './_internal.js';
 import type { EffectCtx, PlatformEvent } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 import type { PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 import type { RestMirrorEntry } from './_transport.js';
@@ -66,6 +67,19 @@ export interface FacetsFactory extends PlatformFactory {
         loading: (key: string) => (state: Record<string, unknown>) => boolean;
     };
     effect: (event: PlatformEvent, ctx: EffectCtx) => void;
+}
+
+function facetRequest(payload: Record<string, unknown>, facet: string): { facet: string; q?: unknown; context?: unknown; limit?: unknown } {
+    return { facet, q: payload.q, context: payload.context, limit: payload.limit };
+}
+
+function isFacetsSlice(value: unknown): value is FacetsSlice {
+    if (!isPlainRecord(value) || !isPlainRecord(value.items) || !isPlainRecord(value.loading) || !isPlainRecord(value.lastQuery)) {
+        return false;
+    }
+    if (!Object.values(value.items).every((items) => Array.isArray(items))) return false;
+    if (!Object.values(value.loading).every((loading) => typeof loading === 'boolean')) return false;
+    return Object.values(value.lastQuery).every((query) => typeof query === 'string');
 }
 
 export function createFacets(options: FacetsOptions): FacetsFactory {
@@ -113,11 +127,14 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
     });
 
     function _requireFacetKey(event: PlatformEvent, eventKey: string): string {
-        const p = event.payload as { facet?: unknown; q?: unknown; [key: string]: unknown } | null;
-        if (!p || typeof p.facet !== 'string') {
+        const payload = event.payload;
+        if (!isPlainRecord(payload)) {
             throw new Error(`createFacets(${name}): ${eventKey} payload.facet required (string)`);
         }
-        const facet = p.facet;
+        const facet = payload.facet;
+        if (typeof facet !== 'string') {
+            throw new Error(`createFacets(${name}): ${eventKey} payload.facet required (string)`);
+        }
         if (!(facet in facets)) {
             throw new Error(`createFacets(${name}): ${eventKey} unknown facet "${facet}"`);
         }
@@ -128,8 +145,11 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
         switch (event.type) {
             case events.LOAD_REQUESTED: {
                 const facet = _requireFacetKey(event, 'LOAD_REQUESTED');
-                const p = event.payload as { q?: unknown };
-                const q = typeof p.q === 'string' ? p.q : '';
+                const request = event.payload;
+                if (!isPlainRecord(request)) {
+                    throw new Error(`createFacets(${name}): LOAD_REQUESTED payload.facet required (string)`);
+                }
+                const q = typeof request.q === 'string' ? request.q : '';
                 return freeze({
                     ...state,
                     loading: freeze({ ...state.loading, [facet]: true }),
@@ -138,13 +158,13 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
             }
             case events.LOADED: {
                 const facet = _requireFacetKey(event, 'LOADED');
-                const p = event.payload as { items?: unknown };
-                if (!Array.isArray(p.items)) {
+                const loaded = event.payload;
+                if (!isPlainRecord(loaded) || !Array.isArray(loaded.items)) {
                     throw new Error(`createFacets(${name}): LOADED payload.items must be array`);
                 }
                 return freeze({
                     ...state,
-                    items: freeze({ ...state.items, [facet]: freeze(p.items) }),
+                    items: freeze({ ...state.items, [facet]: freeze(loaded.items) }),
                     loading: freeze({ ...state.loading, [facet]: false }),
                 });
             }
@@ -162,9 +182,12 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
     }
 
     function _readSlice(state: Record<string, unknown>): FacetsSlice {
-        const slice = state[sliceKey] as FacetsSlice | undefined;
+        const slice = state[sliceKey];
         if (slice === undefined) {
             throw new Error(`createFacets(${name}): slice "${sliceKey}" not registered in bus`);
+        }
+        if (!isFacetsSlice(slice)) {
+            throw new Error(`createFacets(${name}): slice "${sliceKey}" must be a facets slice`);
         }
         return slice;
     }
@@ -179,7 +202,11 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
             if (!_facetCache.has(key)) {
                 _facetCache.set(key, (state: Record<string, unknown>) => _readSlice(state).items[key]);
             }
-            return _facetCache.get(key)!;
+            const cached = _facetCache.get(key);
+            if (cached === undefined) {
+                throw new Error(`createFacets(${name}): facet selector "${key}" missing`);
+            }
+            return cached;
         },
         loading: (key: string) => {
             if (!(key in facets)) {
@@ -194,7 +221,10 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
     function effect(event: PlatformEvent, ctx: EffectCtx): void {
         if (event.type !== events.LOAD_REQUESTED) return;
         const facet = _requireFacetKey(event, 'LOAD_REQUESTED');
-        const payload = event.payload as { facet: string; q?: unknown; context?: unknown; limit?: unknown };
+        const payload = event.payload;
+        if (!isPlainRecord(payload)) {
+            throw new Error(`createFacets(${name}): LOAD_REQUESTED payload.facet required (string)`);
+        }
         const q = typeof payload.q === 'string' ? payload.q.trim() : '';
         if (q.length < minQueryLength && q.length !== 0) {
             return;
@@ -204,7 +234,7 @@ export function createFacets(options: FacetsOptions): FacetsFactory {
         }
         const handle = setTimeout(() => {
             _timers.delete(facet);
-            _runFacetRequest({ name, baseUrl, facets, pageSize }, payload, event, ctx, events);
+            _runFacetRequest({ name, baseUrl, facets, pageSize }, facetRequest(payload, facet), event, ctx, events);
         }, debounceMs);
         _timers.set(facet, handle);
     }
@@ -245,7 +275,10 @@ async function _runFacetRequest(
     events: FacetsFactory['events'],
 ): Promise<void> {
     const facet = payload.facet;
-    const path = cfg.facets[facet]!;
+    const path = cfg.facets[facet];
+    if (path === undefined) {
+        throw new Error(`createFacets(${cfg.name}): facet path for "${facet}" missing`);
+    }
     const query: Record<string, string | number | boolean | null | undefined> = {};
     if (typeof payload.q === 'string' && payload.q.length > 0) query.q = payload.q;
     if (payload.context && typeof payload.context === 'object') {
@@ -253,8 +286,8 @@ async function _runFacetRequest(
     }
     query.limit = typeof payload.limit === 'number' && payload.limit > 0 ? payload.limit : cfg.pageSize;
     try {
-        const data = await httpRequest({ method: 'GET', url: `${cfg.baseUrl}/${path}`, query }) as { items?: unknown } | null;
-        if (!data || !Array.isArray(data.items)) {
+        const data = await httpRequest({ method: 'GET', url: `${cfg.baseUrl}/${path}`, query });
+        if (!isPlainRecord(data) || !Array.isArray(data.items)) {
             throw new Error(`createFacets(${cfg.name}): facet "${facet}" response.items must be array`);
         }
         ctx.dispatch(

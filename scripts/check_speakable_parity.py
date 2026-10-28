@@ -7,12 +7,9 @@ import pathlib
 import re
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _paths import js_or_ts
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PY_PATH = ROOT / "apps" / "flows" / "src" / "streaming" / "speakable.py"
-JS_PATH = js_or_ts(ROOT / "core" / "frontend" / "static" / "lib" / "voice" / "speakable.ts")
+TS_PATH = ROOT / "core" / "frontend" / "static" / "lib" / "voice" / "speakable.ts"
 
 
 def _artifact_names_from_python(path: pathlib.Path) -> set[str]:
@@ -48,7 +45,7 @@ def _artifact_names_from_python(path: pathlib.Path) -> set[str]:
     raise RuntimeError(f"SPEAKABLE_ARTIFACT_NAMES not found in {path}")
 
 
-def _artifact_names_from_js(path: pathlib.Path) -> set[str]:
+def _artifact_names_from_ts(path: pathlib.Path) -> set[str]:
     raw = path.read_text(encoding="utf-8")
     match = re.search(
         r"SPEAKABLE_ARTIFACT_NAMES(?:\s*:\s*[^=]+)?\s*=\s*(?:Object\.freeze\()?new\s+Set(?:<string>)?\(\[([\s\S]*?)\]\)(?:\)\))?",
@@ -68,9 +65,9 @@ def _artifact_names_from_js(path: pathlib.Path) -> set[str]:
 
 def main() -> int:
     py_names = _artifact_names_from_python(PY_PATH)
-    ts_names = _artifact_names_from_js(JS_PATH)
+    ts_names = _artifact_names_from_ts(TS_PATH)
     if py_names != ts_names:
-        only_py = sorted(py_names - js_names)
+        only_py = sorted(py_names - ts_names)
         only_ts = sorted(ts_names - py_names)
         print(
             "speakable parity failed:\n"

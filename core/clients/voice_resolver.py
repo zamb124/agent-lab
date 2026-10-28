@@ -406,7 +406,7 @@ async def _load_platform_pronunciation() -> CompiledPronunciation:
             return cached
 
     _require_pronunciation_database()
-    rows = await PronunciationRule.all_enabled_for_company_scope(company_id=None)
+    rows = await PronunciationRule.list_enabled_for_company_scope(company_id=None)
     rule_set = PronunciationRuleSet(rules=rows, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(
         rule_set,
@@ -424,7 +424,7 @@ async def _load_company_pronunciation(company_id: str) -> CompiledPronunciation:
         return cached[1]
 
     _require_pronunciation_database()
-    rows = await PronunciationRule.all_enabled_for_company_scope(company_id=company_id)
+    rows = await PronunciationRule.list_enabled_for_company_scope(company_id=company_id)
     rule_set = PronunciationRuleSet(rules=rows, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(rule_set)
     _pronunciation_company_cache[company_id] = (now, compiled)

@@ -12,12 +12,12 @@ import { entityTypeNoteSubtreeLocked } from './entity-type-note-subtree-lock.js'
  * @param {(overrides?: object) => object} makeTypeDraft — фабрика черновика страницы (namespace-detail или templates)
  * @param {{ namespaceIds: boolean }} opts — для templates-page: true, для namespace-detail: false
  */
-export function buildEntityTypeDraftFromTemplateTypeItem(
+export function buildEntityTypeDraftFromTemplateTypeItem<TDraft>(
     item: Record<string, any> | null,
     catalogRows: { type_id: string; parent_type_id?: string }[] | null | undefined,
-    makeTypeDraft: (overrides?: Record<string, unknown>) => Record<string, unknown>,
+    makeTypeDraft: (overrides?: Record<string, unknown>) => TDraft,
     opts?: { namespaceIds?: boolean },
-) {
+): TDraft {
     if (!item || typeof item !== 'object' || typeof item.type_id !== 'string' || item.type_id.length === 0) {
         throw new Error('buildEntityTypeDraftFromTemplateTypeItem: item.type_id required');
     }

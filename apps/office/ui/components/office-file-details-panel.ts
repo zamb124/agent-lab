@@ -172,7 +172,7 @@ export class OfficeFileDetailsPanel extends PlatformElement {
         this.explorerView = 'catalog';
         this.namespaceRoot = false;
         this.starred = false;
-        this._localeSel = this.select((state) => (state.i18n as Record<string, unknown>).locale);
+        this._localeSel = this.select((state) => state.i18n.locale);
     }
 
     private _localeSel: SelectController<unknown>;

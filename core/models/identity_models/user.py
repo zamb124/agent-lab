@@ -135,13 +135,14 @@ class User(PlatformModel):
 
     @classmethod
     async def find_by_email(cls, email: str) -> User | None:
-        matches = await cls.find_all_by_email_ci(email)
+        matches = await cls.list_by_email_ci(email)
         if not matches:
             return None
         return matches[0]
 
     @classmethod
-    async def find_all_by_email_ci(cls, email: str) -> list[User]:
+    async def list_by_email_ci(cls, email: str) -> list[User]:
+        """Пользователи, у которых emails содержит адрес без учёта регистра. Порядок — user_id, без limit."""
         norm = email.strip().lower()
         if not norm:
             raise ValueError("search email cannot be empty")
@@ -162,7 +163,8 @@ class User(PlatformModel):
         return [_user_from_row(row) for row in rows]
 
     @classmethod
-    async def search_by_query(cls, query: str, limit: int = 20) -> list[User]:
+    async def list_by_query(cls, query: str, limit: int = 20) -> list[User]:
+        """Пользователи, у которых name или emails содержит подстроку без учёта регистра. Порядок — user_id, не больше limit."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         table = cls.get_table_name()

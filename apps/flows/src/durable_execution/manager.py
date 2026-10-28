@@ -209,7 +209,7 @@ class DurableWorkflowRuntime:
         if cached is not None:
             return cached.state
 
-        instance = await WorkflowInstance.get_instance(
+        instance = await WorkflowInstance.any_by_company_and_session(
             company_id=resolved_company_id,
             session_id=session_id,
         )
@@ -270,7 +270,7 @@ class DurableWorkflowRuntime:
                 head_sequence=cached.head_sequence,
                 head_state_hash=cached.head_state_hash,
             )
-        instance = await WorkflowInstance.get_instance(
+        instance = await WorkflowInstance.any_by_company_and_session(
             company_id=company_id,
             session_id=session_id,
         )
@@ -665,7 +665,7 @@ class DurableWorkflowRuntime:
 
     async def delete_state(self, session_id: str) -> bool:
         company_id = self._company_id()
-        instance = await WorkflowInstance.get_instance(
+        instance = await WorkflowInstance.any_by_company_and_session(
             company_id=company_id,
             session_id=session_id,
         )
@@ -751,7 +751,7 @@ class DurableWorkflowRuntime:
         company_id = self._company_id()
         resolved_branch_id = execution_branch_id
         if resolved_branch_id is None:
-            instance = await WorkflowInstance.get_instance(
+            instance = await WorkflowInstance.any_by_company_and_session(
                 company_id=company_id,
                 session_id=session_id,
             )
@@ -775,7 +775,7 @@ class DurableWorkflowRuntime:
         execution_branch_id: str | None = None,
     ) -> ExecutionState | None:
         company_id = self._company_id()
-        instance = await WorkflowInstance.get_instance(
+        instance = await WorkflowInstance.any_by_company_and_session(
             company_id=company_id,
             session_id=session_id,
         )
@@ -913,14 +913,14 @@ class DurableWorkflowRuntime:
         execution_branch_id: str | None = None,
     ) -> WorkflowBranchResult:
         company_id = self._company_id()
-        instance = await WorkflowInstance.get_instance(
+        instance = await WorkflowInstance.any_by_company_and_session(
             company_id=company_id,
             session_id=session_id,
         )
         if instance is None:
             raise ValueError(f"Workflow instance not found: {session_id!r}")
         resolved_branch_id = execution_branch_id or instance.active_execution_branch_id
-        failed_event = await WorkflowInstance.get_event_by_type(
+        failed_event = await WorkflowInstance.event_by_type(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=resolved_branch_id,
@@ -1015,7 +1015,7 @@ class DurableWorkflowRuntime:
     ) -> JsonObject | None:
         resolved_side_effect_policy = self._require_side_effect_policy(side_effect_policy)
         company_id = self._company_id()
-        instance = await WorkflowInstance.get_instance(
+        instance = await WorkflowInstance.any_by_company_and_session(
             company_id=company_id,
             session_id=session_id,
         )
@@ -1084,13 +1084,13 @@ class DurableWorkflowRuntime:
         input_payload: JsonObject,
     ) -> JsonObject | None:
         company_id = self._company_id()
-        instance = await WorkflowInstance.get_instance(
+        instance = await WorkflowInstance.any_by_company_and_session(
             company_id=company_id,
             session_id=session_id,
         )
         if instance is None:
             raise ValueError(f"Workflow instance not found: {session_id!r}")
-        return await ActivityTask.get_completed_activity_result(
+        return await ActivityTask.completed_result(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=instance.active_execution_branch_id,

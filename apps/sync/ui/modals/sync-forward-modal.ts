@@ -6,8 +6,7 @@
  * useOp('sync/messages_forward').run для каждой пары (target, message).
  */
 
-import type { SyncChatUiController, SyncChannelsController} from '../events/sync.types.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations} from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
@@ -59,18 +58,18 @@ export class SyncForwardModal extends PlatformModal {
             }
         `,
     ];
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
     private _forward: OpController;
-    private _chatUi: SyncChatUiController;
+    private _chatUi: ControllerFor<'sync/chat_ui'>;
 
     constructor() {
         super();
         this.message = null;
         this._selectedIds = [];
         this._query = '';
-        this._channels = this.useResource('sync/channels') as SyncChannelsController;
+        this._channels = this.useResource('sync/channels');
         this._forward = this.useOp('sync/messages_forward');
-        this._chatUi = this.useSlice('sync/chat_ui') as SyncChatUiController;
+        this._chatUi = this.useSlice('sync/chat_ui');
     }
 
     _excludeId() {

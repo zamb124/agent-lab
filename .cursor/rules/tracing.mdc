@@ -16,7 +16,7 @@ alwaysApply: false
 
 ## Модель
 
-- `Span` (`core/tracing/models.py`) — строка таблицы `spans` (алиас `tracing`, `__global_model__ = True`) и все запросы: `insert_once` (не меняет существующий `span_id`), `list_for_trace`, `list_spans_for_service`, `list_spans_for_resource`, `list_by_flow_id`, `list_by_task_id`, `list_by_session_agent`, `list_by_user_id`, `search_traces` (`TraceSearchResult`), `admin_search_spans`, `admin_facet_distinct_*`, `list_spans_pending_billing_settlement`; billing-хелперы — методы `Span`.
+- `Span` (`core/tracing/models.py`) — строка таблицы `spans` (алиас `tracing`, `__global_model__ = True`) и все запросы: `insert_span_once(span) -> None` — пустой `service_name` даёт `ValueError`; повтор того же `span_id` ничего не делает; `IntegrityError` без строки пробрасывается, `list_for_trace`, `span_page_and_cursor_for_service` (страница спанов сервиса и курсор), `list_by_flow_id_desc` (`start_time DESC`, не больше `limit`), `list_by_task_id_asc` (`start_time ASC`, без limit), `list_by_session_agent_desc` (`start_time DESC`, не больше `limit`, без окна времени), `list_by_user_id_desc` (`start_time DESC`, не больше `limit`, окно включительно), `trace_group_page_and_span_count` (страница групп `trace_id` и `COUNT(*)` спанов), `admin_span_page_and_cursor` (страница спанов и курсор), `admin_facet_distinct_*`, `list_pending_billing_settlement`; billing-хелперы — методы `Span`.
 - Журнал сущности — `event_type`, `resource_type`, `resource_id` + индекс `(company_id, resource_type, resource_id, start_time)`; корень — `resource_root_span`, внутри — `flow_span`, `node_span`, `llm_node_span`, `react_iteration_span`, `llm_call_span`, `tool_call_span`, `interrupt_span`, `prompt_build_span`, `platform_operation_span`.
 - Домен flows (`flow_id`, `task_id`, `node_id`, …) — `attributes` с префиксом `platform.*` (`core/tracing/attributes.py`), не колонки.
 
@@ -41,7 +41,7 @@ alwaysApply: false
 
 ### Чтение
 
-1. Админка spans — `/frontend/api/platform-tracing/*` (`apps/frontend/api/platform_tracing.py`), только для активной компании `system` (иначе 403); нет БД или `postgres_enabled=false` — 503. UI — `tracing-page.js`, дерево трассы — `<platform-trace-viewer>`.
+1. Админка spans — `/frontend/api/platform-tracing/*` (`apps/frontend/api/platform_tracing.py`), только для активной компании `system` (иначе 403); нет БД или `postgres_enabled=false` — 503. UI — `tracing-page.ts`, дерево трассы — `<platform-trace-viewer>`.
 2. Трассы в UI flows — только Tempo: `op_flows_traces_*` (`apps/flows/realtime/observability_operations.py`) + REST `apps/flows/src/api/v1/traces.py` через `TempoClient` (session, task, trace, handoff-chain); Tempo недоступен — `unavailable` (503).
 3. Логи в UI flows — `op_flows_logs_*` + REST `apps/flows/src/api/v1/observability_logs.py` через `LokiClient` с серверными whitelist-шаблонами LogQL (by trace, session по `session_agent`, request, span, user); список — только `<platform-log-viewer>`; Loki не настроен — 503.
 

@@ -18,10 +18,10 @@ export class PlatformPage extends PlatformElement {
 
     constructor() {
         super();
-        this._routeSelect = this.select((s) => {
-            const router = s.router as { routeKey: string | null; params: Record<string, string> };
-            return { routeKey: router.routeKey, params: router.params };
-        });
+        this._routeSelect = this.select((s) => ({
+            routeKey: s.router.routeKey,
+            params: s.router.params,
+        }));
     }
 
     get routeKey(): string | null {
@@ -31,7 +31,7 @@ export class PlatformPage extends PlatformElement {
 
     get routeParams(): Record<string, string> {
         const value = this._routeSelect.value;
-        return value ? (value.params || {}) : {};
+        return value ? value.params : {};
     }
 
     override navigate(routeKey: string, params?: Record<string, string>, navigationOptions?: { search?: string; replace?: boolean }): void {

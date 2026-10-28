@@ -70,7 +70,7 @@ async def get_mcp_client(
     """Вернуть MCP-клиент по `server_id` для trusted platform code."""
     if server_id.strip() == "":
         raise ValueError("server_id is required")
-    config = await MCPServerConfig.get(MCPServerConfig.row_id(server_id.strip()))
+    config = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id.strip()))
     if config is None:
         raise ValueError(f"MCP server not found: {server_id}")
     variables: JsonObject = state.variables if state is not None else {}

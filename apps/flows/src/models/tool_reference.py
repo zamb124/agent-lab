@@ -246,7 +246,8 @@ class ToolReference(CompanyScopedModel):
         return self
 
     @classmethod
-    def row_id(cls, tool_id: str) -> str:
+    def row_id_for_active_company(cls, tool_id: str) -> str:
+        """Ключ строки из активной компании и tool_id. Нет компании — ValueError. Пустой tool_id или двоеточие в company_id — ValueError."""
         ctx = get_context()
         if ctx is None or ctx.active_company is None or ctx.active_company.company_id == "":
             raise ValueError("tool_id requires an active company")
@@ -267,7 +268,7 @@ class ToolReference(CompanyScopedModel):
             self.company_id = company_id
         elif self.company_id != company_id:
             raise ValueError("company_id does not match the active company")
-        expected = type(self).row_id(self.tool_id)
+        expected = type(self).row_id_for_active_company(self.tool_id)
         if self.tool_row_id == "":
             self.tool_row_id = expected
         elif self.tool_row_id != expected:
@@ -276,7 +277,7 @@ class ToolReference(CompanyScopedModel):
 
     @override
     async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
-        expected = type(self).row_id(self.tool_id)
+        expected = type(self).row_id_for_active_company(self.tool_id)
         if self.company_id == "" or self.tool_row_id != expected:
             raise ValueError("tool_row_id does not match the active company")
         _ = is_create, update_fields
@@ -321,12 +322,13 @@ class ToolReference(CompanyScopedModel):
         return query.order_by("tool_id")
 
     @classmethod
-    async def list_index(
+    async def list_tool_index(
         cls,
         *,
         mcp: ToolIndexMcpFilter = "all",
         exclude_tool_ids: Collection[str] | None = None,
     ) -> list[ToolListIndexItem]:
+        """Индекс tools, ORDER BY tool_id. Предела нет. mcp=all и пустой exclude_tool_ids не фильтруют."""
         rows = await cls._indexed(mcp=mcp, exclude_tool_ids=exclude_tool_ids).all()
         return [
             ToolListIndexItem(

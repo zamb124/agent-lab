@@ -99,7 +99,7 @@ class MaintenanceService:
         return await StockWarehouse.list_company_ids()
 
     async def _warehouses(self, company_id: str) -> list[StockWarehouse]:
-        return await StockWarehouse.list_for_company(
+        return await StockWarehouse.list_by_code(
             company_id, limit=500, offset=0
         )
 
@@ -123,7 +123,7 @@ class MaintenanceService:
         report = ReconcileReport(warehouse_id=warehouse_id)
 
         async def body(_scope: LaneScope) -> LaneOutcome[ReconcileReport]:
-            lines = await StockMoveLine.list_open_for_warehouse(
+            lines = await StockMoveLine.list_unordered_open_for_warehouse(
                 company_id, warehouse_id
             )
             # Ожидаемый резерв по ключу остатка.
@@ -163,7 +163,7 @@ class MaintenanceService:
                             quant.owner_entity_id,
                         )
                     ] = quant.quantity
-            quants = await StockQuant.list_for_warehouse(
+            quants = await StockQuant.list_unordered_for_warehouse(
                 company_id, warehouse_id
             )
             now = utcnow()
@@ -183,7 +183,7 @@ class MaintenanceService:
                     _ = await quant.save()
                     report.reserved_fixed += 1
             # Застрявшие move: строки все закрыты, шапка «в работе».
-            open_moves = await StockMove.list_open_for_warehouse(
+            open_moves = await StockMove.list_unordered_confirmed_partial_or_assigned_for_warehouse(
                 company_id, warehouse_id
             )
             for move in open_moves:
@@ -286,7 +286,7 @@ class MaintenanceService:
         confirm → assign → validate.
         """
         created = 0
-        rules = await StockReorderRule.list_for_company(
+        rules = await StockReorderRule.list_by_rule_id(
             company_id, active_only=True
         )
         for rule in rules:

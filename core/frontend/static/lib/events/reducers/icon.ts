@@ -9,6 +9,7 @@
  */
 
 import type { PlatformEvent } from '../contract.js';
+import { payloadFields } from '../payload.js';
 
 export interface IconState {
     uiCache: Record<string, string>;
@@ -36,38 +37,38 @@ export const initialIconState: IconState = Object.freeze({
 export function iconReducer(state: IconState = initialIconState, event: PlatformEvent): IconState {
     switch (event.type) {
         case ICON_EVENTS.UI_LOAD_REQUESTED: {
-            const name = ((event.payload || {}) as { name?: unknown }).name;
+            const name = (payloadFields(event)).name;
             if (typeof name !== 'string' || !name || state.uiCache[name] || state.loading[`ui:${name}`]) return state;
             return { ...state, loading: { ...state.loading, [`ui:${name}`]: true } };
         }
         case ICON_EVENTS.UI_LOADED: {
-            const p = (event.payload || {}) as { name?: unknown; svg?: unknown };
+            const p = payloadFields(event);
             if (typeof p.name !== 'string' || !p.name || typeof p.svg !== 'string') return state;
             const loading = { ...state.loading };
             delete loading[`ui:${p.name}`];
             return { ...state, uiCache: { ...state.uiCache, [p.name]: p.svg }, loading };
         }
         case ICON_EVENTS.UI_FAILED: {
-            const p = (event.payload || {}) as { name?: unknown; message?: unknown };
+            const p = payloadFields(event);
             if (typeof p.name !== 'string' || !p.name) return state;
             const loading = { ...state.loading };
             delete loading[`ui:${p.name}`];
             return { ...state, loading, errors: { ...state.errors, [`ui:${p.name}`]: typeof p.message === 'string' ? p.message : 'failed' } };
         }
         case ICON_EVENTS.FILE_LOAD_REQUESTED: {
-            const basename = ((event.payload || {}) as { basename?: unknown }).basename;
+            const basename = (payloadFields(event)).basename;
             if (typeof basename !== 'string' || !basename || state.fileCache[basename] || state.loading[`file:${basename}`]) return state;
             return { ...state, loading: { ...state.loading, [`file:${basename}`]: true } };
         }
         case ICON_EVENTS.FILE_LOADED: {
-            const p = (event.payload || {}) as { basename?: unknown; svg?: unknown };
+            const p = payloadFields(event);
             if (typeof p.basename !== 'string' || !p.basename || typeof p.svg !== 'string') return state;
             const loading = { ...state.loading };
             delete loading[`file:${p.basename}`];
             return { ...state, fileCache: { ...state.fileCache, [p.basename]: p.svg }, loading };
         }
         case ICON_EVENTS.FILE_FAILED: {
-            const p = (event.payload || {}) as { basename?: unknown; message?: unknown };
+            const p = payloadFields(event);
             if (typeof p.basename !== 'string' || !p.basename) return state;
             const loading = { ...state.loading };
             delete loading[`file:${p.basename}`];

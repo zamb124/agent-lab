@@ -283,7 +283,7 @@ async def list_company_voice_providers(
     """Список per-company override-ов провайдеров речи (stt/tts)."""
     user = require_context().user
     await _ensure_user_can_read_company(di, user, company_id)
-    rows = await CompanyVoiceProvider.list_by_company(
+    rows = await CompanyVoiceProvider.list_by_kind_for_company(
         company_id=company_id
     )
     items = [_row_to_item(row) for row in rows if row.kind != "vad"]

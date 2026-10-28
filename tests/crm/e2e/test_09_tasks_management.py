@@ -68,12 +68,12 @@ class TestTasksManagement:
             "namespace": f"g_{unique_id}",
         }, headers=auth_headers_system)
         entity_id = _entity_id(resp)
-        item = await WorkItem.find_work_item_by_crm_entity("system", entity_id)
+        item = await WorkItem.any_crm_activity_by_entity_id("system", entity_id)
         assert item is not None
         assert item.kind is WorkItemKind.CRM_ACTIVITY
         assert item.state is WorkItemState.OPEN
         assert item.board_id is not None
-        board = await Board.get_board(
+        board = await Board.require_in_company(
             company_id="system",
             board_id=item.board_id,
         )
@@ -225,7 +225,7 @@ class TestTasksManagement:
         task = _http_json(get_resp)
         assert object_str(task.get("status"), field="status") == "completed"
 
-        item = await WorkItem.find_work_item_by_crm_entity("system", task_id)
+        item = await WorkItem.any_crm_activity_by_entity_id("system", task_id)
         assert item is not None
         # Lifecycle completed на CRM-узле не обязан переводить WorkItem в done.
         assert item.state is WorkItemState.OPEN

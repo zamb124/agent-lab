@@ -48,18 +48,15 @@ class SyncChannel(PlatformModel):
     speech_to_chat_enabled: bool = DbField(default=False)
 
     @classmethod
-    async def channel_for_company(
-        cls,
-        channel_id: str,
-        company_id: str,
-    ) -> Self | None:
+    async def by_channel_id(cls, company_id: str, channel_id: str) -> Self | None:
+        """Канал компании по channel_id. Нет строки или чужая компания — None. Пустые company_id и channel_id ValueError не дают."""
         return await cls.objects.filter(
             channel_id=channel_id,
             company_id=company_id,
         ).get_or_none()
 
     @classmethod
-    async def list_channels_in_namespace(
+    async def list_by_name_in_namespace(
         cls,
         namespace: str,
         *,
@@ -67,13 +64,14 @@ class SyncChannel(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Каналы компании в namespace, ORDER BY name, окно limit и offset."""
         return await cls.objects.filter(
             company_id=company_id,
             namespace=namespace,
         ).order_by("name").limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_channels_for_user(
+    async def list_member_channels_by_type_and_name(
         cls,
         user_id: str,
         *,
@@ -82,6 +80,7 @@ class SyncChannel(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Каналы компании, где user_id участник, ORDER BY type, name, окно limit и offset. namespace None не фильтрует. Нет участия — []."""
         member_rows = await SyncChannelMember.objects.filter(
             company_id=company_id,
             user_id=user_id,
@@ -98,7 +97,7 @@ class SyncChannel(PlatformModel):
         return await rows.order_by("type", "name").limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_channels_where_both_members(
+    async def list_for_both_members(
         cls,
         user_id_a: str,
         user_id_b: str,
@@ -107,6 +106,7 @@ class SyncChannel(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Каналы компании, где оба user_id есть среди участников. Порядок — type, затем name. Окно limit и offset. Нет общего канала — []."""
         rows_a = await SyncChannelMember.objects.filter(
             company_id=company_id,
             user_id=user_id_a,
@@ -125,39 +125,43 @@ class SyncChannel(PlatformModel):
         ).order_by("type", "name").limit(limit).offset(offset).all()
 
     @classmethod
-    async def search_channels_by_name(
+    async def list_by_name(
         cls,
         company_id: str,
         query: str,
         *,
         limit: int,
     ) -> list[Self]:
+        """Каналы компании по порядку name, не больше limit. Пустой query не фильтрует имя."""
         rows = cls.objects.filter(company_id=company_id)
         if query != "":
             rows = rows.filter(name__icontains=query)
         return await rows.order_by("name").limit(limit).all()
 
     @classmethod
-    async def rename_channel(cls, channel: Self, name: str) -> Self:
+    async def update_name(cls, channel: Self, name: str) -> Self:
+        """Пишет name переданной строки и сохраняет её. Повтор с тем же именем пишет его снова."""
         channel.name = name
         _ = await channel.save(using="sync")
         return channel
 
     @classmethod
-    async def set_channel_pinned_message_ids(
+    async def update_pinned_message_ids(
         cls,
         channel_id: str,
         message_ids: list[str],
         *,
         company_id: str,
     ) -> None:
+        """Пишет pinned_message_ids канала внутри компании. Нет строки — ничего не меняет."""
         _ = await cls.objects.filter(
             channel_id=channel_id,
             company_id=company_id,
         ).update(using="sync", pinned_message_ids=message_ids)
 
     @classmethod
-    async def list_for_authz(cls, *, limit: int | None) -> list[Self]:
+    async def list_all_by_channel_id(cls, *, limit: int | None) -> list[Self]:
+        """Все каналы, ORDER BY channel_id. limit is None не ограничивает."""
         ordered = cls.objects.order_by("channel_id")
         if limit is None:
             return await ordered.all()

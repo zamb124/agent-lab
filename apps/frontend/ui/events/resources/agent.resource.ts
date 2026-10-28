@@ -72,3 +72,14 @@ export const agentAuditLoadOp = createAsyncOp({
     commandType: 'frontend/agent/audit_list_requested',
     restMirror: { method: 'GET', path: '/frontend/api/agent/audit' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/agent_pairing_create': typeof agentPairingCreateOp;
+        'frontend/agent_devices_load': typeof agentDevicesLoadOp;
+        'frontend/agent_device_revoke': typeof agentDeviceRevokeOp;
+        'frontend/agent_releases_status': typeof agentReleasesStatusOp;
+        'frontend/agent_device_policy_patch': typeof agentDevicePolicyPatchOp;
+        'frontend/agent_audit_load': typeof agentAuditLoadOp;
+    }
+}

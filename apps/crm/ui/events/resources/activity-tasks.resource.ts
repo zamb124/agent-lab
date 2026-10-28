@@ -67,3 +67,11 @@ export const activityTaskCreateForm = createForm({
         return payload;
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/activity_task_create': typeof activityTaskCreateOp;
+        'crm/activity_tasks_list': typeof activityTasksListOp;
+        'crm/activity_task_create_form': typeof activityTaskCreateForm;
+    }
+}

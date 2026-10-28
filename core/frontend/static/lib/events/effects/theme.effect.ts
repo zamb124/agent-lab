@@ -8,7 +8,9 @@
  */
 
 import { CoreEvents } from '../contract.js';
-import type { PlatformEvent, EffectCtx } from '../contract.js';import type { ThemeState } from '../reducers/theme.js';
+import type { PlatformEvent, EffectCtx } from '../contract.js';
+import type { ThemeState } from '../reducers/theme.js';
+import { payloadFields } from '../payload.js';
 import { platformStorageKey } from '../../utils/storage-keys.js';
 import { storageGet, storageSet } from '../../utils/platform-storage.js';
 
@@ -87,7 +89,7 @@ export function createThemeEffect(): (event: PlatformEvent, ctx: EffectCtx<{ the
             }
 
             case CoreEvents.THEME_SET_REQUESTED: {
-                const mode = ((event.payload ?? {}) as { mode?: unknown }).mode;
+                const mode = payloadFields(event).mode;
                 if (mode !== 'dark' && mode !== 'light') return;
                 _applyToDom(mode);
                 storageSet(STORAGE_KEY, mode);
@@ -97,7 +99,7 @@ export function createThemeEffect(): (event: PlatformEvent, ctx: EffectCtx<{ the
 
             case CoreEvents.THEME_SYSTEM_CHANGED: {
                 if (ctx.getState().theme.source !== 'system') return;
-                const mode = ((event.payload ?? {}) as { mode?: unknown }).mode;
+                const mode = payloadFields(event).mode;
                 if (mode === 'dark' || mode === 'light') {
                     _applyToDom(mode);
                 }

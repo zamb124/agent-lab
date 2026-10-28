@@ -213,7 +213,7 @@ export class SearchPage extends PlatformPage {
                                         : ''}
                                 </div>
                             </div>
-                            <div class="result-score">${(Number(r.score ?? 0) * 100).toFixed(1)}%</div>
+                            <div class="result-score">${(Number(r.score === undefined || r.score === null ? 0 : r.score) * 100).toFixed(1)}%</div>
                         </div>
                         <div class="result-content">${r.content}</div>
                     </div>

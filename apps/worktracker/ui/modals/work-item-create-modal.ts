@@ -51,7 +51,7 @@ export class WorkItemCreateModal extends PlatformFormModal {
 
     override connectedCallback() {
         super.connectedCallback();
-        this._form.openForm({ title: '', description: '', board_id: this.boardId || '', priority: 'normal' });
+        this._form.openForm({ title: '', description: '', board_id: this.boardId, priority: 'normal' });
         this.useEvent(this._workItems.resource.events.CREATED, () => this.closeAfterSave());
     }
 
@@ -77,7 +77,7 @@ export class WorkItemCreateModal extends PlatformFormModal {
     }
 
     override async _performSave(): Promise<void> {
-        this._form.setField('board_id', this.boardId || '');
+        this._form.setField('board_id', this.boardId);
         this._form.submit();
     }
 

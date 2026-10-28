@@ -4,6 +4,7 @@
 
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import { isPlainRecord } from '../../events/payload.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import type { OpController, ResourceController } from '../../base/use-resource.js';
 import { platformConfirm } from '../platform-confirm-modal.js';
@@ -32,7 +33,112 @@ interface VariableHistoryItem {
     created_at?: string;
 }
 
+function isVariableHistoryItem(value: unknown): value is VariableHistoryItem {
+    if (!isPlainRecord(value)) return false;
+    if (value.version !== undefined && typeof value.version !== 'number' && typeof value.version !== 'string') {
+        return false;
+    }
+    if (value.updated_at !== undefined && typeof value.updated_at !== 'string') return false;
+    if (value.created_at !== undefined && typeof value.created_at !== 'string') return false;
+    return true;
+}
+
+function historyItems(page: unknown): VariableHistoryItem[] {
+    if (!isPlainRecord(page) || !Array.isArray(page.items)) {
+        throw new Error('platform-company-variables-panel: versions page items required');
+    }
+    const items: VariableHistoryItem[] = [];
+    for (const item of page.items) {
+        if (!isVariableHistoryItem(item)) {
+            throw new Error('platform-company-variables-panel: version row must be an object');
+        }
+        items.push(item);
+    }
+    return items;
+}
+
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
+
+function companyVariableItems(items: readonly unknown[]): CompanyVariableItem[] {
+    return items.map((value) => {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            throw new Error('company variable: row must be an object');
+        }
+        if (!('variable_key' in value) || typeof value.variable_key !== 'string' || value.variable_key.length === 0) {
+            throw new Error('company variable: variable_key required');
+        }
+        const item: CompanyVariableItem = { variable_key: value.variable_key };
+        if ('title' in value && value.title !== undefined) {
+            if (typeof value.title !== 'string') throw new Error('company variable: title must be a string');
+            item.title = value.title;
+        }
+        if ('version' in value && value.version !== undefined) {
+            if (typeof value.version !== 'number' && typeof value.version !== 'string') {
+                throw new Error('company variable: version must be a number or string');
+            }
+            item.version = value.version;
+        }
+        if ('public' in value && value.public !== undefined) {
+            if (typeof value.public !== 'boolean') throw new Error('company variable: public must be boolean');
+            item.public = value.public;
+        }
+        if ('secret' in value && value.secret !== undefined) {
+            if (typeof value.secret !== 'boolean') throw new Error('company variable: secret must be boolean');
+            item.secret = value.secret;
+        }
+        if ('shared_for_execution' in value && value.shared_for_execution !== undefined) {
+            if (typeof value.shared_for_execution !== 'boolean') {
+                throw new Error('company variable: shared_for_execution must be boolean');
+            }
+            item.shared_for_execution = value.shared_for_execution;
+        }
+        if ('payload' in value && value.payload !== undefined) {
+            item.payload = variablePayload(value.payload);
+        }
+        return item;
+    });
+}
+
+function variablePayload(value: unknown): NonNullable<CompanyVariableItem['payload']> {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('company variable: payload must be an object');
+    }
+    const payload: NonNullable<CompanyVariableItem['payload']> = {};
+    if ('base' in value && value.base !== undefined) {
+        const base = value.base;
+        if (base === null || typeof base !== 'object' || Array.isArray(base)) {
+            throw new Error('company variable: payload.base must be an object');
+        }
+        const copied: { value_kind?: string; value?: unknown } = {};
+        if ('value_kind' in base && base.value_kind !== undefined) {
+            if (typeof base.value_kind !== 'string') {
+                throw new Error('company variable: value_kind must be a string');
+            }
+            copied.value_kind = base.value_kind;
+        }
+        if ('value' in base) copied.value = base.value;
+        payload.base = copied;
+    }
+    if ('scopes' in value && value.scopes !== undefined) {
+        if (!Array.isArray(value.scopes)) throw new Error('company variable: scopes must be an array');
+        payload.scopes = value.scopes;
+    }
+    return payload;
+}
+
+function versionLabel(value: number | string | null | undefined): string | number {
+    return value === undefined || value === null ? '' : value;
+}
+
+function historyTime(item: VariableHistoryItem): string {
+    if (typeof item.updated_at === 'string') return item.updated_at;
+    if (typeof item.created_at === 'string') return item.created_at;
+    return '';
+}
+
+function titleText(value: string | null | undefined): string {
+    return value === undefined || value === null ? '' : value;
+}
 
 function _accessLabelKey(item: CompanyVariableItem): string {
     if (item.public) {
@@ -200,10 +306,8 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
             limit: 20,
             offset: 0,
         });
-        // Нормализованные версии лежат в slice (extraReducer), сырой result — только маркер успеха.
-        const page = response === null ? null : this._versionsLoad.lastResult as { items?: VariableHistoryItem[] } | null;
         this._historyKey = variableKey;
-        this._historyItems = page && Array.isArray(page.items) ? page.items : [];
+        this._historyItems = response === null ? [] : historyItems(this._versionsLoad.lastResult);
     }
 
     _renderHelp(): TemplateResult | string {
@@ -243,8 +347,8 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
                             <tbody>
                                 ${this._historyItems.map((item) => html`
                                     <tr>
-                                        <td>${this.t('badge_version', { version: item.version ?? '' })}</td>
-                                        <td>${item.updated_at ?? item.created_at ?? ''}</td>
+                                        <td>${this.t('badge_version', { version: versionLabel(item.version) })}</td>
+                                        <td>${historyTime(item)}</td>
                                     </tr>
                                 `)}
                             </tbody>
@@ -255,7 +359,7 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const items = this._variables.items as unknown as CompanyVariableItem[];
+        const items = companyVariableItems(this._variables.items);
         return html`
             <div class="layout">
                 <div>
@@ -292,10 +396,10 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
                                         ${items.map((item) => html`
                                             <tr>
                                                 <td><code>${item.variable_key}</code></td>
-                                                <td>${item.title ?? ''}</td>
+                                                <td>${titleText(item.title)}</td>
                                                 <td><span class="badge">${this.t('source_company')}</span></td>
                                                 <td>${_valueSummary(item, (key: string, params?: Record<string, string | number>) => this.t(key, params))}</td>
-                                                <td>${this.t('badge_version', { version: item.version ?? '' })}</td>
+                                                <td>${this.t('badge_version', { version: versionLabel(item.version) })}</td>
                                                 <td>${this.t(_accessLabelKey(item))}</td>
                                                 <td class="actions">
                                                     <div class="actions-group">

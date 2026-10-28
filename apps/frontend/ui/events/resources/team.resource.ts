@@ -49,3 +49,10 @@ export const inviteGenerateOp = createAsyncOp({
         return state;
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/team': typeof teamMembersResource;
+        'frontend/team_invite': typeof inviteGenerateOp;
+    }
+}

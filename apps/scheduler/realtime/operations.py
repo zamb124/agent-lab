@@ -59,7 +59,7 @@ async def op_schedule_tasks_list(
     scope = await require_company_viewer(di.authz_service)
     items, total = await asyncio.gather(
         di.scheduler_service.list(company_id=scope.company_id, filters=payload),
-        PlatformScheduledTask.count(company_id=scope.company_id, filters=payload),
+        PlatformScheduledTask.count_filtered(company_id=scope.company_id, filters=payload),
     )
     return OffsetPage[PlatformScheduledTask](
         items=items, total=total, limit=payload.limit, offset=payload.offset

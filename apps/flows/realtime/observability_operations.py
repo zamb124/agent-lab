@@ -246,7 +246,7 @@ async def op_flows_traces_search(
 ) -> ObservabilityTraceSearchResponse:
     _ = user
     _ = di
-    traces, total = await Span.search_traces(
+    traces, total = await Span.trace_group_page_and_span_count(
         flow_id=payload.flow_id,
         task_id=payload.task_id,
         limit=payload.limit,

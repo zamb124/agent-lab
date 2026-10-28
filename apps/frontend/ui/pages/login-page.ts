@@ -35,12 +35,10 @@ export class LoginPage extends PlatformPage {
         if (raw === null || raw === '') {
             return null;
         }
-        let target;
-        try {
-            target = new URL(raw);
-        } catch {
+        if (!URL.canParse(raw)) {
             return null;
         }
+        const target = new URL(raw);
         if (target.origin !== window.location.origin) {
             return null;
         }

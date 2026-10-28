@@ -3,6 +3,7 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { mapPlatformVariable } from './secrets-variables.resource.js';
 
 export const secretsVariableVersionsLoadOp = createAsyncOp({
@@ -16,10 +17,21 @@ export const secretsVariableVersionsLoadOp = createAsyncOp({
         if (event.type !== events.SUCCEEDED) {
             return state;
         }
-        const page = (event.payload as { result?: { items?: unknown[] } } | null)?.result;
-        if (!page || typeof page !== 'object' || !Array.isArray(page.items)) {
+        const payload = event.payload;
+        const page = isPlainRecord(payload) ? payload.result : undefined;
+        if (!isPlainRecord(page) || !Array.isArray(page.items)) {
             throw new Error('secrets/variable_versions_load: OffsetPage result required');
         }
-        return { ...state, lastResult: { ...page, items: page.items.map((item: Parameters<typeof mapPlatformVariable>[0]) => mapPlatformVariable(item)) } };
+        const items = [];
+        for (const entry of page.items) {
+            items.push(mapPlatformVariable(entry));
+        }
+        return { ...state, lastResult: { ...page, items } };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'secrets/variable_versions_load': typeof secretsVariableVersionsLoadOp;
+    }
+}

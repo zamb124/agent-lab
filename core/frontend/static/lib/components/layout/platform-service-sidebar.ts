@@ -16,12 +16,7 @@ import {
     readShellSidebarCollapsed,
     writeShellSidebarCollapsed,
 } from '../../utils/shell-sidebar-preference.js';
-import './platform-sidebar.js';
-
-interface PlatformSidebarLike extends HTMLElement {
-    toggleMobile(): void;
-    closeMobile(): void;
-}
+import { PlatformSidebar } from './platform-sidebar.js';
 
 export class PlatformServiceSidebar extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -69,8 +64,15 @@ export class PlatformServiceSidebar extends PlatformElement {
         this.logoOpensServices = false;
     }
 
-    _innerSidebar(): PlatformSidebarLike | null {
-        return (this.renderRoot?.querySelector('platform-sidebar') as PlatformSidebarLike | null) ?? null;
+    _innerSidebar(): PlatformSidebar | null {
+        const root = this.renderRoot;
+        if (root === undefined || root === null) return null;
+        const sidebar = root.querySelector('platform-sidebar');
+        if (sidebar === null) return null;
+        if (!(sidebar instanceof PlatformSidebar)) {
+            throw new Error('platform-service-sidebar: inner sidebar must be platform-sidebar');
+        }
+        return sidebar;
     }
 
     toggleMobile(): void {

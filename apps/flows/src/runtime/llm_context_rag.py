@@ -122,7 +122,7 @@ async def _resolve_rag_config_for_reference(
     if resource_id is None:
         raise ValueError(f"Resource '{key}': shared reference without resource_id")
     definition = await ResourceDefinition.get(
-        ResourceDefinition.row_id(resource_id)
+        ResourceDefinition.resource_row_id_for_active_company(resource_id)
     )
     if definition is None:
         raise ValueError(f"Shared resource '{resource_id}' not found in the database")

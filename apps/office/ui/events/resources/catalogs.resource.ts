@@ -87,3 +87,11 @@ export const catalogEditForm = createForm({
         company_visible: Boolean(draft.company_visible),
     }),
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/catalogs': typeof catalogsResource;
+        'office/catalog_create_form': typeof catalogCreateForm;
+        'office/catalog_edit_form': typeof catalogEditForm;
+    }
+}

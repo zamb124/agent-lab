@@ -143,7 +143,7 @@ class TestReadIsolation:
         env_a = await _env(stock_di, unique_id, "a")
         env_b = await _env(stock_di, unique_id, "b")
         _ = await _receipt(env_a, Decimal("5"), Decimal("7"))
-        layers_b = await StockValueLayer.list_for_company(
+        layers_b = await StockValueLayer.list_by_entry_no(
             env_b.company_id,
             product_id=None,
             warehouse_id=None,
@@ -154,7 +154,7 @@ class TestReadIsolation:
             layer.company_id == env_b.company_id for layer in layers_b
         )
         # Контроль: у A слой реально записан (иначе тест пустой).
-        layers_a = await StockValueLayer.list_for_company(
+        layers_a = await StockValueLayer.list_by_entry_no(
             env_a.company_id,
             product_id=None,
             warehouse_id=None,

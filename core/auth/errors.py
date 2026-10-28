@@ -51,8 +51,8 @@ class PermissionDeniedA2AError(BaseModel):
         )
 
     @classmethod
-    def for_branch(cls, branch_id: str, flow_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
-        """Создает ошибку для отказа доступа к ветке графа."""
+    def denied_for_branch(cls, branch_id: str, flow_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
+        """Ошибка отказа доступа к ветке графа."""
         return cls(
             message=f"Permission denied for branch '{branch_id}' in flow '{flow_id}'",
             data={

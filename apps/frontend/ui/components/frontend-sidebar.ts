@@ -123,7 +123,8 @@ export class FrontendSidebar extends PlatformElement {
         const auth = this._authSel.value;
         const isSystem = auth.activeCompanyId === 'system';
         const t = (k: string, fallback?: string) => this.t(k) || fallback || k;
-        const logoText = (getPlatformBrandBootstrap()?.platformName || '').toUpperCase();
+        const brand = getPlatformBrandBootstrap();
+        const logoText = (brand === undefined || brand === null || typeof brand.platformName !== 'string' ? '' : brand.platformName).toUpperCase();
 
         return html`
             <platform-service-sidebar

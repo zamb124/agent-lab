@@ -18,7 +18,7 @@ function createWebSocket(url: string): WebSocketLike {
   if (typeof WebSocketCtor === 'undefined') {
     throw new Error('WebSocket is not available in this runtime');
   }
-  return new WebSocketCtor(url) as unknown as WebSocketLike;
+  return new WebSocketCtor(url);
 }
 
 export type HumanitecTunnelClientOptions = {

@@ -23,3 +23,10 @@ export const searchDefaultsOp = createAsyncOp({
     commandType: 'rag/search/defaults_requested',
     restMirror: { method: 'GET', path: '/rag/api/v1/search-defaults' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'rag/search': typeof searchOp;
+        'rag/search_defaults': typeof searchDefaultsOp;
+    }
+}

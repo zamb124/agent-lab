@@ -414,7 +414,7 @@ async def mail_sync_binding_task(
 ) -> dict[str, int | bool | str | None]:
     settings = get_settings()
     config = settings.mail_sync
-    binding = await MailboxBinding.find_in_company(
+    binding = await MailboxBinding.by_mailbox_binding_id(
         company_id, mailbox_binding_id
     )
     if binding is None:

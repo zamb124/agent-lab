@@ -387,11 +387,11 @@ async def test_upsert_by_schedule_task_id_updates_same_row(unique_id: str) -> No
     task.task_name = "second"
     updated = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
     assert updated.schedule_task_id == schedule_task_id
-    stored = await PlatformScheduledTask.find_in_company("system", schedule_task_id)
+    stored = await PlatformScheduledTask.by_schedule_task_id("system", schedule_task_id)
     assert stored is not None
     assert stored.task_name == "second"
     assert stored.created_at == created_at
-    assert await PlatformScheduledTask.find_in_company(f"{unique_id}_other", schedule_task_id) is None
+    assert await PlatformScheduledTask.by_schedule_task_id(f"{unique_id}_other", schedule_task_id) is None
     with pytest.raises(ValueError, match="schedule_task_id cannot be empty"):
         _ = await PlatformScheduledTask.upsert_by_schedule_task_id(
             _schedule_task(

@@ -45,7 +45,28 @@ import {
     buildUserMessage,
 } from '../flow-ui/protocol/a2a-codec.js';
 import { consumeA2AStream, unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-stream.js';
-import { isVoiceClientDebugEnabled } from './voice-media-session.js';
+import { devtoolsLog, isPlatformDevtoolsEnabled } from '../events/devtools.js';
+import { isPlainRecord } from '../events/payload.js';
+
+function customRecord(event: Event): Record<string, unknown> | null {
+    if (!(event instanceof CustomEvent) || !isPlainRecord(event.detail)) return null;
+    return event.detail;
+}
+
+function streamVariables(metadata: Record<string, unknown> | null): Record<string, unknown> | null {
+    if (metadata === null || !('variables' in metadata)) return null;
+    const variables = metadata.variables;
+    if (variables === null) return null;
+    if (!isPlainRecord(variables)) {
+        throw new Error('voice-agent-bridge: stream metadata.variables must be an object');
+    }
+    return variables;
+}
+
+function bridgeErrorCode(err: unknown): string {
+    if (isPlainRecord(err) && typeof err.code === 'string') return err.code;
+    return 'voice/bridge/a2a_failed';
+}
 
 /** Минимальная длительность сегмента речи (VAD open) до client barge-in, мс — как `vad_speech_seconds < 0.3` в `BargeInController`. */
 const CLIENT_BARGE_MIN_SPEECH_MS = 300;
@@ -160,13 +181,11 @@ export class VoiceAgentBridge extends EventTarget {
     }
 
     private _onVoiceDiagnostic(event: Event): void {
-        if (!isVoiceClientDebugEnabled()) {
+        if (!isPlatformDevtoolsEnabled()) {
             return;
         }
-        const ev = event as CustomEvent<Record<string, unknown>>;
-        const detail =
-            ev.detail !== null && typeof ev.detail === 'object' ? ev.detail : {};
-        console.info('[voice-agent-bridge]', 'diagnostic', detail);
+        const detail = customRecord(event);
+        devtoolsLog('voice-agent-bridge', 'diagnostic', detail === null ? {} : detail);
     }
 
     /**
@@ -235,9 +254,8 @@ export class VoiceAgentBridge extends EventTarget {
     }
 
     private _onTranscript(event: Event): void {
-        const detail =
-            (event as CustomEvent<{ text: string; final: boolean; interrupted?: boolean }>).detail;
-        if (!detail) return;
+        const detail = customRecord(event);
+        if (detail === null) return;
         const text = typeof detail.text === 'string' ? detail.text.trim() : '';
         if (detail.final === true) {
             this._pendingPartialTranscript = '';
@@ -251,8 +269,8 @@ export class VoiceAgentBridge extends EventTarget {
     }
 
     private _onVad(event: Event): void {
-        const detail = (event as CustomEvent<{ state: 'started' | 'ended' }>).detail;
-        if (!detail || typeof detail.state !== 'string') return;
+        const detail = customRecord(event);
+        if (detail === null || typeof detail.state !== 'string') return;
         if (detail.state === 'ended') {
             this._clearClientBargeDebounce();
             return;
@@ -267,14 +285,14 @@ export class VoiceAgentBridge extends EventTarget {
     }
 
     private _onTtsState(event: Event): void {
-        const detail = (event as CustomEvent<{ state: 'playing' | 'stopped' }>).detail;
-        if (!detail) return;
+        const detail = customRecord(event);
+        if (detail === null) return;
         this._ttsActive = detail.state === 'playing';
     }
 
     private _abortCurrent(): void {
         if (this._currentAbort !== null) {
-            try { this._currentAbort.abort(); } catch { /* noop */ }
+            this._currentAbort.abort();
         }
         this._currentAbort = null;
         this._currentTaskId = null;
@@ -298,11 +316,7 @@ export class VoiceAgentBridge extends EventTarget {
             const frame = ev as object;
             this._handleA2AEvent(frame);
             if (this._onA2aStreamEvent) {
-                try {
-                    this._onA2aStreamEvent(frame);
-                } catch (relayErr) {
-                    console.error('[voice-agent-bridge] onA2aStreamEvent', relayErr);
-                }
+                this._onA2aStreamEvent(frame);
             }
         };
 
@@ -337,7 +351,7 @@ export class VoiceAgentBridge extends EventTarget {
                     }),
                     body: buildSendMessageBody(buildUserMessage({ contextId: this._contextId, text }), {
                         branchId: this._branchId ?? 'default',
-                        variables: metadata !== null && 'variables' in metadata ? metadata.variables as Record<string, unknown> : null,
+                        variables: streamVariables(metadata),
                     }),
                     headers: extraHeaders,
                     credentials: this._credentials,
@@ -352,10 +366,7 @@ export class VoiceAgentBridge extends EventTarget {
                     this._pendingA2aAbortDetail = null;
                 }
             } else {
-                const code =
-                    typeof (err as { code?: unknown })?.code === 'string'
-                        ? (err as { code: string }).code
-                        : 'voice/bridge/a2a_failed';
+                const code = bridgeErrorCode(err);
                 this._dispatch('error', {
                     code,
                     detail: err instanceof Error && err.message ? err.message : String(err),
@@ -373,10 +384,10 @@ export class VoiceAgentBridge extends EventTarget {
     }
 
     private _handleA2AEvent(event: object): void {
-        if (!event || typeof event !== 'object') return;
+        if (!isPlainRecord(event)) return;
 
-        const result = (event as Record<string, unknown>).result;
-        if (!result || typeof result !== 'object') return;
+        const result = event.result;
+        if (!isPlainRecord(result)) return;
 
         const unwrapped = unwrapA2aStreamResult(result);
         if (!unwrapped) {

@@ -1,0 +1,197 @@
+/**
+ * flows-bottom-toolbar — плавающая «таблетка» в нижней части канваса.
+ *
+ * Группы:
+ *   1. zoom: zoom_in / zoom_out / zoom_100 / fit_view
+ *   2. tools: select / pan
+ *   3. history: undo / redo
+ *   4. actions: execution panel / variables / smart-guides / data-wires / help
+ *
+ * Источник state: useOp('flows/editor') as unknown as ControllerFor<'flows/editor'>.state.{activeTool,canUndo,canRedo,
+ * smartGuidesEnabled,showDataWires,executionPanelOpen,viewBox,skillsData,flowConfig}.
+ */
+
+import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
+import { html, css } from 'lit';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
+import { asObject, isPlainObject, getBranchNodes } from '../../_helpers/flows-resolvers.js';
+import { computeFitViewBox, FLOWS_EDITOR_DEFAULT_VIEWBOX } from '../../_helpers/flows-viewbox.js';
+import type {CSSResultGroup, TemplateResult} from 'lit';
+
+const ZOOM_FACTOR = 1.2;
+
+export class FlowsBottomToolbar extends PlatformElement {
+    static override styles: CSSResultGroup = [
+        PlatformElement.styles,
+        css`
+            :host {
+                position: absolute;
+                bottom: var(--space-4);
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 6;
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                padding: var(--space-1) var(--space-2);
+                border-radius: var(--radius-full);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-strong);
+            }
+            .divider {
+                width: 1px;
+                height: 22px;
+                background: var(--border-subtle);
+                margin: 0 var(--space-1);
+            }
+        `,
+    ];
+    private _editor: ControllerFor<'flows/editor'>;
+
+    constructor() {
+        super();
+        this._editor = this.useOp('flows/editor');
+    }
+
+    _viewBox() {
+        const vb = isPlainObject(this._editor.state) ? this._editor.state.viewBox : null;
+        return isPlainObject(vb) ? vb : { ...FLOWS_EDITOR_DEFAULT_VIEWBOX };
+    }
+
+    _setViewBox(vb: any) {
+        (this._editor.setViewBox({ viewBox: vb }) as any);
+    }
+
+    _zoom(factor: any) {
+        const vb = this._viewBox();
+        const cx = (vb as any).x + (vb as any).w / 2;
+        const cy = (vb as any).y + (vb as any).h / 2;
+        const w = (vb as any).w * factor;
+        const h = (vb as any).h * factor;
+        this._setViewBox({ x: cx - w / 2, y: cy - h / 2, w, h });
+    }
+
+    _zoomIn() { this._zoom(1 / ZOOM_FACTOR); }
+    _zoomOut() { this._zoom(ZOOM_FACTOR); }
+    _zoom100() {
+        const vb = this._viewBox();
+        const d = FLOWS_EDITOR_DEFAULT_VIEWBOX;
+        this._setViewBox({ x: (vb as any).x + (vb as any).w / 2 - d.w / 2, y: (vb as any).y + (vb as any).h / 2 - d.h / 2, w: d.w, h: d.h });
+    }
+
+    _fitView() {
+        const state = asObject(this._editor.state);
+        const nodes = getBranchNodes(state);
+        const vb = computeFitViewBox(Object.values(nodes));
+        if (vb === null) {
+            this._setViewBox({ ...FLOWS_EDITOR_DEFAULT_VIEWBOX });
+            return;
+        }
+        this._setViewBox(vb);
+    }
+
+    _setTool(tool: any) { (this._editor.setActiveTool({ tool }) as any); }
+    _undo() { (this._editor.undo({}) as any); }
+    _redo() { (this._editor.redo({}) as any); }
+    _openVariables() {
+        const flowId = ((this._editor.state as any).flowConfig?.flow_id as any);
+        this.openModal('flows.variables', { scope: 'flow', flowId });
+    }
+    _toggleGuides() { (this._editor.toggleSmartGuides({}) as any); }
+    _toggleDataWires() { (this._editor.toggleDataWires({}) as any); }
+    _toggleExecutionPanel() {
+        const state = asObject(this._editor.state);
+        (this._editor.setExecutionPanelOpen as any)({ open: !Boolean((state as any).executionPanelOpen) });
+    }
+    _help() { this.openModal('flows.canvas_help', {}); }
+
+    _renderIconButton({ icon, title, onClick, active = false, disabled = false }: any) {
+        const variant = active ? 'secondary' : 'ghost';
+        return html`
+            <platform-button
+                variant=${variant}
+                icon-only
+                density="dense"
+                aria-label=${title}
+                ?disabled=${disabled}
+                @click=${onClick}
+            >
+                <platform-icon name=${icon} size="16"></platform-icon>
+            </platform-button>
+        `;
+    }
+
+    override render(): TemplateResult {
+        const state = asObject(this._editor.state);
+        const activeTool = typeof (state as any).activeTool === 'string' && (state as any).activeTool.length > 0 ? (state as any).activeTool : 'select';
+        const guidesOn = (state as any).smartGuidesEnabled !== false;
+        const wiresOn = Boolean((state as any).showDataWires);
+        const executionOpen = Boolean((state as any).executionPanelOpen);
+        return html`
+            ${this._renderIconButton({ icon: 'plus', title: this.t('canvas.toolbar.zoom_in'), onClick: () => this._zoomIn() })}
+            ${this._renderIconButton({ icon: 'minus', title: this.t('canvas.toolbar.zoom_out'), onClick: () => this._zoomOut() })}
+            ${this._renderIconButton({ icon: 'search', title: this.t('canvas.toolbar.zoom_100'), onClick: () => this._zoom100() })}
+            ${this._renderIconButton({ icon: 'fullscreen', title: this.t('canvas.toolbar.zoom_fit'), onClick: () => this._fitView() })}
+
+            <span class="divider"></span>
+
+            ${this._renderIconButton({
+                icon: 'target',
+                title: this.t('canvas.toolbar.tool_select'),
+                onClick: () => this._setTool('select'),
+                active: activeTool === 'select',
+            })}
+            ${this._renderIconButton({
+                icon: 'drag-handle',
+                title: this.t('canvas.toolbar.tool_pan'),
+                onClick: () => this._setTool('pan'),
+                active: activeTool === 'pan',
+            })}
+
+            <span class="divider"></span>
+
+            ${this._renderIconButton({
+                icon: 'undo',
+                title: this.t('canvas.toolbar.undo'),
+                onClick: () => this._undo(),
+                disabled: !(state as any).canUndo,
+            })}
+            ${this._renderIconButton({
+                icon: 'redo',
+                title: this.t('canvas.toolbar.redo'),
+                onClick: () => this._redo(),
+                disabled: !(state as any).canRedo,
+            })}
+
+            <span class="divider"></span>
+
+            ${this._renderIconButton({
+                icon: 'chat',
+                title: executionOpen
+                    ? this.t('canvas.toolbar.close_execution_panel')
+                    : this.t('canvas.toolbar.open_execution_panel'),
+                onClick: () => this._toggleExecutionPanel(),
+                active: executionOpen,
+            })}
+            ${this._renderIconButton({ icon: 'code', title: this.t('canvas.toolbar.open_variables'), onClick: () => this._openVariables() })}
+            ${this._renderIconButton({
+                icon: 'schema',
+                title: this.t('canvas.toolbar.toggle_guides'),
+                onClick: () => this._toggleGuides(),
+                active: guidesOn,
+            })}
+            ${this._renderIconButton({
+                icon: 'link',
+                title: wiresOn ? this.t('canvas.dataflow.hide_wires') : this.t('canvas.dataflow.show_wires'),
+                onClick: () => this._toggleDataWires(),
+                active: wiresOn,
+            })}
+            ${this._renderIconButton({ icon: 'help', title: this.t('canvas.toolbar.help'), onClick: () => this._help() })}
+        `;
+    }
+}
+
+customElements.define('flows-bottom-toolbar', FlowsBottomToolbar);

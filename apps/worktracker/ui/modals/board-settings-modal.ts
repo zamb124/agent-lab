@@ -14,6 +14,21 @@ import type { CSSResultGroup, PropertyValues, TemplateResult } from 'lit';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+function optionalZero(value: unknown): number {
+    if (value === undefined || value === null) return 0;
+    return Number(value);
+}
+
+function dragText(transfer: DataTransfer | null, mime: string): string {
+    if (transfer === null) return '';
+    return transfer.getData(mime);
+}
+
 interface BoardColumnRecord {
     board_column_id?: string;
     label?: string;
@@ -232,12 +247,12 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._snapshotName = board.name;
         this._columns = board.columns
             .slice()
-            .sort((left, right) => (left.position ?? 0) - (right.position ?? 0))
+            .sort((left, right) => optionalZero(left.position) - optionalZero(right.position))
             .map((column) => ({
-                board_column_id: String(column.board_column_id ?? ''),
-                label: String(column.label ?? ''),
-                state: String(column.state ?? ''),
-                position: Number(column.position ?? 0),
+                board_column_id: missingAsEmpty(column.board_column_id),
+                label: missingAsEmpty(column.label),
+                state: missingAsEmpty(column.state),
+                position: optionalZero(column.position),
             }));
         this._snapshotColumns = this._columns.map((column) => ({ ...column }));
         this._loading = false;
@@ -347,7 +362,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         event.stopPropagation();
         this._columnInsertIndex = -1;
         this._dragColumnIndex = -1;
-        const rawIndex = event.dataTransfer?.getData(BOARD_COLUMN_INDEX_MIME) ?? '';
+        const rawIndex = dragText(event.dataTransfer, BOARD_COLUMN_INDEX_MIME);
         if (typeof rawIndex !== 'string' || rawIndex.length === 0) {
             return;
         }

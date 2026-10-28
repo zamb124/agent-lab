@@ -22,6 +22,14 @@ import type { PlatformEvent, EffectCtx } from '@platform/lib/events/contract.js'
 import type { DocumentsSlice, OfficeDocumentItem } from '../documents.types.js';
 
 type EventPayload = Record<string, unknown>;
+
+function uploadJobEvent(events: Readonly<Record<string, string>>, name: string): string {
+    const eventName = events[name];
+    if (eventName === undefined || eventName.length === 0) {
+        throw new Error(`documents: ${name} missing`);
+    }
+    return eventName;
+}
 import { httpRequest } from '@platform/lib/events/http.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
@@ -29,8 +37,9 @@ import { storageGet, storageSet, storageSetJson } from '@platform/lib/utils/plat
 import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js';
 import { buildOfficeDocumentFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { nsHeader } from './_namespace-header.js';
+import { isJsonObject } from '@platform/lib/utils/json-object.js';
 
-export type { DocumentsOpController, OfficeDocumentItem, DocumentsSlice } from '../documents.types.js';
+export type { OfficeDocumentItem, DocumentsSlice } from '../documents.types.js';
 
 const RECENT_STORAGE_KEY = 'documents_explorer_recent_ids';
 const STARRED_STORAGE_KEY = 'documents_explorer_starred_ids';
@@ -82,8 +91,51 @@ function _normalizeCatalogIds(raw: unknown): string[] {
     return ids;
 }
 
+function isDocumentsSlice(value: unknown): value is DocumentsSlice {
+    return isJsonObject(value);
+}
+
+function officeDocuments(state: unknown): DocumentsSlice | null {
+    if (!isJsonObject(state)) {
+        return null;
+    }
+    const slice = state.officeDocuments;
+    if (slice === undefined || slice === null) {
+        return null;
+    }
+    if (!isDocumentsSlice(slice)) {
+        throw new Error('documents: officeDocuments must be an object');
+    }
+    return slice;
+}
+
+function documentItems(value: unknown): OfficeDocumentItem[] {
+    if (!Array.isArray(value)) {
+        throw new Error('office/documents: SUCCEEDED.result.items required (array)');
+    }
+    const items: OfficeDocumentItem[] = [];
+    for (const raw of value) {
+        if (!isJsonObject(raw)) {
+            throw new Error('office/documents: document item must be an object');
+        }
+        const item: OfficeDocumentItem = {};
+        for (const [key, field] of Object.entries(raw)) {
+            item[key] = field;
+        }
+        items.push(item);
+    }
+    return items;
+}
+
+function stringIds(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
 function _reloadVisibleDocuments(ctx: EffectCtx, event: PlatformEvent) {
-    const docState = (ctx.getState() as { officeDocuments?: DocumentsSlice }).officeDocuments;
+    const docState = officeDocuments(ctx.getState());
     if (!docState) {
         return;
     }
@@ -235,9 +287,9 @@ export const documentsOp = createAsyncOp({
         recordRecentOpen: 'record_recent_open',
         patchRagIndexStatuses: 'patch_rag_index_statuses',
     },
-    extraReducer: (state, event, events) => {
-        const docState = state as DocumentsSlice;
-        const payload = event.payload as EventPayload | null;
+    extraReducer: (state: DocumentsSlice, event, events) => {
+        const docState = state;
+        const payload = isJsonObject(event.payload) ? event.payload : null;
         if (event.type === events.REQUESTED) {
             if (!payload || typeof payload !== 'object') {
                 throw new Error('office/documents: REQUESTED.payload required');
@@ -251,11 +303,8 @@ export const documentsOp = createAsyncOp({
             return { ...state, items: [], loadedCatalogIds: ids };
         }
         if (event.type === events.SUCCEEDED) {
-            const result = (payload && payload.result) as { items?: unknown } | null;
-            if (!result || !Array.isArray(result.items)) {
-                throw new Error('office/documents: SUCCEEDED.result.items required (array)');
-            }
-            const nextItems = result.items as OfficeDocumentItem[];
+            const result = payload !== null && isJsonObject(payload.result) ? payload.result : null;
+            const nextItems = documentItems(result === null ? undefined : result.items);
             const prevItems = Array.isArray(docState.items) ? docState.items : [];
             if (prevItems.length === 0) {
                 return { ...state, items: nextItems };
@@ -264,17 +313,16 @@ export const documentsOp = createAsyncOp({
         }
         if (event.type === events.PATCH_RAG_INDEX_STATUSES) {
             const statuses = payload && payload.statuses;
-            if (!statuses || typeof statuses !== 'object' || Array.isArray(statuses)) {
+            if (!isJsonObject(statuses)) {
                 throw new Error('office/documents: patch_rag_index_statuses.statuses object required');
             }
-            const statusesMap = statuses as Record<string, unknown>;
             let changed = false;
             const prevItems = Array.isArray(docState.items) ? docState.items : [];
             const items = prevItems.map((item) => {
-                if (typeof item.file_id !== 'string' || !(item.file_id in statusesMap)) {
+                if (typeof item.file_id !== 'string' || !(item.file_id in statuses)) {
                     return item;
                 }
-                const nextStatus = statusesMap[item.file_id];
+                const nextStatus = statuses[item.file_id];
                 if (nextStatus !== null
                     && nextStatus !== 'ready'
                     && nextStatus !== 'pending'
@@ -382,9 +430,7 @@ export const documentsOp = createAsyncOp({
             return { ...state, expandedCatalogIds };
         }
         if (event.type === events.SET_FILTER_CATALOGS) {
-            const ids = payload && Array.isArray(payload.catalogIds)
-                ? (payload.catalogIds as unknown[]).filter((x) => typeof x === 'string' && x.length > 0)
-                : [];
+            const ids = stringIds(payload === null ? undefined : payload.catalogIds);
             return { ...state, filterCatalogIds: ids };
         }
         if (event.type === events.CLEAR_FILTER) {
@@ -456,17 +502,15 @@ export const documentsOp = createAsyncOp({
             return { ...state, selectedFileIds: [...selected] };
         }
         if (event.type === events.SET_FILE_SELECTION) {
-            const ids = payload && Array.isArray(payload.fileIds)
-                ? (payload.fileIds as unknown[]).filter((x) => typeof x === 'string' && x.length > 0)
-                : [];
+            const ids = stringIds(payload === null ? undefined : payload.fileIds);
             return { ...state, selectedFileIds: ids };
         }
         if (event.type === events.CLEAR_FILE_SELECTION) {
             return { ...state, selectedFileIds: [], selectedFileId: null, selectedCatalogId: null };
         }
         if (event.type === events.UPLOAD_JOB_ADD) {
-            const job = payload && payload.job;
-            if (!job || typeof (job as { localId?: unknown }).localId !== 'string') {
+            const job: unknown = payload && payload.job;
+            if (!isJsonObject(job) || typeof job.localId !== 'string') {
                 throw new Error('office/documents: upload job.localId required');
             }
             const jobs = Array.isArray(docState.uploadJobs) ? docState.uploadJobs : [];
@@ -477,14 +521,14 @@ export const documentsOp = createAsyncOp({
                 ? payload.localId
                 : '';
             const patch = payload && payload.patch;
-            if (localId.length === 0 || !patch || typeof patch !== 'object') {
+            if (localId.length === 0 || !isJsonObject(patch)) {
                 throw new Error('office/documents: upload job update requires localId and patch');
             }
             const jobs = (Array.isArray(docState.uploadJobs) ? docState.uploadJobs : []).map((job) => {
                 if (job.localId !== localId) {
                     return job;
                 }
-                return { ...job, ...(patch as Record<string, unknown>) };
+                return { ...job, ...patch };
             });
             return { ...state, uploadJobs: jobs };
         }
@@ -565,10 +609,10 @@ export const documentUploadOp = createAsyncOp({
     errorToastKey: 'documents:toast.document_upload_failed',
     restMirror: { method: 'POST', path: '/documents/api/v1/documents' },
     request: async ({ payload, ctx }) => {
-        const reqPayload = payload as { file?: unknown; catalog_id?: unknown; title?: unknown } | null;
-        if (!reqPayload || typeof reqPayload !== 'object') {
+        if (!isJsonObject(payload)) {
             throw new Error('office/document_upload: payload required');
         }
+        const reqPayload = payload;
         if (!(reqPayload.file instanceof File) && !(reqPayload.file instanceof Blob)) {
             throw new Error('office/document_upload: payload.file (File|Blob) required');
         }
@@ -584,12 +628,12 @@ export const documentUploadOp = createAsyncOp({
             reqPayload.file instanceof File
                 ? reqPayload.file
                 : new File([reqPayload.file], 'document.bin', {
-                    type: (reqPayload.file as Blob).type || 'application/octet-stream',
+                    type: reqPayload.file.type.length > 0 ? reqPayload.file.type : 'application/octet-stream',
                 });
         const uploaded = await uploadPlatformFile({
             file,
             spec: buildOfficeDocumentFileCreateSpecJson({ namespaceId }),
-        }) as { file_id?: unknown };
+        });
         if (typeof uploaded.file_id !== 'string' || uploaded.file_id.length === 0) {
             throw new Error('office/document_upload: upload result.file_id required');
         }
@@ -608,23 +652,23 @@ export const documentUploadOp = createAsyncOp({
         });
     },
     onSuccess: (ctx, result, event) => {
-        const eventPayload = event.payload as EventPayload | null;
+        const eventPayload = isJsonObject(event.payload) ? event.payload : null;
         const localId = eventPayload && eventPayload.localId;
         if (typeof localId === 'string' && localId.length > 0) {
             ctx.dispatch(
-                documentsOp.events.UPLOAD_JOB_UPDATE!,
+                uploadJobEvent(documentsOp.events, 'UPLOAD_JOB_UPDATE'),
                 { localId, patch: { status: 'done', progress: 100 } },
                 { causation_id: event.id, source: 'local' },
             );
             window.setTimeout(() => {
                 ctx.dispatch(
-                    documentsOp.events.UPLOAD_JOB_REMOVE!,
+                    uploadJobEvent(documentsOp.events, 'UPLOAD_JOB_REMOVE'),
                     { localId },
                     { source: 'local' },
                 );
             }, 3000);
         }
-        const uploadResult = result as { file_id?: unknown } | null;
+        const uploadResult = isJsonObject(result) ? result : null;
         if (uploadResult && typeof uploadResult.file_id === 'string') {
             if (eventPayload && eventPayload.openAfterUpload === true) {
                 ctx.dispatch(
@@ -634,7 +678,7 @@ export const documentUploadOp = createAsyncOp({
                 );
             }
         }
-        const docState = (ctx.getState() as { officeDocuments?: DocumentsSlice }).officeDocuments;
+        const docState = officeDocuments(ctx.getState());
         if (!docState) {
             return;
         }
@@ -645,11 +689,11 @@ export const documentUploadOp = createAsyncOp({
         );
     },
     onFailure: (ctx, _err, event) => {
-        const eventPayload = event.payload as EventPayload | null;
+        const eventPayload = isJsonObject(event.payload) ? event.payload : null;
         const localId = eventPayload && eventPayload.localId;
         if (typeof localId === 'string' && localId.length > 0) {
             ctx.dispatch(
-                documentsOp.events.UPLOAD_JOB_UPDATE!,
+                uploadJobEvent(documentsOp.events, 'UPLOAD_JOB_UPDATE'),
                 { localId, patch: { status: 'failed', progress: 0 } },
                 { causation_id: event.id, source: 'local' },
             );
@@ -759,3 +803,19 @@ export const documentRenameForm = createForm({
         title: typeof draft.title === 'string' ? draft.title.trim() : '',
     }),
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/documents': typeof documentsOp;
+        'office/document_create_empty': typeof documentCreateEmptyOp;
+        'office/document_upload': typeof documentUploadOp;
+        'office/document_rename': typeof documentRenameOp;
+        'office/documents_deleted': typeof deletedDocumentsOp;
+        'office/document_restore': typeof documentRestoreOp;
+        'office/document_permanent_delete': typeof documentPermanentDeleteOp;
+        'office/document_move': typeof documentMoveOp;
+        'office/document_share_create': typeof documentShareCreateOp;
+        'office/document_remove': typeof documentRemoveOp;
+        'office/document_rename_form': typeof documentRenameForm;
+    }
+}

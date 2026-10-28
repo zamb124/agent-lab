@@ -47,18 +47,18 @@ class TestFlowRepositoryTwoTables:
         await FlowConfig.create_version(agent)
 
         # Проверяем что версия сохранена
-        versions = await FlowConfig.list_versions(flow_id)
+        versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         assert len(versions) == 1, "Должна быть создана одна версия"
         version = versions[0]
 
         # Проверяем что можем получить версию
-        version_agent = await FlowConfig.get_version(flow_id, version)
-        assert version_agent is not None, "Версия ДОЛЖНА быть доступна через get_version"
+        version_agent = await FlowConfig.by_flow_id_and_version(flow_id, version)
+        assert version_agent is not None, "Версия ДОЛЖНА быть доступна через by_flow_id_and_version"
         assert version_agent.flow_id == flow_id
 
         # Проверяем что можем получить актуальный конфиг
-        latest_agent = await FlowConfig.get_latest(flow_id)
-        assert latest_agent is not None, "Актуальный конфиг ДОЛЖЕН быть доступен через get_latest"
+        latest_agent = await FlowConfig.current_for_flow(flow_id)
+        assert latest_agent is not None, "Актуальный конфиг ДОЛЖЕН быть доступен через current_for_flow"
         assert latest_agent.flow_id == flow_id
 
         # Проверяем что данные идентичны
@@ -69,12 +69,12 @@ class TestFlowRepositoryTwoTables:
         await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_get_latest_reads_from_agents_table(self, app, unique_id, di):
+    async def test_current_for_flow_reads_from_agents_table(self, app, unique_id, di):
         """
-        СТРОГИЙ ТЕСТ: get_latest() читает ТОЛЬКО из таблицы agents.
+        СТРОГИЙ ТЕСТ: current_for_flow() читает ТОЛЬКО из таблицы agents.
         """
 
-        flow_id = f"test_get_latest_source_{unique_id}"
+        flow_id = f"test_current_for_flow_source_{unique_id}"
         agent = FlowConfig(
             flow_id=flow_id,
             name="Test Agent",
@@ -85,12 +85,12 @@ class TestFlowRepositoryTwoTables:
         await FlowConfig.create_version(agent)
 
         # Проверяем что версия создана
-        versions = await FlowConfig.list_versions(flow_id)
+        versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         assert len(versions) == 1, "Должна быть создана одна версия"
 
-        # get_latest() читает из agents (не из agents_versions)
-        loaded = await FlowConfig.get_latest(flow_id)
-        assert loaded is not None, "get_latest() ДОЛЖЕН читать из agents"
+        # current_for_flow() читает из agents (не из agents_versions)
+        loaded = await FlowConfig.current_for_flow(flow_id)
+        assert loaded is not None, "current_for_flow() ДОЛЖЕН читать из agents"
         assert loaded.flow_id == flow_id
         assert loaded.name == "Test Agent"
 
@@ -114,11 +114,11 @@ class TestFlowRepositoryTwoTables:
         await FlowConfig.create_version(agent)
 
         # Проверяем что агент создан
-        loaded_agent = await FlowConfig.get_latest(flow_id)
+        loaded_agent = await FlowConfig.current_for_flow(flow_id)
         assert loaded_agent is not None, "Агент должен быть создан"
         assert loaded_agent.version is not None, "Версия должна быть установлена"
 
-        versions = await FlowConfig.list_versions(flow_id)
+        versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         if len(versions) == 0:
             # Если версий нет, используем версию из агента
             version = loaded_agent.version
@@ -127,7 +127,7 @@ class TestFlowRepositoryTwoTables:
             version = versions[0]
 
         # get_version() читает из agents_versions
-        loaded = await FlowConfig.get_version(flow_id, version)
+        loaded = await FlowConfig.by_flow_id_and_version(flow_id, version)
         assert loaded is not None, "get_version() ДОЛЖЕН читать из agents_versions"
         assert loaded.flow_id == flow_id
         assert loaded.version == version
@@ -156,7 +156,7 @@ class TestFlowRepositoryTwoTables:
             await FlowConfig.create_version(agent)
 
         # Проверяем что агент доступен через get (читает из agents)
-        retrieved_agent = await FlowConfig.get_latest(flow_id)
+        retrieved_agent = await FlowConfig.current_for_flow(flow_id)
         assert retrieved_agent is not None, "Агент ДОЛЖЕН быть доступен через get()"
         assert retrieved_agent.name == "Test Agent v49", "Должна быть последняя версия"
 
@@ -167,7 +167,7 @@ class TestFlowRepositoryTwoTables:
         assert agent_ids.count(flow_id) == 1, "list_all() ДОЛЖЕН вернуть каждого агента только один раз"
 
         # Проверяем что версий действительно много
-        versions = await FlowConfig.list_versions(flow_id)
+        versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         assert len(versions) == 50, "Должно быть создано 50 версий"
 
         # Cleanup
@@ -217,8 +217,8 @@ class TestFlowRepositoryTwoTables:
         await FlowConfig.create_version(later_agent)
 
         # Проверяем что оба агента доступны
-        agent1 = await FlowConfig.get_latest(many_versions_agent_id)
-        agent2 = await FlowConfig.get_latest(later_agent_id)
+        agent1 = await FlowConfig.current_for_flow(many_versions_agent_id)
+        agent2 = await FlowConfig.current_for_flow(later_agent_id)
         assert agent1 is not None, "Первый агент ДОЛЖЕН быть доступен"
         assert agent2 is not None, "Второй агент ДОЛЖЕН быть доступен"
 
@@ -251,7 +251,7 @@ class TestFlowRepositoryTwoTables:
             agent.name = f"Test Agent v{i}"
             await FlowConfig.create_version(agent)
 
-        versions = await FlowConfig.list_versions(flow_id)
+        versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         assert len(versions) == 5, "Должно быть создано 5 версий"
 
         # Удаляем агента
@@ -259,11 +259,11 @@ class TestFlowRepositoryTwoTables:
         assert result is True, "delete() ДОЛЖЕН вернуть True"
 
         # Проверяем что агент удален
-        deleted_agent = await FlowConfig.get_latest(flow_id)
+        deleted_agent = await FlowConfig.current_for_flow(flow_id)
         assert deleted_agent is None, "Агент ДОЛЖЕН быть удалён"
 
         # Проверяем что версии удалены
-        remaining_versions = await FlowConfig.list_versions(flow_id)
+        remaining_versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         assert len(remaining_versions) == 0, "После удаления не должно остаться версий"
 
     @pytest.mark.asyncio
@@ -282,18 +282,18 @@ class TestFlowRepositoryTwoTables:
 
         # Создаём версию 1
         await FlowConfig.create_version(agent)
-        versions = await FlowConfig.list_versions(flow_id)
+        versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         version1 = versions[0]
 
         # Создаём версию 2 (меняем данные)
         agent.name = "Test Agent v2"
         agent.nodes["main"]["prompt"] = "Prompt v2"
         await FlowConfig.create_version(agent)
-        versions = await FlowConfig.list_versions(flow_id)
+        versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         version2 = versions[0]
 
         # Проверяем что актуальная версия - это v2
-        latest = await FlowConfig.get_latest(flow_id)
+        latest = await FlowConfig.current_for_flow(flow_id)
         assert latest.name == "Test Agent v2", "Актуальная версия должна быть v2"
 
         # Откатываемся к версии 1
@@ -301,12 +301,12 @@ class TestFlowRepositoryTwoTables:
         assert result is True, "rollback_to_version() ДОЛЖЕН вернуть True"
 
         # Проверяем что актуальная версия теперь v1
-        latest_after_rollback = await FlowConfig.get_latest(flow_id)
+        latest_after_rollback = await FlowConfig.current_for_flow(flow_id)
         assert latest_after_rollback.name == "Test Agent v1", "После rollback актуальная версия должна быть v1"
         assert latest_after_rollback.nodes["main"]["prompt"] == "Prompt v1", "Промпт должен быть из версии 1"
 
         # Проверяем что версия 2 всё ещё существует в agents_versions
-        version2_data = await FlowConfig.get_version(flow_id, version2)
+        version2_data = await FlowConfig.by_flow_id_and_version(flow_id, version2)
         assert version2_data is not None, "Версия 2 ДОЛЖНА остаться в agents_versions"
         assert version2_data.name == "Test Agent v2", "Версия 2 не должна измениться"
 
@@ -334,7 +334,7 @@ class TestFlowRepositoryTwoTables:
 
         # Проверяем что все агенты доступны через get
         for flow_id in agent_ids:
-            agent = await FlowConfig.get_latest(flow_id)
+            agent = await FlowConfig.current_for_flow(flow_id)
             assert agent is not None, f"Агент {flow_id} ДОЛЖЕН быть доступен"
 
         # list_all() ДОЛЖЕН вернуть всех агентов (с большим limit)
@@ -395,15 +395,15 @@ class TestFlowRepositoryTwoTables:
         )
 
         await FlowConfig.create_version(agent)
-        versions = await FlowConfig.list_versions(flow_id)
+        versions = await FlowConfig.list_version_strings_by_version_desc(flow_id)
         version = versions[0]
 
         # Проверяем что агент создан правильно
-        loaded_agent = await FlowConfig.get_latest(flow_id)
+        loaded_agent = await FlowConfig.current_for_flow(flow_id)
         assert loaded_agent is not None, "Агент должен быть создан"
 
         # Проверяем что версия создана
-        loaded_version = await FlowConfig.get_version(flow_id, version)
+        loaded_version = await FlowConfig.by_flow_id_and_version(flow_id, version)
         assert loaded_version is not None, "Версия должна быть создана"
 
         # Cleanup

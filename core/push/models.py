@@ -36,7 +36,8 @@ class PushSubscription(PlatformModel):
     last_used_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc), db_index=True)
 
     @classmethod
-    async def list_for_user(cls, user_id: str) -> list[Self]:
+    async def list_by_last_used_at_desc(cls, user_id: str) -> list[Self]:
+        """Подписки пользователя, ORDER BY last_used_at DESC. Предела нет."""
         return await cls.objects.filter(user_id=user_id).order_by("-last_used_at").all()
 
     @classmethod

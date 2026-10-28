@@ -14,9 +14,9 @@
 
 ## Команды
 
-- `make app` — все сервисы локально (mprocs); `make app APP_KILL=1` — освободить порты перед стартом.
+- `make app` — сборка UI и все сервисы локально (mprocs, esbuild watch — процесс `ui_watch`); `make app APP_KILL=1` — освободить порты перед стартом.
 - `make lint` — все гейты; `make lint <path>` — один файл; `make lint-ts` — frontend.
-- `make test-up` — тестовый стек и миграции, обязателен до `pytest`; `uv run pytest tests/<домен>/ -q` — домен; `make test` — всё.
+- `make test-up` — сборка UI, тестовый стек и миграции, обязателен до `pytest`; `uv run pytest tests/<домен>/ -q` — домен; `make test` — всё.
 - `make migrate` — миграции dev-баз.
 - `uv add <pkg>`, `uv sync`, `uv run python <file>` — зависимости и запуск.
 - `make doc`, `make doc-serve` — портал документации.

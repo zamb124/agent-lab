@@ -3,6 +3,11 @@
  * REST-зеркало `apps/frontend/api/authz_explorer.py`) + UI slice.
  */
 import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function uiPayload(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
 
 const WS_TIMEOUT_MS = 15_000;
 
@@ -89,14 +94,16 @@ export const authzExplorerUiSlice = createSlice({
     },
     extraReducer: (state, event, events) => {
         if (event.type === events.SET_MODE) {
-            const mode = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).mode;
+            const payload = uiPayload(event.payload);
+            const mode = payload === null ? undefined : payload.mode;
             if (mode !== 'people' && mode !== 'objects') {
                 throw new Error('authzExplorerUiSlice.setMode: mode must be people|objects');
             }
             return { ...state, mode, whyOpen: false, mobilePane: 'picker' };
         }
         if (event.type === events.SELECT_USER) {
-            const userId = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).userId;
+            const payload = uiPayload(event.payload);
+            const userId = payload === null ? undefined : payload.userId;
             if (typeof userId !== 'string' || userId.length === 0) {
                 throw new Error('authzExplorerUiSlice.selectUser: userId required');
             }
@@ -111,8 +118,9 @@ export const authzExplorerUiSlice = createSlice({
             };
         }
         if (event.type === events.SELECT_OBJECT) {
-            const objectType = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).objectType;
-            const objectKey = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).objectKey;
+            const payload = uiPayload(event.payload);
+            const objectType = payload === null ? undefined : payload.objectType;
+            const objectKey = payload === null ? undefined : payload.objectKey;
             if (typeof objectType !== 'string' || objectType.length === 0) {
                 throw new Error('authzExplorerUiSlice.selectObject: objectType required');
             }
@@ -129,51 +137,58 @@ export const authzExplorerUiSlice = createSlice({
             };
         }
         if (event.type === events.SET_PICKER_TYPE_FILTER) {
-            const pickerTypeFilter = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).pickerTypeFilter;
+            const payload = uiPayload(event.payload);
+            const pickerTypeFilter = payload === null ? undefined : payload.pickerTypeFilter;
             if (typeof pickerTypeFilter !== 'string') {
                 throw new Error('authzExplorerUiSlice.setPickerTypeFilter: pickerTypeFilter string required');
             }
             return { ...state, pickerTypeFilter };
         }
         if (event.type === events.SET_GRANT_TYPE_FILTER) {
-            const grantTypeFilter = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).grantTypeFilter;
+            const payload = uiPayload(event.payload);
+            const grantTypeFilter = payload === null ? undefined : payload.grantTypeFilter;
             if (typeof grantTypeFilter !== 'string') {
                 throw new Error('authzExplorerUiSlice.setGrantTypeFilter: grantTypeFilter string required');
             }
             return { ...state, grantTypeFilter };
         }
         if (event.type === events.SET_RELATION_FILTER) {
-            const relationFilter = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).relationFilter;
+            const payload = uiPayload(event.payload);
+            const relationFilter = payload === null ? undefined : payload.relationFilter;
             if (typeof relationFilter !== 'string') {
                 throw new Error('authzExplorerUiSlice.setRelationFilter: relationFilter string required');
             }
             return { ...state, relationFilter };
         }
         if (event.type === events.SET_SOURCE_FILTER) {
-            const sourceFilter = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).sourceFilter;
+            const payload = uiPayload(event.payload);
+            const sourceFilter = payload === null ? undefined : payload.sourceFilter;
             if (typeof sourceFilter !== 'string') {
                 throw new Error('authzExplorerUiSlice.setSourceFilter: sourceFilter string required');
             }
             return { ...state, sourceFilter };
         }
         if (event.type === events.SET_PEOPLE_QUERY) {
-            const peopleQuery = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).peopleQuery;
+            const payload = uiPayload(event.payload);
+            const peopleQuery = payload === null ? undefined : payload.peopleQuery;
             if (typeof peopleQuery !== 'string') {
                 throw new Error('authzExplorerUiSlice.setPeopleQuery: peopleQuery string required');
             }
             return { ...state, peopleQuery };
         }
         if (event.type === events.SET_OBJECTS_QUERY) {
-            const objectsQuery = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).objectsQuery;
+            const payload = uiPayload(event.payload);
+            const objectsQuery = payload === null ? undefined : payload.objectsQuery;
             if (typeof objectsQuery !== 'string') {
                 throw new Error('authzExplorerUiSlice.setObjectsQuery: objectsQuery string required');
             }
             return { ...state, objectsQuery };
         }
         if (event.type === events.OPEN_WHY) {
-            const userId = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).userId;
-            const objectType = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).objectType;
-            const objectKey = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).objectKey;
+            const payload = uiPayload(event.payload);
+            const userId = payload === null ? undefined : payload.userId;
+            const objectType = payload === null ? undefined : payload.objectType;
+            const objectKey = payload === null ? undefined : payload.objectKey;
             if (typeof userId !== 'string' || userId.length === 0) {
                 throw new Error('authzExplorerUiSlice.openWhy: userId required');
             }
@@ -201,7 +216,8 @@ export const authzExplorerUiSlice = createSlice({
             };
         }
         if (event.type === events.SET_MOBILE_PANE) {
-            const mobilePane = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).mobilePane;
+            const payload = uiPayload(event.payload);
+            const mobilePane = payload === null ? undefined : payload.mobilePane;
             if (mobilePane !== 'picker' && mobilePane !== 'detail') {
                 throw new Error('authzExplorerUiSlice.setMobilePane: picker|detail');
             }
@@ -226,3 +242,14 @@ export const authzExplorerUiSlice = createSlice({
         return state;
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/authz_explorer_by_user': typeof authzExplorerByUserOp;
+        'frontend/authz_explorer_by_object': typeof authzExplorerByObjectOp;
+        'frontend/authz_explorer_why': typeof authzExplorerWhyOp;
+        'frontend/authz_explorer_objects': typeof authzExplorerObjectsOp;
+        'frontend/authz_explorer_revoke': typeof authzExplorerRevokeOp;
+        'frontend/authz_explorer_ui': typeof authzExplorerUiSlice;
+    }
+}

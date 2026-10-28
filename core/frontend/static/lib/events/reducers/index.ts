@@ -7,6 +7,7 @@
  */
 
 import type { PlatformEvent } from '../contract.js';
+import type { PlatformBusState } from '../bus-state.js';
 import { authReducer, initialAuthState } from './auth.js';
 import { themeReducer, initialThemeState } from './theme.js';
 import { i18nReducer, initialI18nState } from './i18n.js';
@@ -53,46 +54,125 @@ export const coreSlices = Object.freeze({
  * @param {Object<string, {reducer: Function, initial: any}>} slices
  * @returns {{ reducer: (state: object, event: object) => object, initialState: object }}
  */
+// reducer — метод: фабрики с разными S собираются в одну коллекцию (бивариантность параметров метода).
 export interface SliceDef<S = unknown> {
-    reducer: (state: S, event: PlatformEvent) => S;
+    reducer(state: S, event: PlatformEvent): S;
     initial: S;
 }
 
 type SliceMap = Record<string, SliceDef>;
 type StateOf<T extends SliceMap> = { [K in keyof T]: ReturnType<T[K]['reducer']> };
+type SliceKey<T extends SliceMap> = Extract<keyof T, string>;
+
+function ownedSliceKeys<T extends SliceMap>(slices: T): SliceKey<T>[] {
+    return Object.keys(slices).filter((key): key is SliceKey<T> => Object.prototype.hasOwnProperty.call(slices, key));
+}
+
+function isCombinedState<T extends SliceMap>(value: Record<string, unknown>, slices: T): value is StateOf<T> {
+    return ownedSliceKeys(slices).every((key) => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function requireSlice<T extends SliceMap>(slices: T, key: SliceKey<T>): SliceDef {
+    const slice = slices[key];
+    if (slice === undefined) {
+        throw new Error(`combineReducers: slice "${key}" missing`);
+    }
+    return slice;
+}
 
 export function combineReducers<T extends SliceMap>(slices: T): {
     reducer: (state: StateOf<T>, event: PlatformEvent) => StateOf<T>;
     initialState: StateOf<T>;
 } {
-    const keys = Object.keys(slices) as Array<keyof T>;
-    const initialState = {} as Record<string, unknown>;
+    const keys = ownedSliceKeys(slices);
+    const initialState: Record<string, unknown> = {};
     for (const key of keys) {
-        initialState[key as string] = (slices[key] as SliceDef).initial;
+        initialState[key] = requireSlice(slices, key).initial;
+    }
+    if (!isCombinedState(initialState, slices)) {
+        throw new Error('combineReducers: initial state is missing a slice');
     }
 
-    function rootReducer(state: Record<string, unknown>, event: PlatformEvent): Record<string, unknown> {
+    function rootReducer(state: StateOf<T>, event: PlatformEvent): StateOf<T> {
         let changed = false;
         const next: Record<string, unknown> = {};
         for (const key of keys) {
-            const prev = state[key as string];
-            const slice = (slices[key] as SliceDef).reducer(prev, event);
-            next[key as string] = slice;
-            if (slice !== prev) changed = true;
+            const prev = state[key];
+            const reduced = requireSlice(slices, key).reducer(prev, event);
+            next[key] = reduced;
+            if (reduced !== prev) changed = true;
         }
-        return changed ? next : state;
+        if (!changed) return state;
+        if (!isCombinedState(next, slices)) {
+            throw new Error('combineReducers: next state is missing a slice');
+        }
+        return next;
     }
 
-    return { reducer: rootReducer as (state: StateOf<T>, event: PlatformEvent) => StateOf<T>, initialState: initialState as StateOf<T> };
+    return { reducer: rootReducer, initialState };
+}
+
+function sliceAt(slices: SliceMap, key: string): SliceDef {
+    const slice = slices[key];
+    if (slice === undefined) {
+        throw new Error(`buildPlatformReducer: slice "${key}" missing`);
+    }
+    return slice;
 }
 
 /**
  * Сборка root reducer из core slices плюс набор сервисных.
+ * Сервисные слайсы подключаются списком фабрик во время старта, поэтому
+ * их ключи остаются в индексной части `PlatformBusState`.
  */
-export function buildPlatformReducer<T extends SliceMap>(extraSlices: T = {} as T): {
-    reducer: (state: StateOf<typeof coreSlices & T>, event: PlatformEvent) => StateOf<typeof coreSlices & T>;
-    initialState: StateOf<typeof coreSlices & T>;
+export function buildPlatformReducer(extraSlices: SliceMap = {}): {
+    reducer: (state: PlatformBusState, event: PlatformEvent) => PlatformBusState;
+    initialState: PlatformBusState;
 } {
-    const all = { ...coreSlices, ...extraSlices };
-    return combineReducers(all) as ReturnType<typeof buildPlatformReducer<T>>;
+    for (const key of Object.keys(extraSlices)) {
+        if (Object.hasOwn(coreSlices, key)) {
+            throw new Error(`buildPlatformReducer: extra slice "${key}" replaces a core slice`);
+        }
+    }
+    const slices: SliceMap = { ...coreSlices, ...extraSlices };
+    const initialState: PlatformBusState = {
+        auth: coreSlices.auth.initial,
+        theme: coreSlices.theme.initial,
+        i18n: coreSlices.i18n.initial,
+        notify: coreSlices.notify.initial,
+        modals: coreSlices.modals.initial,
+        bottomSheets: coreSlices.bottomSheets.initial,
+        network: coreSlices.network.initial,
+        router: coreSlices.router.initial,
+        pwa: coreSlices.pwa.initial,
+        ui: coreSlices.ui.initial,
+        icon: coreSlices.icon.initial,
+        fileTypes: coreSlices.fileTypes.initial,
+        files: coreSlices.files.initial,
+        companies: coreSlices.companies.initial,
+        team: coreSlices.team.initial,
+        calendar: coreSlices.calendar.initial,
+        mail: coreSlices.mail.initial,
+        notifications: coreSlices.notifications.initial,
+    };
+    for (const key of Object.keys(extraSlices)) {
+        initialState[key] = sliceAt(extraSlices, key).initial;
+    }
+    const keys = Object.keys(slices);
+
+    function reducer(state: PlatformBusState, event: PlatformEvent): PlatformBusState {
+        let changed = false;
+        const next: PlatformBusState = { ...state };
+        for (const key of keys) {
+            const prev = state[key];
+            const reduced = sliceAt(slices, key).reducer(prev, event);
+            if (reduced !== prev) {
+                next[key] = reduced;
+                changed = true;
+            }
+        }
+        return changed ? next : state;
+    }
+
+    return { reducer, initialState };
 }

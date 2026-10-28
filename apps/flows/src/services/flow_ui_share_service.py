@@ -112,7 +112,7 @@ class FlowUIShareService:
             )
         except Exception as exc:
             await self._flow_access.sync_share_revoked(grant.grant_id)
-            _ = await FlowUIShareGrant.revoke(
+            _ = await FlowUIShareGrant.revoke_by_creator(
                 grant_id=grant.grant_id,
                 company_id=company_id,
                 created_by_user_id=user_id,
@@ -146,7 +146,7 @@ class FlowUIShareService:
         company_id: str,
         user_id: str,
     ) -> bool:
-        revoked = await FlowUIShareGrant.revoke(
+        revoked = await FlowUIShareGrant.revoke_by_creator(
             grant_id=grant_id,
             company_id=company_id,
             created_by_user_id=user_id,
@@ -165,7 +165,7 @@ class FlowUIShareService:
         require_editor: bool = False,
         user_id: str | None = None,
     ) -> FlowUIShareGrant:
-        grant = await FlowUIShareGrant.get_active(grant_id)
+        grant = await FlowUIShareGrant.active_for_grant(grant_id)
         if grant is None:
             raise PermissionError("Flow UI share grant is missing, expired or revoked")
         if (
@@ -203,7 +203,7 @@ class FlowUIShareService:
         grant_id: str,
         origin: str,
     ) -> FlowUIShareExchangeResponse:
-        grant = await FlowUIShareGrant.get_active(grant_id)
+        grant = await FlowUIShareGrant.active_for_grant(grant_id)
         if grant is None:
             raise PermissionError("Flow UI share grant is missing, expired or revoked")
         _ = await self.authorize(

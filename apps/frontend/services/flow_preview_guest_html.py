@@ -3,25 +3,8 @@
 from __future__ import annotations
 
 import html
-import json
 
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
-
-# Нативный ESM: bare `lit` и `@platform/lib/...` задаются import map (как на SPA через бандлер).
-_FLOW_PREVIEW_IMPORT_MAP = (
-    '<script type="importmap">'
-    + json.dumps(
-        {
-            "imports": {
-                "lit": "/static/core/assets/js/lit/lit.min.js",
-                "lit/": "/static/core/assets/js/lit/",
-                "@platform/lib/": "/static/core/lib/",
-            },
-        },
-        separators=(",", ":"),
-    )
-    + "</script>"
-)
 
 # Как `:root` в `core/frontend/static/assets/css/tokens.css` (тёмная тема) — фон страницы без подключения CSS.
 _FLOW_PREVIEW_PAGE_BG = """
@@ -145,7 +128,6 @@ def build_flow_preview_guest_html(
   <meta name="robots" content="noindex, nofollow">
   <title>{safe_title}</title>
   <style>{_FLOW_PREVIEW_PAGE_BG}</style>
-  {_FLOW_PREVIEW_IMPORT_MAP}
 </head>
 <body>
 <script type="module"

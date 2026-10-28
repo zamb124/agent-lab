@@ -87,7 +87,7 @@ async def test_work_item_assigned_enqueues_with_write_back(
     assert session_links[0].session_id == f"{flow_id}:work_item:{work_item.work_item_id}"
     assert session_links[0].flow_id == flow_id
 
-    comments = await WorkItemComment.list_comments("system", work_item.work_item_id)
+    comments = await WorkItemComment.list_for_work_item("system", work_item.work_item_id)
     assert any("Агент взял задачу" in comment.text for comment in comments)
 
     await client.delete(f"/flows/api/v1/flows/{flow_id}")

@@ -64,7 +64,7 @@ async def test_discover_sitemap_example_com_real_http(crawl_search_di, search_sy
     assert due
     domain_row = due[0]
 
-    profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+    profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
     entries = await discover_sitemap_urls(
         domain_row.domain,
         timeout_seconds=get_search_settings().crawl.http_timeout_seconds,

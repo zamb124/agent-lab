@@ -979,7 +979,7 @@ class TestAtConfirmReserve:
             auto_validate=None,
         )
         bin_a = await _bin(env, f"AC{unique_id}")
-        _ = await StockPutawayRule.create_rule(
+        _ = await StockPutawayRule.create(
             company_id=env.company_id,
             warehouse_id=env.warehouse.warehouse_id,
             location_in_id=env.warehouse.view_location_id,

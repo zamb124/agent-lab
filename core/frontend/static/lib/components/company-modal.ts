@@ -18,6 +18,21 @@ import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
 import type { CompaniesState } from '../events/reducers/companies.js';
 import type { SelectController } from '../events/select-controller.js';
 import { formatCompanySubdomainLabel } from '../utils/company-url.js';
+import { isPlainRecord } from '../events/payload.js';
+
+function payloadString(payload: unknown, field: string): string | undefined {
+    if (!isPlainRecord(payload)) return undefined;
+    const value = payload[field];
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function inputValue(event: Event): string {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('company-modal: input required');
+    }
+    return target.value;
+}
 
 const TRANSLIT: Record<string, string> = {
     'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
@@ -91,29 +106,29 @@ export class CompanyModal extends PlatformFormModal {
         this.slugTouched = false;
         this.slugChecking = false;
         this.error = '';
-        this._slugChecksSel = this.select((s) => (s.companies as CompaniesState).slugChecks);
+        this._slugChecksSel = this.select((s) => s.companies.slugChecks);
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
         this.useEvent(COMPANIES_EVENTS.SLUG_CHECKED, (e) => {
-            const slug = (e.payload as { slug?: string } | null)?.slug;
+            const slug = payloadString(e.payload, 'slug');
             if (slug === this.companySlug) {
                 this.slugChecking = false;
             }
         });
         this.useEvent(COMPANIES_EVENTS.SLUG_CHECK_FAILED, (e) => {
-            const slug = (e.payload as { slug?: string } | null)?.slug;
+            const slug = payloadString(e.payload, 'slug');
             if (slug === this.companySlug) {
                 this.slugChecking = false;
-                this.error = (e.payload as { message?: string } | null)?.message
+                this.error = payloadString(e.payload, 'message')
                     || (this.t('company.slug_check_error') || 'company.slug_check_error');
             }
         });
         this.useEvent(COMPANIES_EVENTS.CREATED, (e) => {
             this.loading = false;
             this.closeAfterSave();
-            const url = (e.payload as { redirect_url?: string } | null)?.redirect_url;
+            const url = payloadString(e.payload, 'redirect_url');
             if (url) {
                 window.location.href = url;
             } else {
@@ -122,7 +137,7 @@ export class CompanyModal extends PlatformFormModal {
         });
         this.useEvent(COMPANIES_EVENTS.CREATE_FAILED, (e) => {
             this.loading = false;
-            this.error = (e.payload as { message?: string } | null)?.message
+            this.error = payloadString(e.payload, 'message')
                 || (this.t('company.error_create') || 'company.error_create');
         });
     }
@@ -143,8 +158,9 @@ export class CompanyModal extends PlatformFormModal {
     _slugCheck(): { available: boolean } | null {
         const slug = this.companySlug;
         if (!slug || slug.length < 3) return null;
-        const checks = (this._slugChecksSel && this._slugChecksSel.value) || {};
-        return checks[slug] || null;
+        const checks = this._slugChecksSel.value;
+        const found = checks[slug];
+        return found === undefined ? null : found;
     }
 
     _slugError(): string {
@@ -161,7 +177,7 @@ export class CompanyModal extends PlatformFormModal {
     }
 
     _onName(e: Event) {
-        this.companyName = (e.target as HTMLInputElement).value;
+        this.companyName = inputValue(e);
         this.isDirty = true;
         if (!this.slugTouched) {
             this.companySlug = _slugify(this.companyName);
@@ -170,7 +186,7 @@ export class CompanyModal extends PlatformFormModal {
     }
 
     _onSlug(e: Event) {
-        this.companySlug = (e.target as HTMLInputElement).value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+        this.companySlug = inputValue(e).toLowerCase().replace(/[^a-z0-9-]/g, '');
         this.slugTouched = true;
         this.isDirty = true;
         this._scheduleSlugCheck();
@@ -180,8 +196,8 @@ export class CompanyModal extends PlatformFormModal {
         if (this._debounceTimer) clearTimeout(this._debounceTimer);
         this._debounceTimer = setTimeout(() => {
             if (!this.companySlug || this.companySlug.length < 3) return;
-            const checks = (this._slugChecksSel && this._slugChecksSel.value) || {};
-            if (checks[this.companySlug]) return;
+            const checks = this._slugChecksSel.value;
+            if (checks[this.companySlug] !== undefined) return;
             this.slugChecking = true;
             this.dispatch(COMPANIES_EVENTS.SLUG_CHECK_REQUESTED, { slug: this.companySlug });
         }, 400);

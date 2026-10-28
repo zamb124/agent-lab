@@ -1,6 +1,6 @@
 /**
  * Копирование текста в буфер обмена.
- * Clipboard API недоступен или падает на HTTP вне localhost — используется textarea + execCommand.
+ * Clipboard API отсутствует на HTTP вне localhost — тогда используется textarea + execCommand; отказ API пробрасывается.
  */
 
 /**
@@ -13,12 +13,8 @@ export async function copyTextToClipboard(text: string): Promise<void> {
     }
 
     if (navigator.clipboard?.writeText) {
-        try {
-            await navigator.clipboard.writeText(text);
-            return;
-        } catch {
-            // NotAllowedError на небезопасном origin (HTTP + не localhost)
-        }
+        await navigator.clipboard.writeText(text);
+        return;
     }
 
     const textarea = document.createElement('textarea');

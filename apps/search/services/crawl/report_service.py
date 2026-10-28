@@ -29,7 +29,7 @@ class CrawlReportService:
         self._rag_client: RagClient = rag_client
 
     async def list_profiles(self, *, limit: int, offset: int) -> OffsetPage[CrawlProfileWithIndex]:
-        return await CrawlProfile.list_page(limit=limit, offset=offset)
+        return await CrawlProfile.with_index_page_by_crawl_profile_id(limit=limit, offset=offset)
 
     async def list_domains(
         self,
@@ -39,8 +39,8 @@ class CrawlReportService:
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlDomain]:
-        _ = await CrawlProfile.get_with_index(crawl_profile_id)
-        return await CrawlDomain.list_page(
+        _ = await CrawlProfile.require_with_index(crawl_profile_id)
+        return await CrawlDomain.page_by_domain(
             crawl_profile_id=crawl_profile_id,
             status=status,
             limit=limit,
@@ -48,7 +48,7 @@ class CrawlReportService:
         )
 
     async def get_profile_summary(self, crawl_profile_id: str) -> CrawlProfileSummary:
-        profile = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile = await CrawlProfile.require_with_index(crawl_profile_id)
         now = datetime.now(UTC)
         domain_counts = await CrawlDomain.count_by_status(crawl_profile_id)
         url_counts = await CrawlUrl.count_by_status_for_profile(crawl_profile_id)
@@ -85,8 +85,8 @@ class CrawlReportService:
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlJob]:
-        _ = await CrawlProfile.get_with_index(crawl_profile_id)
-        return await CrawlJob.list_page(
+        _ = await CrawlProfile.require_with_index(crawl_profile_id)
+        return await CrawlJob.page_by_started_at_desc(
             crawl_profile_id=crawl_profile_id,
             status=status,
             limit=limit,
@@ -105,7 +105,7 @@ class CrawlReportService:
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlUrlListItem]:
-        _ = await CrawlProfile.get_with_index(crawl_profile_id)
+        _ = await CrawlProfile.require_with_index(crawl_profile_id)
         return await CrawlUrl.list_page_for_profile(
             crawl_profile_id=crawl_profile_id,
             crawl_status=crawl_status,
@@ -122,8 +122,8 @@ class CrawlReportService:
         crawl_url_id: str,
         crawl_profile_id: str,
     ) -> CrawlUrlDetail:
-        profile = await CrawlProfile.get_with_index(crawl_profile_id)
-        url_item, extract_title, extract_markdown = await CrawlUrl.get_for_profile(
+        profile = await CrawlProfile.require_with_index(crawl_profile_id)
+        url_item, extract_title, extract_markdown = await CrawlUrl.require_for_profile(
             crawl_url_id,
             crawl_profile_id,
         )

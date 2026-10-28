@@ -20,56 +20,38 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 CORE_FRONTEND_MOUNT_PATH = "/static/core"
+CORE_LIB_MOUNT_PATH = "/static/core/lib"
 _DEFAULT_EXCLUDED_PREFIXES: tuple[str, ...] = ("api/", "ui/static/", "ws", "assets/")
 
-# Embed-виджеты: стабильные публичные URL (их вставляют внешние сайты и CDN),
-# обслуживаются собранными self-contained бандлами из core/frontend/embed-dist.
-EMBED_BUNDLE_ROUTES: tuple[str, ...] = (
-    "lib/embed-flow-ui/flow-ui-embed-autoload.js",
-    "lib/flow-ui/shell/embed-autoload.js",
-    "lib/embed-chat/humanitec-embed-autoload.js",
-)
 
+def mount_core_frontend(app: FastAPI) -> None:
+    """Монтирует `/static/core/lib` на собранный `core/frontend/embed-dist`, затем `/static/core` на `core/frontend/static`.
 
-def register_embed_bundle_routes(app: FastAPI) -> None:
-    """Отдаёт embed-бандлы (`npm run build:ui`) по стабильным URL `/static/core/lib/...`.
-
-    Регистрируется ДО mount `/static/core`: внешний сайт получает self-contained
-    бандл (весь граф и lit инлайнены — import-map на внешнем сайте нет), при этом
-    `.ts`-миграция исходников не ломает runtime. Без сборки (unbuilt dev-clone)
-    отдаётся исходный файл — поведение до бандлинга.
+    Порядок тот же, что у granian (`scripts/run.py`, Helm): под `/static/core/lib` браузер получает
+    только результат `npm run build:ui` — embed-бандлы по стабильным URL для внешних сайтов и не-TS
+    ассеты lib/ (css, AudioWorklet); `.ts`-исходники не отдаются. Без сборки приложение не стартует.
     """
-    root = get_project_root()
-    static_root = root / "core" / "frontend" / "static"
-    dist_root = root / "core" / "frontend" / "embed-dist"
-
-    def _make_handler(rel: str):
-        async def serve_embed_bundle() -> FileResponse:
-            bundled = dist_root / rel
-            if bundled.is_file():
-                return FileResponse(bundled)
-            return FileResponse(static_root / rel)
-
-        return serve_embed_bundle
-
-    for rel in EMBED_BUNDLE_ROUTES:
-        app.get(f"{CORE_FRONTEND_MOUNT_PATH}/{rel}", include_in_schema=False)(
-            _make_handler(rel)
-        )
+    frontend_root = get_project_root() / "core" / "frontend"
+    embed_dist = frontend_root / "embed-dist"
+    if not embed_dist.is_dir():
+        raise FileNotFoundError(f"embed bundles are not built: {embed_dist} (run make ui-build)")
+    static_root = frontend_root / "static"
+    if not static_root.is_dir():
+        raise FileNotFoundError(f"core/frontend/static not found: {static_root}")
+    app.mount(CORE_LIB_MOUNT_PATH, StaticFiles(directory=str(embed_dist)), name="core_frontend_lib")
+    app.mount(CORE_FRONTEND_MOUNT_PATH, StaticFiles(directory=str(static_root)), name="core_frontend")
 
 
 def resolve_ui_static_dir(ui_dir: Path) -> Path:
-    """Директория, которую отдаёт mount статики сервиса.
+    """Директория, которую отдаёт mount статики сервиса: `apps/<svc>/ui-dist/` из `npm run build:ui`.
 
-    `apps/<svc>/ui-dist/` (esbuild-бандл `npm run build:ui`) приоритетнее
-    `apps/<svc>/ui/`: после TS-миграции браузер получает только собранный
-    бандл и скопированные ассеты; исходники `.ts` в прод не попадают.
-    Без сборки (чистый dev-clone) mount остаётся на `ui/`.
+    Браузер получает только бандл и скопированные ассеты; `.ts`-исходники `ui/` не отдаются.
+    Без сборки приложение не стартует.
     """
     dist_dir = ui_dir.parent / "ui-dist"
-    if (dist_dir / "index.js").is_file():
-        return dist_dir
-    return ui_dir
+    if not (dist_dir / "index.js").is_file():
+        raise FileNotFoundError(f"UI bundle is not built: {dist_dir} (run make ui-build)")
+    return dist_dir
 
 
 def mount_service_spa(
@@ -80,7 +62,7 @@ def mount_service_spa(
     excluded_prefixes: Sequence[str] = _DEFAULT_EXCLUDED_PREFIXES,
     extra_static_mounts: Sequence[tuple[str, Path, str]] = (),
 ) -> None:
-    """Монтирует `/static/core`, `/{segment}/ui/static` и catch-all `/{segment}/{path}` → index.html.
+    """Монтирует core-статику (`mount_core_frontend`), `/{segment}/ui/static` и catch-all `/{segment}/{path}` → index.html.
 
     `excluded_prefixes` — под-пути, которые SPA не обслуживает (API, статика, WS):
     для них catch-all отвечает 404, а не index.html.
@@ -90,15 +72,7 @@ def mount_service_spa(
     if not index_file.is_file():
         raise FileNotFoundError(f"SPA index.html not found: {index_file}")
 
-    core_frontend_path = get_project_root() / "core" / "frontend" / "static"
-    if not core_frontend_path.is_dir():
-        raise FileNotFoundError(f"core/frontend/static not found: {core_frontend_path}")
-    register_embed_bundle_routes(app)
-    app.mount(
-        CORE_FRONTEND_MOUNT_PATH,
-        StaticFiles(directory=str(core_frontend_path)),
-        name="core_frontend",
-    )
+    mount_core_frontend(app)
     app.mount(
         f"/{public_segment}/ui/static",
         StaticFiles(directory=str(ui_static_dir), html=True),

@@ -325,7 +325,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
                 ns_name
             )
             relationship_types = (
-                await RelationshipType.all_with_prompt(
+                await RelationshipType.list_with_prompt(
                     require_active_company().company_id,
                 )
             )
@@ -377,7 +377,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
                 ns_name
             )
             relationship_types = (
-                await RelationshipType.all_with_prompt(
+                await RelationshipType.list_with_prompt(
                     require_active_company().company_id,
                 )
             )
@@ -410,7 +410,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
                 ns_name
             )
             relationship_types = (
-                await RelationshipType.all_with_prompt(
+                await RelationshipType.list_with_prompt(
                     require_active_company().company_id,
                 )
             )
@@ -461,7 +461,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
 
         with _system_company_context():
-            all_types = await RelationshipType.in_company(
+            all_types = await RelationshipType.query_by_system_in_company(
                 require_active_company().company_id,
                 include_system=True,
             ).all()
@@ -473,13 +473,13 @@ class TestUserEditsPropagateToAnalyzePipeline:
             original_prompt = mentions_row.prompt
             try:
                 mentions_row.prompt = new_prompt
-                _ = await RelationshipType.update_by_company_and_type_id(mentions_row)
+                _ = await RelationshipType.update_loaded_by_company_and_type_id(mentions_row)
 
                 entity_types = await crm_di.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
                     ns_name
                 )
                 relationship_types = (
-                    await RelationshipType.all_with_prompt(
+                    await RelationshipType.list_with_prompt(
                     require_active_company().company_id,
                 )
                 )
@@ -490,7 +490,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
                 assert marker in composite, "правка relationship prompt должна попадать в analyze"
             finally:
                 mentions_row.prompt = original_prompt
-                _ = await RelationshipType.update_by_company_and_type_id(mentions_row)
+                _ = await RelationshipType.update_loaded_by_company_and_type_id(mentions_row)
 
 
 @pytest.mark.timeout(60)

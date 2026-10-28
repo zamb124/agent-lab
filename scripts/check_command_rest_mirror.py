@@ -55,6 +55,7 @@ FACTORY_CANON_SERVICES = {
     "secrets",
     "scheduler",
     "stock",
+    "voice",
 }
 
 COMMAND_WS_SERVICES = {
@@ -115,34 +116,49 @@ COMMAND_WS_HTTP_ALLOWLIST: frozenset[str] = frozenset(
 )
 
 CORE_FACTORY_RESOURCES = ROOT / "core" / "frontend" / "static" / "lib" / "events" / "resources"
-CORE_RAG_FACTORY_FILES = (
-    "rag-namespaces.resource.js",
-    "rag-documents.resource.js",
-    "rag-document-status.resource.js",
-    "rag-search.resource.js",
-    "rag-providers.resource.js",
-)
-CORE_OFFICE_FACTORY_FILES = (
-    "office-catalog-items.resource.js",
-    "office-documents-browse.resource.js",
-)
-CORE_FLOWS_FACTORY_FILES = (
-    "flows-agent-toolkits.resource.js",
-    "flows-flows-list.resource.js",
-)
-# Сервисы без своего UI: их фабрики живут в core и проверяются под владельцем.
-CORE_OWNER_FACTORY_FILES: dict[str, tuple[str, ...]] = {
-    "secrets": (
-        "secrets-variables.resource.js",
-        "secrets-variable-versions.resource.js",
-        "secrets-variables-resolve.resource.js",
-    ),
-    "scheduler": ("scheduler-schedules.resource.js",),
-    "search": (
-        "search-crawl-report.resource.js",
-        "search-providers.resource.js",
-    ),
+# Фабрики core: файл → сервис, в чьём прогоне он проверяется; REST-зеркало ищется у владельца из имени фабрики.
+CORE_FACTORY_FILE_SERVICE: dict[str, str] = {
+    "agent-devices.resource.ts": "frontend",
+    "flows-agent-toolkits.resource.ts": "flows",
+    "flows-flows-list.resource.ts": "flows",
+    "office-catalog-items.resource.ts": "office",
+    "office-documents-browse.resource.ts": "office",
+    "rag-document-status.resource.ts": "rag",
+    "rag-documents.resource.ts": "rag",
+    "rag-namespaces.resource.ts": "rag",
+    "rag-providers.resource.ts": "rag",
+    "rag-search.resource.ts": "rag",
+    "scheduler-schedules.resource.ts": "scheduler",
+    "search-crawl-report.resource.ts": "search",
+    "search-providers.resource.ts": "search",
+    "secrets-variable-versions.resource.ts": "secrets",
+    "secrets-variables-resolve.resource.ts": "secrets",
+    "secrets-variables.resource.ts": "secrets",
+    "voice-company-pronunciation-rules.resource.ts": "voice",
+    "voice-company-providers.resource.ts": "voice",
+    "voice-providers-catalog.resource.ts": "voice",
+    "work-items.resource.ts": "worktracker",
+    "work-queues.resource.ts": "worktracker",
 }
+
+
+def _core_factory_files_by_service() -> dict[str, list[Path]]:
+    on_disk = {path.name for path in CORE_FACTORY_RESOURCES.glob("*.resource.ts")}
+    if not on_disk:
+        raise SystemExit(f"check_command_rest_mirror: {CORE_FACTORY_RESOURCES.relative_to(ROOT)} без *.resource.ts — гейт слепой")
+    unmapped = sorted(on_disk - CORE_FACTORY_FILE_SERVICE.keys())
+    missing = sorted(CORE_FACTORY_FILE_SERVICE.keys() - on_disk)
+    if unmapped or missing:
+        raise SystemExit(
+            "check_command_rest_mirror: CORE_FACTORY_FILE_SERVICE расходится с диском — "
+            f"без сервиса: {unmapped}, нет на диске: {missing}"
+        )
+    by_service: dict[str, list[Path]] = {}
+    for file_name, service in sorted(CORE_FACTORY_FILE_SERVICE.items()):
+        by_service.setdefault(service, []).append(CORE_FACTORY_RESOURCES / file_name)
+    return by_service
+
+
 # Все мигрированные на event-канон сервисы. Парсер `_resolve_external_prefixes`
 # умеет резолвить вложенные `include_router(child, prefix='/...')`-цепочки
 # (используются в `apps/sync/api/__init__.py::get_api_router` и
@@ -420,6 +436,10 @@ def _collect_fastapi_routes(svc_dir: Path) -> set[tuple[str, str]]:
     for api_root_path in api_roots:
         _scan_routers_in_dir(api_root_path, service_api_prefix, routes)
 
+    # 1a. `pages_routers` из main.py `create_service_app` монтирует под `/<public>` + prefix роутера.
+    for module_file in _pages_router_files(main_py):
+        _scan_router_file(module_file, f"/{public_name}", routes)
+
     # 1b. Сервисы, регистрирующие роутеры прямо в main.py (например,
     #     provider_litserve через `_register_model_management_api`):
     #     APIRouter(prefix=...) в нём указан полный путь, без сервисного
@@ -443,6 +463,36 @@ def _collect_fastapi_routes(svc_dir: Path) -> set[tuple[str, str]]:
         _scan_router_file_with_mount(core_root / "files" / "api.py", files_mount, routes)
 
     return routes
+
+
+PAGES_ROUTERS_RE = re.compile(r"pages_routers\s*=\s*\[(?P<body>.*?)\]", re.S)
+APPS_IMPORT_RE = re.compile(
+    r"^from\s+(?P<module>apps\.[\w.]+)\s+import\s+(?:\((?P<multi>[^)]*)\)|(?P<single>[^\n]+))",
+    re.M,
+)
+
+
+def _pages_router_files(main_py: Path) -> list[Path]:
+    """Модули роутеров из `pages_routers=[...]` в main.py сервиса (импорты `from apps... import router as X`)."""
+    if not main_py.exists():
+        return []
+    text = main_py.read_text(encoding="utf-8")
+    block = PAGES_ROUTERS_RE.search(text)
+    if block is None:
+        return []
+    names = {name.strip() for name in block.group("body").split(",") if name.strip()}
+    files: list[Path] = []
+    for match in APPS_IMPORT_RE.finditer(text):
+        imported = match.group("multi") or match.group("single")
+        for part in imported.split(","):
+            alias = part.strip().split(" as ")[-1].strip()
+            if alias not in names:
+                continue
+            module_file = ROOT / (match.group("module").replace(".", "/") + ".py")
+            if not module_file.is_file():
+                raise SystemExit(f"check_command_rest_mirror: модуль pages-роутера {alias} не найден — {module_file.relative_to(ROOT)}")
+            files.append(module_file)
+    return files
 
 
 def _scan_router_file_with_mount(py: Path, mount_prefix: str, routes: set[tuple[str, str]]) -> None:
@@ -668,6 +718,7 @@ def main() -> int:
             routes_by_service[service_name] = _collect_fastapi_routes(APPS / service_name)
         return routes_by_service[service_name]
 
+    core_factory_files = _core_factory_files_by_service()
     for svc_dir in services:
         svc = svc_dir.name
         if args.app and svc != args.app:
@@ -682,22 +733,8 @@ def main() -> int:
         routes_total += len(_routes_of(svc))
         _collect_publish_event_types(svc_dir)
 
-        factory_files = list(sorted(p for g in ("*.js", "*.ts") for p in ui_resources.rglob(g))) if ui_resources.exists() else []
-        if svc == "worktracker" and CORE_FACTORY_RESOURCES.exists():
-            factory_files.extend(sorted(p for g in ("work-items.resource.js", "work-items.resource.ts") for p in CORE_FACTORY_RESOURCES.glob(g)))
-            factory_files.extend(sorted(p for g in ("work-queues.resource.js", "work-queues.resource.ts") for p in CORE_FACTORY_RESOURCES.glob(g)))
-        if svc == "rag" and CORE_FACTORY_RESOURCES.exists():
-            for factory_name in CORE_RAG_FACTORY_FILES:
-                factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
-        if svc == "office" and CORE_FACTORY_RESOURCES.exists():
-            for factory_name in CORE_OFFICE_FACTORY_FILES:
-                factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
-        if svc == "flows" and CORE_FACTORY_RESOURCES.exists():
-            for factory_name in CORE_FLOWS_FACTORY_FILES:
-                factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
-        if svc in CORE_OWNER_FACTORY_FILES and CORE_FACTORY_RESOURCES.exists():
-            for factory_name in CORE_OWNER_FACTORY_FILES[svc]:
-                factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
+        factory_files = sorted(ui_resources.rglob("*.ts")) if ui_resources.exists() else []
+        factory_files.extend(core_factory_files.get(svc, []))
         if not factory_files:
             continue
 

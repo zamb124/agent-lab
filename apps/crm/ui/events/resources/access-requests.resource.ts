@@ -68,3 +68,10 @@ export const accessRequestUpdateOp = createAsyncOp({
     commandType: 'crm/access_requests/update_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/access-requests/:access_request_id' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/access_requests': typeof accessRequestsResource;
+        'crm/access_request_update': typeof accessRequestUpdateOp;
+    }
+}

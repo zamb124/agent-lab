@@ -9,6 +9,7 @@
  * ``flowUi.resize``, ``flowUi.openUrl``; декларативно — ``data-bind`` (textContent) и ``data-show``.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
 import { STATE_PATH_PATTERN } from '../protocol/constants.js';
 import { valueAtPath } from './templating.js';
 
@@ -52,13 +53,28 @@ const START_TAG_RE = /<[a-zA-Z][^\s/>]*((?:"[^"]*"|'[^']*'|[^'">])*)>/g;
 const ATTRIBUTE_RE = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 const NAMED_CHAR_REFS = Object.freeze({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" });
 
+function namedCharRef(name: string): string | undefined {
+    switch (name) {
+        case 'amp': return NAMED_CHAR_REFS.amp;
+        case 'lt': return NAMED_CHAR_REFS.lt;
+        case 'gt': return NAMED_CHAR_REFS.gt;
+        case 'quot': return NAMED_CHAR_REFS.quot;
+        case 'apos': return NAMED_CHAR_REFS.apos;
+        default: return undefined;
+    }
+}
+
+function capture(value: string | undefined): string {
+    return value === undefined ? '' : value;
+}
+
 function decodeCharRefs(value: string): string {
     return value.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (reference: string, body: string) => {
         if (body[0] === '#') {
             const hex = body[1] === 'x' || body[1] === 'X';
             return String.fromCodePoint(Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10));
         }
-        const named = (NAMED_CHAR_REFS as Record<string, string>)[body.toLowerCase()];
+        const named = namedCharRef(body.toLowerCase());
         return named === undefined ? reference : named;
     });
 }
@@ -71,10 +87,10 @@ function decodeCharRefs(value: string): string {
 export function htmlBoundPaths(source: unknown): string[] {
     const paths: string[] = [];
     const invalid: string[] = [];
-    const markup = String(source).replace(SKIPPED_MARKUP_RE, (_skipped: string, rawTextStart: string | undefined) => rawTextStart ?? '');
+    const markup = String(source).replace(SKIPPED_MARKUP_RE, (_skipped: string, rawTextStart: string | undefined) => capture(rawTextStart));
     for (const tag of markup.matchAll(START_TAG_RE)) {
-        for (const attribute of (tag[1] ?? '').matchAll(ATTRIBUTE_RE)) {
-            const name = (attribute[1] ?? '').toLowerCase();
+        for (const attribute of capture(tag[1]).matchAll(ATTRIBUTE_RE)) {
+            const name = capture(attribute[1]).toLowerCase();
             if (!BINDING_ATTRIBUTES.has(name)) continue;
             const rawValue = attribute[2] ?? attribute[3] ?? attribute[4];
             const path = rawValue === undefined ? '' : decodeCharRefs(rawValue).trim();
@@ -99,10 +115,22 @@ export function htmlBlockState(block: { fields?: unknown; source?: unknown } | R
         const segments = String(path).split('.');
         let target = projection;
         for (const segment of segments.slice(0, -1)) {
-            if (target[segment] === null || typeof target[segment] !== 'object') target[segment] = {};
-            target = target[segment] as Record<string, unknown>;
+            let child = target[segment];
+            if (!isPlainRecord(child)) {
+                const created: Record<string, unknown> = {};
+                target[segment] = created;
+                child = created;
+            }
+            if (!isPlainRecord(child)) {
+                throw new Error('flow-ui: html state path segment is not an object');
+            }
+            target = child;
         }
-        target[segments[segments.length - 1] as string] = value;
+        const leaf = segments[segments.length - 1];
+        if (leaf === undefined) {
+            throw new Error('flow-ui: html state path is empty');
+        }
+        target[leaf] = value;
     }
     return projection;
 }
@@ -138,7 +166,12 @@ export function readThemeTokens(element: Element): Record<string, string> {
             value = getComputedStyle(source).getPropertyValue(name).trim();
             if (value !== '') break;
         }
-        tokens[name] = value !== '' ? value : (FLOW_UI_HTML_THEME_FALLBACKS as Record<string, string>)[name] ?? '';
+        const fallbacks: Readonly<Record<string, string>> = FLOW_UI_HTML_THEME_FALLBACKS;
+        const fallback = fallbacks[name];
+        if (fallback === undefined) {
+            throw new Error(`flow-ui: theme fallback missing for ${name}`);
+        }
+        tokens[name] = value !== '' ? value : fallback;
     }
     return tokens;
 }
@@ -231,9 +264,10 @@ export class HtmlSandboxBridge {
 
     private _onMessage(event: MessageEvent) {
         if (event.source !== this.iframe.contentWindow) return;
-        const message = event.data as Record<string, unknown> | null;
-        if (!message || typeof message !== 'object' || !FRAME_MESSAGE_TYPES.has(String(message.type))) {
-            this.handlers.onError({ message: `flow-ui: unknown sandbox message ${JSON.stringify(message?.type)}`, stack: '' });
+        const message = event.data;
+        const messageType = isPlainRecord(message) ? message.type : undefined;
+        if (!isPlainRecord(message) || !FRAME_MESSAGE_TYPES.has(String(message.type))) {
+            this.handlers.onError({ message: `flow-ui: unknown sandbox message ${JSON.stringify(messageType)}`, stack: '' });
             return;
         }
         if (message.type === 'action') {

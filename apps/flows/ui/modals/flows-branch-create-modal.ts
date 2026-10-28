@@ -1,0 +1,150 @@
+/**
+ * flows-branch-create-modal — создание ветки графа для flow.
+ *
+ * Использует useOp('flows/branch_create'). После успеха страница редактора
+ * загружает обновлённый flow через push `flows/branch/created`.
+ */
+
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import { html, css, nothing } from 'lit';
+import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
+import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/fields/platform-field.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import type {CSSResultGroup, PropertyDeclarations} from 'lit';
+
+const BRANCH_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
+
+export class FlowsBranchCreateModal extends PlatformFormModal {
+    static modalKind = 'flows.branch_create';
+    static i18nNamespace = 'flows';
+
+    static override properties: PropertyDeclarations = {
+        ...PlatformFormModal.properties,
+        flowId: { type: String },
+        _branchId: { state: true },
+        _name: { state: true },
+        _description: { state: true },
+    }
+    declare flowId: string;
+    declare _branchId: string;
+    declare _name: string;
+    declare _description: string;
+;
+
+    static override styles: CSSResultGroup = [
+        ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
+        glassStyles,
+        css`
+            .stack {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+
+            .field-error {
+                margin: calc(var(--space-1) * -1) 0 0;
+                font-size: var(--text-sm);
+                color: var(--error);
+            }
+        `,
+    ];
+    private _createBranch: OpController;
+    private _flows: ResourceController;
+
+    constructor() {
+        super();
+        this.flowId = '';
+        this._branchId = '';
+        this._name = '';
+        this._description = '';
+        this._createBranch = this.useOp('flows/branch_create');
+        this._flows = this.useResource('flows/flows');
+    }
+
+    override renderHeader() {
+        return html`<h3>${this.t('branch_create_modal.title')}</h3>`;
+    }
+
+    override renderSaveHeaderButton() {
+        return html``;
+    }
+
+    override renderBody() {
+        const validId = BRANCH_ID_PATTERN.test(this._branchId);
+        const showIdError = (this._branchId.length as any) > 0 && !validId;
+        return html`
+            <div class="stack">
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('branch_create_modal.field_branch_id')}
+                    .placeholder=${'my_branch'}
+                    .value=${this._branchId}
+                    @change=${(e: CustomEvent) => {
+                        this._branchId = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+                ${showIdError
+                    ? html`<div class="field-error">${this.t('branch_create_modal.err_branch_id_pattern')}</div>`
+                    : nothing}
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('branch_create_modal.field_name')}
+                    .value=${this._name}
+                    @change=${(e: CustomEvent) => {
+                        this._name = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('branch_create_modal.field_description')}
+                    .value=${this._description}
+                    @change=${(e: CustomEvent) => {
+                        this._description = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+        `;
+    }
+
+    override renderFooter() {
+        const validId = BRANCH_ID_PATTERN.test(this._branchId);
+        const validName = (this._name.trim() as any).length > 0;
+        const busy = this._createBranch.busy;
+        return html`
+            <platform-button variant="ghost" @click=${() => this.close()}>
+                ${this.t('common.action_cancel')}
+            </platform-button>
+            <platform-button
+                variant="primary"
+                ?disabled=${!(validId && validName) || busy}
+                @click=${this._onSubmit}
+            >
+                ${this.t('common.action_create')}
+            </platform-button>
+        `;
+    }
+
+    override async _onSubmit() {
+        if (!this.flowId) return;
+        if (this._createBranch.busy) return;
+        await this._createBranch.run({
+            flow_id: this.flowId,
+            branch_id: (this._branchId.trim() as any),
+            name: (this._name.trim() as any),
+            description: this._description,
+        });
+        await this._flows.get(this.flowId);
+        this.closeAfterSave();
+    }
+}
+
+customElements.define('flows-branch-create-modal', FlowsBranchCreateModal);
+registerModalKind(FlowsBranchCreateModal.modalKind, 'flows-branch-create-modal');

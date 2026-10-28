@@ -81,3 +81,11 @@ export const namespaceCreateForm = createForm({
         };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'office/namespaces': typeof namespacesResource;
+        'office/namespace_templates': typeof namespaceTemplatesOp;
+        'office/namespace_create_form': typeof namespaceCreateForm;
+    }
+}

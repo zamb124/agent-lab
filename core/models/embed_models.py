@@ -225,13 +225,14 @@ class EmbedConfig(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_company(
+    async def list_unordered_window_for_company(
         cls,
         company_id: str,
         *,
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Окно виджетов компании: limit и offset. Порядка нет."""
         return await (
             cls.objects.filter(company_id=company_id)
             .limit(limit)

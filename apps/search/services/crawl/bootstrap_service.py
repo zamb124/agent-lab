@@ -37,7 +37,7 @@ class CrawlBootstrapService:
                 domain_count=domain_count,
             )
 
-        profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
+        profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         if not profile_bundle.profile.enabled:
             raise ValueError(f"crawl profile disabled: {crawl_profile_id}")
 

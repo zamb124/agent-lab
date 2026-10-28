@@ -14,8 +14,9 @@ import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../../components/sheets/access-why-sheet.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
-import type { OpController, ResourceController, SliceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, SliceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const OBJECT_TYPES = Object.freeze([
     'wiki_page',
@@ -51,21 +52,75 @@ const TYPE_ICONS = Object.freeze({
 
 const OBJECT_SEARCH_DEBOUNCE_MS = 250;
 
-interface AccessUiController extends SliceController {
-    selectUser(payload: { userId: string }): void;
-    selectObject(payload: { objectType: string; objectKey: string }): void;
-    setMode(payload: { mode: string }): void;
-    setMobilePane(payload: Record<string, unknown>): void;
-    setPeopleQuery(payload: Record<string, unknown>): void;
-    setObjectsQuery(payload: Record<string, unknown>): void;
-    setPickerTypeFilter(payload: Record<string, unknown>): void;
-    setGrantTypeFilter(payload: Record<string, unknown>): void;
-    setSourceFilter(payload: Record<string, unknown>): void;
-    resetPickerSearch(payload?: Record<string, unknown>): void;
-    resetGrantFilters(payload?: Record<string, unknown>): void;
-    openWhy(payload: Record<string, unknown>): void;
-    closeWhy(payload?: Record<string, unknown>): void;
+interface ExplorerUiState {
+    mode: 'people' | 'objects';
+    userId: string;
+    objectType: string;
+    objectKey: string;
+    pickerTypeFilter: string;
+    grantTypeFilter: string;
+    relationFilter: string;
+    sourceFilter: string;
+    peopleQuery: string;
+    objectsQuery: string;
+    whyOpen: boolean;
+    whyUserId: string;
+    whyObjectType: string;
+    whyObjectKey: string;
+    mobilePane: string;
 }
+
+function requireUiString(value: unknown, label: string): string {
+    if (typeof value !== 'string') {
+        throw new Error(`access page: ${label} must be a string`);
+    }
+    return value;
+}
+
+function readExplorerUi(value: unknown): ExplorerUiState {
+    if (!isPlainRecord(value)) {
+        throw new Error('access page: explorer ui state required');
+    }
+    const mode = value.mode;
+    if (mode !== 'people' && mode !== 'objects') {
+        throw new Error('access page: mode must be people or objects');
+    }
+    if (value.whyOpen !== true && value.whyOpen !== false) {
+        throw new Error('access page: whyOpen must be boolean');
+    }
+    return {
+        mode,
+        userId: requireUiString(value.userId, 'userId'),
+        objectType: requireUiString(value.objectType, 'objectType'),
+        objectKey: requireUiString(value.objectKey, 'objectKey'),
+        pickerTypeFilter: requireUiString(value.pickerTypeFilter, 'pickerTypeFilter'),
+        grantTypeFilter: requireUiString(value.grantTypeFilter, 'grantTypeFilter'),
+        relationFilter: requireUiString(value.relationFilter, 'relationFilter'),
+        sourceFilter: requireUiString(value.sourceFilter, 'sourceFilter'),
+        peopleQuery: requireUiString(value.peopleQuery, 'peopleQuery'),
+        objectsQuery: requireUiString(value.objectsQuery, 'objectsQuery'),
+        whyOpen: value.whyOpen,
+        whyUserId: requireUiString(value.whyUserId, 'whyUserId'),
+        whyObjectType: requireUiString(value.whyObjectType, 'whyObjectType'),
+        whyObjectKey: requireUiString(value.whyObjectKey, 'whyObjectKey'),
+        mobilePane: requireUiString(value.mobilePane, 'mobilePane'),
+    };
+}
+
+function resultItems(value: unknown): Record<string, unknown>[] | null {
+    if (!isPlainRecord(value) || !Array.isArray(value.items)) {
+        return null;
+    }
+    const items: Record<string, unknown>[] = [];
+    for (const item of value.items) {
+        if (!isPlainRecord(item)) {
+            throw new Error('access page: row must be an object');
+        }
+        items.push(item);
+    }
+    return items;
+}
+
 
 export class FrontendAccessPage extends PlatformPage {
     static i18nNamespace = 'frontend';
@@ -271,7 +326,7 @@ export class FrontendAccessPage extends PlatformPage {
     constructor() {
         super();
         this._members = this.useResource('frontend/team', { autoload: true });
-        this._ui = this.useSlice('frontend/authz_explorer_ui') as unknown as AccessUiController;
+        this._ui = this.useSlice('frontend/authz_explorer_ui');
         this._byUser = this.useOp('frontend/authz_explorer_by_user');
         this._byObject = this.useOp('frontend/authz_explorer_by_object');
         this._why = this.useOp('frontend/authz_explorer_why');
@@ -284,7 +339,7 @@ export class FrontendAccessPage extends PlatformPage {
         this._objectsSearchTimer = 0;
     }
     private _members: ResourceController;
-    private _ui: AccessUiController;
+    private _ui: ControllerFor<'frontend/authz_explorer_ui'>;
     private _byUser: OpController;
     private _byObject: OpController;
     private _why: OpController;
@@ -325,7 +380,7 @@ export class FrontendAccessPage extends PlatformPage {
         const userId = params.get('user_id');
         const objectType = params.get('object_type');
         const objectKey = params.get('object_key');
-        const sig = `${userId || ''}\n${objectType || ''}\n${objectKey || ''}`;
+        const sig = `${userId === null ? '' : userId}\n${objectType === null ? '' : objectType}\n${objectKey === null ? '' : objectKey}`;
         if (sig === this._lastRouteSig) {
             return;
         }
@@ -343,12 +398,12 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _canSearchObjects() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         return ui.objectsQuery.trim().length >= 2 || ui.pickerTypeFilter !== '';
     }
 
     _syncObjectSearch() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         if (ui.mode !== 'objects') {
             return;
         }
@@ -366,7 +421,7 @@ export class FrontendAccessPage extends PlatformPage {
         }
         this._objectsSearchTimer = window.setTimeout(() => {
             this._objectsSearchTimer = 0;
-            const current = (this._ui.value as Record<string, any>);
+            const current = readExplorerUi(this._ui.value);
             if (current.mode !== 'objects') {
                 return;
             }
@@ -405,7 +460,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _filteredMembers() {
-        const query = ((this._ui.value as Record<string, any>).peopleQuery as string).trim().toLowerCase();
+        const query = readExplorerUi(this._ui.value).peopleQuery.trim().toLowerCase();
         const items = this._members.items;
         if (query === '') {
             return items;
@@ -418,12 +473,13 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _currentRows() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const payload = ui.mode === 'people' ? this._byUser.lastResult : this._byObject.lastResult;
-        if (!payload || !Array.isArray((payload as Record<string, any>).items)) {
+        const items = resultItems(payload);
+        if (items === null) {
             return [];
         }
-        return ((payload as Record<string, any>).items as Record<string, any>[]).filter((row) => {
+        return items.filter((row) => {
             if (ui.grantTypeFilter !== '' && row.object_type !== ui.grantTypeFilter) {
                 return false;
             }
@@ -438,7 +494,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _busy() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'people') {
             return this._byUser.busy && !this._byUser.lastResult;
         }
@@ -446,7 +502,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _whyEnabled(row: Record<string, any>) {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'objects' && row.subject_kind !== 'user') {
             return false;
         }
@@ -457,7 +513,7 @@ export class FrontendAccessPage extends PlatformPage {
         if (!this._whyEnabled(row)) {
             return;
         }
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const userId = ui.mode === 'people' ? ui.userId : row.subject_id;
         if (typeof userId !== 'string' || userId.length === 0) {
             return;
@@ -499,7 +555,7 @@ export class FrontendAccessPage extends PlatformPage {
             subject_kind: row.subject_kind,
             subject_id: row.subject_id,
         });
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'people' && ui.userId !== '') {
             void this._byUser.run({ user_id: ui.userId });
         }
@@ -511,7 +567,7 @@ export class FrontendAccessPage extends PlatformPage {
         }
     }
 
-    _rowTitle(row: Record<string, any>) {
+    _rowTitle(row: Record<string, unknown>) {
         if (row.title_status === 'loaded' && typeof row.title === 'string' && row.title.length > 0) {
             return row.title;
         }
@@ -521,19 +577,22 @@ export class FrontendAccessPage extends PlatformPage {
         return this.t('access_page.title_missing');
     }
 
-    _groupLabel(subjectId: Record<string, any>) {
-        if (typeof subjectId !== 'string' || (subjectId as Record<string, any>).length === 0) {
+    _groupLabel(subjectId: unknown) {
+        if (typeof subjectId !== 'string' || subjectId.length === 0) {
             throw new Error('access page: group subject_id required');
         }
-        const slash = (subjectId as Record<string, any>).lastIndexOf('/');
-        const shortName = slash >= 0 ? (subjectId as Record<string, any>).slice(slash + 1) : subjectId;
+        const slash = subjectId.lastIndexOf('/');
+        const shortName = slash >= 0 ? subjectId.slice(slash + 1) : subjectId;
         if (shortName.length === 0) {
             throw new Error('access page: group name is empty');
         }
         return this.t('access_page.subject_group', { name: shortName });
     }
 
-    _copyObjectId(objectType: string, objectKey: Record<string, any>) {
+    _copyObjectId(objectType: unknown, objectKey: unknown) {
+        if (typeof objectType !== 'string' || typeof objectKey !== 'string') {
+            throw new Error('access page: object id required');
+        }
         this.copyToClipboard(`${objectType}:${objectKey}`, {
             success_i18n_key: 'frontend:access_page.toast_copied',
             error_i18n_key: 'frontend:access_page.err_clipboard',
@@ -541,7 +600,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _retryHydrate() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'people' && ui.userId !== '') {
             void this._byUser.run({ user_id: ui.userId });
             return;
@@ -580,7 +639,7 @@ export class FrontendAccessPage extends PlatformPage {
                 </div>
             `;
         }
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         return html`
             <platform-breadcrumbs></platform-breadcrumbs>
             <page-header
@@ -597,7 +656,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderMaster() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         return html`
             <div class="mode-row" role="tablist">
                 <button
@@ -618,7 +677,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderPeoplePicker() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const members = this._filteredMembers();
         return html`
             <platform-field
@@ -642,7 +701,7 @@ export class FrontendAccessPage extends PlatformPage {
                 ? html`
                     <div class="empty">
                         <div class="empty-title">${this.t('access_page.search_empty')}</div>
-                        <button type="button" class="chip" @click=${() => this._ui.resetPickerSearch()}>
+                        <button type="button" class="chip" @click=${() => this._ui.resetPickerSearch(null)}>
                             ${this.t('access_page.reset_filters')}
                         </button>
                     </div>
@@ -674,9 +733,10 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderObjectPicker() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const result = this._objects.lastResult;
-        const items = result && Array.isArray((result as Record<string, any>).items) ? (result as Record<string, any>).items : [];
+        const listed = resultItems(result);
+        const items = listed === null ? [] : listed;
         const canSearch = this._canSearchObjects();
         return html`
             <platform-field
@@ -720,7 +780,7 @@ export class FrontendAccessPage extends PlatformPage {
                         ? html`
                             <div class="empty">
                                 <div class="empty-title">${this.t('access_page.search_empty')}</div>
-                                <button type="button" class="chip" @click=${() => this._ui.resetPickerSearch()}>
+                                <button type="button" class="chip" @click=${() => this._ui.resetPickerSearch(null)}>
                                     ${this.t('access_page.reset_filters')}
                                 </button>
                             </div>
@@ -747,14 +807,41 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _typeIcon(objectType: string) {
-        const icon = (TYPE_ICONS as Record<string, string>)[objectType];
-        if (typeof icon !== 'string') {
-            throw new Error(`access page: unknown object_type ${objectType}`);
+        switch (objectType) {
+            case 'wiki_page':
+                return TYPE_ICONS.wiki_page;
+            case 'document_file':
+                return TYPE_ICONS.document_file;
+            case 'document_catalog':
+                return TYPE_ICONS.document_catalog;
+            case 'crm_entity':
+                return TYPE_ICONS.crm_entity;
+            case 'crm_namespace':
+                return TYPE_ICONS.crm_namespace;
+            case 'flow':
+                return TYPE_ICONS.flow;
+            case 'tool':
+                return TYPE_ICONS.tool;
+            case 'sync_channel':
+                return TYPE_ICONS.sync_channel;
+            case 'work_queue':
+                return TYPE_ICONS.work_queue;
+            case 'mailbox_binding':
+                return TYPE_ICONS.mailbox_binding;
+            case 'platform_namespace':
+                return TYPE_ICONS.platform_namespace;
+            case 'agent_device':
+                return TYPE_ICONS.agent_device;
+            case 'flow_ui_share':
+                return TYPE_ICONS.flow_ui_share;
+            case 'flow_branch':
+                return TYPE_ICONS.flow_branch;
+            default:
+                throw new Error(`access page: unknown object_type ${objectType}`);
         }
-        return icon;
     }
 
-    _hitTitle(hit: Record<string, any>) {
+    _hitTitle(hit: Record<string, unknown>) {
         if (hit.title_status === 'loaded' && typeof hit.title === 'string' && hit.title.length > 0) {
             return hit.title;
         }
@@ -765,7 +852,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderDetail() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const selected = ui.mode === 'people' ? ui.userId !== '' : ui.objectType !== '' && ui.objectKey !== '';
         if (!selected) {
             return html`
@@ -789,7 +876,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderDetailHead() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'people') {
             return html`
                 <div class="detail-head">
@@ -798,14 +885,15 @@ export class FrontendAccessPage extends PlatformPage {
             `;
         }
         const result = this._byObject.lastResult;
-        const title = result ? this._hitTitle(result) : this.t('access_page.title_missing');
-        const href = result && typeof (result as Record<string, any>).href === 'string' ? (result as Record<string, any>).href : '';
+        const record = isPlainRecord(result) ? result : null;
+        const title = record ? this._hitTitle(record) : this.t('access_page.title_missing');
+        const href = record !== null && typeof record.href === 'string' ? record.href : '';
         return html`
             <div class="detail-head">
                 <div>
                     <div class="detail-title">${title}</div>
                     <div class="picker-meta">${this.t(`access_page.type_${ui.objectType}`)}</div>
-                    ${result && (result as Record<string, any>).title_status !== 'loaded' ? html`
+                    ${record !== null && record.title_status !== 'loaded' ? html`
                         <button
                             type="button"
                             class="id-btn"
@@ -824,20 +912,29 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderSummary() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const payload = ui.mode === 'people' ? this._byUser.lastResult : this._byObject.lastResult;
-        if (!payload || !(payload as Record<string, any>).summary) {
+        if (!isPlainRecord(payload) || !isPlainRecord(payload.summary)) {
             return nothing;
         }
-        const summary = (payload as Record<string, any>).summary;
+        const summary = payload.summary;
+        const explicitCount = summary.explicit_grant_count;
+        const groupCount = summary.group_count;
+        if (typeof explicitCount !== 'number' || typeof groupCount !== 'number') {
+            throw new Error('access page: summary counts required');
+        }
+        if (!isPlainRecord(summary.counts_by_type)) {
+            throw new Error('access page: counts_by_type required');
+        }
+        const countsByType = summary.counts_by_type;
         return html`
             <div class="summary">
                 <button
                     type="button"
                     class="chip"
                     aria-pressed=${ui.sourceFilter === '' && ui.grantTypeFilter === '' ? 'true' : 'false'}
-                    @click=${() => this._ui.resetGrantFilters()}
-                >${this.t('access_page.summary_explicit', { count: summary.explicit_grant_count })}</button>
+                    @click=${() => this._ui.resetGrantFilters(null)}
+                >${this.t('access_page.summary_explicit', { count: explicitCount })}</button>
                 ${summary.company_visible ? html`
                     <span class="chip">${this.t('access_page.summary_company_visible')}</span>
                 ` : nothing}
@@ -848,8 +945,8 @@ export class FrontendAccessPage extends PlatformPage {
                     @click=${() => this._ui.setSourceFilter({
                         sourceFilter: ui.sourceFilter === 'group' ? '' : 'group',
                     })}
-                >${this.t('access_page.summary_groups', { count: summary.group_count })}</button>
-                ${Object.keys(summary.counts_by_type).map((typeName) => html`
+                >${this.t('access_page.summary_groups', { count: groupCount })}</button>
+                ${Object.keys(countsByType).map((typeName) => html`
                     <button
                         type="button"
                         class="chip"
@@ -857,7 +954,7 @@ export class FrontendAccessPage extends PlatformPage {
                         @click=${() => this._ui.setGrantTypeFilter({
                             grantTypeFilter: ui.grantTypeFilter === typeName ? '' : typeName,
                         })}
-                    >${this.t(`access_page.type_${typeName}`)} · ${summary.counts_by_type[typeName]}</button>
+                    >${this.t(`access_page.type_${typeName}`)} · ${countsByType[typeName]}</button>
                 `)}
             </div>
         `;
@@ -874,7 +971,7 @@ export class FrontendAccessPage extends PlatformPage {
                 <div class="skeleton-row"></div>
             `;
         }
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const payload = ui.mode === 'people' ? this._byUser.lastResult : this._byObject.lastResult;
         const error = ui.mode === 'people' ? this._byUser.error : this._byObject.error;
         if (error) {
@@ -895,7 +992,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderEmptyGrants(payload: Record<string, any>) {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'people') {
             return html`
                 <div class="empty">
@@ -926,7 +1023,7 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderGrantRow(row: Record<string, any>) {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const icon = this._typeIcon(row.object_type);
         const whyEnabled = this._whyEnabled(row);
         const href = typeof row.href === 'string' ? row.href : '';
@@ -999,15 +1096,16 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _whyObjectTitle() {
-        const ui = (this._ui.value as Record<string, any>);
-        if (ui.mode === 'objects' && this._byObject.lastResult) {
+        const ui = readExplorerUi(this._ui.value);
+        if (ui.mode === 'objects' && isPlainRecord(this._byObject.lastResult)) {
             return this._hitTitle(this._byObject.lastResult);
         }
         const payload = this._byUser.lastResult;
-        if (!payload || !Array.isArray((payload as Record<string, any>).items)) {
+        const items = resultItems(payload);
+        if (items === null) {
             return this.t('access_page.title_missing');
         }
-        const match = ((payload as Record<string, any>).items as Record<string, any>[]).find((row) => (
+        const match = items.find((row) => (
             row.object_type === ui.whyObjectType && row.object_key === ui.whyObjectKey
         ));
         if (!match) {
@@ -1017,8 +1115,9 @@ export class FrontendAccessPage extends PlatformPage {
     }
 
     _renderWhyDrawer() {
-        const ui = (this._ui.value as Record<string, any>);
+        const ui = readExplorerUi(this._ui.value);
         const result = this._why.lastResult;
+        const why = isPlainRecord(result) ? result : null;
         return html`
             <aside class="why-drawer">
                 <div class="detail-head">
@@ -1026,7 +1125,7 @@ export class FrontendAccessPage extends PlatformPage {
                     <platform-button
                         variant="ghost"
                         density="dense"
-                        @click=${() => this._ui.closeWhy()}
+                        @click=${() => this._ui.closeWhy(null)}
                     >${this.t('access_page.why_close')}</platform-button>
                 </div>
                 <div class="why-meta">
@@ -1038,18 +1137,18 @@ export class FrontendAccessPage extends PlatformPage {
                         @click=${() => this._copyObjectId(ui.whyObjectType, ui.whyObjectKey)}
                     >${this.t('access_page.why_copy_id')}</platform-button>
                 </div>
-                ${this._why.busy && !result
+                ${this._why.busy && why === null
                     ? html`<glass-spinner></glass-spinner>`
                     : this._why.error
                         ? html`<div class="empty">${this.t('access_page.why_error')}</div>`
-                        : result
+                        : why
                             ? html`
                                 <div class="why-item">
-                                    ${(result as Record<string, any>).allowed
+                                    ${why.allowed
                                         ? this.t('access_page.why_allowed')
                                         : this.t('access_page.why_denied')}
                                 </div>
-                                ${(Array.isArray((result as Record<string, any>).reasons) ? (result as Record<string, any>).reasons : []).map((reason: string) => html`
+                                ${(Array.isArray(why.reasons) ? why.reasons : []).map((reason: string) => html`
                                     <div class="why-item">${this.t(`access_page.why_${reason}`)}</div>
                                 `)}
                             `

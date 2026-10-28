@@ -59,7 +59,8 @@ class SyncCallParticipant(PlatformModel):
         _ = await query.update(using="sync", status=status)
 
     @classmethod
-    async def list_for_call(cls, call_id: str) -> list[Self]:
+    async def list_unordered_for_call(cls, call_id: str) -> list[Self]:
+        """Участники звонка. Порядка, limit и фильтра компании нет."""
         return await cls.objects.filter(call_id=call_id).all()
 
     @classmethod

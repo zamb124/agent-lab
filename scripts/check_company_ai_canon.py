@@ -312,15 +312,10 @@ def _iter_python_files() -> list[Path]:
     return out
 
 
-def _ui_source(path: Path) -> Path:
-    ts = path.with_suffix(".ts")
-    return ts if path.suffix == ".js" and ts.exists() else path
-
-
 def _company_ai_ui_files() -> tuple[Path, ...]:
     return (
-        _ui_source(REPO_ROOT / "core/frontend/static/lib/components/llm/llm-config-editor.js"),
-        _ui_source(REPO_ROOT / "apps/frontend/ui/pages/settings/settings-page.js"),
+        REPO_ROOT / "core/frontend/static/lib/components/llm/llm-config-editor.ts",
+        REPO_ROOT / "apps/frontend/ui/pages/settings/settings-page.ts",
         REPO_ROOT / "core/i18n/translations/en/frontend.json",
         REPO_ROOT / "core/i18n/translations/ru/frontend.json",
         REPO_ROOT / "core/i18n/generated/en.json",
@@ -377,8 +372,8 @@ def _check_ai_provider_error_canon(failures: list[str]) -> None:
     error_classes = {member.value for member in AIProviderErrorClass}
     availabilities = {member.value for member in LLMModelAvailability}
 
-    resource_path = _ui_source(REPO_ROOT / "apps/frontend/ui/events/resources/llm-model-scores.resource.js")
-    strip_path = _ui_source(REPO_ROOT / "apps/frontend/ui/components/llm-provider-status-strip.js")
+    resource_path = REPO_ROOT / "apps/frontend/ui/events/resources/llm-model-scores.resource.ts"
+    strip_path = REPO_ROOT / "apps/frontend/ui/components/llm-provider-status-strip.ts"
     resource_text = resource_path.read_text(encoding="utf-8")
     strip_text = strip_path.read_text(encoding="utf-8")
 
@@ -386,13 +381,13 @@ def _check_ai_provider_error_canon(failures: list[str]) -> None:
     availability_set_match = _JS_AVAILABILITY_SET_RE.search(resource_text)
     i18n_map_match = _JS_ERROR_CLASS_I18N_RE.search(strip_text)
     if error_set_match is None:
-        failures.append("llm-model-scores.resource.js: ERROR_CLASS set not found")
+        failures.append("llm-model-scores.resource.ts: ERROR_CLASS set not found")
         return
     if availability_set_match is None:
-        failures.append("llm-model-scores.resource.js: AVAILABILITY set not found")
+        failures.append("llm-model-scores.resource.ts: AVAILABILITY set not found")
         return
     if i18n_map_match is None:
-        failures.append("llm-provider-status-strip.js: LLM_PROVIDER_ERROR_CLASS_I18N not found")
+        failures.append("llm-provider-status-strip.ts: LLM_PROVIDER_ERROR_CLASS_I18N not found")
         return
 
     js_error_classes = _quoted_js_values(error_set_match.group(1))

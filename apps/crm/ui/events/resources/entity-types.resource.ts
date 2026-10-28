@@ -117,3 +117,11 @@ export const entityTypePublicFieldsOp = createAsyncOp({
     commandType: 'crm/entity_types/public_fields_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/entity-types/:type_id/public-fields' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/entity_types': typeof entityTypesResource;
+        'crm/entity_type_update': typeof entityTypeUpdateOp;
+        'crm/entity_type_public_fields': typeof entityTypePublicFieldsOp;
+    }
+}

@@ -16,9 +16,10 @@
  *   - thread → useResource('sync/threads').create(...)
  */
 
-import type { SyncMessagesStoreController, SyncThreadsController } from '../events/sync.types.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import { html, css, nothing } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -26,6 +27,10 @@ import '@platform/lib/components/platform-menu.js';
 import '@platform/lib/components/platform-popover.js';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😄', '🎉', '🤔', '👀'];
+
+function isStoreRecord(value: unknown): value is Record<string, any> {
+    return isPlainRecord(value);
+}
 
 export class SyncMessageContextMenu extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -55,30 +60,30 @@ export class SyncMessageContextMenu extends PlatformElement {
         }
         .reactions span:hover { background: var(--glass-tint-medium); }
     `;
-    private _messagesStore: SyncMessagesStoreController;
+    private _messagesStore: ControllerFor<'sync/messages_store'>;
     private _delete: OpController;
     private _react: OpController;
     private _pin: OpController;
-    private _threads: SyncThreadsController;
+    private _threads: ControllerFor<'sync/threads'>;
     private _messagesStoreSel: SelectController<Record<string, any> | undefined>;
-    private _authSel: SelectController<Record<string, any> | undefined>;
+    private _authSel: SelectController<AuthUser | null>;
 
     constructor() {
         super();
         this.channelId = '';
-        this._messagesStore = this.useSlice('sync/messages_store') as SyncMessagesStoreController;
+        this._messagesStore = this.useSlice('sync/messages_store');
         this._delete = this.useOp('sync/messages_delete');
         this._react = this.useOp('sync/messages_react');
         this._pin = this.useOp('sync/messages_pin');
-        this._threads = this.useResource('sync/threads') as SyncThreadsController;
-        this._messagesStoreSel = this.select((s) => s.syncMessagesStore as Record<string, any> | undefined);
-        this._authSel = this.select((s) => (s.auth as Record<string, any> | undefined)?.user);
+        this._threads = this.useResource('sync/threads');
+        this._messagesStoreSel = this.select((s) => isStoreRecord(s.syncMessagesStore) ? s.syncMessagesStore : undefined);
+        this._authSel = this.select((s) => s.auth.user);
     }
 
     _currentTarget(): Record<string, any> | null {
         const slice = this._messagesStoreSel.value;
         const t = slice && slice.contextMenuTarget;
-        return (t && typeof t === 'object') ? t as Record<string, any> : null;
+        return isStoreRecord(t) ? t : null;
     }
 
     _resolveChannelId() {
@@ -103,7 +108,7 @@ export class SyncMessageContextMenu extends PlatformElement {
         if (channelId === '') return null;
         const channelData = slice.byChannelId[channelId];
         if (!channelData || !Array.isArray(channelData.items)) return null;
-        const found = channelData.items.find((m: Record<string, any>) => m.message_id === (target as Record<string, unknown>).messageId);
+        const found = channelData.items.find((m: Record<string, any>) => m.message_id === target.messageId);
         if (found) return found;
         const pendingMap = channelData.pendingByLocalId;
         if (pendingMap && typeof pendingMap === 'object' && pendingMap[target.messageId]) {
@@ -237,21 +242,19 @@ export class SyncMessageContextMenu extends PlatformElement {
     }
 
     _onActionSelect(event: Event) {
-        const handlers = {
-            reply: () => this._onReply(),
-            thread: () => this._onOpenThread(),
-            edit: () => this._onEdit(),
-            copy: () => this._onCopy(),
-            forward: () => this._onForward(),
-            pin: () => this._onPin(),
-            delete: () => this._onDelete(),
-        };
-        const detail = (event as CustomEvent<{ id?: string }>).detail;
-        const handler = (handlers as Record<string, () => void>)[detail?.id ?? ''];
-        if (handler === undefined) {
-            throw new Error(`sync-message-context-menu: неизвестное действие ${detail?.id}`);
+        if (!(event instanceof CustomEvent)) {
+            throw new Error('sync-message-context-menu: action event required');
         }
-        handler();
+        const detail = isStoreRecord(event.detail) ? event.detail : null;
+        const actionId = detail === null || typeof detail.id !== 'string' ? '' : detail.id;
+        if (actionId === 'reply') return this._onReply();
+        if (actionId === 'thread') return this._onOpenThread();
+        if (actionId === 'edit') return this._onEdit();
+        if (actionId === 'copy') return this._onCopy();
+        if (actionId === 'forward') return this._onForward();
+        if (actionId === 'pin') return this._onPin();
+        if (actionId === 'delete') return this._onDelete();
+        throw new Error(`sync-message-context-menu: неизвестное действие ${actionId}`);
     }
 
     override render(): TemplateResult | typeof nothing {
@@ -259,11 +262,12 @@ export class SyncMessageContextMenu extends PlatformElement {
         if (!target) return nothing;
         const message = this._currentMessage();
         const me = this._authSel.value;
-        const myId = (me && typeof (me as Record<string, unknown>).user_id === 'string') ? (me as Record<string, unknown>).user_id as string : '';
-        const isOwn = Boolean(message && (message as Record<string, any>).sender && (message as Record<string, any>).sender.user_id === myId);
-        const hasText = Boolean(
-            message && Array.isArray((message as Record<string, any>).contents) && (message as Record<string, any>).contents.some((c: Record<string, unknown>) => c.type === 'text/plain')
-        );
+        const userId = me === null ? undefined : me.user_id;
+        const myId = typeof userId === 'string' ? userId : '';
+        const sender = message === null ? null : message.sender;
+        const isOwn = isStoreRecord(sender) && sender.user_id === myId;
+        const contents = message === null ? undefined : message.contents;
+        const hasText = Array.isArray(contents) && contents.some((part) => isStoreRecord(part) && part.type === 'text/plain');
         const anchor = {
             x: typeof target.x === 'number' ? target.x : 0,
             y: typeof target.y === 'number' ? target.y : 0,

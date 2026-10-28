@@ -5,24 +5,41 @@
  */
 
 import { LitElement, css, html, nothing } from '../../lit-shim.js';
+import { isPlainRecord } from '../../events/payload.js';
 import type { FlowUiTask } from '../runtime/conversation.js';
 import type { FlowUiRecord } from '../runtime/flow-ui-store.js';
 import { firstDataFromParts, textFromParts } from '../protocol/parts.js';
 import { flowUIGlyph } from '../utils/glyph.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
 
-const GLYPH_BY_KIND = Object.freeze({
+const GLYPH_BY_KIND: Readonly<Record<string, string>> = Object.freeze({
     node_start: 'play', node_complete: 'check', node_error: 'alert-triangle', tool_call: 'refresh', tool_result: 'check',
     edge_executed: 'chevron-right', edge_error: 'alert-triangle', breakpoint: 'pause', input_required: 'info', status_terminal: 'check',
 });
+
+function glyphName(kind: unknown): string {
+    if (typeof kind !== 'string') return 'info';
+    const glyph = GLYPH_BY_KIND[kind];
+    return glyph === undefined ? 'info' : glyph;
+}
+
+function taskArtifacts(task: FlowUiTask): FlowUiRecord[] {
+    if (!Array.isArray(task.artifacts)) return [];
+    const artifacts: FlowUiRecord[] = [];
+    for (const artifact of task.artifacts) {
+        if (!isPlainRecord(artifact)) throw new Error('flow-ui: run trace artifact must be an object');
+        artifacts.push(artifact);
+    }
+    return artifacts;
+}
 
 /** Записи таймлайна из артефактов Tasks (тот же формат, что у панели выполнения редактора). */
 export function runTraceEntriesFromTasks(tasks: FlowUiTask[]): FlowUiRecord[] {
     const entries: FlowUiRecord[] = [];
     for (const task of tasks) {
-        for (const artifact of Array.isArray(task.artifacts) ? task.artifacts : []) {
-            const data = firstDataFromParts(artifact.parts) as FlowUiRecord | null;
-            if (!data || typeof data !== 'object') continue;
+        for (const artifact of taskArtifacts(task)) {
+            const data = firstDataFromParts(artifact.parts);
+            if (!isPlainRecord(data)) continue;
             const base = { id: `${task.id}:${artifact.artifactId}`, task_id: task.id };
             if (typeof data.tool === 'string' && typeof data.tool_call_id === 'string') {
                 const isResult = Object.prototype.hasOwnProperty.call(data, 'result');
@@ -33,14 +50,16 @@ export function runTraceEntriesFromTasks(tasks: FlowUiTask[]): FlowUiRecord[] {
                 entries.push({ ...base, kind: data.event, ...data });
             }
         }
-        const status = task.status as FlowUiRecord | undefined;
-        const state = status?.state;
+        const status = task.status;
+        if (!isPlainRecord(status)) continue;
+        const state = status.state;
         if (state === 'TASK_STATE_COMPLETED' || state === 'TASK_STATE_FAILED' || state === 'TASK_STATE_CANCELED') {
-            const message = status?.message as FlowUiRecord | undefined;
+            const message = status.message;
+            const parts = isPlainRecord(message) ? message.parts : undefined;
             entries.push({
                 id: `${task.id}:status`, task_id: task.id, kind: 'status_terminal',
                 terminal_state: String(state).replace('TASK_STATE_', '').toLowerCase(),
-                message_preview: textFromParts(message?.parts as never[] | undefined).slice(0, 160),
+                message_preview: textFromParts(parts).slice(0, 160),
             });
         }
     }
@@ -151,7 +170,7 @@ export class FlowUIRunTrace extends LitElement {
                 return html`<li data-kind=${entry.kind} data-tone=${this._tone(entry)} role="button" tabindex="0" aria-expanded=${open ? 'true' : 'false'}
                     @click=${() => this._toggle(entry.id)}
                     @keydown=${(event: KeyboardEvent) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this._toggle(entry.id); } }}>
-                    <span class="glyph">${flowUIGlyph((GLYPH_BY_KIND as Record<string, string>)[String(entry.kind)] ?? 'info', 12)}</span>
+                    <span class="glyph">${flowUIGlyph(glyphName(entry.kind), 12)}</span>
                     <span>
                         <span class="title"><span>${this._title(entry, locale)}</span><span class="kind">${entry.kind}</span></span>
                         ${duration !== '' ? html`<div class="meta">${duration}</div>` : nothing}

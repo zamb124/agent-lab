@@ -73,7 +73,7 @@ class Board(PlatformModel):
         ]
 
     @classmethod
-    async def get_board(cls, company_id: str, board_id: str) -> Self:
+    async def require_in_company(cls, company_id: str, board_id: str) -> Self:
         board = await cls.objects.filter(
             company_id=company_id,
             board_id=board_id,

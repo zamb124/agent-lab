@@ -39,3 +39,10 @@ export const sharedChannelsOp = createAsyncOp({
     commandType: 'sync/shared_channels/list_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/company/members/:peer_user_id/shared-channels' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/company_members': typeof companyMembersResource;
+        'sync/shared_channels': typeof sharedChannelsOp;
+    }
+}

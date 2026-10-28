@@ -84,11 +84,7 @@ function applyVisualViewportCssVars() {
         && typeof window.scrollTo === 'function'
         && (window.scrollY !== 0 || window.scrollX !== 0)
     ) {
-        try {
-            window.scrollTo({ left: 0, top: 0, behavior: 'instant' });
-        } catch {
-            window.scrollTo(0, 0);
-        }
+        window.scrollTo({ left: 0, top: 0, behavior: 'instant' });
     }
 }
 

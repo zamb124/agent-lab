@@ -3,6 +3,12 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
+function textOrDash(value: unknown): string {
+    if (typeof value === 'string' && value.length > 0) return value;
+    if (typeof value === 'number' && Number.isFinite(value) && value !== 0) return String(value);
+    return '—';
+}
+
 export class CrawlReportStructuralPanel extends PlatformElement {
     static i18nNamespace = 'frontend';
 
@@ -100,13 +106,13 @@ export class CrawlReportStructuralPanel extends PlatformElement {
             : '—';
         return html`
             <div class="meta-grid">
-                ${this._item('crawl_report_page.structural_title', signals.title || '—')}
+                ${this._item('crawl_report_page.structural_title', textOrDash(signals.title))}
                 ${this._item('crawl_report_page.structural_content_type_hint', contentType)}
                 ${this._item('crawl_report_page.structural_date_published', this._formatDate(signals.date_published))}
                 ${this._item('crawl_report_page.structural_date_modified', this._formatDate(signals.date_modified))}
-                ${this._item('crawl_report_page.structural_author', signals.author || '—')}
-                ${this._item('crawl_report_page.structural_publisher', signals.publisher || '—')}
-                ${this._item('crawl_report_page.structural_language', signals.language || '—')}
+                ${this._item('crawl_report_page.structural_author', textOrDash(signals.author))}
+                ${this._item('crawl_report_page.structural_publisher', textOrDash(signals.publisher))}
+                ${this._item('crawl_report_page.structural_language', textOrDash(signals.language))}
                 ${this._chips('crawl_report_page.structural_category_hints', signals.category_hints)}
                 ${this._chips('crawl_report_page.structural_topic_hints', signals.topic_hints)}
             </div>
@@ -158,7 +164,7 @@ export class CrawlReportFilterMetadataPanel extends PlatformElement {
             <div class="meta-grid">
                 <div class="meta-item">
                     <div class="meta-label">${this.t('crawl_report_page.col_page_title')}</div>
-                    <div class="meta-value">${snapshot?.page_title || '—'}</div>
+                    <div class="meta-value">${textOrDash(snapshot === undefined || snapshot === null ? undefined : snapshot.page_title)}</div>
                 </div>
                 <div class="meta-item">
                     <div class="meta-label">${this.t('crawl_report_page.col_content_type')}</div>

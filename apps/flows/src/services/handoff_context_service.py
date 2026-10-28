@@ -41,7 +41,7 @@ class HandoffContextService:
         if resource_key is None or not resource_key.strip():
             return None
         resource = await ResourceDefinition.get(
-            ResourceDefinition.row_id(resource_key)
+            ResourceDefinition.resource_row_id_for_active_company(resource_key)
         )
         if resource is None:
             raise ValueError(f"handoff context resource not found: {resource_key}")

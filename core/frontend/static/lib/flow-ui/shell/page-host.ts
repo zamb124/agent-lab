@@ -51,7 +51,7 @@ export class FlowUIPageHost extends LitElement {
 
     constructor() {
         super();
-        this.config = {} as FlowUiPageHostConfig;
+        this.config = {};
     }
 
     override render() {
@@ -73,11 +73,11 @@ export class FlowUIPageHost extends LitElement {
             credentials = c.credentials;
         }
         return html`<platform-flow-ui
-            embed-id=${c.embedId || ''}
-            flow-id=${c.flowId || ''}
+            embed-id=${typeof c.embedId === 'string' ? c.embedId : ''}
+            flow-id=${typeof c.flowId === 'string' ? c.flowId : ''}
             branch-id=${c.branchId || 'default'}
             base-url=${c.baseUrl}
-            context-id=${c.contextId || ''}
+            context-id=${typeof c.contextId === 'string' ? c.contextId : ''}
             company-id=${companyId}
             voice-base-url=${voiceBaseUrl}
             platform-ui-origin=${platformUiOrigin}

@@ -3,7 +3,7 @@
  * крупных карточек каналов и горизонтальная панель действий.
  *
  * Источники:
- *   useResource('sync/channels') as SyncChannelsController — все каналы компании (membership).
+ *   useResource('sync/channels') as ControllerFor<'sync/channels'> — все каналы компании (membership).
  *
  * Действия:
  *   - клик по карточке канала → navigate('channel', { channelId })
@@ -16,8 +16,7 @@
  * --border-*, --text-*, --radius-*); никаких хардкод-цветов.
  */
 
-import type { SyncChannelsController } from '../events/sync.types.js';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -121,12 +120,12 @@ export class SyncChannelPicker extends PlatformElement {
             text-align: center;
         }
     `;
-    private _channels: SyncChannelsController;
+    private _channels: ControllerFor<'sync/channels'>;
 
     constructor() {
         super();
         this._tileAvatarFailed = Object.freeze({});
-        this._channels = this.useResource('sync/channels', { autoload: true }) as SyncChannelsController;
+        this._channels = this.useResource('sync/channels', { autoload: true });
     }
 
     _groupChannels() {

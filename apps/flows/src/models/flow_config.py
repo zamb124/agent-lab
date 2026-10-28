@@ -509,7 +509,8 @@ class FlowConfig(CompanyScopedModel):
     )
 
     @classmethod
-    def row_id(cls, flow_id: str, version: str) -> str:
+    def row_id_for_active_company_and_version(cls, flow_id: str, version: str) -> str:
+        """Ключ строки из активной компании, flow_id и version. Нет компании — ValueError. Пустые flow_id или version, либо двоеточие в компании, flow_id или version — ValueError."""
         ctx = get_context()
         if ctx is None or ctx.active_company is None or ctx.active_company.company_id == "":
             raise ValueError("flow_id requires an active company")
@@ -538,7 +539,7 @@ class FlowConfig(CompanyScopedModel):
             raise ValueError("company_id does not match the active company")
         if self.version == "":
             return self
-        expected = type(self).row_id(self.flow_id, self.version)
+        expected = type(self).row_id_for_active_company_and_version(self.flow_id, self.version)
         if self.flow_row_id == "":
             self.flow_row_id = expected
         elif self.flow_row_id != expected:
@@ -547,7 +548,7 @@ class FlowConfig(CompanyScopedModel):
 
     @override
     async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
-        expected = type(self).row_id(self.flow_id, self.version)
+        expected = type(self).row_id_for_active_company_and_version(self.flow_id, self.version)
         if self.company_id == "" or self.flow_row_id != expected:
             raise ValueError("flow_row_id does not match the active company")
         _ = is_create, update_fields
@@ -573,13 +574,13 @@ class FlowConfig(CompanyScopedModel):
         return self
 
     @classmethod
-    async def get_latest(cls, flow_id: str) -> Self | None:
+    async def current_for_flow(cls, flow_id: str) -> Self | None:
         if flow_id == "":
             raise ValueError("flow_id is required")
         return await cls.objects.filter(flow_id=flow_id, is_current=True).get_or_none()
 
     @classmethod
-    async def get_latest_by_flow_id_unscoped(
+    async def current_unscoped(
         cls, flow_id: str
     ) -> tuple[Self, str] | None:
         if flow_id.strip() == "":
@@ -608,7 +609,7 @@ class FlowConfig(CompanyScopedModel):
         return (config, config.company_id)
 
     @classmethod
-    async def get_current_for_company(cls, company_id: str, flow_id: str) -> Self | None:
+    async def current_for_company(cls, company_id: str, flow_id: str) -> Self | None:
         if company_id.strip() == "" or flow_id.strip() == "":
             raise ValueError("company_id and flow_id are required")
         rows = await execute_raw(
@@ -667,13 +668,14 @@ class FlowConfig(CompanyScopedModel):
         return identifiers
 
     @classmethod
-    async def get_version(cls, flow_id: str, version: str) -> Self | None:
+    async def by_flow_id_and_version(cls, flow_id: str, version: str) -> Self | None:
         if flow_id == "" or version == "":
             raise ValueError("flow_id and version are required")
         return await cls.objects.filter(flow_id=flow_id, version=version).get_or_none()
 
     @classmethod
-    async def list_versions(cls, flow_id: str) -> list[str]:
+    async def list_version_strings_by_version_desc(cls, flow_id: str) -> list[str]:
+        """Версии flow, ORDER BY version DESC. Предела нет. Пустой flow_id — ValueError."""
         if flow_id == "":
             raise ValueError("flow_id is required")
         rows = await cls.objects.filter(flow_id=flow_id).order_by("-version").all()
@@ -689,11 +691,11 @@ class FlowConfig(CompanyScopedModel):
         if context is None or context.active_company is None or context.active_company.company_id == "":
             raise ValueError("flow save requires an active company")
         entity.company_id = context.active_company.company_id
-        entity.flow_row_id = cls.row_id(entity.flow_id, version)
+        entity.flow_row_id = cls.row_id_for_active_company_and_version(entity.flow_id, version)
         if entity.created_at is None:
             entity.created_at = now
         entity.updated_at = now
-        previous = await cls.get_latest(entity.flow_id)
+        previous = await cls.current_for_flow(entity.flow_id)
         if previous is not None:
             previous.is_current = False
             _ = await previous.save(update_fields={"is_current"})
@@ -724,7 +726,8 @@ class FlowConfig(CompanyScopedModel):
         return await cls._current_flows().limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_index(cls) -> list[FlowListIndexItem]:
+    async def list_current_flow_index(cls) -> list[FlowListIndexItem]:
+        """Все текущие flow, ORDER BY created_at DESC, flow_id. Читается страницами до конца. Предела у вызывающего нет. Элемент — flow_id и type."""
         items: list[FlowListIndexItem] = []
         offset = 0
         while True:
@@ -777,10 +780,10 @@ class FlowConfig(CompanyScopedModel):
 
     @classmethod
     async def rollback_to_version(cls, flow_id: str, version: str) -> bool:
-        snapshot = await cls.get_version(flow_id, version)
+        snapshot = await cls.by_flow_id_and_version(flow_id, version)
         if snapshot is None:
             return False
-        current = await cls.get_latest(flow_id)
+        current = await cls.current_for_flow(flow_id)
         if current is not None and current.flow_row_id != snapshot.flow_row_id:
             current.is_current = False
             _ = await current.save(update_fields={"is_current"})

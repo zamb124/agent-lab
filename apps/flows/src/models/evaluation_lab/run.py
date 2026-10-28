@@ -80,7 +80,8 @@ class EvaluationRun(CompanyScopedModel):
     finished_at: datetime | None = DbField(default=None)
 
     @classmethod
-    async def list_for_suite(cls, suite_id: str, limit: int) -> list[Self]:
+    async def list_by_created_at_and_run_id_desc(cls, suite_id: str, limit: int) -> list[Self]:
+        """Запуски набора, ORDER BY created_at DESC, run_id DESC, не больше limit. Пустой suite_id и limit < 1 — ValueError."""
         if suite_id == "":
             raise ValueError("suite_id is required")
         if limit < 1:
@@ -93,13 +94,14 @@ class EvaluationRun(CompanyScopedModel):
         )
 
     @classmethod
-    async def for_idempotency(
+    async def any_for_idempotency(
         cls,
         *,
         suite_id: str,
         branch_id: str,
         idempotency_key: str,
     ) -> Self | None:
+        """Первый попавшийся запуск по ключу идемпотентности. Порядка нет. Несколько строк — какая именно, не задано. Нет строки — None. Пустые поля — ValueError."""
         if suite_id == "" or branch_id == "" or idempotency_key == "":
             raise ValueError("suite_id, branch_id and idempotency_key are required")
         return await cls.objects.filter(

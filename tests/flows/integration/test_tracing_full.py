@@ -58,9 +58,9 @@ async def _wait_spans(
     while time.monotonic() < deadline:
         spans: list[Span] = []
         if task_id:
-            spans = await Span.list_by_task_id(task_id)
+            spans = await Span.list_by_task_id_asc(task_id)
         if not spans:
-            raw = await Span.list_by_flow_id(flow_id, limit=20)
+            raw = await Span.list_by_flow_id_desc(flow_id, limit=20)
             if filter_agent_id:
                 spans = [s for s in raw if s.flow_id == filter_agent_id][:10]
             else:

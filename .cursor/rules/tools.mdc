@@ -14,7 +14,7 @@ Builtin tools — trusted Python в `apps/flows/tools/<tag>/` (подпакет 
 
 ## Модель
 
-- `ToolReference` — редактируемый контракт tool в ноде; `parameters_schema` — единственный JSON Schema аргументов (`CallParameter`/`args_schema` запрещены).
+- `ToolReference` — редактируемый контракт tool в ноде; `parameters_schema` — единственный JSON Schema аргументов (`CallParameter`/`args_schema` запрещены). `ToolReference.list_tool_index(*, mcp="all", exclude_tool_ids=None) -> list[ToolListIndexItem]` — индекс tools, `ORDER BY tool_id`, без предела. `mcp="all"` и пустой `exclude_tool_ids` не фильтруют. `ToolReference.row_id_for_active_company(tool_id) -> str` — ключ строки из активной компании и `tool_id`. Нет компании — `ValueError` с текстом `tool_id requires an active company`. Пустой `tool_id` или `:` в `company_id` — `ValueError` с текстом `tool_id is required and company_id must not contain ':'`.
 - `ToolDefinition`, `ToolRevision`, `ToolGrantClaims`, `ToolResultEnvelope` (`apps/flows/src/models/tool_contracts.py`) — контракт для preview и `GET /flows/api/v1/tools/{tool_id}/contract` (`build_tool_definition_from_base_tool`).
 - `ToolTagGroup` (таблица `tool_tag_groups`, PK `tag`, `description_ru`/`description_en`, `content_hash`) — описания групп picker.
 - `ToolApprovalStore` (`apps/flows/src/services/tool_approval.py`) — pending approvals в Redis (`ToolApprovalRecord`: `approval_id`, actor, `tool_id`, `definition_version`, `argument_hash`, `expires_at`, `status`).

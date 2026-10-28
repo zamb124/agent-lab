@@ -443,7 +443,7 @@ async def op_indexes_list(
 ) -> OffsetPage[SearchIndexDefinition]:
     _ = user
     scope = await require_system_admin(di.authz_service)
-    return await SearchIndexDefinition.list_page(
+    return await SearchIndexDefinition.page_by_search_index_id(
         company_id=scope.company_id,
         enabled=payload.enabled,
         limit=payload.limit,
@@ -553,7 +553,7 @@ async def op_query_providers_snapshot(
 ) -> SearchProvidersSnapshot:
     _ = payload, user, di
     config = get_search_settings().search
-    index_page = await SearchIndexDefinition.list_page(
+    index_page = await SearchIndexDefinition.page_by_search_index_id(
         company_id="system",
         enabled=True,
         limit=100,

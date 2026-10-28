@@ -52,6 +52,12 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-user-chip.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 export const WIKI_PANEL_TABS = Object.freeze(['outline', 'backlinks', 'comments', 'history']);
 
 export class WikiPagePanel extends PlatformElement {
@@ -299,7 +305,7 @@ export class WikiPagePanel extends PlatformElement {
         this._revisions = this.useOp('wiki/revisions');
         this._revisionRead = this.useOp('wiki/revision_read');
         this._revisionRestore = this.useOp('wiki/revision_restore');
-        this._locale = this.select((state) => (state.i18n as Record<string, unknown>).locale);
+        this._locale = this.select((state) => state.i18n.locale);
     }
 
     override connectedCallback() {
@@ -350,7 +356,7 @@ export class WikiPagePanel extends PlatformElement {
     }
 
     private _onTabChange(event: CustomEvent<{ value?: string }>) {
-        this.tab = String(event.detail.value ?? '');
+        this.tab = missingAsEmpty(event.detail.value);
         this.emit('panel-tab-change', { tab: this.tab });
     }
 
@@ -440,7 +446,7 @@ export class WikiPagePanel extends PlatformElement {
                 <a
                     class="backlink"
                     data-wiki-backlink=${link.wiki_page_id}
-                    @click=${() => this.navigate('wiki_page', { pageId: String(link.wiki_page_id ?? '') })}
+                    @click=${() => this.navigate('wiki_page', { pageId: missingAsEmpty(link.wiki_page_id) })}
                 >${link.title === '' ? this.t('page.untitled') : link.title}</a>
             `)}
         `;
@@ -490,11 +496,11 @@ export class WikiPagePanel extends PlatformElement {
                               ? html`<button
                                     class="ghost-btn"
                                     type="button"
-                                    @click=${() => this._resolveComment(String(comment.wiki_comment_id ?? ''))}
+                                    @click=${() => this._resolveComment(missingAsEmpty(comment.wiki_comment_id))}
                                 >${this.t('page.comment_resolve')}</button>`
                               : html`<span class="comment-resolved">${this.t('page.comment_resolved')}</span>`}
                           <div class="muted">
-                              ${formatPlatformDateTime(new Date(comment.created_at ?? ''), String(this._locale.value ?? ''))}
+                              ${formatPlatformDateTime(new Date(comment.created_at === undefined || comment.created_at === null ? '' : comment.created_at), missingAsEmpty(this._locale.value))}
                           </div>
                       </div>
                   `)}
@@ -556,11 +562,11 @@ export class WikiPagePanel extends PlatformElement {
                     class="revision ${revision.wiki_revision_id === this._selectedRevisionId ? 'is-selected' : ''}"
                     type="button"
                     data-wiki-revision=${revision.wiki_revision_id}
-                    @click=${() => this._selectRevision(String(revision.wiki_revision_id ?? ''))}
+                    @click=${() => this._selectRevision(missingAsEmpty(revision.wiki_revision_id))}
                 >
                     <platform-user-chip user-id=${revision.author_user_id} size="sm"></platform-user-chip>
                     <div class="revision-meta">
-                        ${formatPlatformDateTime(new Date(revision.created_at ?? ''), String(this._locale.value ?? ''))}
+                        ${formatPlatformDateTime(new Date(revision.created_at === undefined || revision.created_at === null ? '' : revision.created_at), missingAsEmpty(this._locale.value))}
                     </div>
                 </button>
                 ${revision.wiki_revision_id === this._selectedRevisionId

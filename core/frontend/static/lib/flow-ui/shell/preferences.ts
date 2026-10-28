@@ -1,4 +1,5 @@
 import { platformStorageKey } from '../../utils/storage-keys.js';
+import { isPlainRecord } from '../../events/payload.js';
 import { parseStoredGeometry, toStoredGeometry } from './drawer-geometry.js';
 import type { StoredDrawerGeometry } from './drawer-geometry.js';
 
@@ -15,8 +16,12 @@ const BRANCH_ID_RE = /^[a-z][a-z0-9_]*$/;
 function store(): Storage | null {
     try {
         return localStorage;
-    } catch {
-        return null;
+    } catch (err) {
+        // Доступ к localStorage запрещён политикой браузера: хранилища нет.
+        if (err instanceof DOMException && err.name === 'SecurityError') {
+            return null;
+        }
+        throw err;
     }
 }
 
@@ -80,10 +85,10 @@ export function readFlowUIPreferences(scope: string = 'global'): Record<string, 
     const raw = storage.getItem(_prefsKey(scope));
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    if (!isPlainRecord(parsed)) {
         throw new Error('flow-ui preferences: invalid stored JSON object');
     }
-    return parsed as Record<string, unknown>;
+    return parsed;
 }
 
 export function writeFlowUIPreferences(scope: string, patch: Record<string, unknown>): void {

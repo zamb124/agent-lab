@@ -591,8 +591,8 @@ async def _get_flow_config(
         version: Версия агента (опционально). Если не указана - возвращает latest.
     """
     if version:
-        return await FlowConfig.get_version(flow_id, version)
-    return await FlowConfig.get_latest(flow_id)
+        return await FlowConfig.by_flow_id_and_version(flow_id, version)
+    return await FlowConfig.current_for_flow(flow_id)
 
 
 def _get_base_url(request: Request) -> str:

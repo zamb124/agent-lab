@@ -81,7 +81,7 @@ class UserPersonService:
             if existing is not None and existing.company_id == company_id:
                 if existing.entity_type == CONTACT_ENTITY_TYPE:
                     existing.entity_type = MEMBER_ENTITY_TYPE
-                    existing = await CRMEntity.save_loaded(existing)
+                    existing = await CRMEntity.update_loaded(existing)
                     await index_crm_entity(self._rag, existing, replace=True)
                     logger.info("crm.member.migrated", entity_id=existing_id)
                 await self._sync_person_fields_from_user(existing, user)
@@ -121,7 +121,7 @@ class UserPersonService:
         try:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
-            removed = await CRMEntity.take_by_id(entity.entity_id)
+            removed = await CRMEntity.delete_returning(entity.entity_id)
             if removed is not None:
                 _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
@@ -225,7 +225,7 @@ class UserPersonService:
         company_id: str,
     ) -> None:
         """Создаёт связь member->company (belongs_to), если company entity существует."""
-        company_entities = await CRMEntity.all_by_entity_type_and_attribute(
+        company_entities = await CRMEntity.list_by_entity_type_and_attribute(
             entity_type=COMPANY_ENTITY_TYPE,
             attribute_key=PLATFORM_COMPANY_ID_ATTR,
             attribute_value=company_id,
@@ -260,5 +260,5 @@ class UserPersonService:
         entity.description = user.bio
         entity.attributes = attrs
         entity.updated_at = datetime.now(UTC)
-        entity = await CRMEntity.save_loaded(entity)
+        entity = await CRMEntity.update_loaded(entity)
         await index_crm_entity(self._rag, entity, replace=True)

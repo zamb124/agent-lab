@@ -1,5 +1,5 @@
 {
-  "ui_js_files": 604,
+  "ui_js_files": 412,
   "fetch_outside_events": 0,
   "window_dialogs": 0,
   "createelement_modal": 0,
@@ -11,5 +11,6 @@
   "raw_controls": 0,
   "manual_pill": 0,
   "raw_dispatch_events": 0,
-  "window_custom_event": 0
+  "window_custom_event": 0,
+  "ts_controller_cast": 0
 }

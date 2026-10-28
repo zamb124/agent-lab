@@ -49,7 +49,7 @@ async def test_flow_kv_is_in_flows_table_not_storage_prefix_scan(
     )
     try:
         _ = await FlowConfig.create_version(config)
-        loaded = await FlowConfig.get_latest(flow_id)
+        loaded = await FlowConfig.current_for_flow(flow_id)
     finally:
         reset_context(context_token)
 

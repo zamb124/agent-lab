@@ -93,7 +93,7 @@ export class WorkItemDetailPanel extends PlatformElement {
         this.workItemId = '';
         this.panelOpen = false;
         this._isMobile = false;
-        this._routeSel = this.select((state) => (state.router as Record<string, unknown>).routeKey);
+        this._routeSel = this.select((state) => state.router.routeKey);
         this._onMqlChange = this._onMqlChange.bind(this);
     }
 

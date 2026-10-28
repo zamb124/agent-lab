@@ -25,21 +25,30 @@ import type {
     OpController,
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const PROVIDER_AMOCRM = 'amocrm';
 
 const INTEGRATION_TASK_TERMINAL = new Set(['completed', 'failed', 'cancelled', 'rolled_back']);
 const INTEGRATION_TASK_WAIT_MS = 600_000;
 
-function amoSubdomainFromCrmSettings(cs: Record<string, any> | null | undefined): string {
-    if (!cs || typeof cs.integrations !== 'object' || cs.integrations === null) {
+function amoSubdomainFromCrmSettings(cs: unknown): string {
+    if (!isPlainRecord(cs) || !isPlainRecord(cs.integrations)) {
         return '';
     }
-    const amo = (cs.integrations as Record<string, any>).amocrm;
-    if (!amo || typeof amo !== 'object') {
+    const amo = cs.integrations.amocrm;
+    if (!isPlainRecord(amo)) {
         return '';
     }
     return typeof amo.subdomain === 'string' ? amo.subdomain : '';
+}
+
+function taskIdOf(value: unknown, label: string): string {
+    if (!isPlainRecord(value) || typeof value.task_id !== 'string' || value.task_id.length === 0) {
+        throw new Error(label);
+    }
+    return value.task_id;
 }
 
 export class CRMNamespaceIntegrationsPage extends PlatformPage {
@@ -239,51 +248,56 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
     override connectedCallback(): void {
         super.connectedCallback();
         this.useEvent('crm/namespace_integration_entities_sync/failed', (ev) => {
-            const payload = ev && ev.payload;
-            if (!payload || typeof payload !== 'object') {
+            const payload = ev.payload;
+            if (!isPlainRecord(payload)) {
                 throw new Error('CRMNamespaceIntegrationsPage: sync failed payload required');
             }
-            const pl = payload as Record<string, any>;
-            if (pl.code === 'conflict') {
+            if (payload.code === 'conflict') {
                 this.toast('integrations_page.amocrm_sync_active_conflict', { type: 'warning' });
                 return;
             }
-            if (typeof pl.message !== 'string') {
+            if (typeof payload.message !== 'string') {
                 throw new Error('CRMNamespaceIntegrationsPage: sync failed message required');
             }
             this.toast('integrations_page.amocrm_sync_task_failed', {
                 type: 'error',
-                vars: { message: pl.message },
+                vars: { message: payload.message },
             });
         });
         this.useEvent('crm/namespace_integration_custom_fields_sync/failed', (ev) => {
-            const payload = ev && ev.payload;
-            if (!payload || typeof payload !== 'object') {
+            const payload = ev.payload;
+            if (!isPlainRecord(payload)) {
                 throw new Error('CRMNamespaceIntegrationsPage: fields sync failed payload required');
             }
-            const pl2 = payload as Record<string, any>;
-            if (pl2.code === 'conflict') {
+            if (payload.code === 'conflict') {
                 this.toast('integrations_page.amocrm_fields_active_conflict', { type: 'warning' });
                 return;
             }
-            if (typeof pl2.message !== 'string') {
+            if (typeof payload.message !== 'string') {
                 throw new Error('CRMNamespaceIntegrationsPage: fields sync failed message required');
             }
             this.toast('integrations_page.amocrm_fields_task_failed', {
                 type: 'error',
-                vars: { message: pl2.message },
+                vars: { message: payload.message },
             });
         });
         this.useEvent(this._listOp.op.events.SUCCEEDED, (event) => {
             this._manifestLoading = false;
-            const payload = (event && event.payload) as Record<string, any> | null;
-            const result = payload && payload.result as Record<string, any> | null;
-            if (!result || !Array.isArray(result.items)) {
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const result = payload !== null && isPlainRecord(payload.result) ? payload.result : null;
+            if (result === null || !Array.isArray(result.items)) {
                 throw new Error('CRMNamespaceIntegrationsPage: integrations items required');
             }
-            this._manifestItems = result.items;
-            const amo = result.items.find((row: Record<string, any> | null) => row && row.provider_id === PROVIDER_AMOCRM);
-            this._applyAutoSyncFieldsFromManifestRow(amo !== undefined ? amo : null);
+            const rows: Record<string, unknown>[] = [];
+            for (const row of result.items) {
+                if (!isPlainRecord(row)) {
+                    throw new Error('CRMNamespaceIntegrationsPage: integration row must be an object');
+                }
+                rows.push(row);
+            }
+            this._manifestItems = rows;
+            const amo = rows.find((row) => row.provider_id === PROVIDER_AMOCRM);
+            this._applyAutoSyncFieldsFromManifestRow(amo === undefined ? null : amo);
         });
         this.useEvent(this._listOp.op.events.FAILED, () => {
             this._manifestLoading = false;
@@ -293,13 +307,13 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
             this._listOp.run({ namespace_name: this.itemId });
         });
         this.useEvent(this._namespaces.resource.events.ITEM_LOADED, (event) => {
-            const p = (event && event.payload) as Record<string, any> | null;
-            const item = p && p.item as Record<string, any> | null;
+            const p = isPlainRecord(event.payload) ? event.payload : null;
+            const item = p !== null && isPlainRecord(p.item) ? p.item : null;
             if (!item || item.name !== this.itemId) return;
             this._subdomainDraft = amoSubdomainFromCrmSettings(item.crm_settings);
         });
         this.useEvent(this._namespaces.resource.events.LIST_LOADED, () => {
-            const item = this._namespaces.byId[this.itemId] as Record<string, any> | undefined;
+            const item = this._namespaces.byId[this.itemId];
             if (item !== undefined) {
                 this._subdomainDraft = amoSubdomainFromCrmSettings(item.crm_settings);
             }
@@ -320,7 +334,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
         this._listOp.run({ namespace_name: this.itemId });
     }
 
-    _applyAutoSyncFieldsFromManifestRow(row: Record<string, any> | null) {
+    _applyAutoSyncFieldsFromManifestRow(row: Record<string, unknown> | null) {
         if (row === null) {
             return;
         }
@@ -400,17 +414,16 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
             return_origin: globalThis.location.origin,
             brand_host: globalThis.location.host,
         });
-        const res = result as Record<string, any> | null;
-        if (!res || typeof res.authorize_url !== 'string' || res.authorize_url.length === 0) {
+        if (!isPlainRecord(result) || typeof result.authorize_url !== 'string' || result.authorize_url.length === 0) {
             throw new Error('CRMNamespaceIntegrationsPage: authorize_url required');
         }
-        window.location.assign(res.authorize_url);
+        window.location.assign(result.authorize_url);
     }
 
     async _waitCrmTaskOutcome(taskId: string): Promise<{ ok: boolean; status: string; error_message: string }> {
-        const seeded = await this._taskGetOp.run({ task_id: taskId }) as Record<string, any> | null;
+        const seeded = await this._taskGetOp.run({ task_id: taskId });
         if (seeded !== null) {
-            if (typeof seeded.status !== 'string') {
+            if (!isPlainRecord(seeded) || typeof seeded.status !== 'string') {
                 throw new Error('crm task wait: status missing');
             }
             if (INTEGRATION_TASK_TERMINAL.has(seeded.status)) {
@@ -432,10 +445,10 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
                 unsub();
                 resolve(outcome);
             };
-            const onUpdated = (event: { payload?: unknown } | null) => {
-                const payload = (event && event.payload) as Record<string, any> | null;
-                const task = payload && payload.task as Record<string, any> | null;
-                if (!task || typeof task !== 'object' || task.task_id !== taskId) {
+            const onUpdated = (event: PlatformEvent) => {
+                const payload = isPlainRecord(event.payload) ? event.payload : null;
+                const task = payload !== null && isPlainRecord(payload.task) ? payload.task : null;
+                if (task === null || task.task_id !== taskId) {
                     return;
                 }
                 if (typeof task.status !== 'string' || !INTEGRATION_TASK_TERMINAL.has(task.status)) {
@@ -531,12 +544,10 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
                 provider_id: PROVIDER_AMOCRM,
             });
             if (entitiesStarted === null) return;
-            if (!entitiesStarted || typeof (entitiesStarted as Record<string, any>).task_id !== 'string') {
-                throw new Error('amocrm sync: task_id missing in response');
-            }
+            const entitiesTaskId = taskIdOf(entitiesStarted, 'amocrm sync: task_id missing in response');
             this.toast('integrations_page.amocrm_unified_sync_started', { type: 'success' });
             this._listOp.run({ namespace_name: this.itemId });
-            const entitiesOutcome = await this._waitCrmTaskOutcome((entitiesStarted as Record<string, any>).task_id);
+            const entitiesOutcome = await this._waitCrmTaskOutcome(entitiesTaskId);
             if (!entitiesOutcome.ok) {
                 this._toastTaskFailure('integrations_page.amocrm_sync_task_failed', entitiesOutcome);
                 return;
@@ -546,11 +557,9 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
                 provider_id: PROVIDER_AMOCRM,
             });
             if (fieldsStarted === null) return;
-            if (!fieldsStarted || typeof (fieldsStarted as Record<string, any>).task_id !== 'string') {
-                throw new Error('amocrm fields: task_id missing in response');
-            }
+            const fieldsTaskId = taskIdOf(fieldsStarted, 'amocrm fields: task_id missing in response');
             this._listOp.run({ namespace_name: this.itemId });
-            const fieldsOutcome = await this._waitCrmTaskOutcome((fieldsStarted as Record<string, any>).task_id);
+            const fieldsOutcome = await this._waitCrmTaskOutcome(fieldsTaskId);
             if (!fieldsOutcome.ok) {
                 this._toastTaskFailure('integrations_page.amocrm_fields_task_failed', fieldsOutcome);
                 return;
@@ -576,6 +585,8 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
 
         const amoRow = this._amoManifestRow();
         const connected = amoRow && amoRow.connected === true;
+        const namespaceName = ns.name;
+        const namespaceLabel = namespaceName === undefined || namespaceName === null ? '' : String(namespaceName);
 
         return html`
             <div class="breadcrumbs-wrap">
@@ -584,7 +595,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
             <div class="header-wrap">
                 <page-header
                     title=${this.t('integrations_page.title')}
-                    subtitle=${this.t('integrations_page.subtitle', { name: String((ns as Record<string, any>).name ?? '') })}
+                    subtitle=${this.t('integrations_page.subtitle', { name: namespaceLabel })}
                 ></page-header>
                 <p class="hint" style="padding: 0 var(--space-4); margin-top: var(--space-1);">
                     ${this.t('integrations_page.scope_hint')}

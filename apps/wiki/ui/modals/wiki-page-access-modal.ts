@@ -48,6 +48,12 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 const RELATION_VIEWER = 'viewer';
 const LINK_PERMISSION_VIEWER = 'viewer';
 
@@ -471,7 +477,7 @@ export class WikiPageAccessModal extends PlatformModal {
                               <platform-button
                                   variant="ghost"
                                   size="sm"
-                                  @click=${() => this._removeMember(String(member.user_id ?? ''))}
+                                  @click=${() => this._removeMember(missingAsEmpty(member.user_id))}
                               >${this.t('access.member_remove')}</platform-button>
                           </div>
                       `)}
@@ -482,7 +488,7 @@ export class WikiPageAccessModal extends PlatformModal {
                         label=${this.t('access.member_add')}
                         .value=${this._newMemberId}
                         .config=${this._memberConfig()}
-                        @change=${(event: CustomEvent<{ value?: unknown }>) => { this._newMemberId = String(event.detail.value ?? ''); }}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => { this._newMemberId = missingAsEmpty(event.detail.value); }}
                     ></platform-field>
                     <platform-field
                         type="enum"
@@ -490,7 +496,7 @@ export class WikiPageAccessModal extends PlatformModal {
                         label=${this.t('access.relation_label')}
                         .value=${this._newRelation}
                         .config=${this._relationConfig()}
-                        @change=${(event: CustomEvent<{ value?: unknown }>) => { this._newRelation = String(event.detail.value ?? ''); }}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => { this._newRelation = missingAsEmpty(event.detail.value); }}
                     ></platform-field>
                     <platform-button variant="primary" data-wiki-member-add @click=${() => this._addMember()}>
                         <platform-icon name="plus" size="16"></platform-icon>

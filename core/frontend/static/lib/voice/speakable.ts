@@ -13,6 +13,15 @@
  * (`scripts/check_speakable_parity.py`).
  */
 
+import { isPlainRecord } from '../events/payload.js';
+
+function partText(part: unknown): string | null {
+    if (!isPlainRecord(part)) return null;
+    const root = part.root !== undefined ? part.root : part;
+    if (!isPlainRecord(root) || typeof root.text !== 'string' || root.text === '') return null;
+    return root.text;
+}
+
 export const SPEAKABLE_ARTIFACT_NAMES: ReadonlySet<string> = Object.freeze(new Set([
     'response',
     'operator_reply',
@@ -37,18 +46,7 @@ export const SPEAK_FLAG_KEY = 'speak';
 function artifactHasAnyTextPart(artifact: A2aArtifactLike): boolean {
     const parts = Array.isArray(artifact.parts) ? artifact.parts : [];
     for (const part of parts) {
-        if (part === null || typeof part !== 'object') {
-            continue;
-        }
-        const rec = part as Record<string, unknown>;
-        const root = rec.root !== undefined ? rec.root : rec;
-        if (root === null || typeof root !== 'object') {
-            continue;
-        }
-        const text = (root as Record<string, unknown>).text;
-        if (typeof text === 'string' && text !== '') {
-            return true;
-        }
+        if (partText(part) !== null) return true;
     }
     return false;
 }
@@ -58,13 +56,12 @@ function artifactHasAnyTextPart(artifact: A2aArtifactLike): boolean {
  * @returns {boolean}
  */
 export function isSpeakableArtifact(artifact: unknown): artifact is A2aArtifactLike {
-    if (artifact === null || typeof artifact !== 'object') {
+    if (!isPlainRecord(artifact)) {
         return false;
     }
-    const art = artifact as A2aArtifactLike;
-    let name = typeof art.name === 'string' ? art.name : '';
+    let name = typeof artifact.name === 'string' ? artifact.name : '';
     if (name === '') {
-        if (!artifactHasAnyTextPart(art)) {
+        if (!artifactHasAnyTextPart(artifact)) {
             return false;
         }
         name = 'response';
@@ -72,11 +69,9 @@ export function isSpeakableArtifact(artifact: unknown): artifact is A2aArtifactL
     if (!SPEAKABLE_ARTIFACT_NAMES.has(name)) {
         return false;
     }
-    const metadata = art.metadata;
-    if (metadata !== null && typeof metadata === 'object') {
-        if ((metadata as Record<string, unknown>)[SPEAK_FLAG_KEY] === false) {
-            return false;
-        }
+    const metadata = artifact.metadata;
+    if (isPlainRecord(metadata) && metadata[SPEAK_FLAG_KEY] === false) {
+        return false;
     }
     return true;
 }
@@ -97,21 +92,8 @@ export function iterSpeakableTextParts(artifact: A2aArtifactLike): string[] {
     const parts = Array.isArray(artifact.parts) ? artifact.parts : [];
     const out: string[] = [];
     for (const part of parts) {
-        if (part === null || typeof part !== 'object') {
-            continue;
-        }
-        const rec = part as Record<string, unknown>;
-        const root = rec.root !== undefined ? rec.root : rec;
-        if (root === null || typeof root !== 'object') {
-            continue;
-        }
-        const text = (root as Record<string, unknown>).text;
-        if (typeof text !== 'string') {
-            continue;
-        }
-        if (text !== '') {
-            out.push(text);
-        }
+        const text = partText(part);
+        if (text !== null) out.push(text);
     }
     return out;
 }
@@ -123,10 +105,10 @@ export function iterSpeakableTextParts(artifact: A2aArtifactLike): string[] {
  * @returns {string|null} склеенный текст или `null` если не speakable / нет текста.
  */
 export function extractSpeakableText(event: unknown): string | null {
-    if (event === null || typeof event !== 'object') {
+    if (!isPlainRecord(event)) {
         return null;
     }
-    const artifact = (event as A2aArtifactUpdateEventLike).artifact;
+    const artifact = event.artifact;
     if (!artifact) {
         return null;
     }

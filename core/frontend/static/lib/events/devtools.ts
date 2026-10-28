@@ -9,6 +9,7 @@
  */
 
 import type { EventBus } from './bus.js';
+import type { PlatformBusState } from './bus-state.js';
 import type { EventLog } from './log.js';
 import type { PlatformEvent, EventMetaInput } from './contract.js';
 
@@ -24,11 +25,21 @@ declare global {
     }
 }
 
-export function maybeAttachDevtools(bus: EventBus, log: EventLog): void {
-    if (typeof window === 'undefined') return;
-    const enabled = window.__PLATFORM_DEVTOOLS__ === true
-        || /[?&]platform_devtools=1\b/.test(location.search);
-    if (!enabled) return;
+/** Единственный флаг диагностики: `?platform_devtools=1` или `window.__PLATFORM_DEVTOOLS__ = true`. */
+export function isPlatformDevtoolsEnabled(): boolean {
+    return typeof window !== 'undefined'
+        && (window.__PLATFORM_DEVTOOLS__ === true || /[?&]platform_devtools=1\b/.test(location.search));
+}
+
+/** Диагностическая запись подсистемы; без флага devtools ничего не пишет. */
+export function devtoolsLog(scope: string, message: string, payload?: unknown): void {
+    if (!isPlatformDevtoolsEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.debug(`[${scope}]`, message, payload);
+}
+
+export function maybeAttachDevtools(bus: EventBus<PlatformBusState>, log: EventLog): void {
+    if (!isPlatformDevtoolsEnabled()) return;
 
     bus.subscribeAny((event: PlatformEvent) => {
         // eslint-disable-next-line no-console

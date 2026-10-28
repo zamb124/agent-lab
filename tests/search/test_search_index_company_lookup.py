@@ -28,14 +28,14 @@ async def test_find_in_company_returns_own_row_and_hides_other_company(
             updated_at=now,
         )
     )
-    found = await SearchIndexDefinition.find_in_company(owner_company_id, search_index_id)
+    found = await SearchIndexDefinition.by_search_index_id(owner_company_id, search_index_id)
     assert found is not None
     assert found.company_id == owner_company_id
-    assert await SearchIndexDefinition.find_in_company(other_company_id, search_index_id) is None
-    assert await SearchIndexDefinition.find_in_company(owner_company_id, f"missing-{unique_id}") is None
+    assert await SearchIndexDefinition.by_search_index_id(other_company_id, search_index_id) is None
+    assert await SearchIndexDefinition.by_search_index_id(owner_company_id, f"missing-{unique_id}") is None
     with pytest.raises(ValueError, match="company_id cannot be empty"):
-        _ = await SearchIndexDefinition.find_in_company("", search_index_id)
+        _ = await SearchIndexDefinition.by_search_index_id("", search_index_id)
     with pytest.raises(ValueError, match="search_index_id cannot be empty"):
-        _ = await SearchIndexDefinition.find_in_company(owner_company_id, "")
+        _ = await SearchIndexDefinition.by_search_index_id(owner_company_id, "")
     deleted = await SearchIndexDefinition.delete_by_id(search_index_id)
     assert deleted is True

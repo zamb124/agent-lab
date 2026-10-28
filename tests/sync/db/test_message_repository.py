@@ -131,7 +131,7 @@ async def test_message_list_by_thread(
         ],
     )
 
-    thread_msgs = await SyncMessage.list_by_thread(thr_1, company_id=company_id)
+    thread_msgs = await SyncMessage.list_alive_by_sent_at(thr_1, company_id=company_id)
     assert [m.message_id for m in thread_msgs] == [msg_root, msg_reply]
 
 
@@ -211,7 +211,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
         created_by_user_id="u_viewer",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    await SyncChannelMember.ensure_channel_member_row(ch_lane, "u_viewer", company_id=company_id
+    await SyncChannelMember.ensure_member(ch_lane, "u_viewer", company_id=company_id
     )
 
     t_msg = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
@@ -244,7 +244,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
     assert summ.last_message_preview == "hello lane"
     assert summ.last_message_at is not None
 
-    await SyncChannelMember.set_channel_member_last_read_at(
+    await SyncChannelMember.update_last_read_at(
         ch_lane,
         "u_viewer",
         datetime(2026, 3, 1, 13, 0, 0, tzinfo=UTC),
@@ -279,9 +279,9 @@ async def test_channel_lane_summaries_batch_mention_unread_count(
         created_by_user_id="u_viewer",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    await SyncChannelMember.ensure_channel_member_row(ch_men, "u_viewer", company_id=company_id
+    await SyncChannelMember.ensure_member(ch_men, "u_viewer", company_id=company_id
     )
-    await SyncChannelMember.ensure_channel_member_row(ch_men, "u_other", company_id=company_id
+    await SyncChannelMember.ensure_member(ch_men, "u_other", company_id=company_id
     )
     t_msg = datetime(2026, 3, 2, 12, 0, 0, tzinfo=UTC)
     _ = await SyncMessage.create_with_contents(

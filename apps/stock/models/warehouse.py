@@ -61,9 +61,10 @@ class StockWarehouse(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_company(
+    async def list_by_code(
         cls, company_id: str, *, limit: int, offset: int
     ) -> list[Self]:
+        """Окно складов компании, ORDER BY code, limit и offset."""
         return await cls.objects.filter(company_id=company_id).order_by("code").limit(
             limit
         ).offset(offset).all()

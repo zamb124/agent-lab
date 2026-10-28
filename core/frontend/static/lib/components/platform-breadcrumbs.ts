@@ -2,7 +2,7 @@ import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
-import type { RouterRoute, RouterState } from '../events/reducers/router.js';
+import type { RouterRoute } from '../events/reducers/router.js';
 import type { SelectController } from '../events/select-controller.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -127,8 +127,11 @@ export class PlatformBreadcrumbs extends PlatformElement {
         this.trail = [];
         this._separator = '/';
         this._routerSel = this.select((s) => {
-            const router = s.router as RouterState;
-            return { routeKey: router.routeKey, params: router.params, routes: router.routes };
+            return {
+                routeKey: s.router.routeKey,
+                params: s.router.params,
+                routes: s.router.routes,
+            };
         });
     }
 
@@ -175,7 +178,7 @@ export class PlatformBreadcrumbs extends PlatformElement {
     }
 
     _resolveLabel(route: RouterRoute): string {
-        const titleKey = (route as RouterRoute & { titleKey?: string }).titleKey;
+        const titleKey = route.titleKey;
         if (typeof titleKey === 'string' && titleKey.length > 0) {
             return this.t(titleKey);
         }
@@ -216,7 +219,7 @@ export class PlatformBreadcrumbs extends PlatformElement {
 
     override render(): TemplateResult {
         const router = this._routerSel.value;
-        const chain = this._buildChain(router?.routes ?? [], router?.routeKey ?? null);
+        const chain = this._buildChain(router.routes, router.routeKey);
         const trimmedCurrent = typeof this.currentLabel === 'string' ? this.currentLabel.trim() : '';
         const trail = this._trailSegments();
         // Цепочка из одного узла дублирует заголовок страницы и не несёт навигации,
@@ -228,7 +231,7 @@ export class PlatformBreadcrumbs extends PlatformElement {
         const routeSegments = chain.map((route) => ({
             label: this._resolveLabel(route),
             routeKey: route.key,
-            params: this._paramsForRoute(route, router?.routeKey ?? null, router?.params),
+            params: this._paramsForRoute(route, router.routeKey, router.params),
         }));
         const segments = trimmedCurrent.length > 0
             // Подпись текущей страницы занимает место последнего маршрута,
@@ -255,7 +258,12 @@ export class PlatformBreadcrumbs extends PlatformElement {
                                 <button
                                     type="button"
                                     class="breadcrumb-item"
-                                    @click=${() => this._onClick(segment.routeKey, segment.params ?? {})}
+                                    @click=${() => {
+                                        if (segment.params === undefined) {
+                                            throw new Error('platform-breadcrumbs: segment params required');
+                                        }
+                                        this._onClick(segment.routeKey, segment.params);
+                                    }}
                                 >
                                     ${segment.label}
                                 </button>

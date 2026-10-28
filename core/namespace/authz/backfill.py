@@ -51,7 +51,7 @@ async def backfill_platform_namespace_authz(
     company_written = 0
     owners_written = 0
 
-    for row in await Namespace.list_for_authz(limit=limit):
+    for row in await Namespace.partial_company_rows_by_namespace_id(limit=limit):
         await authz.write(
             [
                 platform_namespace_company_link(row.company_id, row.name),

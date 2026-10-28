@@ -8,6 +8,15 @@ if (typeof globalThis.HTMLElement !== 'function') {
     };
 }
 
+class FlowUiStub extends globalThis.HTMLElement {
+    constructor() {
+        super();
+        this.theme = 'auto';
+        this.locale = 'auto';
+        this.assistantTitle = '';
+    }
+}
+
 class HostElement extends globalThis.HTMLElement {
     constructor(presentation = 'drawer') {
         super();
@@ -17,13 +26,7 @@ class HostElement extends globalThis.HTMLElement {
             showLauncher: true,
             toggleEventName: 'linnex-flow-ui-toggle',
         };
-        this.flowUi = {
-            theme: 'auto',
-            locale: 'auto',
-            assistantTitle: '',
-            getExtraMetadataVariables: undefined,
-            getRequestHeaders: undefined,
-        };
+        this.flowUi = new FlowUiStub();
         this.shadowRoot = {
             querySelector: (selector) => {
                 if (selector !== 'platform-flow-ui') {

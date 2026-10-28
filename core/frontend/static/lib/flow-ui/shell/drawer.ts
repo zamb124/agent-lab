@@ -24,6 +24,31 @@ import {
     writeLaraDrawerGeometry,
 } from './preferences.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
+import { isPlainRecord } from '../../events/payload.js';
+
+function customDetail(event: Event): unknown {
+    if (!(event instanceof CustomEvent)) return undefined;
+    return event.detail;
+}
+
+function movePoint(detail: unknown): { clientX: number; clientY: number; pointerId: number } {
+    if (!isPlainRecord(detail)) {
+        throw new Error('flow-ui-drawer: move detail is required');
+    }
+    const clientX = detail.clientX;
+    const clientY = detail.clientY;
+    const pointerId = detail.pointerId;
+    if (typeof clientX !== 'number' || !Number.isFinite(clientX)) {
+        throw new Error('flow-ui-drawer: move detail.clientX must be a finite number');
+    }
+    if (typeof clientY !== 'number' || !Number.isFinite(clientY)) {
+        throw new Error('flow-ui-drawer: move detail.clientY must be a finite number');
+    }
+    if (typeof pointerId !== 'number' || !Number.isFinite(pointerId)) {
+        throw new Error('flow-ui-drawer: move detail.pointerId must be a finite number');
+    }
+    return { clientX, clientY, pointerId };
+}
 
 interface DrawerGesture {
     type: 'move' | 'resize' | 'launcher';
@@ -78,17 +103,17 @@ export class FlowUIDrawer extends LitElement {
         this._loadedPersistKey = null;
         this._gesture = null;
         this._toggle = (event: Event) => {
-            const detail = (event as CustomEvent).detail;
-            if (detail && typeof detail === 'object' && Object.prototype.hasOwnProperty.call(detail, 'open')) {
-                this.open = (detail as Record<string, unknown>).open === true;
+            const detail = customDetail(event);
+            if (isPlainRecord(detail) && Object.prototype.hasOwnProperty.call(detail, 'open')) {
+                this.open = detail.open === true;
                 return;
             }
             this.open = !this.open;
         };
         this._onExpandToggle = (event: Event) => {
-            const detail = (event as CustomEvent).detail;
-            if (detail && typeof detail === 'object' && Object.prototype.hasOwnProperty.call(detail, 'expanded')) {
-                this.expanded = (detail as Record<string, unknown>).expanded === true;
+            const detail = customDetail(event);
+            if (isPlainRecord(detail) && Object.prototype.hasOwnProperty.call(detail, 'expanded')) {
+                this.expanded = detail.expanded === true;
                 return;
             }
             this.expanded = !this.expanded;
@@ -97,7 +122,7 @@ export class FlowUIDrawer extends LitElement {
             this.open = false;
         };
         this._onMoveStart = (event: Event) => {
-            this._beginMoveFromDetail((event as CustomEvent).detail);
+            this._beginMoveFromDetail(customDetail(event));
         };
         this._onWindowPointerMove = (event: PointerEvent) => {
             this._handlePointerMove(event);
@@ -109,9 +134,9 @@ export class FlowUIDrawer extends LitElement {
             this._reclampToViewport(true);
         };
         this._onIdentityChanged = (event: Event) => {
-            const detail = (event as CustomEvent).detail;
-            if (!detail || typeof detail !== 'object') throw new Error('flow-ui-drawer: flow-ui-identity-changed detail required');
-            const imageUrl = (detail as Record<string, unknown>).image_url;
+            const detail = customDetail(event);
+            if (!isPlainRecord(detail)) throw new Error('flow-ui-drawer: flow-ui-identity-changed detail required');
+            const imageUrl = detail.image_url;
             if (imageUrl !== null && typeof imageUrl !== 'string') throw new Error('flow-ui-drawer: image_url must be string or null');
             this._identityImageUrl = imageUrl;
         };
@@ -266,12 +291,7 @@ export class FlowUIDrawer extends LitElement {
 
     _syncGeometryFromStore() {
         const viewport = this._readViewport();
-        let stored = null;
-        try {
-            stored = this._loadStoredGeometry();
-        } catch {
-            stored = null;
-        }
+        const stored = this._loadStoredGeometry();
         if (stored === null) {
             this._cluster = clampCluster(
                 createDefaultGeometry(this._launcherPosition(), viewport),
@@ -377,11 +397,7 @@ export class FlowUIDrawer extends LitElement {
 
     private _beginMoveFromDetail(detail: unknown) {
         if (this._gesturesEnabled() !== true) return;
-        if (!detail || typeof detail !== 'object') throw new Error('flow-ui-drawer: move detail is required');
-        const d = detail as { clientX?: unknown; clientY?: unknown; pointerId?: unknown };
-        if (typeof d.clientX !== 'number' || !Number.isFinite(d.clientX)) throw new Error('flow-ui-drawer: move detail.clientX must be a finite number');
-        if (typeof d.clientY !== 'number' || !Number.isFinite(d.clientY)) throw new Error('flow-ui-drawer: move detail.clientY must be a finite number');
-        if (typeof d.pointerId !== 'number' || !Number.isFinite(d.pointerId)) throw new Error('flow-ui-drawer: move detail.pointerId must be a finite number');
+        const point = movePoint(detail);
         if (this._cluster === null) {
             this._syncGeometryFromStore();
         }
@@ -389,16 +405,16 @@ export class FlowUIDrawer extends LitElement {
         if (moveClusterStart === null) throw new Error('flow-ui-drawer: cluster is required');
         this._gesture = {
             type: 'move',
-            pointerId: d.pointerId,
-            startX: d.clientX,
-            startY: d.clientY,
+            pointerId: point.pointerId,
+            startX: point.clientX,
+            startY: point.clientY,
             startCluster: moveClusterStart,
             didMove: false,
             seOffsetX: 0,
             seOffsetY: 0,
         };
         this._dragging = true;
-        this._capturePointer(d.pointerId);
+        this._capturePointer(point.pointerId);
         this._attachGestureListeners();
     }
 
@@ -499,11 +515,11 @@ export class FlowUIDrawer extends LitElement {
             class="panel"
             style=${gesturesOn && cluster !== null ? this._clusterStyle('panel') : ''}
         ><platform-flow-ui
-            embed-id=${c.embedId || ''}
-            flow-id=${c.flowId || ''}
+            embed-id=${typeof c.embedId === 'string' ? c.embedId : ''}
+            flow-id=${typeof c.flowId === 'string' ? c.flowId : ''}
             branch-id=${c.branchId || 'default'}
             base-url=${c.baseUrl}
-            context-id=${c.contextId || ''}
+            context-id=${typeof c.contextId === 'string' ? c.contextId : ''}
             company-id=${companyId}
             voice-base-url=${voiceBaseUrl}
             platform-ui-origin=${platformUiOrigin}

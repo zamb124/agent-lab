@@ -15,9 +15,13 @@ import type { TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { getBottomSheetTag } from '../utils/bottom-sheet-registry.js';
 import { CoreEvents } from '../events/contract.js';
-import type { BottomSheetItem, BottomSheetsState } from '../events/reducers/bottom_sheets.js';
+import type { BottomSheetItem } from '../events/reducers/bottom_sheets.js';
 import type { SelectController } from '../events/select-controller.js';
 import { waitForPlatformMotion } from '../utils/motion.js';
+
+function isStackSheet(node: unknown): node is StackSheetElement {
+    return node instanceof HTMLElement;
+}
 
 interface StackSheetElement extends HTMLElement {
     _sheetId?: string;
@@ -35,7 +39,7 @@ export class PlatformBottomSheetStack extends PlatformElement {
 
     constructor() {
         super();
-        this._stackSel = this.select((s) => (s.bottomSheets as BottomSheetsState).stack);
+        this._stackSel = this.select((s) => s.bottomSheets.stack);
         this._mounted = new Map();
         this._closing = new Set();
     }
@@ -45,7 +49,7 @@ export class PlatformBottomSheetStack extends PlatformElement {
     }
 
     override updated(): void {
-        const stack = this._stackSel ? this._stackSel.value || [] : [];
+        const stack = this._stackSel.value;
         const wantIds = new Set(stack.map((s) => s.id));
 
         for (const [id, el] of Array.from(this._mounted.entries())) {
@@ -64,7 +68,11 @@ export class PlatformBottomSheetStack extends PlatformElement {
                 continue;
             }
             const tag = getBottomSheetTag(item.kind);
-            const el = document.createElement(tag) as StackSheetElement;
+            const created = document.createElement(tag);
+            if (!isStackSheet(created)) {
+                throw new Error(`platform-bottom-sheet-stack: ${tag} did not create an element`);
+            }
+            const el = created;
             this._applyProps(el, item);
             this.appendChild(el);
             this._mounted.set(item.id, el);
@@ -107,7 +115,7 @@ export class PlatformBottomSheetStack extends PlatformElement {
             } finally {
                 this._closing.delete(id);
             }
-            const stack = this._stackSel ? this._stackSel.value || [] : [];
+            const stack = this._stackSel.value;
             const item = stack.find((s) => s.id === id);
             if (!item || item.closing !== true) return;
             this.dispatch(CoreEvents.UI_BOTTOM_SHEET_CLOSED, { id });

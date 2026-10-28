@@ -26,7 +26,11 @@ function _groupByParent(items: CatalogRecord[], parentKey: string, idKey: string
         if (!map.has(bucketKey)) {
             map.set(bucketKey, []);
         }
-        map.get(bucketKey)!.push(item);
+        const bucket = map.get(bucketKey);
+        if (bucket === undefined) {
+            throw new Error('office-explorer-tree: catalog bucket missing');
+        }
+        bucket.push(item);
     }
     return map;
 }
@@ -265,7 +269,8 @@ export class OfficeExplorerTree extends PlatformElement {
     }
 
     private _createCatalog(parentCatalogId: string | null) {
-        this.emit('create-catalog', { parentCatalogId: parentCatalogId || null });
+        const parentId = parentCatalogId === null || parentCatalogId.length === 0 ? null : parentCatalogId;
+        this.emit('create-catalog', { parentCatalogId: parentId });
     }
 
     private _showContextMenu(clientX: number, clientY: number, catalog: CatalogRecord, hasChildCatalogs: boolean) {
@@ -335,7 +340,8 @@ export class OfficeExplorerTree extends PlatformElement {
     }
 
     private _renderCatalogNode(catalog: CatalogRecord, catalogChildrenMap: Map<string, CatalogRecord[]>, depth: number): TemplateResult {
-        const childCatalogs = catalogChildrenMap.get(catalog.catalog_id) || [];
+        const storedChildren = catalogChildrenMap.get(catalog.catalog_id);
+        const childCatalogs = storedChildren === undefined ? [] : storedChildren;
         const hasChildren = childCatalogs.length > 0;
         const expanded = this._catalogExpanded(catalog.catalog_id);
         const active = catalog.catalog_id === this.activeCatalogId;
@@ -406,7 +412,8 @@ export class OfficeExplorerTree extends PlatformElement {
     override render(): TemplateResult {
         const items = Array.isArray(this.catalogs) ? this.catalogs : [];
         const catalogChildrenMap = _groupByParent(items, 'parent_catalog_id', 'catalog_id');
-        const roots = catalogChildrenMap.get('') || [];
+        const storedRoots = catalogChildrenMap.get('');
+        const roots = storedRoots === undefined ? [] : storedRoots;
         const menu = this._contextMenu;
         return html`
             <div class="head">

@@ -125,7 +125,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         this._rebuild = this.useOp(REBUILD_OP);
         this._settings = this.useOp(SETTINGS_OP);
         this._catalogs = this.useResource(CATALOGS_NAME);
-        this._localeSel = this.select((s) => (s.i18n as Record<string, unknown>).locale);
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
     private _status: OpController;
     private _enable: OpController;

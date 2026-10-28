@@ -38,9 +38,11 @@ class StorageRoute(PlatformModel):
         return await cls.get(storage_route_id(company_id, source_kind))
 
     @classmethod
-    async def list_for_company(cls, company_id: str) -> list[Self]:
+    async def list_by_source_kind(cls, company_id: str) -> list[Self]:
+        """Все маршруты компании, ORDER BY source_kind. Предела нет."""
         return await cls.objects.filter(company_id=company_id).order_by("source_kind").all()
 
     @classmethod
-    async def list_for_storage(cls, storage_id: str) -> list[Self]:
+    async def list_unordered_for_storage(cls, storage_id: str) -> list[Self]:
+        """Все маршруты хранилища. Порядка и limit нет."""
         return await cls.objects.filter(storage_id=storage_id).all()

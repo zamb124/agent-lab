@@ -8,6 +8,7 @@
  *      а текст ответа — артефактом `response`;
  *   3. эта фабрика сводит их в SERP-state для UI.
  */
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest, HttpError } from '@platform/lib/events/http.js';
 import { a2aEndpointUrl, buildSendMessageBody, buildUserMessage } from '@platform/lib/flow-ui/protocol/a2a-codec.js';
@@ -102,8 +103,8 @@ function _emptySourceDescribeStream() {
     };
 }
 
-function _requireObject(value: unknown, label: string) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+function _requireObject(value: unknown, label: string): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
         throw new Error(`${label} must be an object`);
     }
     return value;
@@ -189,12 +190,12 @@ function _requirePublicSearchErrorKind(value: unknown, label: string) {
 
 function _normalizeRunPayload(payload: any) {
     const body = _requireObject(payload, 'frontend/public_search_run payload');
-    const runId = _requireNonEmptyString((body as Record<string, any>).run_id, 'run_id');
+    const runId = _requireNonEmptyString(body.run_id, 'run_id');
     if (!RUN_ID_PATTERN.test(runId)) {
         throw new Error('run_id must contain only latin letters, digits, underscore or dash');
     }
-    const query = _requireNonEmptyString((body as Record<string, any>).query, 'query');
-    const mode = _requireSearchRunMode((body as Record<string, any>).mode, 'mode');
+    const query = _requireNonEmptyString(body.query, 'query');
+    const mode = _requireSearchRunMode(body.mode, 'mode');
     if (Object.prototype.hasOwnProperty.call(body, 'files')) {
         throw new Error(
             'frontend/public_search_run: files payload removed; use pending browser Files + chunked upload',
@@ -206,19 +207,19 @@ function _normalizeRunPayload(payload: any) {
 function _normalizeResult(value: unknown, index: number) {
     const item = _requireObject(value, `results[${index}]`);
     return {
-        title: _requireNonEmptyString((item as Record<string, any>).title, `results[${index}].title`),
-        url: _requireNonEmptyString((item as Record<string, any>).url, `results[${index}].url`),
-        snippet: _requireString((item as Record<string, any>).snippet, `results[${index}].snippet`),
-        display_url: _requireString((item as Record<string, any>).display_url, `results[${index}].display_url`),
-        provider: _requireNonEmptyString((item as Record<string, any>).provider, `results[${index}].provider`),
-        provider_rank: _requireNumber((item as Record<string, any>).provider_rank, `results[${index}].provider_rank`),
-        rank: _requireNumber((item as Record<string, any>).rank, `results[${index}].rank`),
-        score: _requireNumber((item as Record<string, any>).score, `results[${index}].score`),
-        published_at: _requireNullableString((item as Record<string, any>).published_at, `results[${index}].published_at`),
-        source_type: _requireNonEmptyString((item as Record<string, any>).source_type, `results[${index}].source_type`),
-        site_name: _requireString((item as Record<string, any>).site_name, `results[${index}].site_name`),
-        favicon_url: _requireString((item as Record<string, any>).favicon_url, `results[${index}].favicon_url`),
-        preview_image_url: _requireString((item as Record<string, any>).preview_image_url, `results[${index}].preview_image_url`),
+        title: _requireNonEmptyString(item.title, `results[${index}].title`),
+        url: _requireNonEmptyString(item.url, `results[${index}].url`),
+        snippet: _requireString(item.snippet, `results[${index}].snippet`),
+        display_url: _requireString(item.display_url, `results[${index}].display_url`),
+        provider: _requireNonEmptyString(item.provider, `results[${index}].provider`),
+        provider_rank: _requireNumber(item.provider_rank, `results[${index}].provider_rank`),
+        rank: _requireNumber(item.rank, `results[${index}].rank`),
+        score: _requireNumber(item.score, `results[${index}].score`),
+        published_at: _requireNullableString(item.published_at, `results[${index}].published_at`),
+        source_type: _requireNonEmptyString(item.source_type, `results[${index}].source_type`),
+        site_name: _requireString(item.site_name, `results[${index}].site_name`),
+        favicon_url: _requireString(item.favicon_url, `results[${index}].favicon_url`),
+        preview_image_url: _requireString(item.preview_image_url, `results[${index}].preview_image_url`),
     };
 }
 
@@ -232,13 +233,13 @@ function _normalizeProviders(value: unknown) {
     for (const [name, raw] of Object.entries(providers)) {
         const status = _requireObject(raw, `providers.${name}`);
         out[name] = {
-            ok: _requireBoolean((status as Record<string, any>).ok, `providers.${name}.ok`),
-            latency_ms: _requireNumber((status as Record<string, any>).latency_ms, `providers.${name}.latency_ms`),
-            results_count: _requireNumber((status as Record<string, any>).results_count, `providers.${name}.results_count`),
-            error: _requireNullableString((status as Record<string, any>).error, `providers.${name}.error`),
-            selected: _requireBoolean((status as Record<string, any>).selected, `providers.${name}.selected`),
-            skipped: _requireBoolean((status as Record<string, any>).skipped, `providers.${name}.skipped`),
-            skip_reason: _requireNullableString((status as Record<string, any>).skip_reason, `providers.${name}.skip_reason`),
+            ok: _requireBoolean(status.ok, `providers.${name}.ok`),
+            latency_ms: _requireNumber(status.latency_ms, `providers.${name}.latency_ms`),
+            results_count: _requireNumber(status.results_count, `providers.${name}.results_count`),
+            error: _requireNullableString(status.error, `providers.${name}.error`),
+            selected: _requireBoolean(status.selected, `providers.${name}.selected`),
+            skipped: _requireBoolean(status.skipped, `providers.${name}.skipped`),
+            skip_reason: _requireNullableString(status.skip_reason, `providers.${name}.skip_reason`),
         };
     }
     return out;
@@ -247,9 +248,9 @@ function _normalizeProviders(value: unknown) {
 function _normalizeSuggestion(value: unknown, index: number, label: string) {
     const item = _requireObject(value, `${label}[${index}]`);
     return {
-        text: _requireNonEmptyString((item as Record<string, any>).text, `${label}[${index}].text`),
-        kind: _requireNonEmptyString((item as Record<string, any>).kind, `${label}[${index}].kind`),
-        score: _requireNumber((item as Record<string, any>).score, `${label}[${index}].score`),
+        text: _requireNonEmptyString(item.text, `${label}[${index}].text`),
+        kind: _requireNonEmptyString(item.kind, `${label}[${index}].kind`),
+        score: _requireNumber(item.score, `${label}[${index}].score`),
     };
 }
 
@@ -264,14 +265,14 @@ function _normalizeStringArray(value: unknown, label: string) {
 function _normalizeInsight(value: unknown, index: number) {
     const item = _requireObject(value, `result_insights[${index}]`);
     return {
-        title: _requireNonEmptyString((item as Record<string, any>).title, `result_insights[${index}].title`),
-        url: _requireNonEmptyString((item as Record<string, any>).url, `result_insights[${index}].url`),
-        provider: _requireNonEmptyString((item as Record<string, any>).provider, `result_insights[${index}].provider`),
-        rank: _requireNumber((item as Record<string, any>).rank, `result_insights[${index}].rank`),
-        confidence: _requireNumber((item as Record<string, any>).confidence, `result_insights[${index}].confidence`),
-        matched_terms: _normalizeStringArray((item as Record<string, any>).matched_terms, `result_insights[${index}].matched_terms`),
-        relevance_hint: _requireNonEmptyString((item as Record<string, any>).relevance_hint, `result_insights[${index}].relevance_hint`),
-        actions: _normalizeStringArray((item as Record<string, any>).actions, `result_insights[${index}].actions`),
+        title: _requireNonEmptyString(item.title, `result_insights[${index}].title`),
+        url: _requireNonEmptyString(item.url, `result_insights[${index}].url`),
+        provider: _requireNonEmptyString(item.provider, `result_insights[${index}].provider`),
+        rank: _requireNumber(item.rank, `result_insights[${index}].rank`),
+        confidence: _requireNumber(item.confidence, `result_insights[${index}].confidence`),
+        matched_terms: _normalizeStringArray(item.matched_terms, `result_insights[${index}].matched_terms`),
+        relevance_hint: _requireNonEmptyString(item.relevance_hint, `result_insights[${index}].relevance_hint`),
+        actions: _normalizeStringArray(item.actions, `result_insights[${index}].actions`),
     };
 }
 
@@ -282,9 +283,9 @@ function _normalizeInsights(value: unknown) {
 function _normalizeResearchStep(value: unknown, index: number) {
     const item = _requireObject(value, `research_steps[${index}]`);
     return {
-        phase: _requireNonEmptyString((item as Record<string, any>).phase, `research_steps[${index}].phase`),
-        count: _requireNumber((item as Record<string, any>).count, `research_steps[${index}].count`),
-        title: _requireString((item as Record<string, any>).title, `research_steps[${index}].title`),
+        phase: _requireNonEmptyString(item.phase, `research_steps[${index}].phase`),
+        count: _requireNumber(item.count, `research_steps[${index}].count`),
+        title: _requireString(item.title, `research_steps[${index}].title`),
     };
 }
 
@@ -295,12 +296,12 @@ function _normalizeResearchSteps(value: unknown) {
 function _normalizeResearchSource(value: unknown, index: number) {
     const item = _requireObject(value, `research_sources[${index}]`);
     return {
-        index: _requireNumber((item as Record<string, any>).index, `research_sources[${index}].index`),
-        url: _requireNonEmptyString((item as Record<string, any>).url, `research_sources[${index}].url`),
-        title: _requireNonEmptyString((item as Record<string, any>).title, `research_sources[${index}].title`),
-        provider: _requireString((item as Record<string, any>).provider, `research_sources[${index}].provider`),
-        site_name: _requireString((item as Record<string, any>).site_name, `research_sources[${index}].site_name`),
-        snippet: _requireString((item as Record<string, any>).snippet, `research_sources[${index}].snippet`),
+        index: _requireNumber(item.index, `research_sources[${index}].index`),
+        url: _requireNonEmptyString(item.url, `research_sources[${index}].url`),
+        title: _requireNonEmptyString(item.title, `research_sources[${index}].title`),
+        provider: _requireString(item.provider, `research_sources[${index}].provider`),
+        site_name: _requireString(item.site_name, `research_sources[${index}].site_name`),
+        snippet: _requireString(item.snippet, `research_sources[${index}].snippet`),
     };
 }
 
@@ -310,22 +311,22 @@ function _normalizeResearchSources(value: unknown) {
 
 function _normalizeFailedRunPayload(event: PlatformEvent) {
     const payload = _requireObject(event.payload, 'failed payload');
-    const body = _requireObject((payload as Record<string, any>).body, 'failed payload body');
+    const body = _requireObject(payload.body, 'failed payload body');
     return {
-        run_id: _requireNonEmptyString((body as Record<string, any>).run_id, 'failed payload body.run_id'),
-        error_kind: _requirePublicSearchErrorKind((body as Record<string, any>).error_kind, 'failed payload body.error_kind'),
-        detail: _requireString((body as Record<string, any>).detail, 'failed payload body.detail'),
+        run_id: _requireNonEmptyString(body.run_id, 'failed payload body.run_id'),
+        error_kind: _requirePublicSearchErrorKind(body.error_kind, 'failed payload body.error_kind'),
+        detail: _requireString(body.detail, 'failed payload body.detail'),
     };
 }
 
 function _normalizeSourceDescribePayload(payload: any) {
     const body = _requireObject(payload, 'frontend/public_search_source_describe payload');
-    const runId = _requireNonEmptyString((body as Record<string, any>).run_id, 'run_id');
+    const runId = _requireNonEmptyString(body.run_id, 'run_id');
     if (!RUN_ID_PATTERN.test(runId)) {
         throw new Error('run_id must contain only latin letters, digits, underscore or dash');
     }
-    const query = _requireNonEmptyString((body as Record<string, any>).query, 'query');
-    const source = _normalizeResult((body as Record<string, any>).source, 0);
+    const query = _requireNonEmptyString(body.query, 'query');
+    const source = _normalizeResult(body.source, 0);
     return { run_id: runId, query, mode: 'source', source };
 }
 
@@ -368,34 +369,34 @@ function _normalizeStreamPayload(value: unknown) {
     return {
         kind: 'public_search_stream',
         version: 1,
-        run_id: _requireNonEmptyString((stream as Record<string, any>).run_id, 'stream.run_id'),
-        query: _requireNonEmptyString((stream as Record<string, any>).query, 'stream.query'),
-        mode: _requireSearchRunMode((stream as Record<string, any>).mode, 'stream.mode'),
-        phase: _requireNonEmptyString((stream as Record<string, any>).phase, 'stream.phase'),
-        activity: _requireString((stream as Record<string, any>).activity, 'stream.activity'),
-        task_id: _requireString((stream as Record<string, any>).task_id, 'stream.task_id'),
-        context_id: _requireString((stream as Record<string, any>).context_id, 'stream.context_id'),
-        task_primed: _requireBoolean((stream as Record<string, any>).task_primed, 'stream.task_primed'),
-        results: _normalizeResults((stream as Record<string, any>).results),
-        providers: _normalizeProviders((stream as Record<string, any>).providers),
-        suggestions: _normalizeSuggestions((stream as Record<string, any>).suggestions, 'suggestions'),
-        followups: _normalizeSuggestions((stream as Record<string, any>).followups, 'followups'),
-        result_insights: _normalizeInsights((stream as Record<string, any>).result_insights),
-        answer: _requireString((stream as Record<string, any>).answer, 'stream.answer'),
-        markdown_sources: _requireString((stream as Record<string, any>).markdown_sources, 'stream.markdown_sources'),
-        completed: _requireBoolean((stream as Record<string, any>).completed, 'stream.completed'),
-        serp_cache_key: _requireString((stream as Record<string, any>).serp_cache_key, 'stream.serp_cache_key'),
-        rank_stage: _requireRankStage((stream as Record<string, any>).rank_stage, 'stream.rank_stage'),
-        total_count: _requireNumber((stream as Record<string, any>).total_count, 'stream.total_count'),
-        has_more: _requireBoolean((stream as Record<string, any>).has_more, 'stream.has_more'),
-        results_offset: _requireNumber((stream as Record<string, any>).results_offset, 'stream.results_offset'),
-        page_limit: _requireNumber((stream as Record<string, any>).page_limit, 'stream.page_limit'),
-        research_brief: _requireString((stream as Record<string, any>).research_brief, 'stream.research_brief'),
-        research_sub_questions: _normalizeStringArray((stream as Record<string, any>).research_sub_questions, 'stream.research_sub_questions'),
-        research_outline: _normalizeStringArray((stream as Record<string, any>).research_outline, 'stream.research_outline'),
-        research_steps: _normalizeResearchSteps((stream as Record<string, any>).research_steps),
-        research_sources: _normalizeResearchSources((stream as Record<string, any>).research_sources),
-        report: _requireString((stream as Record<string, any>).report, 'stream.report'),
+        run_id: _requireNonEmptyString(stream.run_id, 'stream.run_id'),
+        query: _requireNonEmptyString(stream.query, 'stream.query'),
+        mode: _requireSearchRunMode(stream.mode, 'stream.mode'),
+        phase: _requireNonEmptyString(stream.phase, 'stream.phase'),
+        activity: _requireString(stream.activity, 'stream.activity'),
+        task_id: _requireString(stream.task_id, 'stream.task_id'),
+        context_id: _requireString(stream.context_id, 'stream.context_id'),
+        task_primed: _requireBoolean(stream.task_primed, 'stream.task_primed'),
+        results: _normalizeResults(stream.results),
+        providers: _normalizeProviders(stream.providers),
+        suggestions: _normalizeSuggestions(stream.suggestions, 'suggestions'),
+        followups: _normalizeSuggestions(stream.followups, 'followups'),
+        result_insights: _normalizeInsights(stream.result_insights),
+        answer: _requireString(stream.answer, 'stream.answer'),
+        markdown_sources: _requireString(stream.markdown_sources, 'stream.markdown_sources'),
+        completed: _requireBoolean(stream.completed, 'stream.completed'),
+        serp_cache_key: _requireString(stream.serp_cache_key, 'stream.serp_cache_key'),
+        rank_stage: _requireRankStage(stream.rank_stage, 'stream.rank_stage'),
+        total_count: _requireNumber(stream.total_count, 'stream.total_count'),
+        has_more: _requireBoolean(stream.has_more, 'stream.has_more'),
+        results_offset: _requireNumber(stream.results_offset, 'stream.results_offset'),
+        page_limit: _requireNumber(stream.page_limit, 'stream.page_limit'),
+        research_brief: _requireString(stream.research_brief, 'stream.research_brief'),
+        research_sub_questions: _normalizeStringArray(stream.research_sub_questions, 'stream.research_sub_questions'),
+        research_outline: _normalizeStringArray(stream.research_outline, 'stream.research_outline'),
+        research_steps: _normalizeResearchSteps(stream.research_steps),
+        research_sources: _normalizeResearchSources(stream.research_sources),
+        report: _requireString(stream.report, 'stream.report'),
     };
 }
 
@@ -404,36 +405,36 @@ function _normalizeSourceDescribeStream(value: unknown) {
     return {
         kind: 'public_search_source_stream',
         version: 1,
-        run_id: _requireNonEmptyString((stream as Record<string, any>).run_id, 'source_stream.run_id'),
-        query: _requireNonEmptyString((stream as Record<string, any>).query, 'source_stream.query'),
-        title: _requireNonEmptyString((stream as Record<string, any>).title, 'source_stream.title'),
-        url: _requireNonEmptyString((stream as Record<string, any>).url, 'source_stream.url'),
-        display_url: _requireString((stream as Record<string, any>).display_url, 'source_stream.display_url'),
-        provider: _requireNonEmptyString((stream as Record<string, any>).provider, 'source_stream.provider'),
-        rank: _requireNumber((stream as Record<string, any>).rank, 'source_stream.rank'),
-        phase: _requireNonEmptyString((stream as Record<string, any>).phase, 'source_stream.phase'),
-        activity: _requireString((stream as Record<string, any>).activity, 'source_stream.activity'),
-        task_id: _requireString((stream as Record<string, any>).task_id, 'source_stream.task_id'),
-        context_id: _requireString((stream as Record<string, any>).context_id, 'source_stream.context_id'),
-        task_primed: _requireBoolean((stream as Record<string, any>).task_primed, 'source_stream.task_primed'),
-        answer: _requireString((stream as Record<string, any>).answer, 'source_stream.answer'),
-        completed: _requireBoolean((stream as Record<string, any>).completed, 'source_stream.completed'),
+        run_id: _requireNonEmptyString(stream.run_id, 'source_stream.run_id'),
+        query: _requireNonEmptyString(stream.query, 'source_stream.query'),
+        title: _requireNonEmptyString(stream.title, 'source_stream.title'),
+        url: _requireNonEmptyString(stream.url, 'source_stream.url'),
+        display_url: _requireString(stream.display_url, 'source_stream.display_url'),
+        provider: _requireNonEmptyString(stream.provider, 'source_stream.provider'),
+        rank: _requireNumber(stream.rank, 'source_stream.rank'),
+        phase: _requireNonEmptyString(stream.phase, 'source_stream.phase'),
+        activity: _requireString(stream.activity, 'source_stream.activity'),
+        task_id: _requireString(stream.task_id, 'source_stream.task_id'),
+        context_id: _requireString(stream.context_id, 'source_stream.context_id'),
+        task_primed: _requireBoolean(stream.task_primed, 'source_stream.task_primed'),
+        answer: _requireString(stream.answer, 'source_stream.answer'),
+        completed: _requireBoolean(stream.completed, 'source_stream.completed'),
     };
 }
 
 function _normalizeSession(value: unknown) {
     const session = _requireObject(value, 'public search session');
-    const tokenType = _requireNonEmptyString((session as Record<string, any>).token_type, 'session.token_type');
+    const tokenType = _requireNonEmptyString(session.token_type, 'session.token_type');
     if (tokenType !== 'Bearer') {
         throw new Error('session.token_type must be Bearer');
     }
     return {
-        token: _requireNonEmptyString((session as Record<string, any>).token, 'session.token'),
+        token: _requireNonEmptyString(session.token, 'session.token'),
         token_type: tokenType,
-        expires_at: _requireNonEmptyString((session as Record<string, any>).expires_at, 'session.expires_at'),
-        embed_id: _requireNonEmptyString((session as Record<string, any>).embed_id, 'session.embed_id'),
-        flow_id: _requireNonEmptyString((session as Record<string, any>).flow_id, 'session.flow_id'),
-        branch_id: _requirePublicSearchSessionMode((session as Record<string, any>).branch_id, 'session.branch_id'),
+        expires_at: _requireNonEmptyString(session.expires_at, 'session.expires_at'),
+        embed_id: _requireNonEmptyString(session.embed_id, 'session.embed_id'),
+        flow_id: _requireNonEmptyString(session.flow_id, 'session.flow_id'),
+        branch_id: _requirePublicSearchSessionMode(session.branch_id, 'session.branch_id'),
     };
 }
 
@@ -463,12 +464,12 @@ function _publishStream(ctx: Record<string, any>, eventId: string, stream: Recor
  * insights/completed/task_started/failed) публикуются немедленно.
  */
 function _createStreamPublisher(ctx: Record<string, any>, eventId: string, publishFn: (ctx: Record<string, any>, eventId: string, stream: Record<string, any>) => void) {
-    let timer = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     let pending: Record<string, any> | null = null;
     const flush = () => {
-        if (timer !== 0) {
+        if (timer !== null) {
             clearTimeout(timer);
-            timer = 0;
+            timer = null;
         }
         if (pending !== null) {
             const stream = pending;
@@ -483,14 +484,14 @@ function _createStreamPublisher(ctx: Record<string, any>, eventId: string, publi
                 flush();
                 return;
             }
-            if (timer === 0) {
+            if (timer === null) {
                 timer = setTimeout(flush, PUBLIC_SEARCH_STREAM_THROTTLE_MS);
             }
         },
         cancel: () => {
-            if (timer !== 0) {
+            if (timer !== null) {
                 clearTimeout(timer);
-                timer = 0;
+                timer = null;
             }
             pending = null;
         },
@@ -539,13 +540,13 @@ function _applySearchUiEvent(stream: Record<string, any>, event: PlatformEvent) 
     if (eventType === 'search/serp/results_ready') {
         stream.phase = 'results';
         stream.rank_stage = 'preview';
-        stream.results = _normalizeResults((payload as Record<string, any>).results);
-        stream.providers = _normalizeProviders((payload as Record<string, any>).providers);
-        stream.total_count = _requireNumber((payload as Record<string, any>).total_count, 'results_ready.total_count');
-        stream.has_more = _requireBoolean((payload as Record<string, any>).has_more, 'results_ready.has_more');
+        stream.results = _normalizeResults(payload.results);
+        stream.providers = _normalizeProviders(payload.providers);
+        stream.total_count = _requireNumber(payload.total_count, 'results_ready.total_count');
+        stream.has_more = _requireBoolean(payload.has_more, 'results_ready.has_more');
         stream.results_offset = stream.results.length;
         if (Object.prototype.hasOwnProperty.call(payload, 'serp_cache_key')) {
-            const cacheKey = (payload as Record<string, any>).serp_cache_key;
+            const cacheKey = payload.serp_cache_key;
             if (cacheKey === null) {
                 stream.serp_cache_key = '';
             } else {
@@ -553,7 +554,7 @@ function _applySearchUiEvent(stream: Record<string, any>, event: PlatformEvent) 
             }
         }
         if (Object.prototype.hasOwnProperty.call(payload, 'limit')) {
-            stream.page_limit = _requireNumber((payload as Record<string, any>).limit, 'results_ready.limit');
+            stream.page_limit = _requireNumber(payload.limit, 'results_ready.limit');
         }
         return;
     }
@@ -561,9 +562,9 @@ function _applySearchUiEvent(stream: Record<string, any>, event: PlatformEvent) 
         // Refined-порядок доранжирования: обновляем результаты и cache key,
         // но НЕ меняем phase — LLM-ответ уже мог стартовать по preview.
         stream.rank_stage = 'refined';
-        stream.results = _normalizeResults((payload as Record<string, any>).results);
+        stream.results = _normalizeResults(payload.results);
         if (Object.prototype.hasOwnProperty.call(payload, 'serp_cache_key')) {
-            const cacheKey = (payload as Record<string, any>).serp_cache_key;
+            const cacheKey = payload.serp_cache_key;
             if (cacheKey === null) {
                 stream.serp_cache_key = '';
             } else {
@@ -574,39 +575,39 @@ function _applySearchUiEvent(stream: Record<string, any>, event: PlatformEvent) 
     }
     if (eventType === 'search/serp/suggestions_ready') {
         stream.phase = 'suggestions';
-        stream.suggestions = _normalizeSuggestions((payload as Record<string, any>).suggestions, 'suggestions');
-        stream.followups = _normalizeSuggestions((payload as Record<string, any>).followups, 'followups');
+        stream.suggestions = _normalizeSuggestions(payload.suggestions, 'suggestions');
+        stream.followups = _normalizeSuggestions(payload.followups, 'followups');
         return;
     }
     if (eventType === 'search/serp/insights_ready') {
         stream.phase = 'insights';
-        stream.result_insights = _normalizeInsights((payload as Record<string, any>).result_insights);
+        stream.result_insights = _normalizeInsights(payload.result_insights);
         return;
     }
     if (eventType === 'search/research/plan_ready') {
         stream.phase = 'plan';
         stream.report = '';
-        stream.query = _requireNonEmptyString((payload as Record<string, any>).query, 'plan_ready.query');
-        stream.research_brief = _requireString((payload as Record<string, any>).brief, 'plan_ready.brief');
-        stream.research_sub_questions = _normalizeStringArray((payload as Record<string, any>).sub_questions, 'plan_ready.sub_questions');
-        stream.research_outline = _normalizeStringArray((payload as Record<string, any>).outline, 'plan_ready.outline');
-        const plannedQueries = _normalizeStringArray((payload as Record<string, any>).queries, 'plan_ready.queries');
+        stream.query = _requireNonEmptyString(payload.query, 'plan_ready.query');
+        stream.research_brief = _requireString(payload.brief, 'plan_ready.brief');
+        stream.research_sub_questions = _normalizeStringArray(payload.sub_questions, 'plan_ready.sub_questions');
+        stream.research_outline = _normalizeStringArray(payload.outline, 'plan_ready.outline');
+        const plannedQueries = _normalizeStringArray(payload.queries, 'plan_ready.queries');
         stream.research_steps = [...stream.research_steps, { phase: 'plan', count: plannedQueries.length, title: '' }];
         return;
     }
     if (eventType === 'search/research/search_ready') {
         stream.phase = 'searching';
-        const found = _requireNumber((payload as Record<string, any>).found, 'search_ready.found');
+        const found = _requireNumber(payload.found, 'search_ready.found');
         stream.research_steps = [...stream.research_steps, { phase: 'search', count: found, title: '' }];
         return;
     }
     if (eventType === 'search/research/source_read') {
         stream.phase = 'reading';
-        const sourceIndex = _requireNumber((payload as Record<string, any>).index, 'source_read.index');
-        const sourceTitle = _requireNonEmptyString((payload as Record<string, any>).title, 'source_read.title');
-        const sourceUrl = _requireNonEmptyString((payload as Record<string, any>).url, 'source_read.url');
-        const sourceProvider = _requireString((payload as Record<string, any>).provider, 'source_read.provider');
-        const sourceSiteName = _requireString((payload as Record<string, any>).site_name, 'source_read.site_name');
+        const sourceIndex = _requireNumber(payload.index, 'source_read.index');
+        const sourceTitle = _requireNonEmptyString(payload.title, 'source_read.title');
+        const sourceUrl = _requireNonEmptyString(payload.url, 'source_read.url');
+        const sourceProvider = _requireString(payload.provider, 'source_read.provider');
+        const sourceSiteName = _requireString(payload.site_name, 'source_read.site_name');
         if (!stream.research_sources.some((item: Record<string, any>) => item.index === sourceIndex)) {
             stream.research_sources = [...stream.research_sources, {
                 index: sourceIndex,
@@ -621,38 +622,38 @@ function _applySearchUiEvent(stream: Record<string, any>, event: PlatformEvent) 
         return;
     }
     if (eventType === 'search/research/reflection_ready') {
-        const needMore = _requireBoolean((payload as Record<string, any>).need_more, 'reflection_ready.need_more');
+        const needMore = _requireBoolean(payload.need_more, 'reflection_ready.need_more');
         stream.phase = needMore ? 'reflecting' : 'synthesizing';
         if (needMore === false) {
             stream.report = '';
         }
-        const iteration = _requireNumber((payload as Record<string, any>).iteration, 'reflection_ready.iteration');
+        const iteration = _requireNumber(payload.iteration, 'reflection_ready.iteration');
         stream.research_steps = [...stream.research_steps, { phase: 'reflect', count: iteration, title: '' }];
         return;
     }
-    if (eventType === 'search/serp/completed' && (payload as Record<string, any>).kind === 'public_search_research_report') {
+    if (eventType === 'search/serp/completed' && payload.kind === 'public_search_research_report') {
         stream.phase = 'completed';
         stream.mode = 'research';
-        stream.query = _requireNonEmptyString((payload as Record<string, any>).query, 'research_completed.query');
-        stream.research_brief = _requireString((payload as Record<string, any>).brief, 'research_completed.brief');
-        stream.research_outline = _normalizeStringArray((payload as Record<string, any>).outline, 'research_completed.outline');
-        stream.research_sub_questions = _normalizeStringArray((payload as Record<string, any>).sub_questions, 'research_completed.sub_questions');
-        stream.report = _requireNonEmptyString((payload as Record<string, any>).report, 'research_completed.report');
-        stream.research_sources = _normalizeResearchSources((payload as Record<string, any>).sources);
+        stream.query = _requireNonEmptyString(payload.query, 'research_completed.query');
+        stream.research_brief = _requireString(payload.brief, 'research_completed.brief');
+        stream.research_outline = _normalizeStringArray(payload.outline, 'research_completed.outline');
+        stream.research_sub_questions = _normalizeStringArray(payload.sub_questions, 'research_completed.sub_questions');
+        stream.report = _requireNonEmptyString(payload.report, 'research_completed.report');
+        stream.research_sources = _normalizeResearchSources(payload.sources);
         stream.completed = true;
         return;
     }
     if (eventType === 'search/serp/completed') {
         stream.phase = 'completed';
-        stream.mode = _requireSearchRunMode((payload as Record<string, any>).mode, 'completed.mode');
-        stream.query = _requireNonEmptyString((payload as Record<string, any>).query, 'completed.query');
-        stream.answer = _requireNonEmptyString((payload as Record<string, any>).answer, 'completed.answer');
-        stream.markdown_sources = _requireNonEmptyString((payload as Record<string, any>).markdown_sources, 'completed.markdown_sources');
-        stream.results = _normalizeResults((payload as Record<string, any>).results);
-        stream.providers = _normalizeProviders((payload as Record<string, any>).providers);
-        stream.suggestions = _normalizeSuggestions((payload as Record<string, any>).suggestions, 'suggestions');
-        stream.followups = _normalizeSuggestions((payload as Record<string, any>).followups, 'followups');
-        stream.result_insights = _normalizeInsights((payload as Record<string, any>).result_insights);
+        stream.mode = _requireSearchRunMode(payload.mode, 'completed.mode');
+        stream.query = _requireNonEmptyString(payload.query, 'completed.query');
+        stream.answer = _requireNonEmptyString(payload.answer, 'completed.answer');
+        stream.markdown_sources = _requireNonEmptyString(payload.markdown_sources, 'completed.markdown_sources');
+        stream.results = _normalizeResults(payload.results);
+        stream.providers = _normalizeProviders(payload.providers);
+        stream.suggestions = _normalizeSuggestions(payload.suggestions, 'suggestions');
+        stream.followups = _normalizeSuggestions(payload.followups, 'followups');
+        stream.result_insights = _normalizeInsights(payload.result_insights);
         stream.completed = true;
         return;
     }
@@ -660,7 +661,7 @@ function _applySearchUiEvent(stream: Record<string, any>, event: PlatformEvent) 
 }
 
 /** Пути state публичного поиска → staged-события SERP; порядок задаёт приоритет применения. */
-const SEARCH_STATE_EVENTS = Object.freeze([
+const SEARCH_STATE_EVENTS: ReadonlyArray<readonly [string, string]> = Object.freeze([
     ['serp_results', 'search/serp/results_ready'],
     ['serp_results_refined', 'search/serp/results_refined'],
     ['serp_suggestions', 'search/serp/suggestions_ready'],
@@ -671,11 +672,17 @@ const SEARCH_STATE_EVENTS = Object.freeze([
     ['serp_completed', 'search/serp/completed'],
 ]);
 
-function _createStateFold() {
+interface SearchStateFold {
+    state: Record<string, unknown>;
+    seen: Map<string, string>;
+    sourcesRead: number;
+}
+
+function _createStateFold(): SearchStateFold {
     return { state: {}, seen: new Map(), sourcesRead: 0 };
 }
 
-function _foldStateArtifact(fold: Record<string, any>, artifact: Record<string, any>) {
+function _foldStateArtifact(fold: SearchStateFold, artifact: Record<string, unknown>) {
     for (const part of Array.isArray(artifact.parts) ? artifact.parts : []) {
         const decoded = decodePart(part);
         if (decoded.kind === 'json') {
@@ -688,9 +695,9 @@ function _foldStateArtifact(fold: Record<string, any>, artifact: Record<string, 
     }
 }
 
-function _stagedSearchEvents(fold: { state: Record<string, unknown>; seen: Map<string, string>; sourcesRead: number }) {
+function _stagedSearchEvents(fold: SearchStateFold) {
     const events: any[] = [];
-    for (const [path, eventType] of SEARCH_STATE_EVENTS as unknown as ReadonlyArray<readonly [string, string]>) {
+    for (const [path, eventType] of SEARCH_STATE_EVENTS) {
         const payload = fold.state[path as string];
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
             continue;
@@ -733,7 +740,7 @@ function _statusFrameError(status: Record<string, any>) {
     if (state === 'TASK_STATE_COMPLETED' || !isTerminalTaskState(state)) {
         return null;
     }
-    const text = status.message && typeof status.message === 'object' ? textFromParts((status.message as Record<string, any>).parts) : '';
+    const text = status.message && typeof status.message === 'object' ? textFromParts((status.message).parts) : '';
     return new Error(text !== '' ? text : `A2A task ${state}`);
 }
 
@@ -741,7 +748,7 @@ function _statusFrameError(status: Record<string, any>) {
  * Один кадр SendStreamingMessage → SERP-stream. Возвращает true, когда кадр
  * требует немедленной публикации (staged-событие, старт Task), false для текстовых чанков.
  */
-function _applySearchFrame(stream: Record<string, any>, fold: Record<string, any>, result: Record<string, any>) {
+function _applySearchFrame(stream: Record<string, any>, fold: SearchStateFold, result: Record<string, any>) {
     const unwrapped = unwrapA2aStreamResult(result);
     if (unwrapped === null) {
         throw new Error('A2A SSE result is not a StreamResponse frame');
@@ -759,8 +766,9 @@ function _applySearchFrame(stream: Record<string, any>, fold: Record<string, any
         if (error !== null) {
             throw error;
         }
-        if (!isTerminalTaskState((status as Record<string, any>).state) && (status as Record<string, any>).message && typeof (status as Record<string, any>).message === 'object') {
-            const activity = textFromParts((status as Record<string, any>).message.parts);
+        const message = status.message;
+        if (!isTerminalTaskState(status.state) && isPlainRecord(message)) {
+            const activity = textFromParts(message.parts);
             if (activity !== '') {
                 stream.activity = activity;
                 return false;
@@ -772,16 +780,16 @@ function _applySearchFrame(stream: Record<string, any>, fold: Record<string, any
         return started;
     }
     const artifact = _requireObject(unwrapped.event.artifact, 'artifactUpdate.artifact');
-    if ((artifact as Record<string, any>).artifactId === STATE_ARTIFACT_ID) {
-        _foldStateArtifact(fold as Record<string, any>, artifact);
-        const staged = _stagedSearchEvents(fold as { state: Record<string, unknown>; seen: Map<string, string>; sourcesRead: number });
+    if (artifact.artifactId === STATE_ARTIFACT_ID) {
+        _foldStateArtifact(fold, artifact);
+        const staged = _stagedSearchEvents(fold);
         for (const stagedEvent of staged) {
             _applySearchUiEvent(stream, stagedEvent);
         }
         return staged.length > 0 || started;
     }
-    if ((artifact as Record<string, any>).name === RESPONSE_ARTIFACT_NAME) {
-        const chunk = textFromParts((artifact as Record<string, any>).parts);
+    if (artifact.name === RESPONSE_ARTIFACT_NAME) {
+        const chunk = textFromParts(artifact.parts);
         if (chunk === '') {
             return started;
         }
@@ -813,8 +821,9 @@ function _applySourceDescribeFrame(stream: Record<string, any>, result: Record<s
         if (error !== null) {
             throw error;
         }
-        const messageText = (status as Record<string, any>).message && typeof (status as Record<string, any>).message === 'object' ? textFromParts((status as Record<string, any>).message.parts) : '';
-        if ((status as Record<string, any>).state === 'TASK_STATE_COMPLETED') {
+        const message = status.message;
+        const messageText = isPlainRecord(message) ? textFromParts(message.parts) : '';
+        if (status.state === 'TASK_STATE_COMPLETED') {
             if (stream.answer.trim() === '' && messageText.trim() !== '') {
                 stream.answer = messageText;
             }
@@ -829,8 +838,8 @@ function _applySourceDescribeFrame(stream: Record<string, any>, result: Record<s
         return;
     }
     const artifact = _requireObject(unwrapped.event.artifact, 'artifactUpdate.artifact');
-    if ((artifact as Record<string, any>).name === RESPONSE_ARTIFACT_NAME) {
-        const chunk = textFromParts((artifact as Record<string, any>).parts);
+    if (artifact.name === RESPONSE_ARTIFACT_NAME) {
+        const chunk = textFromParts(artifact.parts);
         if (chunk !== '') {
             stream.answer = `${stream.answer}${chunk}`;
             stream.phase = 'answering';
@@ -858,8 +867,8 @@ function _publicSearchErrorKind(detail: string, transportStatus: number, errorBo
     if (message === 'search_quota_exhausted') {
         return 'search_quota_exhausted';
     }
-    if (errorBody !== null && typeof errorBody === 'object' && !Array.isArray(errorBody)) {
-        const errorCode = (errorBody as Record<string, any>).error_code;
+    if (isPlainRecord(errorBody)) {
+        const errorCode = errorBody.error_code;
         if (typeof errorCode === 'string' && errorCode === 'search_quota_exhausted') {
             return 'search_quota_exhausted';
         }
@@ -975,13 +984,13 @@ async function _runPublicSearch({ payload, ctx, event }: { payload: unknown; ctx
         try {
             const envelope = _requireObject(frame, 'A2A SSE frame');
             if (Object.prototype.hasOwnProperty.call(envelope, 'error')) {
-                const rawError = (envelope as Record<string, any>).error;
-                const message = rawError && typeof rawError === 'object' && typeof rawError.message === 'string'
+                const rawError = envelope.error;
+                const message = isPlainRecord(rawError) && typeof rawError.message === 'string'
                     ? rawError.message
                     : 'A2A stream error';
                 throw new Error(message);
             }
-            const result = _requireObject((envelope as Record<string, any>).result, 'A2A SSE result');
+            const result = _requireObject(envelope.result, 'A2A SSE result');
             const immediate = _applySearchFrame(stream, fold, result);
             publisher.publish(stream, immediate);
         } catch (error) {
@@ -1061,13 +1070,13 @@ async function _runPublicSearchSourceDescribe({ payload, ctx, event }: { payload
         try {
             const envelope = _requireObject(frame, 'A2A SSE frame');
             if (Object.prototype.hasOwnProperty.call(envelope, 'error')) {
-                const rawError = (envelope as Record<string, any>).error;
-                const message = rawError && typeof rawError === 'object' && typeof rawError.message === 'string'
+                const rawError = envelope.error;
+                const message = isPlainRecord(rawError) && typeof rawError.message === 'string'
                     ? rawError.message
                     : 'A2A stream error';
                 throw new Error(message);
             }
-            const result = _requireObject((envelope as Record<string, any>).result, 'A2A SSE result');
+            const result = _requireObject(envelope.result, 'A2A SSE result');
             _applySourceDescribeFrame(sourceStream, result);
             _publishSourceDescribeStream(ctx, event.id, sourceStream);
         } catch (error) {
@@ -1125,10 +1134,10 @@ export const publicSearchRunOp = createAsyncOp({
         if (event.type === events.SERP_APPEND) {
             const payload = _requireObject(event.payload, 'serp_append payload');
             const stream = _requireObject(state.stream, 'stream state');
-            const appended = _normalizeResults((payload as Record<string, any>).results);
-            const hasMore = _requireBoolean((payload as Record<string, any>).has_more, 'serp_append.has_more');
-            const totalCount = _requireNumber((payload as Record<string, any>).total_count, 'serp_append.total_count');
-            const mergedResults = [..._normalizeResults((stream as Record<string, any>).results), ...appended];
+            const appended = _normalizeResults(payload.results);
+            const hasMore = _requireBoolean(payload.has_more, 'serp_append.has_more');
+            const totalCount = _requireNumber(payload.total_count, 'serp_append.total_count');
+            const mergedResults = [..._normalizeResults(stream.results), ...appended];
             return {
                 ...state,
                 stream: {
@@ -1152,7 +1161,7 @@ export const publicSearchRunOp = createAsyncOp({
         }
         if (event.type === events.STREAM_EVENT) {
             const payload = _requireObject(event.payload, 'stream event payload');
-            const stream = _normalizeStreamPayload((payload as Record<string, any>).stream);
+            const stream = _normalizeStreamPayload(payload.stream);
             if (stream.run_id !== state.active_run_id) {
                 return state;
             }
@@ -1160,7 +1169,7 @@ export const publicSearchRunOp = createAsyncOp({
         }
         if (event.type === events.SUCCEEDED) {
             const payload = _requireObject(event.payload, 'succeeded payload');
-            const stream = _normalizeStreamPayload((payload as Record<string, any>).result);
+            const stream = _normalizeStreamPayload(payload.result);
             if (stream.run_id !== state.active_run_id) {
                 return {
                     ...state,
@@ -1219,10 +1228,10 @@ export const publicSearchSerpMoreOp = createAsyncOp({
             throw new Error('frontend/public_search_serp_more: event.id required');
         }
         const body = _requireObject(payload, 'serp_more payload');
-        const mode = _requirePublicSearchSessionMode((body as Record<string, any>).mode, 'serp_more.mode');
-        const serpCacheKey = _requireNonEmptyString((body as Record<string, any>).serp_cache_key, 'serp_more.serp_cache_key');
-        const offset = _requireNumber((body as Record<string, any>).offset, 'serp_more.offset');
-        const limit = _requireNumber((body as Record<string, any>).limit, 'serp_more.limit');
+        const mode = _requirePublicSearchSessionMode(body.mode, 'serp_more.mode');
+        const serpCacheKey = _requireNonEmptyString(body.serp_cache_key, 'serp_more.serp_cache_key');
+        const offset = _requireNumber(body.offset, 'serp_more.offset');
+        const limit = _requireNumber(body.limit, 'serp_more.limit');
         const session = await _issuePublicSearchSession(mode, { consumeSearchQuota: false });
         const response = _requireObject(await httpRequest({
             method: 'POST',
@@ -1238,16 +1247,16 @@ export const publicSearchSerpMoreOp = createAsyncOp({
         ctx.dispatch(
             'frontend/public_search_run/serp_append',
             {
-                results: (response as Record<string, any>).results,
-                has_more: (response as Record<string, any>).has_more,
-                total_count: (response as Record<string, any>).total_count,
+                results: response.results,
+                has_more: response.has_more,
+                total_count: response.total_count,
             },
             { causation_id: event.id, source: 'http' },
         );
         return {
-            results: _normalizeResults((response as Record<string, any>).results),
-            has_more: _requireBoolean((response as Record<string, any>).has_more, 'serp_more.has_more'),
-            total_count: _requireNumber((response as Record<string, any>).total_count, 'serp_more.total_count'),
+            results: _normalizeResults(response.results),
+            has_more: _requireBoolean(response.has_more, 'serp_more.has_more'),
+            total_count: _requireNumber(response.total_count, 'serp_more.total_count'),
         };
     },
 });
@@ -1258,13 +1267,13 @@ export const publicSearchSerpClickOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/frontend/api/public/search/serp/click' },
     request: async ({ payload }) => {
         const body = _requireObject(payload, 'serp_click payload');
-        const mode = _requireSearchRunMode((body as Record<string, any>).mode, 'serp_click.mode');
-        const query = _requireNonEmptyString((body as Record<string, any>).query, 'serp_click.query');
-        const url = _requireNonEmptyString((body as Record<string, any>).url, 'serp_click.url');
-        const position = _requireNumber((body as Record<string, any>).position, 'serp_click.position');
-        const provider = _requireString((body as Record<string, any>).provider, 'serp_click.provider');
-        const searchIndexId = _requireString((body as Record<string, any>).search_index_id, 'serp_click.search_index_id');
-        const serpCacheKey = _requireString((body as Record<string, any>).serp_cache_key, 'serp_click.serp_cache_key');
+        const mode = _requireSearchRunMode(body.mode, 'serp_click.mode');
+        const query = _requireNonEmptyString(body.query, 'serp_click.query');
+        const url = _requireNonEmptyString(body.url, 'serp_click.url');
+        const position = _requireNumber(body.position, 'serp_click.position');
+        const provider = _requireString(body.provider, 'serp_click.provider');
+        const searchIndexId = _requireString(body.search_index_id, 'serp_click.search_index_id');
+        const serpCacheKey = _requireString(body.serp_cache_key, 'serp_click.serp_cache_key');
         const session = await _issuePublicSearchSession(mode, { consumeSearchQuota: false });
         await httpRequest({
             method: 'POST',
@@ -1320,7 +1329,7 @@ export const publicSearchSourceDescribeOp = createAsyncOp({
         }
         if (event.type === events.STREAM_EVENT) {
             const payload = _requireObject(event.payload, 'source stream event payload');
-            const sourceStream = _normalizeSourceDescribeStream((payload as Record<string, any>).source_stream);
+            const sourceStream = _normalizeSourceDescribeStream(payload.source_stream);
             const descriptions = _requireObject(state.descriptions, 'source descriptions state');
             return {
                 ...state,
@@ -1331,7 +1340,7 @@ export const publicSearchSourceDescribeOp = createAsyncOp({
         }
         if (event.type === events.SUCCEEDED) {
             const payload = _requireObject(event.payload, 'source succeeded payload');
-            const sourceStream = _normalizeSourceDescribeStream((payload as Record<string, any>).result);
+            const sourceStream = _normalizeSourceDescribeStream(payload.result);
             const descriptions = _requireObject(state.descriptions, 'source descriptions state');
             return {
                 ...state,
@@ -1354,3 +1363,12 @@ export const publicSearchSourceDescribeOp = createAsyncOp({
         }
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/public_search_run': typeof publicSearchRunOp;
+        'frontend/public_search_serp_more': typeof publicSearchSerpMoreOp;
+        'frontend/public_search_serp_click': typeof publicSearchSerpClickOp;
+        'frontend/public_search_source_describe': typeof publicSearchSourceDescribeOp;
+    }
+}

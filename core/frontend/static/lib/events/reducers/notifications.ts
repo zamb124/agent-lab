@@ -11,6 +11,7 @@
 const NOTIFY_PREFIX = 'notify/';
 
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, recordField, payloadFields, stringField } from '../payload.js';
 
 export interface NotificationItem extends Record<string, unknown> {
     id: string;
@@ -65,31 +66,31 @@ export function notificationsReducer(state: NotificationsState = initialNotifica
         const scope = segments[1] || 'unknown';
         const kindRaw = segments[2] || 'event';
         const kind = kindRaw.replace(/_received$/, '');
-        const p = (event.payload || {}) as NotificationPushPayload;
+        const p = payloadFields(event);
         const item = {
             id: _nextId(),
             type: event.type,
             scope,
             kind,
-            title: p.title || '',
-            message: p.message || '',
-            title_i18n_key: (p.title_i18n_key || null),
-            title_i18n_vars: (p.title_i18n_vars || null),
-            message_i18n_key: (p.message_i18n_key || null),
-            message_i18n_vars: (p.message_i18n_vars || null),
+            title: typeof p.title === 'string' ? p.title : '',
+            message: typeof p.message === 'string' ? p.message : '',
+            title_i18n_key: stringField(p.title_i18n_key),
+            title_i18n_vars: isPlainRecord(p.title_i18n_vars) ? p.title_i18n_vars : null,
+            message_i18n_key: stringField(p.message_i18n_key),
+            message_i18n_vars: isPlainRecord(p.message_i18n_vars) ? p.message_i18n_vars : null,
             ts: event.meta.ts,
-            action_url: (p.action_url || null),
-            action_label: p.action_label || '',
-            action_label_i18n_key: (p.action_label_i18n_key || null),
+            action_url: stringField(p.action_url),
+            action_label: typeof p.action_label === 'string' ? p.action_label : '',
+            action_label_i18n_key: stringField(p.action_label_i18n_key),
             actions: Array.isArray(p.actions) ? p.actions : [],
-            data: (p.data || {}),
+            data: recordField(p.data, `${event.type}.data`),
             read: false,
         };
         return { ...state, list: [item, ...state.list], unread: state.unread + 1 };
     }
     switch (event.type) {
         case NOTIFICATIONS_EVENTS.READ: {
-            const id = ((event.payload || {}) as { id?: unknown }).id;
+            const id = (payloadFields(event)).id;
             if (typeof id !== 'string' || !id) return state;
             let unreadDelta = 0;
             const list = state.list.map((n) => {
@@ -100,7 +101,7 @@ export function notificationsReducer(state: NotificationsState = initialNotifica
             return { ...state, list, unread: Math.max(0, state.unread + unreadDelta) };
         }
         case NOTIFICATIONS_EVENTS.DISMISS: {
-            const id = ((event.payload || {}) as { id?: unknown }).id;
+            const id = (payloadFields(event)).id;
             if (typeof id !== 'string' || !id) return state;
             const target = state.list.find((n) => n.id === id);
             if (!target) return state;

@@ -57,7 +57,7 @@ async def op_flows_resources_item(
 ) -> ResourceDefinition:
     _ = user
     _ = await require_company_member(di)
-    resource = await ResourceDefinition.get(ResourceDefinition.row_id(payload.resource_id))
+    resource = await ResourceDefinition.get(ResourceDefinition.resource_row_id_for_active_company(payload.resource_id))
     if resource is None:
         raise_not_found(LookupError("Resource not found"))
     return resource
@@ -75,7 +75,7 @@ async def op_flows_resources_create(
         _ = payload.get_typed_config()
     except ValueError as exc:
         raise_invalid(exc)
-    existing = await ResourceDefinition.get(ResourceDefinition.row_id(payload.resource_id))
+    existing = await ResourceDefinition.get(ResourceDefinition.resource_row_id_for_active_company(payload.resource_id))
     if existing is not None:
         raise_conflict(ValueError(f"Resource '{payload.resource_id}' already exists"))
     _ = await ResourceDefinition.set(payload)
@@ -91,7 +91,7 @@ async def op_flows_resources_update(
 ) -> ResourceDefinition:
     _ = user
     _ = await require_company_member(di)
-    resource = await ResourceDefinition.get(ResourceDefinition.row_id(payload.resource_id))
+    resource = await ResourceDefinition.get(ResourceDefinition.resource_row_id_for_active_company(payload.resource_id))
     if resource is None:
         raise_not_found(LookupError("Resource not found"))
     fields_set = payload.model_fields_set
@@ -136,7 +136,7 @@ async def op_flows_resources_remove(
 ) -> ResourceDeletedResponse:
     _ = user
     _ = await require_company_member(di)
-    deleted = await ResourceDefinition.delete_by_id(ResourceDefinition.row_id(payload.resource_id))
+    deleted = await ResourceDefinition.delete_by_id(ResourceDefinition.resource_row_id_for_active_company(payload.resource_id))
     if not deleted:
         raise_not_found(LookupError("Resource not found"))
     logger.info("flows.resource.deleted", resource_id=payload.resource_id)

@@ -4,10 +4,38 @@
 
 import { httpRequest } from '../http.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
+import { isPlainRecord, payloadFields } from '../payload.js';
 import { MAIL_EVENTS } from '../reducers/mail.js';
 
+function cursorOrNull(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 function errorMessage(err: unknown): string {
-    return String(err && (err as Error).message ? (err as Error).message : err);
+    if (err instanceof Error) {
+        return err.message;
+    }
+    if (isPlainRecord(err) && typeof err.message === 'string' && err.message.length > 0) {
+        return err.message;
+    }
+    return String(err);
+}
+
+function httpStatus(err: unknown): number {
+    if (isPlainRecord(err) && typeof err.status === 'number') {
+        return err.status;
+    }
+    return 0;
+}
+
+function httpObject(value: unknown): Record<string, unknown> | null {
+    if (value === null) {
+        return null;
+    }
+    if (!isPlainRecord(value)) {
+        throw new Error('mail effect: HTTP response must be an object');
+    }
+    return value;
 }
 
 // Троттлинг авто-синка: needs_sync от folders/list мог бы дёргать SYNC в тугом
@@ -18,7 +46,8 @@ const lastAutoSyncAt = new Map();
 
 function shouldAutoSync(mailboxBindingId: unknown): boolean {
     const now = Date.now();
-    const prev = lastAutoSyncAt.get(mailboxBindingId) || 0;
+    const stored = lastAutoSyncAt.get(mailboxBindingId);
+    const prev = typeof stored === 'number' ? stored : 0;
     if (now - prev < AUTO_SYNC_COOLDOWN_MS) return false;
     lastAutoSyncAt.set(mailboxBindingId, now);
     return true;
@@ -52,9 +81,9 @@ interface MailStateView {
 }
 
 export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: PlatformEvent, ctx: EffectCtx<MailStateView>) => Promise<void> {
-    const base = baseUrl || '';
+    const base = baseUrl === undefined ? '' : baseUrl;
     return async function mailEffect(event: PlatformEvent, ctx: EffectCtx<MailStateView>): Promise<void> {
-        const p = (event.payload ?? null) as Record<string, unknown> | null;
+        const p = payloadFields(event);
         switch (event.type) {
             case MAIL_EVENTS.BOOTSTRAP_REQUESTED: {
                 ctx.dispatch(MAIL_EVENTS.BINDINGS_LOAD_REQUESTED, null, {
@@ -69,10 +98,10 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.BINDINGS_LOAD_REQUESTED: {
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'GET',
                         url: `${base}/api/mail/bindings/me`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.items)) {
                         throw new Error('mail.bindings.me: items must be array');
                     }
@@ -104,10 +133,10 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.COMPANY_BINDINGS_LOAD_REQUESTED: {
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'GET',
                         url: `${base}/api/mail/bindings`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.items)) {
                         throw new Error('mail.bindings: items must be array');
                     }
@@ -127,17 +156,17 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.CONNECTION_LOAD_REQUESTED: {
                 try {
-                    const connection = (await httpRequest({
+                    const connection = httpObject(await httpRequest({
                         method: 'GET',
                         url: `${base}/api/mail/connection`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.CONNECTION_LOADED,
                         { connection },
                         { causation_id: event.id, source: 'http' },
                     );
                 } catch (err) {
-                    const status = err && typeof (err as { status?: unknown }).status === 'number' ? (err as { status: number }).status : 0;
+                    const status = httpStatus(err);
                     if (status === 404) {
                         ctx.dispatch(
                             MAIL_EVENTS.CONNECTION_LOADED,
@@ -156,11 +185,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.CONNECTION_SAVE_REQUESTED: {
                 try {
-                    const connection = (await httpRequest({
+                    const connection = httpObject(await httpRequest({
                         method: 'PUT',
                         url: `${base}/api/mail/connection`,
                         body: p,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.CONNECTION_SAVED,
                         { connection },
@@ -177,11 +206,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.BINDING_CREATE_REQUESTED: {
                 try {
-                    const binding = (await httpRequest({
+                    const binding = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/bindings`,
                         body: p,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_CREATED,
                         { binding },
@@ -206,11 +235,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.PERSONAL_CONNECT_REQUESTED: {
                 try {
-                    const binding = (await httpRequest({
+                    const binding = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/bindings/personal`,
                         body: p,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_CREATED,
                         { binding },
@@ -231,11 +260,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.PERSONAL_HEALTHCHECK_REQUESTED: {
                 try {
-                    const health = (await httpRequest({
+                    const health = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/bindings/personal/healthcheck`,
                         body: p,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.PERSONAL_HEALTHCHECK_COMPLETED,
                         { health },
@@ -255,11 +284,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 if (!id) throw new Error('mail.effect: mailbox_binding_id required');
                 const { mailbox_binding_id: _id, ...body } = p;
                 try {
-                    const binding = (await httpRequest({
+                    const binding = httpObject(await httpRequest({
                         method: 'PATCH',
                         url: `${base}/api/mail/bindings/${encodeURIComponent(String(id))}`,
                         body,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_PATCHED,
                         { binding },
@@ -284,12 +313,12 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 if (!id) throw new Error('mail.effect: mailbox_binding_id required');
                 const linking = event.type === MAIL_EVENTS.BINDING_CALENDAR_AUTOLINK_REQUESTED;
                 try {
-                    const binding = (await httpRequest({
+                    const binding = httpObject(await httpRequest({
                         method: linking ? 'POST' : 'DELETE',
                         url: linking
                             ? `${base}/api/mail/bindings/${encodeURIComponent(String(id))}/calendar/autolink`
                             : `${base}/api/mail/bindings/${encodeURIComponent(String(id))}/calendar`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_PATCHED,
                         { binding },
@@ -313,11 +342,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 if (!id) throw new Error('mail.effect: mailbox_binding_id required');
                 const { mailbox_binding_id: _id, ...body } = p;
                 try {
-                    const health = (await httpRequest({
+                    const health = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/bindings/${encodeURIComponent(String(id))}/healthcheck`,
-                        body: body || {},
-                    })) as Record<string, unknown> | null;
+                        body,
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_HEALTHCHECK_COMPLETED,
                         { health, mailbox_binding_id: id },
@@ -366,10 +395,10 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 const id = p && p.mailbox_binding_id;
                 if (!id) throw new Error('mail.effect: mailbox_binding_id required');
                 try {
-                    const binding = (await httpRequest({
+                    const binding = httpObject(await httpRequest({
                         method: 'PUT',
                         url: `${base}/api/mail/bindings/${encodeURIComponent(String(id))}/default`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.DEFAULT_SET,
                         { binding },
@@ -416,10 +445,10 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 if (!mailboxBindingId) throw new Error('mail.effect: mailbox_binding_id required');
                 const skipAutoSync = p && p.skip_auto_sync === true;
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'GET',
                         url: `${base}/api/mail/folders?mailbox_binding_id=${encodeURIComponent(String(mailboxBindingId))}`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.folders)) {
                         throw new Error('mail.folders: folders must be array');
                     }
@@ -474,11 +503,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 const mailboxBindingId = p && p.mailbox_binding_id;
                 if (!mailboxBindingId) throw new Error('mail.effect: mailbox_binding_id required');
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/sync`,
                         body: { mailbox_binding_id: mailboxBindingId },
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.SYNC_ACCEPTED,
                         data || { accepted: true, mailbox_binding_id: mailboxBindingId },
@@ -505,11 +534,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 const mailboxBindingId = p && p.mailbox_binding_id;
                 if (!mailboxBindingId) throw new Error('mail.effect: mailbox_binding_id required');
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/folders/ensure`,
                         body: { mailbox_binding_id: mailboxBindingId },
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.folders)) {
                         throw new Error('mail.folders.ensure: folders must be array');
                     }
@@ -560,14 +589,14 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                     return folder.name;
                 });
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'PUT',
                         url: `${base}/api/mail/folders/order`,
                         body: {
                             mailbox_binding_id: mailboxBindingId,
                             folder_names: folderNames,
                         },
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.folders)) {
                         throw new Error('mail.folders.order: folders must be array');
                     }
@@ -620,13 +649,13 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGES_LOAD_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 const mailboxBindingId = payload.mailbox_binding_id;
                 const folder = typeof payload.folder === 'string' ? payload.folder : null;
                 if (!mailboxBindingId) throw new Error('mail.effect: mailbox_binding_id required');
                 if (!folder) throw new Error('mail.effect: folder required');
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/list`,
                         body: {
@@ -634,7 +663,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                             folder,
                             limit: 50,
                         },
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.items)) {
                         throw new Error('mail.messages.list: items must be array');
                     }
@@ -642,7 +671,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                         MAIL_EVENTS.MESSAGES_LOADED,
                         {
                             items: data.items,
-                            next_cursor: data.next_cursor || null,
+                            next_cursor: cursorOrNull(data.next_cursor),
                             has_more: data.has_more === true,
                             needs_sync: data.needs_sync === true,
                         },
@@ -678,7 +707,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGES_LOAD_MORE_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 const mailboxBindingId = payload.mailbox_binding_id;
                 const folder = typeof payload.folder === 'string' ? payload.folder : null;
                 const cursor = typeof payload.cursor === 'string' ? payload.cursor : null;
@@ -686,7 +715,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                     throw new Error('mail.effect: mailbox_binding_id, folder, cursor required');
                 }
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/list`,
                         body: {
@@ -695,7 +724,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                             limit: 50,
                             cursor,
                         },
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.items)) {
                         throw new Error('mail.messages.list: items must be array');
                     }
@@ -703,7 +732,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                         MAIL_EVENTS.MESSAGES_APPEND_LOADED,
                         {
                             items: data.items,
-                            next_cursor: data.next_cursor || null,
+                            next_cursor: cursorOrNull(data.next_cursor),
                             has_more: data.has_more === true,
                         },
                         { causation_id: event.id, source: 'http' },
@@ -718,7 +747,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGES_SEARCH_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 const mailboxBindingId = payload.mailbox_binding_id;
                 const q = typeof payload.q === 'string' ? payload.q.trim() : '';
                 const folder = typeof payload.folder === 'string' ? payload.folder : null;
@@ -740,11 +769,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                         limit: 50,
                     };
                     if (folder) body.folder = folder;
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/search`,
                         body,
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.items)) {
                         throw new Error('mail.messages.search: items must be array');
                     }
@@ -752,7 +781,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                         MAIL_EVENTS.MESSAGES_LOADED,
                         {
                             items: data.items,
-                            next_cursor: data.next_cursor || null,
+                            next_cursor: cursorOrNull(data.next_cursor),
                             has_more: data.has_more === true,
                             needs_sync: false,
                         },
@@ -789,7 +818,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.THREAD_LOAD_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 const uid = payload.uid;
                 const mailboxBindingId = payload.mailbox_binding_id;
                 const folder = typeof payload.folder === 'string' ? payload.folder : 'INBOX';
@@ -797,7 +826,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                     throw new Error('mail.effect: uid and mailbox_binding_id required for thread');
                 }
                 try {
-                    const thread = (await httpRequest({
+                    const thread = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/thread`,
                         body: {
@@ -805,7 +834,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                             folder,
                             uid,
                         },
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!thread || !Array.isArray(thread.items)) {
                         throw new Error('mail.messages.thread: items must be array');
                     }
@@ -824,7 +853,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGE_LOAD_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 const uid = payload.uid;
                 const mailboxBindingId = payload.mailbox_binding_id;
                 const folder = typeof payload.folder === 'string' ? payload.folder : 'INBOX';
@@ -836,10 +865,10 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                         mailbox_binding_id: String(mailboxBindingId),
                         folder: String(folder),
                     });
-                    const message = (await httpRequest({
+                    const message = httpObject(await httpRequest({
                         method: 'GET',
                         url: `${base}/api/mail/messages/${encodeURIComponent(String(uid))}?${q.toString()}`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_LOADED,
                         { message },
@@ -855,7 +884,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGE_MARK_UNSEEN_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 const uid = payload.uid;
                 const mailboxBindingId = payload.mailbox_binding_id;
                 const folder = typeof payload.folder === 'string' ? payload.folder : 'INBOX';
@@ -863,7 +892,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                     throw new Error('mail.effect: uid and mailbox_binding_id required for mark_unseen');
                 }
                 try {
-                    const result = (await httpRequest({
+                    const result = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/mark_unseen`,
                         body: {
@@ -871,7 +900,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                             folder,
                             uid,
                         },
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_MARK_UNSEEN_COMPLETED,
                         { uid: result?.uid, unread: result?.unread === true },
@@ -888,11 +917,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.MESSAGE_SEND_REQUESTED: {
                 try {
-                    const result = (await httpRequest({
+                    const result = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/send`,
                         body: p,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_SENT,
                         { result },
@@ -919,13 +948,13 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGE_TRASH_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 try {
-                    const result = (await httpRequest({
+                    const result = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/trash`,
                         body: payload,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_TRASH_COMPLETED,
                         result,
@@ -941,13 +970,13 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGE_ARCHIVE_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 try {
-                    const result = (await httpRequest({
+                    const result = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/archive`,
                         body: payload,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_ARCHIVE_COMPLETED,
                         result,
@@ -963,13 +992,13 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGE_DELETE_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 try {
-                    const result = (await httpRequest({
+                    const result = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/delete`,
                         body: payload,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_DELETE_COMPLETED,
                         result,
@@ -985,13 +1014,13 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGE_STAR_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 try {
-                    const result = (await httpRequest({
+                    const result = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/star`,
                         body: payload,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_STAR_COMPLETED,
                         result,
@@ -1007,13 +1036,13 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.MESSAGE_RAG_INDEX_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 try {
-                    const result = (await httpRequest({
+                    const result = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/rag-index`,
                         body: payload,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_RAG_INDEX_ACCEPTED,
                         result,
@@ -1030,11 +1059,11 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.DRAFT_SAVE_REQUESTED: {
                 try {
-                    const result = (await httpRequest({
+                    const result = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/messages/drafts`,
                         body: p,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.DRAFT_SAVED,
                         result,
@@ -1053,10 +1082,10 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 const mailboxBindingId = p && p.mailbox_binding_id;
                 if (!mailboxBindingId) throw new Error('mail.effect: mailbox_binding_id required');
                 try {
-                    const data = (await httpRequest({
+                    const data = httpObject(await httpRequest({
                         method: 'GET',
                         url: `${base}/api/mail/bindings/${encodeURIComponent(String(mailboxBindingId))}/members`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     if (!data || !Array.isArray(data.items)) {
                         throw new Error('mail.binding_members: items must be array');
                     }
@@ -1075,18 +1104,18 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.BINDING_MEMBER_ADD_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 const mailboxBindingId = payload.mailbox_binding_id;
                 if (!mailboxBindingId) throw new Error('mail.effect: mailbox_binding_id required');
                 try {
-                    const member = (await httpRequest({
+                    const member = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/bindings/${encodeURIComponent(String(mailboxBindingId))}/members`,
                         body: {
                             user_id: payload.user_id,
                             role: payload.role || 'member',
                         },
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_MEMBER_ADDED,
                         { member },
@@ -1102,7 +1131,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 return;
             }
             case MAIL_EVENTS.BINDING_MEMBER_REMOVE_REQUESTED: {
-                const payload = (p ?? {}) as Record<string, unknown>;
+                const payload = p;
                 const mailboxBindingId = payload.mailbox_binding_id;
                 const userId = payload.user_id;
                 if (!mailboxBindingId || !userId) {
@@ -1129,10 +1158,10 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
             }
             case MAIL_EVENTS.HEALTHCHECK_REQUESTED: {
                 try {
-                    const health = (await httpRequest({
+                    const health = httpObject(await httpRequest({
                         method: 'POST',
                         url: `${base}/api/mail/connection/healthcheck`,
-                    })) as Record<string, unknown> | null;
+                    }));
                     ctx.dispatch(
                         MAIL_EVENTS.HEALTHCHECK_COMPLETED,
                         { health },
@@ -1156,9 +1185,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 if (!mail.folder || typeof mail.folder !== 'string') {
                     return;
                 }
-                const data = p && p.data && typeof p.data === 'object'
-                    ? p.data as Record<string, unknown>
-                    : {};
+                const data = isPlainRecord(p.data) ? p.data : {};
                 const notifyBindingId = typeof data.mailbox_binding_id === 'string'
                     ? data.mailbox_binding_id
                     : '';

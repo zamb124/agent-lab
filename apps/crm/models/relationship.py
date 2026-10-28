@@ -75,12 +75,13 @@ class Relationship(PlatformModel):
         return await cls.objects.create(instance=row)
 
     @classmethod
-    async def target_by_source_and_type(
+    async def any_target_entity_id_by_source_and_type(
         cls,
         company_id: str,
         source_entity_id: str,
         relationship_type: str,
     ) -> str | None:
+        """Один target_entity_id ребра компании с этим source и типом. Нет ребра — None. Если ребер несколько, какое взято, не задано."""
         row = await cls.objects.filter(
             company_id=company_id,
             source_entity_id=source_entity_id,
@@ -169,13 +170,14 @@ class Relationship(PlatformModel):
             return raced
 
     @classmethod
-    async def neighbors_for_entities(
+    async def incident_edges_by_entity_id(
         cls,
         entity_ids: list[str],
         relationship_types: list[str] | None = None,
         cross_company: bool = False,
         relationship_namespace: str | None = None,
     ) -> dict[str, list[Relationship]]:
+        """Рёбра, инцидентные каждому entity_id. Ключ есть и без рёбер. Ребро с обоими концами в наборе попадает в оба списка. Пустой список id — {}."""
         if len(entity_ids) == 0:
             return {}
         rows = cls.objects.filter(
@@ -254,12 +256,13 @@ class Relationship(PlatformModel):
         return CursorPage[Relationship](items=page, next_cursor=next_cursor, has_more=has_more)
 
     @classmethod
-    async def rewrite_entity_id(
+    async def update_source_and_target_entity_id(
         cls,
         company_id: str,
         old_entity_id: str,
         new_entity_id: str,
     ) -> int:
+        """Пишет source_entity_id и target_entity_id рёбер компании, где конец равен old_entity_id. Возвращает сумму двух обновлений. Одинаковые id — ValueError."""
         if old_entity_id == new_entity_id:
             raise ValueError("old_entity_id and new_entity_id must differ")
         async with atomic(using="crm"):
@@ -281,7 +284,8 @@ class Relationship(PlatformModel):
         return source_rows + target_rows
 
     @classmethod
-    async def deduplicate_for_entity(cls, entity_id: str) -> None:
+    async def delete_loops_and_duplicate_edges(cls, entity_id: str) -> None:
+        """В активной компании удаляет петли сущности и лишние рёбра с тем же namespace, концами и типом. Оставляет ребро с наименьшим relationship_id."""
         company_id = require_active_company().company_id
         rows = await cls.touching_in_company(entity_id, company_id).all()
         deleted_count = 0

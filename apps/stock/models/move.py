@@ -338,10 +338,10 @@ class StockMove(PlatformModel):
         ).all()
 
     @classmethod
-    async def list_open_for_warehouse(
+    async def list_unordered_confirmed_partial_or_assigned_for_warehouse(
         cls, company_id: str, warehouse_id: str
     ) -> list[Self]:
-        """Незакрытые движения склада — сверка застрявших при reconcile."""
+        """Движения склада в confirmed, partially_available или assigned. Порядка и limit нет."""
         return await cls.objects.filter(
             company_id=company_id,
             warehouse_id=warehouse_id,
@@ -474,7 +474,7 @@ class StockMove(PlatformModel):
             location_ids=location_ids,
             owner_entity_id=owner_entity_id,
         )
-        candidate_locations = await StockLocation.by_ids(
+        candidate_locations = await StockLocation.found_in_company_by_ids(
             company_id, [q.location_id for q in candidates]
         )
         removal_bins = {
@@ -639,7 +639,7 @@ class StockMove(PlatformModel):
         """
         lines = await StockMoveLine.list_for_move(company_id, move.move_id)
         location_ids = sorted({line.location_id for line in lines})
-        locations = await StockLocation.by_ids(company_id, location_ids)
+        locations = await StockLocation.found_in_company_by_ids(company_id, location_ids)
         for line in lines:
             if line.kind == StockMoveLineKind.CONTAINER:
                 if line.state != StockMoveLineState.OPEN:
@@ -842,7 +842,7 @@ class StockMove(PlatformModel):
                 if line.container_id is not None
             }
         )
-        locations = await StockLocation.by_ids(company_id, location_ids)
+        locations = await StockLocation.found_in_company_by_ids(company_id, location_ids)
         storage_type_ids = sorted(
             {
                 loc.storage_type_id
@@ -850,7 +850,7 @@ class StockMove(PlatformModel):
                 if loc.storage_type_id is not None
             }
         )
-        storage_types = await StockStorageType.by_ids(company_id, storage_type_ids)
+        storage_types = await StockStorageType.found_in_company_by_ids(company_id, storage_type_ids)
         ordered = sorted(
             posting,
             key=lambda line: (
@@ -938,7 +938,7 @@ class StockMove(PlatformModel):
             from apps.stock.models.wave import StockWave
 
             for wave_id in wave_ids:
-                await StockWave.refresh_state(company_id, wave_id)
+                await StockWave.mark_done_when_no_open_lines(company_id, wave_id)
         _ = await cls.objects.filter(
             company_id=company_id, move_id=move.move_id
         ).update(using=STOCK_DB, state=StockMoveState.DONE, done_at=now)
@@ -1040,7 +1040,7 @@ class StockMove(PlatformModel):
                 ),
                 *(container_move or ()),
             }
-            endpoint_locations = await StockLocation.by_ids(
+            endpoint_locations = await StockLocation.found_in_company_by_ids(
                 company_id, sorted(endpoint_ids)
             )
 
@@ -1188,7 +1188,7 @@ class StockMove(PlatformModel):
                 )
 
             locations = endpoint_locations
-            storage_types = await StockStorageType.by_ids(
+            storage_types = await StockStorageType.found_in_company_by_ids(
                 company_id,
                 sorted(
                     {
@@ -1275,7 +1275,7 @@ class StockMove(PlatformModel):
                 from apps.stock.models.wave import StockWave
 
                 for wave_id in wave_ids:
-                    await StockWave.refresh_state(company_id, wave_id)
+                    await StockWave.mark_done_when_no_open_lines(company_id, wave_id)
             still_open = [
                 line
                 for line in await StockMoveLine.list_for_move(
@@ -1418,7 +1418,7 @@ class StockMove(PlatformModel):
                 line_dst,
             )
         if line_src.usage in STOCK_QUANT_USAGES:
-            src_quant = await StockQuant.get_or_create_locked(
+            src_quant = await StockQuant.ensure_locked(
                 company_id=company_id,
                 product_id=move.product_id,
                 location_id=line.location_id,
@@ -1453,7 +1453,7 @@ class StockMove(PlatformModel):
                     storage_types=storage_types,
                 )
             removal_at = await cls._lot_removal_at(company_id, line.lot_id)
-            dst_quant = await StockQuant.get_or_create_locked(
+            dst_quant = await StockQuant.ensure_locked(
                 company_id=company_id,
                 product_id=move.product_id,
                 location_id=line.location_dest_id,
@@ -1861,7 +1861,7 @@ class StockMove(PlatformModel):
             await cls._validate_container_move(
                 company_id=company_id, container=container, dest=dest
             )
-            storage_types = await StockStorageType.by_ids(
+            storage_types = await StockStorageType.found_in_company_by_ids(
                 company_id, [dest.storage_type_id] if dest.storage_type_id else []
             )
             subtree_ids = await StockLocation.list_subtree_ids(
@@ -2372,7 +2372,7 @@ class StockMove(PlatformModel):
                 created_at=now,
             )
             _ = await StockMoveLine.objects.create(instance=line)
-            await StockQuant.set_inventory_quantity(quant.quant_id, None)
+            await StockQuant.update_inventory_quantity_counted_at_and_user(quant.quant_id, None)
             posted = await cls.post_step(
                 company_id=company_id,
                 move=move,

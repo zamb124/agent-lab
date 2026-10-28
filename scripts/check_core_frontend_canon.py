@@ -9,7 +9,7 @@ event-архитектуре. Запускается как первый сло�
   events/**       — фундамент (bus, log, contract, factory-registry,
                     select-controller, http, ws.effect, factories/, reducers/,
                     effects/). Здесь не место LitElement, BaseStore, fetch
-                    вне http.js/effects, |/?? фолбекам в reducers/factories.
+                    вне http.ts/effects, |/?? фолбекам в reducers/factories.
 
   base/**         — PlatformElement / PlatformApp / PlatformPage /
                     use-resource. Все публичные методы PlatformElement обязаны
@@ -45,16 +45,6 @@ ERRORS: list[str] = []
 
 def fail(message: str) -> None:
     ERRORS.append(message)
-
-
-def _js_or_ts(path: Path) -> Path:
-    """Каноничный путь исходника: при миграции .js -> .ts sibling."""
-    if path.exists():
-        return path
-    ts = path.with_suffix('.ts')
-    if path.suffix == '.js' and ts.exists():
-        return ts
-    return path
 
 
 def _iter_js(*subdirs: str) -> list[Path]:
@@ -106,15 +96,15 @@ def check_events_zone() -> None:
         re.compile(r"\b(BaseStore|BaseService|ServiceRegistry|AppEvents|Zustand)\b"),
         "events/** must not reference legacy primitives",
     )
-    # fetch разрешён только в http.js (низкоуровневый клиент) и в effects/* (effects
-    # сами знают, как обращаться с сетью — http.js или прямой fetch на статику/SSE).
+    # fetch разрешён только в http.ts (низкоуровневый клиент) и в effects/* (effects
+    # сами знают, как обращаться с сетью — http.ts или прямой fetch на статику/SSE).
     for path in files:
         rel = path.relative_to(LIB / "events")
         text = _strip_comments(path.read_text(encoding="utf-8"))
         first_part = rel.parts[0] if rel.parts else ""
         if re.search(r"\bfetch\s*\(", text):
-            if path != _js_or_ts(LIB / "events" / "http.js") and first_part != "effects":
-                fail(f"{path.relative_to(ROOT)}: fetch( is allowed only in events/http.js and events/effects/")
+            if path != LIB / "events" / "http.ts" and first_part != "effects":
+                fail(f"{path.relative_to(ROOT)}: fetch( is allowed only in events/http.ts and events/effects/")
         if re.search(r"\bnew\s+WebSocket\s*\(", text) and first_part != "effects":
             fail(f"{path.relative_to(ROOT)}: new WebSocket allowed only in events/effects/")
 
@@ -127,8 +117,8 @@ def check_events_zone() -> None:
     ]
     fallback_files = [p for p in files if any(str(p).startswith(str(z)) for z in fallback_zones)]
     fallback_excluded = {
-        _js_or_ts(LIB / "events" / "factories" / name)
-        for name in ("_internal.js", "_transport.js", "register.js")
+        LIB / "events" / "factories" / name
+        for name in ("_internal.ts", "_transport.ts", "register.ts")
     }
     fallback_pattern = re.compile(r"\)\s*\|\|\s*(\[\]|\{\}|null)|\?\?\s*(\[\]|\{\}|null|['\"][^'\"]*['\"])")
     for path in fallback_files:
@@ -141,7 +131,7 @@ def check_events_zone() -> None:
                 f"{path.relative_to(ROOT)}:{line}: fallback `|| [] | || {{}} | ?? ...` запрещён в reducers/factories — проверяйте payload явно и бросайте"
             )
 
-    contract_path = _js_or_ts(LIB / "events" / "contract.js")
+    contract_path = LIB / "events" / "contract.ts"
     contract_text = contract_path.read_text(encoding="utf-8")
     block = re.search(r"export\s+const\s+CoreEvents\s*=\s*Object\.freeze\(\{(?P<body>[^}]+)\}", contract_text, re.S)
     if not block:
@@ -165,13 +155,13 @@ def check_base_zone() -> None:
     ) if False else None  # PlatformElement legitimately extends LitElement
 
     # Только в самом PlatformElement допускается `extends LitElement`.
-    pe_path = _js_or_ts(LIB / "platform-element" / "index.js")
+    pe_path = LIB / "platform-element" / "index.ts"
     for path in files:
         if path == pe_path:
             continue
         text = _strip_comments(path.read_text(encoding="utf-8"))
         if re.search(r"\bextends\s+LitElement\b", text):
-            fail(f"{path.relative_to(ROOT)}: only platform-element/index.js may extend LitElement")
+            fail(f"{path.relative_to(ROOT)}: only platform-element/index.ts may extend LitElement")
 
     _check_no_pattern(
         files,
@@ -201,8 +191,9 @@ def check_base_zone() -> None:
         "switchCompany",
     )
     for helper in helpers:
-        pattern = rf"\b{re.escape(helper)}\s*\([^)]*\)[^{{]*\{{"
-        if not re.search(pattern, text):
+        # Объявление метода в теле класса (параметры типа допустимы); упоминание в комментарии не считается.
+        pattern = rf"^    {re.escape(helper)}(?:<.+?>)?\(.*\)[^{{\n]*\{{\s*$"
+        if not re.search(pattern, text, re.M):
             fail(f"PlatformElement: helper '{helper}' missing")
     if "throw new Error" not in text:
         fail("PlatformElement helpers must guard arguments with throw new Error()")
@@ -292,13 +283,13 @@ def check_utils_zone() -> None:
         "utils/** must not import from apps/",
     )
     # fetch разрешён только для статических ассетов (CSS-стили — style-cache).
-    fetch_allowed = {_js_or_ts(LIB / "utils" / "style-cache.js")}
+    fetch_allowed = {LIB / "utils" / "style-cache.ts"}
     for path in files:
         if path in fetch_allowed:
             continue
         text = _strip_comments(path.read_text(encoding="utf-8"))
         if re.search(r"\bfetch\s*\(", text):
-            fail(f"{path.relative_to(ROOT)}: fetch( in utils/** разрешён только в style-cache.js (CSS loader)")
+            fail(f"{path.relative_to(ROOT)}: fetch( in utils/** разрешён только в style-cache.ts (CSS loader)")
 
 
 def main() -> int:

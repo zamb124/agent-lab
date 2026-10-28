@@ -3,6 +3,7 @@
  * В storage только пары id -> false (явно свёрнута); отсутствие ключа у группы = развёрнута.
  */
 
+import { isPlainRecord } from '../events/payload.js';
 import { platformStorageKey } from './storage-keys.js';
 import { storageGet, storageSetJson } from './platform-storage.js';
 function _segment(raw: unknown): string {
@@ -38,7 +39,7 @@ export function readSidebarNavTreeExpanded(scope: string): Record<string, boolea
             `readSidebarNavTreeExpanded: invalid JSON for ${JSON.stringify(key)}: ${e instanceof Error ? e.message : String(e)}`,
         );
     }
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    if (!isPlainRecord(parsed)) {
         throw new Error(`readSidebarNavTreeExpanded: expected object at ${JSON.stringify(key)}`);
     }
     const out: Record<string, boolean> = Object.create(null);
@@ -46,7 +47,7 @@ export function readSidebarNavTreeExpanded(scope: string): Record<string, boolea
         if (typeof k !== 'string') {
             throw new Error(`readSidebarNavTreeExpanded: key must be string at ${JSON.stringify(key)}`);
         }
-        const v = (parsed as Record<string, unknown>)[k];
+        const v = parsed[k];
         if (v === false) {
             out[k] = false;
             continue;

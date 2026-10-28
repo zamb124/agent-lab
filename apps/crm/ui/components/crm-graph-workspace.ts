@@ -65,23 +65,37 @@ import type {
     PropertyValues,
     TemplateResult,
 } from 'lit';
-import type {
-    OpController,
-    ResourceController,
-} from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { graphCanvasViewFromParam } from '../_helpers/graph-view-mode.js';
 import type { GraphCanvasViewMode } from '../_helpers/graph-view-mode.js';
-import type {
-    CrmGraphUiController,
-    CrmGraphUiSlice,
-    CrmGraphViewController,
-    CrmGraphViewSlice,
-} from '../events/crm.types.js';
+import type { CrmGraphUiSlice, CrmGraphViewSlice } from '../events/crm.types.js';
 
 const VIEW_MODES = ['influence', 'related', 'path'];
 const PANEL_IDS = ['search', 'timeline', 'legend', 'meta'];
+
+function eventResult(payload: unknown): Record<string, unknown> | null {
+    if (!isPlainRecord(payload)) {
+        throw new Error('CRMGraphWorkspace: event payload must be an object');
+    }
+    const result = payload.result;
+    if (result === null || result === undefined) {
+        return null;
+    }
+    if (!isPlainRecord(result)) {
+        throw new Error('CRMGraphWorkspace: event result must be an object');
+    }
+    return result;
+}
+
+function failureMessage(payload: unknown): string {
+    if (!isPlainRecord(payload) || typeof payload.message !== 'string') {
+        throw new Error('CRMGraphWorkspace: failure message required');
+    }
+    return payload.message;
+}
 const SEARCH_DEBOUNCE_MS = 400;
 const TIMELINE_RELOAD_DEBOUNCE_MS = 220;
 
@@ -494,8 +508,8 @@ export class CRMGraphWorkspace extends PlatformElement {
 
     private _crmNamespaceSel: SelectController<string | null>;
     private _routerSel: SelectController<{ routeKey: any; params: any; search: any }>;
-    private _graphUi: CrmGraphUiController;
-    private _graphView: CrmGraphViewController;
+    private _graphUi: ControllerFor<'crm/graph_ui'>;
+    private _graphView: ControllerFor<'crm/graph_view'>;
     private _entityTypes: ResourceController;
     private _relationshipTypes: ResourceController;
     private _timelineBoundsOp: OpController;
@@ -567,8 +581,8 @@ export class CRMGraphWorkspace extends PlatformElement {
             search: s.router.search,
         }));
 
-        this._graphUi = this.useSlice('crm/graph_ui') as CrmGraphUiController;
-        this._graphView = this.useSlice('crm/graph_view') as CrmGraphViewController;
+        this._graphUi = this.useSlice('crm/graph_ui');
+        this._graphView = this.useSlice('crm/graph_view');
         this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
         this._relationshipTypes = this.useResource('crm/relationship_types', { autoload: true });
         this._timelineBoundsOp = this.useOp('crm/timeline_bounds');
@@ -609,22 +623,22 @@ export class CRMGraphWorkspace extends PlatformElement {
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._reloadAll());
 
         this.useEvent(this._timelineBoundsOp.op.events.REQUESTED, () => { this._loading = true; });
-        this.useEvent(this._timelineBoundsOp.op.events.SUCCEEDED, (event) => this._onTimelineBoundsLoaded((event.payload as Record<string, any>).result));
-        this.useEvent(this._entitiesLookupOp.op.events.SUCCEEDED, (event) => this._onEntitiesLookupLoaded((event.payload as Record<string, any>).result));
-        this.useEvent(this._overviewOp.op.events.SUCCEEDED, (event) => this._onGraphResponse((event.payload as Record<string, any>).result));
-        this.useEvent(this._influenceOp.op.events.SUCCEEDED, (event) => this._onGraphResponse((event.payload as Record<string, any>).result));
-        this.useEvent(this._relatedOp.op.events.SUCCEEDED, (event) => this._onRelatedLoaded((event.payload as Record<string, any>).result));
-        this.useEvent(this._entityRelOp.op.events.SUCCEEDED, (event) => this._onEntityRelationshipsLoaded((event.payload as Record<string, any>).result));
-        this.useEvent(this._shortestPathOp.op.events.SUCCEEDED, (event) => this._onShortestPathLoaded((event.payload as Record<string, any>).result));
-        this.useEvent(this._entitySearchOp.op.events.SUCCEEDED, (event) => this._onSearchLoaded((event.payload as Record<string, any>).result));
+        this.useEvent(this._timelineBoundsOp.op.events.SUCCEEDED, (event) => this._onTimelineBoundsLoaded(eventResult(event.payload)));
+        this.useEvent(this._entitiesLookupOp.op.events.SUCCEEDED, (event) => this._onEntitiesLookupLoaded(eventResult(event.payload)));
+        this.useEvent(this._overviewOp.op.events.SUCCEEDED, (event) => this._onGraphResponse(eventResult(event.payload)));
+        this.useEvent(this._influenceOp.op.events.SUCCEEDED, (event) => this._onGraphResponse(eventResult(event.payload)));
+        this.useEvent(this._relatedOp.op.events.SUCCEEDED, (event) => this._onRelatedLoaded(eventResult(event.payload)));
+        this.useEvent(this._entityRelOp.op.events.SUCCEEDED, (event) => this._onEntityRelationshipsLoaded(eventResult(event.payload)));
+        this.useEvent(this._shortestPathOp.op.events.SUCCEEDED, (event) => this._onShortestPathLoaded(eventResult(event.payload)));
+        this.useEvent(this._entitySearchOp.op.events.SUCCEEDED, (event) => this._onSearchLoaded(eventResult(event.payload)));
 
         this.useEvent(this._timelineBoundsOp.op.events.FAILED, (event) => {
             this._loading = false;
-            this.toast('crm:graph_page.err_timeline', { type: 'error', vars: { message: (event.payload as Record<string, any>).message } });
+            this.toast('crm:graph_page.err_timeline', { type: 'error', vars: { message: failureMessage(event.payload) } });
         });
         this.useEvent(this._shortestPathOp.op.events.FAILED, (event) => {
             this._loading = false;
-            this.toast('crm:graph_page.err_path_build', { type: 'error', vars: { message: (event.payload as Record<string, any>).message } });
+            this.toast('crm:graph_page.err_path_build', { type: 'error', vars: { message: failureMessage(event.payload) } });
         });
         this.useEvent(this._overviewOp.op.events.FAILED, () => { this._loading = false; });
         this.useEvent(this._influenceOp.op.events.FAILED, () => { this._loading = false; });
@@ -702,7 +716,11 @@ export class CRMGraphWorkspace extends PlatformElement {
         if (raw !== '' && raw !== '?') {
             return;
         }
-        const gv = this._graphViewValue.viewMode as GraphCanvasViewMode;
+        const viewMode = this._graphViewValue.viewMode;
+        if (viewMode !== '3d' && viewMode !== 'mindmap') {
+            throw new Error('CRMGraphWorkspace: viewMode must be 3d or mindmap');
+        }
+        const gv = viewMode;
         const root =
             typeof this._selectedRootId === 'string' && this._selectedRootId.trim().length > 0
                 ? this._selectedRootId.trim()
@@ -775,7 +793,9 @@ export class CRMGraphWorkspace extends PlatformElement {
      * @returns {string}
      */
     _rootLabelFromGraph(graph: unknown, rootId: string): string {
-        const nodes = graph && typeof graph === 'object' && Array.isArray((graph as Record<string, any>).nodes) ? (graph as Record<string, any>).nodes : [];
+        const graphRecord = isPlainRecord(graph) ? graph : null;
+        const nodeList = graphRecord === null ? undefined : graphRecord.nodes;
+        const nodes = Array.isArray(nodeList) ? nodeList : [];
         for (const raw of nodes) {
             if (!raw || typeof raw !== 'object') {
                 continue;
@@ -822,7 +842,7 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     _currentNamespace(): string | null {
-        return this._crmNamespaceSel.value ?? null;
+        return this._crmNamespaceSel.value;
     }
 
     _reloadAll() {
@@ -834,7 +854,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._timelineBoundsOp.run({ namespace: nq });
     }
 
-    _onTimelineBoundsLoaded(bounds: Record<string, any> | null): void {
+    _onTimelineBoundsLoaded(bounds: Record<string, unknown> | null): void {
         const minTs = _parseTimestamp(bounds && bounds.min_created_at);
         const maxTs = _parseTimestamp(bounds && bounds.max_created_at);
         const total = Number(bounds && bounds.total_entities);
@@ -865,7 +885,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._entitiesLookupOp.run(lookup);
     }
 
-    async _onEntitiesLookupLoaded(response: Record<string, any> | null): Promise<void> {
+    async _onEntitiesLookupLoaded(response: Record<string, unknown> | null): Promise<void> {
         const items: Record<string, any>[] = response && Array.isArray(response.items) ? response.items : [];
         const map = new Map<string, Record<string, any>>();
         items.forEach((item: Record<string, any>) => {
@@ -883,15 +903,16 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._mindmapErrorKey = '';
             let rootId = this._readGraphRootFromSearch(this._routerSel.value?.search);
             if (rootId === null) {
-                const person = await this._personOp.run(null) as Record<string, any> | null;
-                if (person === null) {
+                const personRaw = await this._personOp.run(null);
+                if (personRaw === null) {
                     this._loading = false;
                     this._mindmapErrorKey = 'mindmap.err_person';
                     return;
                 }
-                if (!person || typeof person !== 'object') {
+                if (!isPlainRecord(personRaw)) {
                     throw new Error('CRMGraphWorkspace: person_entity_self invalid response');
                 }
+                const person = personRaw;
                 const entityIdRaw = person.entity_id !== undefined ? person.entity_id : person.id;
                 const entityId = typeof entityIdRaw === 'string' ? entityIdRaw.trim() : '';
                 if (entityId.length === 0) {
@@ -907,26 +928,38 @@ export class CRMGraphWorkspace extends PlatformElement {
             }
             if (!this._pathTargetId && items.length > 1) {
                 const target = items.find((entity: Record<string, any>) => entity.entity_id !== this._pathSourceId);
-                this._pathTargetId = target ? target.entity_id : items[0]!.entity_id;
+                const first = items[0];
+                if (first === undefined) {
+                    throw new Error('CRMGraphWorkspace: entity missing');
+                }
+                this._pathTargetId = target ? target.entity_id : first.entity_id;
             }
             this._rebuildGraphByMode();
             return;
         }
 
         if (!this._selectedRootId && items.length > 0) {
-            this._selectedRootId = items[0]!.entity_id;
+            const first = items[0];
+            if (first === undefined) {
+                throw new Error('CRMGraphWorkspace: entity missing');
+            }
+            this._selectedRootId = first.entity_id;
         }
         if (!this._pathSourceId && items.length > 0) {
             this._pathSourceId = this._selectedRootId;
         }
         if (!this._pathTargetId && items.length > 1) {
             const target = items.find((entity: Record<string, any>) => entity.entity_id !== this._pathSourceId);
-            this._pathTargetId = target ? target.entity_id : items[0]!.entity_id;
+            const first = items[0];
+            if (first === undefined) {
+                throw new Error('CRMGraphWorkspace: entity missing');
+            }
+            this._pathTargetId = target ? target.entity_id : first.entity_id;
         }
         this._rebuildGraphByMode();
     }
 
-    _onGraphResponse(response: Record<string, any> | null): void {
+    _onGraphResponse(response: Record<string, unknown> | null): void {
         if (!response || typeof response !== 'object') {
             this._graphNodes = [];
             this._graphEdges = [];
@@ -986,7 +1019,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         }
     }
 
-    _onRelatedLoaded(response: Record<string, any> | null): void {
+    _onRelatedLoaded(response: Record<string, unknown> | null): void {
         if (!response || typeof response !== 'object') {
             this._loading = false;
             return;
@@ -1020,14 +1053,15 @@ export class CRMGraphWorkspace extends PlatformElement {
         });
     }
 
-    _onEntityRelationshipsLoaded(response: Record<string, any> | null): void {
-        if (!response || !Array.isArray(response.relationships)) {
+    _onEntityRelationshipsLoaded(response: Record<string, unknown> | null): void {
+        const relationships = response === null ? undefined : response.relationships;
+        if (!Array.isArray(relationships)) {
             this._loading = false;
             return;
         }
         const relationType = this._relationshipTypeFilter.trim();
         const allowed = this._relatedNodeIds;
-        const filtered = (response.relationships as Record<string, any>[]).filter((edge: Record<string, any>) => {
+        const filtered = relationships.filter((edge: Record<string, any>) => {
             const source = edge.source_entity_id;
             const target = edge.target_entity_id;
             if (!allowed.has(source) || !allowed.has(target)) return false;
@@ -1044,15 +1078,19 @@ export class CRMGraphWorkspace extends PlatformElement {
         }
     }
 
-    _onShortestPathLoaded(response: Record<string, any> | null): void {
-        if (!response || !Array.isArray(response.path) || !Array.isArray(response.edges)) {
+    _onShortestPathLoaded(response: Record<string, unknown> | null): void {
+        const path = response === null ? undefined : response.path;
+        const edges = response === null ? undefined : response.edges;
+        if (!Array.isArray(path) || !Array.isArray(edges)) {
             this._loading = false;
             return;
         }
-        const undirectedPath = Array.isArray(response.undirected_path) ? response.undirected_path : [];
-        const undirectedEdges = Array.isArray(response.undirected_edges) ? response.undirected_edges : [];
-        const directedExists = response.exists === true && response.path.length > 0;
-        const undirectedExists = response.undirected_exists === true && undirectedPath.length > 0;
+        const undirectedPathRaw = response === null ? undefined : response.undirected_path;
+        const undirectedEdgesRaw = response === null ? undefined : response.undirected_edges;
+        const undirectedPath = Array.isArray(undirectedPathRaw) ? undirectedPathRaw : [];
+        const undirectedEdges = Array.isArray(undirectedEdgesRaw) ? undirectedEdgesRaw : [];
+        const directedExists = response !== null && response.exists === true && path.length > 0;
+        const undirectedExists = response !== null && response.undirected_exists === true && undirectedPath.length > 0;
         if (!directedExists && !undirectedExists) {
             this._shortestPathEdges = [];
             this._graphNodes = [];
@@ -1065,9 +1103,9 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._loading = false;
             return;
         }
-        const merged = this._mergePathEdgesByKind(response.edges as Record<string, any>[], undirectedEdges);
+        const merged = this._mergePathEdgesByKind(edges, undirectedEdges);
         this._shortestPathEdges = merged;
-        const allPathNodeIds = Array.from(new Set([...response.path, ...undirectedPath]));
+        const allPathNodeIds = Array.from(new Set([...path, ...undirectedPath]));
         const nodes = allPathNodeIds.map((entityId: string, index: number) => {
             const entity = this._entitiesById.get(entityId);
             if (!entity) {
@@ -1115,7 +1153,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         return Array.from(merged.values());
     }
 
-    _onSearchLoaded(response: Record<string, any> | null): void {
+    _onSearchLoaded(response: Record<string, unknown> | null): void {
         const all: Record<string, any>[] = response && Array.isArray(response.items) ? response.items : [];
         // Порог min score действует только для узлов с числовым score из поиска; узлы без score не трактуем как 0.
         const items = this._minScore > 0
@@ -1287,7 +1325,7 @@ export class CRMGraphWorkspace extends PlatformElement {
 
     _getEntityTypeColors(): Map<string, string> {
         const colors = new Map<string, string>();
-        (this._entityTypes.items as Record<string, any>[]).forEach((item: Record<string, any>) => {
+        this._entityTypes.items.forEach((item) => {
             const typeId = typeof item.type_id === 'string' ? item.type_id.trim() : '';
             if (!typeId) return;
             const color = typeof item.color === 'string' ? item.color.trim() : '';
@@ -1298,7 +1336,7 @@ export class CRMGraphWorkspace extends PlatformElement {
 
     _getRelationshipTypeColors(): Map<string, string> {
         const colors = new Map<string, string>();
-        (this._relationshipTypes.items as Record<string, any>[]).forEach((item: Record<string, any>) => {
+        this._relationshipTypes.items.forEach((item) => {
             const typeId = typeof item.type_id === 'string' ? item.type_id.trim() : '';
             if (!typeId) return;
             const color = typeof item.color === 'string' ? item.color.trim() : '';
@@ -1318,7 +1356,7 @@ export class CRMGraphWorkspace extends PlatformElement {
     _isEdgeDirected(edge: Record<string, any>): boolean {
         if (typeof edge.is_directed === 'boolean') return edge.is_directed;
         const relType = edge.relationship_type || edge.type;
-        const relationshipType = (this._relationshipTypes.items as Record<string, any>[]).find((item: Record<string, any>) => item.type_id === relType);
+        const relationshipType = this._relationshipTypes.items.find((item) => item.type_id === relType);
         if (!relationshipType) return true;
         return relationshipType.is_directed !== false;
     }
@@ -1451,7 +1489,10 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     _onCanvasContextMenu(event: CustomEvent) {
-        this._showContextMenu(event.detail.screenX, event.detail.screenY, event.detail.node?.id || '', '');
+        const node = event.detail.node;
+        const rawNodeId = node === undefined || node === null ? undefined : node.id;
+        const nodeId = rawNodeId === undefined || rawNodeId === null || rawNodeId === '' ? '' : String(rawNodeId);
+        this._showContextMenu(event.detail.screenX, event.detail.screenY, nodeId, '');
     }
 
     _onCanvasClick() {
@@ -1685,7 +1726,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             return;
         }
         if (actionId === 'filter_rel_type') {
-            const types = this._relationshipTypes.items as Record<string, any>[];
+            const types = this._relationshipTypes.items;
             if (this._relationshipTypeFilter.trim().length > 0) {
                 this._relationshipTypeFilter = '';
                 this._rebuildGraphByMode();
@@ -1696,7 +1737,14 @@ export class CRMGraphWorkspace extends PlatformElement {
             if (selectedEdge && selectedEdge.relationship_type) {
                 this._relationshipTypeFilter = selectedEdge.relationship_type;
             } else {
-                this._relationshipTypeFilter = types[0]!.type_id;
+                const firstType = types[0];
+                if (firstType === undefined) {
+                    throw new Error('CRMGraphWorkspace: relationship type missing');
+                }
+                if (typeof firstType.type_id !== 'string' || firstType.type_id.length === 0) {
+                    throw new Error('CRMGraphWorkspace: relationship type id required');
+                }
+                this._relationshipTypeFilter = firstType.type_id;
             }
             this._rebuildGraphByMode();
             return;

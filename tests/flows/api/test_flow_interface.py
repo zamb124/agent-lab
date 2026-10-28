@@ -86,7 +86,7 @@ async def _set_interface(
         )
     )
     try:
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
         assert config is not None
         config.interface = document
         await FlowConfig.create_version(config)
@@ -204,7 +204,7 @@ async def test_flow_interface_branch_document_and_unknown_branch_404(
         )
     )
     try:
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
         assert config is not None
         config.branches = {
             "support": BranchConfig(name="Support", interface=_chat_document(greeting="Support")),
@@ -431,7 +431,7 @@ async def test_flow_identity_image_url_comes_from_agent_identity_block(
         )
     )
     try:
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
         assert config is not None
         config.store_card_image_url = "https://cdn.example/store-card.png"
         await FlowConfig.create_version(config)

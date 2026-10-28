@@ -124,7 +124,7 @@ class CompanyStorageService:
         alive = await FileRecord.count_for_storage(storage_id)
         if alive > 0:
             raise PlatformConflictError("object storage still has files")
-        routes = await StorageRoute.list_for_storage(storage_id)
+        routes = await StorageRoute.list_unordered_for_storage(storage_id)
         if routes:
             raise PlatformConflictError("object storage still has routes")
         running = await StorageMigration.running_for_source(storage_id)

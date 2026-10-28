@@ -62,7 +62,7 @@ class TestFlowDiscoveryService:
         all_agents = await FlowConfig.list(limit=10000)
         assert len(all_agents) >= 1
 
-        found = await FlowConfig.get_latest("test_agent_1")
+        found = await FlowConfig.current_for_flow("test_agent_1")
         assert found is not None
         assert found.name == "Test Agent 1"
         assert found.headers == {"X-API-Key": "test-key"}
@@ -137,7 +137,7 @@ class TestFlowDiscoveryService:
         await FlowConfig.create_version(agent)
 
         # Обновляем health check
-        agent = await FlowConfig.get_latest("health_test_agent")
+        agent = await FlowConfig.current_for_flow("health_test_agent")
         agent.status = ExternalAgentStatus.UNHEALTHY
         agent.agent_card = {"name": "Updated Card"}
         from datetime import datetime
@@ -145,7 +145,7 @@ class TestFlowDiscoveryService:
         agent.last_health_check = datetime.now(tz.utc)
         await FlowConfig.create_version(agent)
 
-        updated = await FlowConfig.get_latest("health_test_agent")
+        updated = await FlowConfig.current_for_flow("health_test_agent")
         assert updated.status == ExternalAgentStatus.UNHEALTHY
         assert updated.agent_card == {"name": "Updated Card"}
         assert updated.last_health_check is not None
@@ -262,7 +262,7 @@ class TestExternalAgentsAPI:
         response = await client.delete("/flows/api/v1/flows/delete_test_agent")
         assert response.status_code == 200
 
-        deleted = await FlowConfig.get_latest("delete_test_agent")
+        deleted = await FlowConfig.current_for_flow("delete_test_agent")
         assert deleted is None
 
     @pytest.mark.asyncio

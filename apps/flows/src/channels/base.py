@@ -366,7 +366,7 @@ class BaseChannel(ABC):
                 AuthzObject.flow(self.flow_id, company_id=company_id),
                 user_id=user_id,
             )
-            flow_config = await FlowConfig.get_latest(self.flow_id)
+            flow_config = await FlowConfig.current_for_flow(self.flow_id)
             if (
                 flow_config is not None
                 and flow_config.branches
@@ -379,7 +379,7 @@ class BaseChannel(ABC):
                     user_id=user_id,
                 )
         except AuthzDenied as exc:
-            flow_config = await FlowConfig.get_latest(self.flow_id)
+            flow_config = await FlowConfig.current_for_flow(self.flow_id)
             required = list(flow_config.permission) if flow_config is not None else []
             if (
                 flow_config is not None
@@ -387,7 +387,7 @@ class BaseChannel(ABC):
                 and flow_config.branches[branch_id].permission
             ):
                 raise PermissionDenied(
-                    PermissionDeniedA2AError.for_branch(
+                    PermissionDeniedA2AError.denied_for_branch(
                         branch_id,
                         self.flow_id,
                         list(flow_config.branches[branch_id].permission),
@@ -465,7 +465,7 @@ class BaseChannel(ABC):
         if ctx is None or ctx.active_company is None:
             return None
         company_id = ctx.active_company.company_id
-        work_item = await WorkItem.find_work_item_by_correlation(
+        work_item = await WorkItem.any_by_correlation_id(
             company_id, str(correlation_id)
         )
         if work_item is None:
@@ -634,7 +634,7 @@ class BaseChannel(ABC):
 
         # Единая точка подмены identity: flow-сотрудник исполняется от собственного имени.
         # Инициатор (собеседник/человек) сохраняется для аудита, эскалаций и prompt-переменных.
-        target_flow_config = await FlowConfig.get_latest(target.flow_id)
+        target_flow_config = await FlowConfig.current_for_flow(target.flow_id)
         if target_flow_config is None:
             raise ValueError(f"create_task: flow {target.flow_id} not found")
         execution_identity = await resolve_execution_context(
@@ -802,7 +802,7 @@ class BaseChannel(ABC):
             return
         cfg = flow_config
         if cfg is None:
-            cfg = await FlowConfig.get_latest(self.flow_id)
+            cfg = await FlowConfig.current_for_flow(self.flow_id)
         if cfg is None:
             return
         trigger = cfg.triggers.get(trigger_id)
@@ -1621,7 +1621,7 @@ class BaseChannel(ABC):
 
     async def get_agent_card(self, base_url: str) -> JsonObject:
         """Собрать AgentCard (A2A) для этого flow_id."""
-        config = self._flow_config or await FlowConfig.get_latest(self.flow_id)
+        config = self._flow_config or await FlowConfig.current_for_flow(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
 

@@ -191,14 +191,14 @@ async def rag_cleanup_expired_documents_tick(
     files_service = di.files_service
     now = datetime.now(timezone.utc)
 
-    candidates = await DocumentProcessingStatus.list_expired_document_candidates(
+    expired_pairs = await DocumentProcessingStatus.list_expired_namespace_document_pairs(
         utc_now=now,
         limit=ttl_cfg.cleanup_batch_size,
     )
 
     deleted = 0
     failed = 0
-    for namespace_id, document_id in candidates:
+    for namespace_id, document_id in expired_pairs:
         try:
             file_record = await FileRecord.get(document_id)
             if file_record is not None:
@@ -217,7 +217,7 @@ async def rag_cleanup_expired_documents_tick(
     logger.info(
         "rag.cleanup_expired.tick_done",
         schedule_task_id=schedule_task_id,
-        candidates=len(candidates),
+        candidates=len(expired_pairs),
         deleted_documents=deleted,
         failed_documents=failed,
     )
@@ -225,7 +225,7 @@ async def rag_cleanup_expired_documents_tick(
     return {
         "skipped": False,
         "schedule_task_id": schedule_task_id,
-        "candidates_total": len(candidates),
+        "candidates_total": len(expired_pairs),
         "deleted_documents": deleted,
         "failed_documents": failed,
     }

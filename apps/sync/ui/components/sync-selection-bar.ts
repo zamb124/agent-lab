@@ -6,8 +6,7 @@
  * useOp('sync/messages_delete').run), cancel (clearSelection).
  */
 
-import type { SyncChatUiController } from '../events/sync.types.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -54,13 +53,13 @@ export class SyncSelectionBar extends PlatformElement {
         .btn:hover { background: var(--glass-hover); }
         .btn.danger { color: var(--error, #ef4444); border-color: var(--error, #ef4444); }
     `;
-    private _chatUi: SyncChatUiController;
+    private _chatUi: ControllerFor<'sync/chat_ui'>;
     private _delete: OpController;
 
     constructor() {
         super();
         this.channelId = '';
-        this._chatUi = this.useSlice('sync/chat_ui') as SyncChatUiController;
+        this._chatUi = this.useSlice('sync/chat_ui');
         this._delete = this.useOp('sync/messages_delete');
     }
 

@@ -1,8 +1,17 @@
 import { html, css, unsafeCSS, nothing } from '../lit-shim.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
+import { PlatformPopover } from './platform-popover.js';
 import './platform-icon.js';
-import './platform-popover.js';
+
+function timeInputValue(event: Event): string {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-date-picker: time input target must be an input');
+    }
+    return target.value;
+}
 import './fields/platform-field-shell.js';
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -547,8 +556,11 @@ export class PlatformDatePicker extends PlatformElement {
             return;
         }
         // Календарь меняет высоту при переключении месяца и режима времени.
-        const popover = this.renderRoot?.querySelector('platform-popover') as { reposition?: () => void } | null;
-        popover?.reposition?.();
+        const popover = this.renderRoot.querySelector('platform-popover');
+        if (!(popover instanceof PlatformPopover)) {
+            throw new Error('platform-date-picker: open calendar popover is missing');
+        }
+        popover.reposition();
         if (changed.has('open')) {
             this._focusFocusedDay();
         }
@@ -574,13 +586,14 @@ export class PlatformDatePicker extends PlatformElement {
             return;
         }
 
-        if (typeof this.value !== 'object' || this.value === null) {
+        if (!isPlainRecord(this.value)) {
             throw new Error('Range value must be object {start, end}');
         }
 
-        const range = this.value as { start?: unknown; end?: unknown };
-        const startValue = range.start ?? null;
-        const endValue = range.end ?? null;
+        const start = this.value.start;
+        const end = this.value.end;
+        const startValue = start === undefined ? null : start;
+        const endValue = end === undefined ? null : end;
         this._syncRangeValue(startValue, endValue);
         this._updatingFromExternal = false;
     }
@@ -921,7 +934,7 @@ export class PlatformDatePicker extends PlatformElement {
     }
 
     _onTimePartInput(target: TimeTarget, part: 'hours' | 'minutes', event: Event): void {
-        const raw = (event.target as HTMLInputElement).value;
+        const raw = timeInputValue(event);
         if (raw === '') {
             return;
         }
@@ -930,7 +943,8 @@ export class PlatformDatePicker extends PlatformElement {
             return;
         }
 
-        const current = this._targetTimeValue(target) ?? 0;
+        const stored = this._targetTimeValue(target);
+        const current = stored === null ? 0 : stored;
         const currentHours = Math.floor(current / 60);
         const currentMinutes = current % 60;
         const nextHours = part === 'hours' ? asNumber : currentHours;

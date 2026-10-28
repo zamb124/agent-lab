@@ -817,7 +817,7 @@ export class LandingHero extends PlatformElement {
     override render(): TemplateResult {
         const t = (key: string) => this.t(key);
         const brand = getPlatformBrandBootstrap();
-        const heroWordmark = (brand?.platformName || '').toUpperCase();
+        const heroWordmark = (brand === undefined || brand === null || typeof brand.platformName !== 'string' ? '' : brand.platformName).toUpperCase();
         return html`
             <div class="hero-container">
                 <h1 class="hero-title">${heroWordmark}</h1>

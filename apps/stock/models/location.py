@@ -114,7 +114,7 @@ class StockLocation(PlatformModel):
         return await cls.objects.create(instance=row)
 
     @classmethod
-    async def create_child(
+    async def create_with_parent_path(
         cls,
         *,
         company_id: str,
@@ -129,14 +129,7 @@ class StockLocation(PlatformModel):
         level: int | None = None,
         partner_role: StockPartnerRole | None = None,
     ) -> Self:
-        """Создать локацию внутри родителя — наследуем путь и имя.
-
-        Родитель определяет «адрес»: ``complete_name`` становится
-        ``Zone A / Rack 3 / Bin A-03-14``, ``parent_path`` — цепочкой
-        id. Правило вложения: дети есть только у ``view`` (зоны) и у
-        ``container`` (контейнер в контейнере — короб на паллете);
-        запрет проверяет сервисный слой.
-        """
+        """Вставляет локацию. parent None — корень: parent_id None, путь от /, complete_name = name. Иначе путь и complete_name от родителя. pick_sequence None — 0. level None — 1."""
         location_id = new_id("loc")
         parent_path = parent.parent_path if parent is not None else "/"
         if parent is None:
@@ -177,7 +170,8 @@ class StockLocation(PlatformModel):
         ).for_update().get_or_none()
 
     @classmethod
-    async def by_ids(cls, company_id: str, location_ids: list[str]) -> dict[str, Self]:
+    async def found_in_company_by_ids(cls, company_id: str, location_ids: list[str]) -> dict[str, Self]:
+        """Найденные локации компании по id. Пустой список — {}. Отсутствующие id не входят. Порядка нет."""
         if not location_ids:
             return {}
         rows = await cls.objects.filter(
@@ -187,7 +181,8 @@ class StockLocation(PlatformModel):
 
 
     @classmethod
-    async def list_for_company(cls, company_id: str) -> list[Self]:
+    async def list_by_usage_and_name(cls, company_id: str) -> list[Self]:
+        """Все локации компании, ORDER BY usage, name. Предела нет."""
         return await cls.objects.filter(company_id=company_id).order_by(
             "usage", "name"
         ).all()
@@ -315,7 +310,7 @@ class StockLocation(PlatformModel):
         # Нижняя граница выборки — самый мягкий порог (минимальный
         # интервал): без неё per-type фильтрация уронила бы строки,
         # которые глобальный порог считает свежими.
-        storage_types = await StockStorageType.list_for_warehouse(
+        storage_types = await StockStorageType.list_by_name_for_warehouse(
             company_id, warehouse_id
         )
         type_days = {

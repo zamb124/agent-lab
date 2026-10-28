@@ -150,7 +150,8 @@ export class WorktrackerBoardPicker extends PlatformElement {
         if (!Array.isArray(this.boards)) {
             return null;
         }
-        return this.boards.find((board) => board.board_id === this.activeBoardId) || null;
+        const found = this.boards.find((board) => board.board_id === this.activeBoardId);
+        return found === undefined ? null : found;
     }
 
     private _toggleOpen(event: Event) {
@@ -191,7 +192,7 @@ export class WorktrackerBoardPicker extends PlatformElement {
                         <button
                             type="button"
                             class="item ${board.board_id === this.activeBoardId ? 'active' : ''}"
-                            @click=${(e: Event) => this._selectBoard(String(board.board_id ?? ''), e)}
+                            @click=${(e: Event) => this._selectBoard(board.board_id === undefined || board.board_id === null ? '' : String(board.board_id), e)}
                         >
                             <platform-icon name="list-check" size="16"></platform-icon>
                             <span>${board.name}</span>

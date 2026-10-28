@@ -33,9 +33,5 @@ export function embedSafeFetchCredentials(url: string): 'include' | 'omit' {
     if (typeof url !== 'string' || !url.startsWith('http')) {
         return 'include';
     }
-    try {
-        return new URL(url).origin === location.origin ? 'include' : 'omit';
-    } catch {
-        return 'include';
-    }
+    return new URL(url).origin === location.origin ? 'include' : 'omit';
 }

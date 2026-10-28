@@ -22,6 +22,7 @@ from core.crawl.models.contracts import (
     canonicalize_url,
 )
 from core.crawl.models.crawl_domain import CrawlDomain
+from core.errors.boundary import PlatformNotFoundError
 from core.models import StrictBaseModel
 from core.models.platform_model import PlatformModel
 from core.pagination import OffsetPage
@@ -229,13 +230,13 @@ class CrawlUrl(PlatformModel):
         )
 
     @classmethod
-    async def get_layer1_snapshot(
+    async def require_layer1_snapshot(
         cls,
         crawl_url_id: str,
     ) -> tuple[str, str, str, str, str, CrawlStructuralSignals]:
         row = await cls.get(crawl_url_id)
         if row is None:
-            raise ValueError(f"crawl url not found: {crawl_url_id}")
+            raise PlatformNotFoundError(f"crawl url not found: {crawl_url_id}")
         if row.extract_markdown is None or row.extract_markdown.strip() == "":
             raise ValueError(f"extract_markdown is missing for crawl_url_id={crawl_url_id}")
         if row.extract_title is None or row.extract_title.strip() == "":
@@ -270,7 +271,7 @@ class CrawlUrl(PlatformModel):
         async with atomic(using="search"):
             row = await cls.get(crawl_url_id)
             if row is None:
-                raise ValueError(f"crawl url not found: {crawl_url_id}")
+                raise PlatformNotFoundError(f"crawl url not found: {crawl_url_id}")
             now = datetime.now(UTC)
             attempts = row.fetch_attempts + 1
             next_retry_after: datetime | None = None
@@ -289,7 +290,7 @@ class CrawlUrl(PlatformModel):
                 updated_at=now,
             )
         if updated != 1:
-            raise ValueError(f"crawl url not found: {crawl_url_id}")
+            raise PlatformNotFoundError(f"crawl url not found: {crawl_url_id}")
 
     @classmethod
     async def mark_skipped(
@@ -449,7 +450,7 @@ class CrawlUrl(PlatformModel):
     async def requeue_url(cls, crawl_url_id: str) -> Self:
         row = await cls.get(crawl_url_id)
         if row is None:
-            raise ValueError(f"crawl url not found: {crawl_url_id}")
+            raise PlatformNotFoundError(f"crawl url not found: {crawl_url_id}")
         row.crawl_status = "pending"
         row.fetch_attempts = 0
         row.next_retry_after = None
@@ -623,7 +624,7 @@ class CrawlUrl(PlatformModel):
         )
 
     @classmethod
-    async def get_for_profile(
+    async def require_for_profile(
         cls,
         crawl_url_id: str,
         crawl_profile_id: str,
@@ -636,7 +637,7 @@ class CrawlUrl(PlatformModel):
             using="search",
         )
         if len(rows) == 0:
-            raise ValueError(f"crawl url not found: crawl_url_id={crawl_url_id}")
+            raise PlatformNotFoundError(f"crawl url not found: crawl_url_id={crawl_url_id}")
         parsed = require_json_object(rows[0], "crawl_url")
         domain_name = parsed["domain"]
         if not isinstance(domain_name, str):

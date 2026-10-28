@@ -77,17 +77,19 @@ class StockLot(PlatformModel):
 
 
     @classmethod
-    async def by_name(
+    async def by_product_and_name(
         cls, company_id: str, product_id: str, name: str
     ) -> Self | None:
+        """Партия компании по product_id и name. Нет строки — None."""
         return await cls.objects.filter(
             company_id=company_id, product_id=product_id, name=name
         ).get_or_none()
 
     @classmethod
-    async def list_for_company(
+    async def list_all_by_name(
         cls, company_id: str, *, product_id: str | None
     ) -> list[Self]:
+        """Партии компании, ORDER BY name, без предела. product_id None не фильтрует."""
         query = cls.objects.filter(company_id=company_id)
         if product_id is not None:
             query = query.filter(product_id=product_id)

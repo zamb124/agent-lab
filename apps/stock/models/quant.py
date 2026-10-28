@@ -190,7 +190,7 @@ class StockQuant(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def get_or_create_locked(
+    async def ensure_locked(
         cls,
         *,
         company_id: str,
@@ -302,7 +302,7 @@ class StockQuant(PlatformModel):
         )
 
     @classmethod
-    async def list_for_company(
+    async def list_by_product_and_location(
         cls,
         company_id: str,
         *,
@@ -312,6 +312,7 @@ class StockQuant(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Окно остатков компании, ORDER BY product_id, location_id. location_id, product_id и owner_entity_id равные None не фильтруют."""
         query = cls.objects.filter(company_id=company_id)
         if location_id is not None:
             query = query.filter(location_id=location_id)
@@ -324,7 +325,7 @@ class StockQuant(PlatformModel):
         ).all()
 
     @classmethod
-    async def count_for_company(
+    async def count_by_location_product_and_owner(
         cls,
         company_id: str,
         *,
@@ -332,6 +333,7 @@ class StockQuant(PlatformModel):
         product_id: str | None,
         owner_entity_id: str | None = None,
     ) -> int:
+        """Счёт остатков компании. location_id, product_id и owner_entity_id равные None не фильтруют."""
         query = cls.objects.filter(company_id=company_id)
         if location_id is not None:
             query = query.filter(location_id=location_id)
@@ -342,9 +344,10 @@ class StockQuant(PlatformModel):
         return await query.count()
 
     @classmethod
-    async def list_for_warehouse(
+    async def list_unordered_for_warehouse(
         cls, company_id: str, warehouse_id: str
     ) -> list[Self]:
+        """Все остатки склада. Порядка и limit нет."""
         return await cls.objects.filter(
             company_id=company_id, warehouse_id=warehouse_id
         ).all()
@@ -363,20 +366,14 @@ class StockQuant(PlatformModel):
         return await query.all()
 
     @classmethod
-    async def set_inventory_quantity(
+    async def update_inventory_quantity_counted_at_and_user(
         cls,
         quant_id: str,
         inventory_quantity: Decimal | None,
         counted_at: datetime | None = None,
         user_id: str | None = None,
     ) -> None:
-        """Черновик фактического подсчёта — результат инвентаризации на полке.
-
-        Это «записать в тетрадь, сколько реально насчитали». Само число
-        ничего не двигает: расхождение с книжным ``quantity`` превращается
-        в движение только командой ``inventory_apply`` (StockMove
-        ``bin ↔ adjustment`` на дельту).
-        """
+        """Пишет черновик подсчёта: inventory_quantity, inventory_counted_at, inventory_user_id и updated_at. None тоже записывается. Книжный quantity не меняется. Нет строки — ничего не меняет."""
         _ = await cls.objects.filter(quant_id=quant_id).update(
             using=STOCK_DB,
             inventory_quantity=inventory_quantity,
@@ -407,7 +404,7 @@ class StockQuant(PlatformModel):
     # --- Команды леджера: граница транзакции = полоса ---
 
     @classmethod
-    async def set_inventory_in_lane(
+    async def update_inventory_quantity_in_lane(
         cls,
         *,
         company_id: str,
@@ -418,19 +415,7 @@ class StockQuant(PlatformModel):
         actor_user_id: str,
         command_type: str,
     ) -> LaneRun[Self]:
-        """Команда «внести фактический подсчёт» — в полосе склада.
-
-        Бизнес-флоу инвентаризации:
-          1. Кладовщик насчитал на полке N шт → эта команда пишет
-             ``inventory_quantity = N`` (черновик, остаток пока прежний).
-          2. Отдельная команда ``inventory_apply`` сравнивает N с книжным
-             quantity и проводит StockMove на разницу (недостача —
-             списание в локацию ``adjustment``, излишек — оприходование
-             из ``adjustment``).
-
-        Серийный запуск в полосе склада исключает «двойной подсчёт»
-        двумя ТСД одновременно.
-        """
+        """Пишет черновик inventory_quantity в полосе склада и отмечает last_count локации. Книжный quantity не меняется. Нет остатка — PlatformNotFoundError. Количество < 0 — PlatformConflictError. Возвращает LaneRun."""
 
         async def body(_scope: LaneScope) -> LaneOutcome[Self]:
             quant = await cls.by_id_locked(company_id, quant_id)
@@ -444,7 +429,7 @@ class StockQuant(PlatformModel):
                     error_code="inventory_qty_invalid",
                 )
             now = utcnow()
-            await cls.set_inventory_quantity(
+            await cls.update_inventory_quantity_counted_at_and_user(
                 quant_id, inventory_quantity, counted_at=now, user_id=actor_user_id
             )
             await StockLocation.touch_counted(

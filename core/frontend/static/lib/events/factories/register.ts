@@ -23,11 +23,18 @@
  * проверяется здесь на уровне финальной сборки).
  */
 
-const KNOWN_KINDS = new Set(['async-op', 'resource-collection', 'cursor-list', 'facets', 'form', 'slice']);
-
 import type { PlatformEvent, EffectCtx } from '../contract.js';
 import type { PlatformFactory, FactoryKind } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
+
+function isFactoryKind(value: unknown): value is FactoryKind {
+    return value === 'async-op'
+        || value === 'resource-collection'
+        || value === 'cursor-list'
+        || value === 'facets'
+        || value === 'form'
+        || value === 'slice';
+}
 
 export interface CollectableFactory extends PlatformFactory {
     sliceKey: string;
@@ -45,8 +52,9 @@ export function collectFactories(factories: CollectableFactory[]): {
     const slices: Record<string, SliceDef> = {};
     const effects: Array<(event: PlatformEvent, ctx: EffectCtx) => void | Promise<void>> = [];
     for (const factory of factories) {
-        if (!factory || typeof factory !== 'object' || !KNOWN_KINDS.has(factory.kind as FactoryKind)) {
-            throw new Error(`collectFactories: unknown factory kind "${factory && factory.kind}"`);
+        const kind: unknown = factory && typeof factory === 'object' ? factory.kind : undefined;
+        if (!isFactoryKind(kind)) {
+            throw new Error(`collectFactories: unknown factory kind "${String(kind)}"`);
         }
         if (slices[factory.sliceKey]) {
             throw new Error(`collectFactories: duplicate sliceKey "${factory.sliceKey}" (factory: ${factory.name})`);

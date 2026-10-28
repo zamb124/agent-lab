@@ -25,11 +25,11 @@ export function sanitizeMarkdownEditorHtml(rawHtml: string): string {
             if (child.nodeType === Node.TEXT_NODE) {
                 continue;
             }
-            if (child.nodeType !== Node.ELEMENT_NODE) {
+            if (!(child instanceof Element)) {
                 child.remove();
                 continue;
             }
-            const el = child as HTMLElement;
+            const el = child;
             if (!ALLOWED_TAGS.has(el.tagName)) {
                 const parent = el.parentNode;
                 if (!parent) {
@@ -71,12 +71,12 @@ export function sanitizeMarkdownEditorHtml(rawHtml: string): string {
  */
 function _nodeToMarkdown(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) {
-        return node.textContent || '';
+        return node.textContent === null ? '' : node.textContent;
     }
-    if (node.nodeType !== Node.ELEMENT_NODE) {
+    if (!(node instanceof Element)) {
         return '';
     }
-    const el = node as HTMLElement;
+    const el = node;
     const tag = el.tagName;
     const inner = Array.from(el.childNodes).map((child) => _nodeToMarkdown(child)).join('');
     if (tag === 'BR') {
@@ -162,5 +162,5 @@ export function htmlToPlainText(rawHtml: string): string {
     }
     const tmp = document.createElement('div');
     tmp.innerHTML = sanitized;
-    return tmp.innerText || '';
+    return tmp.innerText;
 }

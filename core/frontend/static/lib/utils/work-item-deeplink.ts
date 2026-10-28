@@ -32,7 +32,10 @@ export function readWorkItemIdFromPathname(pathname: string): string {
         return '';
     }
     const rest = pathname.slice(WORK_ITEM_TASK_PATH_PREFIX.length);
-    const segment = rest.split('/')[0] ?? '';
+    const segment = rest.split('/')[0];
+    if (segment === undefined) {
+        throw new Error('readWorkItemIdFromPathname: path segment missing');
+    }
     if (segment.length === 0) {
         return '';
     }

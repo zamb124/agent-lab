@@ -5,8 +5,8 @@ globs:
   - "core/documents/**"
   - "core/data_tables/**"
   - "core/clients/files_client.py"
-  - "core/frontend/static/lib/utils/platform-file-upload.js"
-  - "core/frontend/static/lib/utils/platform-files-url.js"
+  - "core/frontend/static/lib/utils/platform-file-upload.ts"
+  - "core/frontend/static/lib/utils/platform-files-url.ts"
 alwaysApply: false
 ---
 
@@ -16,7 +16,7 @@ alwaysApply: false
 
 ## Модель
 
-- `FileRecord` — строка и JSON-ответ; `s3_key` и `storage_id` пишутся в таблицу и не сериализуются; доступ к байтам проверяет `FileGate`.
+- `FileRecord` — строка и JSON-ответ; `s3_key` и `storage_id` пишутся в таблицу и не сериализуются; доступ к байтам проверяет `FileGate`. `list_alive_by_original_name(company_id, catalog_ids, title_query, limit) -> list[FileRecord]` — живые файлы компании в этих каталогах, `original_name` содержит `title_query` без учёта регистра, `ORDER BY updated_at DESC`, не больше `limit`; пустой `catalog_ids` — `[]`. Удалённый файл и чужой каталог не входят. `list_with_catalog_by_original_name(company_id, query, limit) -> list[FileRecord]` — живые файлы компании с непустым `catalog_id`, `ORDER BY original_name`, не больше `limit`; пустой `query` не фильтрует имя, иначе `original_name` содержит подстроку без учёта регистра. Файл без каталога и удалённый файл не входят. `list_pending_authz_with_catalog_by_created_at(*, limit) -> list[FileRecord]` — файлы с пустым `authz_synced_at` и непустым `catalog_id`, `ORDER BY created_at`, не больше `limit`. `FileRecord.by_file_id(file_id, company_id) -> FileRecord | None` — строка по `file_id` в компании. Нет строки — `None`. Пустые идентификаторы не проверяются.
 - `FileRef` (`file_id`, `original_name`, `url`, `content_type`, `file_size`, `checksum`, `is_public`, `created_at`, `capabilities`) — публичная форма в API и `state.files`; проекция записи — `stored_file_ref`; имена `name`, `path`, `mime_type`, `size`, `type` для файла запрещены.
 - `FileCreateSpec` (`core/files/create_spec.py`) — единственный вход создания; дефолты по `FileSourceKind` — `core/files/registry.py`; `FileRetentionSpec` обязателен (`retention_kind`, `expires_at`).
 - Типы файлов — `core/files/types.py`: `FileCategory`, `FILE_TYPE_REGISTRY` (`FileTypeEntry`: расширение, MIME, категория), функции `extensions_for`, `mimes_for`, `ext_to_mime`, `ext_to_category`, `mime_to_category`, `accept_string_for`.
@@ -28,7 +28,7 @@ alwaysApply: false
 
 1. Байты из браузера — только chunked `/{segment}/api/v1/files/uploads*`: `POST /uploads` (init: `spec`, `original_name`, `content_type`, `file_size` → `upload_id`, `file_id`, `chunk_size_bytes`), `PUT /uploads/{upload_id}/parts/{n}`, `POST .../complete` → `FileRef`, `DELETE` — abort; S3 multipart, сессия в Redis, даже 1 байт — одна part; сервер держит в памяти только текущую part.
 2. Files router монтирует `create_service_app` на каждом сервисе с `include_platform_routers` (office — `/documents/api/v1/files/...`); лимиты — `FilesConfig` (`max_upload_bytes`, `chunk_size_bytes`, `upload_session_ttl_seconds`), UI читает `GET .../files/upload-config`.
-3. UI: `uploadPlatformFile`/`resolvePlatformFileRefs` (`platform-file-upload.js`) + фабрика `platform/file_create`; выбор — модалка `platform.file_picker`; URL — `resolvePlatformFilesApiBase`, `buildPlatformFileDownloadUrl`, `extractPlatformFileDownloadId` (`platform-files-url.js`), segment — `setPlatformFilesRouteSegment` из `PlatformApp.getBaseUrl()`.
+3. UI: `uploadPlatformFile`/`resolvePlatformFileRefs` (`platform-file-upload.ts`) + фабрика `platform/file_create`; выбор — модалка `platform.file_picker`; URL — `resolvePlatformFilesApiBase`, `buildPlatformFileDownloadUrl`, `extractPlatformFileDownloadId` (`platform-files-url.ts`), segment — `setPlatformFilesRouteSegment` из `PlatformApp.getBaseUrl()`.
 4. Доменная операция после upload принимает только `file_id` (CRM attachment, документ Office, RAG `index-file`, вложение письма).
 5. A2A из UI платформы — сначала upload, затем только `Part.url`; готовый `FileRef` не загружается повторно; `Part.raw` — только внешние клиенты → `a2a.mdc`.
 6. Серверная запись байтов (входящая почта, сгенерированные артефакты, внешний `Part.raw`, пустые шаблоны Office) — `FilesService.create`; cross-pod — `FilesClient` (`core/clients/files_client.py`).
@@ -58,7 +58,7 @@ Purge — TaskIQ `file_retention_purge_tick` (idle, cron `files.retention.purge_
 ### S3
 
 1. Байты читает и пишет только `FileGate` (`core/files/object_store/gate.py`). `aioboto3` и `S3ClientFactory` — внутри `core/files/object_store`.
-2. Платформенное S3-хранилище — `settings.s3` (`storage_id=platform`). Хранилище компании — `ObjectStorage`; маршрут записи — `StorageRoute` по `FileSourceKind`, иначе дефолт компании, иначе `platform`. `FileRecord.storage_id` — адрес уже записанных байтов, маршрут его не меняет.
+2. Платформенное S3-хранилище — `settings.s3` (`storage_id=platform`). Хранилище компании — `ObjectStorage`. `list_by_created_at(company_id) -> list[ObjectStorage]` — все хранилища компании, `ORDER BY created_at`, без предела. Маршрут записи — `StorageRoute`. `list_by_source_kind(company_id) -> list[StorageRoute]` — все маршруты компании, `ORDER BY source_kind`, без предела. `list_unordered_for_storage(storage_id) -> list[StorageRoute]` — все маршруты хранилища, порядка и limit нет. Выбор маршрута — по `FileSourceKind`, иначе дефолт компании, иначе `platform`. `FileRecord.storage_id` — адрес уже записанных байтов, маршрут его не меняет.
 3. Доступ — `authorize_file`: публичный файл, `SignedFileGrant` на свой `file_id`, иначе компания принципала совпадает с `FileRecord.company_id`; сессия дополнительно проверяет `company#can_view` и родителя по `source_kind`.
 4. Новое подключение становится `active` только после probe. Смена endpoint — новая строка и перенос `storage_migration_tick`. Удаление при живых файлах — `conflict`.
 5. Self-hosted S3 (SeaweedFS, MinIO) создаёт бакет при первой записи, если `provider` ∈ {seaweedfs, minio}. Прокси для self-hosted S3 и localhost выключен. Сдвиг часов SigV4 — `core/files/s3_sigv4_clock.py`.

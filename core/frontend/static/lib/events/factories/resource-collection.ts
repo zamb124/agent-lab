@@ -29,6 +29,7 @@
  */
 
 import { CoreEvents } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 import { httpRequest, HttpError } from '../http.js';
 import {
     assertResourceName,
@@ -47,11 +48,10 @@ import {
     transportRequest,
 } from './_transport.js';
 import type { EffectCtx, PlatformEvent } from '../contract.js';
-import type { PlatformFactory } from '../factory-registry.js';
+import type { ActionMap, PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 import type { FactoryTransport, RestMirrorEntry } from './_transport.js';
 
-const VALID_OPERATIONS = new Set(['list', 'get', 'create', 'update', 'remove']);
 const MUTATING_OPERATIONS = new Set(['create', 'update', 'remove']);
 const _REQUESTED_SUFFIX = '_requested';
 
@@ -78,13 +78,61 @@ const INITIAL_SLICE = freeze({
 
 export type ResourceOperation = 'list' | 'get' | 'create' | 'update' | 'remove';
 
+function isResourceOperation(value: string): value is ResourceOperation {
+    return value === 'list' || value === 'get' || value === 'create' || value === 'update' || value === 'remove';
+}
+
+function resourceItems(items: readonly unknown[], label: string): ResourceItem[] {
+    return items.map((item, index) => {
+        if (!isPlainRecord(item)) {
+            throw new Error(`${label}[${index}] must be an object`);
+        }
+        return item;
+    });
+}
+
+function listResponse(value: unknown, label: string): { items: ResourceItem[]; total: unknown } {
+    if (!isPlainRecord(value) || !Array.isArray(value.items)) {
+        throw new Error(`${label}: items must be an array`);
+    }
+    return { items: resourceItems(value.items, label), total: value.total };
+}
+
+function queryRecord(value: unknown, label: string): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        throw new Error(`${label} must return object`);
+    }
+    return value;
+}
+
+function httpQueryFields(
+    value: Record<string, unknown>,
+    label: string,
+): Record<string, string | number | boolean | null | undefined> {
+    const query: Record<string, string | number | boolean | null | undefined> = {};
+    for (const [key, field] of Object.entries(value)) {
+        if (
+            field === undefined
+            || field === null
+            || typeof field === 'string'
+            || typeof field === 'number'
+            || typeof field === 'boolean'
+        ) {
+            query[key] = field;
+            continue;
+        }
+        throw new Error(`${label}: query.${key} must be a scalar`);
+    }
+    return query;
+}
+
 export interface ResourceItem {
     [key: string]: unknown;
 }
 
-export interface ResourceCollectionSlice {
-    items: readonly ResourceItem[];
-    byId: Readonly<Record<string, ResourceItem>>;
+export interface ResourceCollectionSlice<TItem = ResourceItem> {
+    items: readonly TItem[];
+    byId: Readonly<Record<string, TItem>>;
     loading: boolean;
     refreshing: boolean;
     listTotal: number | null;
@@ -97,7 +145,11 @@ export interface ResourceCollectionSlice {
     [key: string]: unknown;
 }
 
-export interface ResourceCollectionOptions {
+export interface ResourceCollectionOptions<
+    TItem extends ResourceItem = ResourceItem,
+    S extends ResourceCollectionSlice<TItem> = ResourceCollectionSlice<TItem>,
+    A extends ActionMap = ActionMap,
+> {
     name: string;
     baseUrl: string;
     idField: string;
@@ -108,7 +160,7 @@ export interface ResourceCollectionOptions {
     wsTimeoutMs?: number;
     itemPathTemplate?: string;
     listQuery?: (payload: Record<string, unknown>) => Record<string, unknown>;
-    mapItem?: (item: ResourceItem) => ResourceItem;
+    mapItem?: (item: ResourceItem) => TItem;
     listFetchAllPages?: boolean;
     listPreserveItemsOnRefresh?: boolean;
     buildItemUrl?: (id: string | number) => string;
@@ -116,10 +168,10 @@ export interface ResourceCollectionOptions {
     requestHeaders?: (args: { ctx: EffectCtx; payload: unknown; op: string }) => Record<string, string>;
     sliceKey?: string;
     extraInitial?: Record<string, unknown>;
-    extraReducer?: (state: ResourceCollectionSlice, event: PlatformEvent, events: Readonly<Record<string, string>>) => ResourceCollectionSlice | null | undefined;
+    extraReducer?: (state: S, event: PlatformEvent, events: Readonly<Record<string, string>>) => NoInfer<S> | null | undefined;
     extraEffect?: (event: PlatformEvent, ctx: EffectCtx, events: Readonly<Record<string, string>>) => boolean | void | Promise<boolean | void>;
     extraEvents?: Record<string, string>;
-    actions?: Record<string, string>;
+    actions?: A;
 }
 
 interface _OpSpec {
@@ -135,7 +187,10 @@ interface _OpSpec {
     headersPayload?: unknown;
 }
 
-export interface ResourceCollectionFactory extends PlatformFactory {
+export interface ResourceCollectionFactory<
+    S extends ResourceCollectionSlice<unknown> = ResourceCollectionSlice,
+    A extends ActionMap = ActionMap,
+> extends PlatformFactory {
     kind: 'resource-collection';
     name: string;
     sliceKey: string;
@@ -151,27 +206,30 @@ export interface ResourceCollectionFactory extends PlatformFactory {
         UPDATE_REQUESTED: string; UPDATED: string; UPDATE_FAILED: string;
         REMOVE_REQUESTED: string; REMOVED: string; REMOVE_FAILED: string;
     };
-    actions: Readonly<Record<string, string>>;
-    reducer: (state: ResourceCollectionSlice | undefined, event: PlatformEvent) => ResourceCollectionSlice;
-    slice: SliceDef<ResourceCollectionSlice>;
+    actions: Readonly<A>;
+    reducer(state: S | undefined, event: PlatformEvent): S;
+    slice: SliceDef<S>;
     selectors: {
-        slice: (state: Record<string, unknown>) => ResourceCollectionSlice;
-        all: (state: Record<string, unknown>) => readonly ResourceItem[];
-        byId: (state: Record<string, unknown>) => Readonly<Record<string, ResourceItem>>;
+        slice: (state: Record<string, unknown>) => S;
+        all: (state: Record<string, unknown>) => S['items'];
+        byId: (state: Record<string, unknown>) => S['byId'];
         loading: (state: Record<string, unknown>) => boolean;
         refreshing: (state: Record<string, unknown>) => boolean;
         listTotal: (state: Record<string, unknown>) => number | null;
         error: (state: Record<string, unknown>) => string | null;
         busyIds: (state: Record<string, unknown>) => Readonly<Record<string, boolean>>;
         lastError: (state: Record<string, unknown>) => Readonly<Record<string, string | null>>;
-        item: (id: string | number) => (state: Record<string, unknown>) => ResourceItem | null;
         isBusy: (id: string | number) => (state: Record<string, unknown>) => boolean;
         createInFlight: (state: Record<string, unknown>) => boolean;
     };
     effect: (event: PlatformEvent, ctx: EffectCtx) => Promise<void>;
 }
 
-export function createResourceCollection(options: ResourceCollectionOptions): ResourceCollectionFactory {
+export function createResourceCollection<
+    TItem extends ResourceItem = ResourceItem,
+    S extends ResourceCollectionSlice<TItem> = ResourceCollectionSlice<TItem>,
+    A extends ActionMap = Record<never, string>,
+>(options: ResourceCollectionOptions<TItem, S, A>): ResourceCollectionFactory<S, A> {
     if (!options || typeof options !== 'object') {
         throw new Error('createResourceCollection: options object required');
     }
@@ -179,15 +237,17 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
     assertResourceName(name);
     const baseUrl = requireField(options, 'baseUrl', `createResourceCollection(${name})`);
     const idField = requireField(options, 'idField', `createResourceCollection(${name})`);
-    const operations = Array.isArray(options.operations) && options.operations.length > 0
+    const requestedOperations = Array.isArray(options.operations) && options.operations.length > 0
         ? options.operations
         : ['list'];
-    for (const op of operations) {
-        if (!VALID_OPERATIONS.has(op)) {
+    const operations: ResourceOperation[] = [];
+    for (const op of requestedOperations) {
+        if (!isResourceOperation(op)) {
             throw new Error(`createResourceCollection(${name}): unknown operation "${op}"`);
         }
+        operations.push(op);
     }
-    const toastKeys = options.toastKeys || {};
+    const toastKeys = options.toastKeys === undefined ? {} : options.toastKeys;
     for (const op of operations) {
         if (MUTATING_OPERATIONS.has(op)) {
             requireI18nKey(toastKeys[op], `createResourceCollection(${name}).toastKeys.${op}`);
@@ -205,10 +265,19 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         update: { method: 'PATCH',  path: itemPathTemplate },
         remove: { method: 'DELETE', path: itemPathTemplate },
     };
-    const restMirrorInput = options.restMirror || {};
+    const restMirrorInput = options.restMirror === undefined ? {} : options.restMirror;
     const mergedRestMirror: Record<string, RestMirrorEntry | { method: string; path: string }> = {};
     for (const op of operations) {
-        mergedRestMirror[op] = restMirrorInput[op] || defaultRestMirror[op as ResourceOperation]!;
+        const provided = restMirrorInput[op];
+        if (provided) {
+            mergedRestMirror[op] = provided;
+        } else {
+            const fallback = defaultRestMirror[op];
+            if (fallback === undefined) {
+                throw new Error(`createResourceCollection(${name}): rest mirror for ${op} missing`);
+            }
+            mergedRestMirror[op] = fallback;
+        }
     }
     const restMirror = normalizeRestMirrorCollection(
         mergedRestMirror,
@@ -219,7 +288,7 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
 
     const sliceKey = options.sliceKey || deriveSliceKey(name);
     const listQuery = options.listQuery || (() => ({ limit: 200 }));
-    const mapItem = options.mapItem || ((x) => x);
+    const mapItem: (item: ResourceItem) => ResourceItem = options.mapItem || ((x) => x);
     const listFetchAllPages = options.listFetchAllPages === true;
     const listPreserveItemsOnRefresh = options.listPreserveItemsOnRefresh === true;
     const buildItemUrl = options.buildItemUrl || ((id) => `${baseUrl}/${encodeURIComponent(id)}`);
@@ -281,18 +350,44 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         }
     }
     const events = freeze({ ...baseEvents, ...extraEvents });
+    // Ключи actionsMap — ключи options.actions (A); значения — полные типы событий.
+    function isBuiltActionMap(value: Record<string, string>): value is A {
+        if (actionsConfig === null) {
+            return Object.keys(value).length === 0;
+        }
+        return Object.keys(actionsConfig).every((key) => {
+            const eventType = value[key];
+            return typeof eventType === 'string' && eventType.length > 0;
+        });
+    }
+
+    function isCollectionSlice(value: unknown): value is S {
+        return isPlainRecord(value)
+            && Array.isArray(value.items)
+            && isPlainRecord(value.byId)
+            && typeof value.loading === 'boolean';
+    }
+
+    if (!isBuiltActionMap(actionsMap)) {
+        throw new Error(`createResourceCollection(${name}): actions map does not match options.actions`);
+    }
     const actions = freeze(actionsMap);
-    const initialSlice = freeze(extraInitial ? { ...INITIAL_SLICE, ...extraInitial } : { ...INITIAL_SLICE }) as ResourceCollectionSlice;
+    const baseSlice: ResourceCollectionSlice<TItem> = { ...INITIAL_SLICE };
+    const mergedSlice = extraInitial ? { ...baseSlice, ...extraInitial } : baseSlice;
+    if (!isCollectionSlice(mergedSlice)) {
+        throw new Error(`createResourceCollection(${name}): initial slice must be an object with items`);
+    }
+    const initialSlice = freeze(mergedSlice);
 
     const hasCreate = operations.includes('create');
 
-    function _withItems(state: ResourceCollectionSlice, items: ResourceItem[], listTotal?: number): ResourceCollectionSlice {
+    function _withItems(state: S, items: ResourceItem[], listTotal?: number): S {
         const list = items.map(mapItem);
         const byId: Record<string, ResourceItem> = {};
         for (const item of list) {
             byId[String(item[idField])] = item;
         }
-        const next: ResourceCollectionSlice = {
+        const next: S = {
             ...state,
             items: freeze(list),
             byId: freeze(byId),
@@ -306,7 +401,7 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         return freeze(next);
     }
 
-    function _withItem(state: ResourceCollectionSlice, item: ResourceItem): ResourceCollectionSlice {
+    function _withItem(state: S, item: ResourceItem): S {
         const mapped = mapItem(item);
         const id = String(mapped[idField]);
         const idx = state.items.findIndex((x) => x[idField] === mapped[idField]);
@@ -320,7 +415,7 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         });
     }
 
-    function _withoutItem(state: ResourceCollectionSlice, id: string | number): ResourceCollectionSlice {
+    function _withoutItem(state: S, id: string | number): S {
         const items = state.items.filter((x) => x[idField] !== id);
         const byId = { ...state.byId };
         delete byId[String(id)];
@@ -332,7 +427,7 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         });
     }
 
-    function _setBusy(state: ResourceCollectionSlice, id: string | number | null | undefined): ResourceCollectionSlice {
+    function _setBusy(state: S, id: string | number | null | undefined): S {
         if (!id) return state;
         const next = { ...state.busyIds, [id]: true };
         return freeze({ ...state, busyIds: freeze(next) });
@@ -345,11 +440,11 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         return freeze(next);
     }
 
-    function _setLastError(state: ResourceCollectionSlice, op: string, message: string | null): ResourceCollectionSlice {
+    function _setLastError(state: S, op: string, message: string | null): S {
         return freeze({ ...state, lastError: freeze({ ...state.lastError, [op]: message }) });
     }
 
-    function reducer(state: ResourceCollectionSlice = initialSlice, event: PlatformEvent): ResourceCollectionSlice {
+    function reducer(state: S = initialSlice, event: PlatformEvent): S {
         const next = _baseReducer(state, event);
         if (extraReducer) {
             const extended = extraReducer(next, event, events);
@@ -361,30 +456,34 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
     }
 
     function _requireItem(event: PlatformEvent, eventKey: string): ResourceItem {
-        const p = event.payload as { item?: ResourceItem } | null;
-        if (!p || !p.item) {
+        const p = event.payload;
+        if (!isPlainRecord(p) || !isPlainRecord(p.item)) {
             throw new Error(`createResourceCollection(${name}): ${eventKey} payload.item required`);
         }
         return p.item;
     }
 
     function _requireId(event: PlatformEvent, eventKey: string): string | number {
-        const p = event.payload as Record<string, unknown> | null;
-        if (!p || !p[idField]) {
+        const p = event.payload;
+        if (!isPlainRecord(p)) {
             throw new Error(`createResourceCollection(${name}): ${eventKey} payload.${idField} required`);
         }
-        return p[idField] as string | number;
+        const id = p[idField];
+        if ((typeof id !== 'string' && typeof id !== 'number') || id === '' || id === 0) {
+            throw new Error(`createResourceCollection(${name}): ${eventKey} payload.${idField} required`);
+        }
+        return id;
     }
 
     function _requireMessage(event: PlatformEvent, eventKey: string): string {
-        const p = event.payload as { message?: unknown } | null;
-        if (!p || typeof p.message !== 'string') {
+        const p = event.payload;
+        if (!isPlainRecord(p) || typeof p.message !== 'string') {
             throw new Error(`createResourceCollection(${name}): ${eventKey} payload.message required (string)`);
         }
         return p.message;
     }
 
-    function _baseReducer(state: ResourceCollectionSlice, event: PlatformEvent): ResourceCollectionSlice {
+    function _baseReducer(state: S, event: PlatformEvent): S {
         switch (event.type) {
             case events.LIST_REQUESTED: {
                 const lastListQuery = freeze({ payload: event.payload === undefined ? null : event.payload });
@@ -394,12 +493,9 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                 return freeze({ ...state, loading: true, refreshing: false, error: null, lastListQuery });
             }
             case events.LIST_LOADED: {
-                const p = event.payload as { items?: unknown; total?: unknown } | null;
-                if (!p || !Array.isArray(p.items)) {
-                    throw new Error(`createResourceCollection(${name}): LIST_LOADED payload.items required (array)`);
-                }
-                const resolvedTotal = typeof p.total === 'number' ? p.total : undefined;
-                return _withItems(state, p.items as ResourceItem[], resolvedTotal);
+                const page = listResponse(event.payload, `createResourceCollection(${name}): LIST_LOADED`);
+                const resolvedTotal = typeof page.total === 'number' ? page.total : undefined;
+                return _withItems(state, page.items, resolvedTotal);
             }
             case events.LIST_FAILED:
                 return freeze({ ...state, loading: false, refreshing: false, error: _requireMessage(event, 'LIST_FAILED') });
@@ -466,9 +562,10 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         }
     }
 
-    function _readSlice(state: Record<string, unknown>): ResourceCollectionSlice {
-        const slice = state[sliceKey] as ResourceCollectionSlice | undefined;
-        if (slice === undefined) {
+    function _readSlice(state: Record<string, unknown>): S {
+        // Корневое состояние шины хранит slices разных фабрик; slice этой фабрики кладёт её reducer.
+        const slice = state[sliceKey];
+        if (!isCollectionSlice(slice)) {
             throw new Error(`createResourceCollection(${name}): slice "${sliceKey}" not registered in bus`);
         }
         return slice;
@@ -487,20 +584,16 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         error:    (state: Record<string, unknown>) => _readSlice(state).error,
         busyIds:  (state: Record<string, unknown>) => _readSlice(state).busyIds,
         lastError:(state: Record<string, unknown>) => _readSlice(state).lastError,
-        item:     (id: string | number) => (state: Record<string, unknown>) => {
-            const slice = _readSlice(state);
-            return slice.byId[String(id)] === undefined ? null : slice.byId[String(id)]!;
-        },
         isBusy:   (id: string | number) => (state: Record<string, unknown>) => Boolean(_readSlice(state).busyIds[String(id)]),
         createInFlight: (state: Record<string, unknown>) => Boolean(_readSlice(state).createInFlight),
     });
 
     function _requestPayload(event: PlatformEvent): Record<string, unknown> {
         if (event.payload === null || event.payload === undefined) return {};
-        if (typeof event.payload !== 'object') {
+        if (!isPlainRecord(event.payload)) {
             throw new Error(`createResourceCollection(${name}): event.payload for ${event.type} must be object|null`);
         }
-        return event.payload as Record<string, unknown>;
+        return event.payload;
     }
 
     async function _doRequest(opSpec: _OpSpec, event: PlatformEvent, ctx: EffectCtx): Promise<unknown> {
@@ -523,9 +616,13 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
         const headers = requestHeaders
             ? requestHeaders({ ctx, payload: opSpec.headersPayload, op: opSpec.op })
             : undefined;
+        const url = opSpec.url;
+        if (url === undefined || url === null) {
+            throw new Error(`createResourceCollection: ${opSpec.op} url required`);
+        }
         return httpRequest({
             method: opSpec.method,
-            url: opSpec.url!,
+            url,
             body: opSpec.httpBody,
             query: opSpec.httpQuery,
             headers,
@@ -554,16 +651,16 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                 let data;
                 try {
                     if (listFetchAllPages) {
-                        const baseQuery = listQuery(payload) as Record<string, unknown>;
-                        if (!baseQuery || typeof baseQuery !== 'object') {
-                            throw new Error(`createResourceCollection(${name}): listQuery must return object`);
-                        }
+                        const baseQuery = queryRecord(listQuery(payload), `createResourceCollection(${name}): listQuery`);
                         const pageLimit = typeof baseQuery.limit === 'number' ? baseQuery.limit : 200;
                         let off = typeof baseQuery.offset === 'number' ? baseQuery.offset : 0;
                         const mergedItems: ResourceItem[] = [];
                         let total = 0;
                         for (;;) {
-                            const pageQuery = { ...baseQuery, ...payload, limit: pageLimit, offset: off } as Record<string, string | number | boolean | null | undefined>;
+                            const pageQuery = httpQueryFields(
+                                { ...baseQuery, ...payload, limit: pageLimit, offset: off },
+                                `createResourceCollection(${name})`,
+                            );
                             const pageData = await _doRequest({
                                 commandType: events.LIST_REQUESTED,
                                 succeeded: events.LIST_LOADED,
@@ -575,15 +672,12 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                                 op: 'list',
                                 headersPayload: payload,
                             }, event, ctx);
-                            const pd = pageData as { items?: unknown; total?: unknown } | null;
-                            if (!pd || !Array.isArray(pd.items)) {
-                                throw new Error(`createResourceCollection(${name}): list response.items missing or not array`);
-                            }
+                            const pd = listResponse(pageData, `createResourceCollection(${name}): list response`);
                             if (typeof pd.total !== 'number') {
                                 throw new Error(`createResourceCollection(${name}): list response.total must be number when listFetchAllPages is true`);
                             }
                             total = pd.total;
-                            mergedItems.push(...(pd.items as ResourceItem[]));
+                            mergedItems.push(...pd.items);
                             if (mergedItems.length >= total) {
                                 break;
                             }
@@ -595,7 +689,7 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                         ctx.dispatch(events.LIST_LOADED, { items: mergedItems, total }, { causation_id: event.id, source: _transportSource() });
                         return;
                     }
-                    const singleQuery = listQuery(payload);
+                    const singleQuery = queryRecord(listQuery(payload), `createResourceCollection(${name}): listQuery`);
                     data = await _doRequest({
                         commandType: events.LIST_REQUESTED,
                         succeeded: events.LIST_LOADED,
@@ -603,7 +697,7 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                         wsPayload: { ...singleQuery, ...payload },
                         method: 'GET',
                         url: baseUrl,
-                        httpQuery: singleQuery as Record<string, string | number | boolean | null | undefined>,
+                        httpQuery: httpQueryFields(singleQuery, `createResourceCollection(${name})`),
                         op: 'list',
                         headersPayload: payload,
                     }, event, ctx);
@@ -612,10 +706,7 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                     ctx.dispatch(events.LIST_FAILED, { message: err.message }, { causation_id: event.id, source: _transportSource() });
                     return;
                 }
-                const d = data as { items?: unknown; total?: unknown } | null;
-                if (!d || !Array.isArray(d.items)) {
-                    throw new Error(`createResourceCollection(${name}): list response.items missing or not array`);
-                }
+                const d = listResponse(data, `createResourceCollection(${name}): list response`);
                 ctx.dispatch(
                     events.LIST_LOADED,
                     {
@@ -640,10 +731,10 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                         op: 'get',
                         headersPayload: { [idField]: id },
                     }, event, ctx);
-                    if (!item || typeof item !== 'object') {
+                    if (!isPlainRecord(item)) {
                         throw new Error(`createResourceCollection(${name}): get response must be object`);
                     }
-                    ctx.dispatch(events.ITEM_LOADED, { item: item as ResourceItem }, { causation_id: event.id, source: _transportSource() });
+                    ctx.dispatch(events.ITEM_LOADED, { item }, { causation_id: event.id, source: _transportSource() });
                 } catch (err) {
                     if (!_isTransportError(err)) throw err;
                     ctx.dispatch(events.ITEM_FAILED, { [idField]: id, message: err.message }, { causation_id: event.id, source: _transportSource() });
@@ -652,9 +743,9 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
             }
             case events.CREATE_REQUESTED: {
                 if (!operations.includes('create')) return;
-                const st = ctx.getState() as Record<string, ResourceCollectionSlice | undefined>;
-                const rawSlice = st[sliceKey];
-                if (rawSlice != null) {
+                const st = ctx.getState();
+                const rawSlice = isPlainRecord(st) ? st[sliceKey] : undefined;
+                if (isPlainRecord(rawSlice)) {
                     const lock = rawSlice.createLockEventId;
                     if (lock != null && lock !== event.id) {
                         return;
@@ -673,10 +764,10 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                         op: 'create',
                         headersPayload: payload,
                     }, event, ctx);
-                    if (!item || typeof item !== 'object' || !(item as ResourceItem)[idField]) {
+                    if (!isPlainRecord(item) || !item[idField]) {
                         throw new Error(`createResourceCollection(${name}): create response missing ${idField}`);
                     }
-                    ctx.dispatch(events.CREATED, { item: item as ResourceItem }, { causation_id: event.id, source: _transportSource() });
+                    ctx.dispatch(events.CREATED, { item }, { causation_id: event.id, source: _transportSource() });
                     ctx.dispatch(
                         CoreEvents.UI_TOAST_SHOW,
                         { type: 'success', i18n_key: toastKeys.create },
@@ -714,9 +805,9 @@ export function createResourceCollection(options: ResourceCollectionOptions): Re
                         op: 'update',
                         headersPayload: payload,
                     }, event, ctx);
-                    const finalItem = (response && typeof response === 'object' && (response as ResourceItem)[idField]
+                    const finalItem = isPlainRecord(response) && response[idField]
                         ? response
-                        : { [idField]: id, ...body }) as ResourceItem;
+                        : { [idField]: id, ...body };
                     ctx.dispatch(events.UPDATED, { item: finalItem }, { causation_id: event.id, source: _transportSource() });
                     ctx.dispatch(
                         CoreEvents.UI_TOAST_SHOW,

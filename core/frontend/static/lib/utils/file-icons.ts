@@ -4,6 +4,21 @@
  * Не делает HTTP, не использует bus. Иконки тянет icon.effect через bus.
  */
 
+import { isPlainRecord } from '../events/payload.js';
+
+function iconValue(map: object, key: string): string | undefined {
+    const record: unknown = map;
+    if (!isPlainRecord(record)) {
+        throw new Error('file icon: map must be an object');
+    }
+    const value = record[key];
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`file icon: ${key} must be a non-empty string`);
+    }
+    return value;
+}
+
 export const FILE_ICON_BASE_NAMES = Object.freeze([
     '001-adobe illustrator', '002-apk', '003-css', '004-disc', '005-doc',
     '006-excel', '007-font file', '008-iso', '009-javascript', '010-image',
@@ -78,12 +93,16 @@ const FILE_MIME_TO_ICON_KEY = Object.freeze({
 });
 
 export function resolveFileIconKey(filename = '', mimeType = ''): string {
-    const name = String(filename ?? '').trim();
-    const rawMime = String(mimeType ?? '').trim();
-    const mime = rawMime ? (rawMime.split(';')[0] ?? '').trim().toLowerCase() : '';
+    const name = (typeof filename === 'string' ? filename : '').trim();
+    const rawMime = (typeof mimeType === 'string' ? mimeType : '').trim();
+    const mimeHead = rawMime.split(';')[0];
+    if (rawMime !== '' && mimeHead === undefined) {
+        throw new Error('file icon: mime segment missing');
+    }
+    const mime = rawMime === '' || mimeHead === undefined ? '' : mimeHead.trim().toLowerCase();
 
     if (mime) {
-        const exact = (FILE_MIME_TO_ICON_KEY as Record<string, string>)[mime];
+        const exact = iconValue(FILE_MIME_TO_ICON_KEY, mime);
         if (typeof exact === 'string' && FILE_ICON_ALIAS_KEYS.has(exact)) return exact;
         const slash = mime.indexOf('/');
         if (slash > 0) {
@@ -246,7 +265,7 @@ export function resolveFileIconBasename(name: string): string {
     const raw = String(name).trim();
     if (!raw) throw new Error('File icon name is required');
     const lower = raw.toLowerCase();
-    const fromAlias = (FILE_ICON_ALIASES as Record<string, string>)[lower];
+    const fromAlias = iconValue(FILE_ICON_ALIASES, lower);
     if (fromAlias) return fromAlias;
     if (FILE_ICON_BASENAME_SET.has(raw)) return raw;
     for (const b of FILE_ICON_BASENAME_SET) {
@@ -262,9 +281,14 @@ export function isUiIconKnown(name: string): boolean {
 }
 
 export function resolveUiIconFile(name: string): string {
-    return (UI_ICON_MAP as Record<string, string>)[name] || (UI_ICON_MAP as Record<string, string>)[name.toLowerCase()] || name;
+    const exact = iconValue(UI_ICON_MAP, name);
+    if (exact !== undefined) return exact;
+    const lower = iconValue(UI_ICON_MAP, name.toLowerCase());
+    if (lower !== undefined) return lower;
+    return name;
 }
 
 export function normalizeSvg(svg: unknown): string {
-    return String(svg || '').replace(/\s+width="[^"]*"/g, '').replace(/\s+height="[^"]*"/g, '');
+    const source = typeof svg === 'string' ? svg : '';
+    return source.replace(/\s+width="[^"]*"/g, '').replace(/\s+height="[^"]*"/g, '');
 }

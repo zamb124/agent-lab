@@ -28,3 +28,10 @@ export const namespaceUpdateOp = createAsyncOp({
     commandType: 'sync/namespace/sync_settings_update_requested',
     restMirror: { method: 'PUT', path: '/sync/api/v1/namespaces/:name' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/namespaces': typeof namespacesResource;
+        'sync/namespace_update': typeof namespaceUpdateOp;
+    }
+}

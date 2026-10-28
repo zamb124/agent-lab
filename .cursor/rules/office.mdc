@@ -5,11 +5,11 @@ globs:
   - "core/documents/viewer/**"
   - "core/office/**"
   - "core/viz/**"
-  - "core/frontend/static/lib/components/platform-document-viewer-host.js"
-  - "core/frontend/static/lib/components/platform-data-table-host.js"
-  - "core/frontend/static/lib/components/platform-onlyoffice-host.js"
-  - "core/frontend/static/lib/components/platform-viz-host.js"
-  - "core/frontend/static/lib/components/platform-file-viewer-modal.js"
+  - "core/frontend/static/lib/components/platform-document-viewer-host.ts"
+  - "core/frontend/static/lib/components/platform-data-table-host.ts"
+  - "core/frontend/static/lib/components/platform-onlyoffice-host.ts"
+  - "core/frontend/static/lib/components/platform-viz-host.ts"
+  - "core/frontend/static/lib/components/platform-file-viewer-modal.ts"
   - "core/frontend/static/assets/icons/files_icons/**"
 alwaysApply: false
 ---
@@ -20,9 +20,9 @@ Documents (`apps/office`) — каталог файлов компании по�
 
 ## Модель
 
-- Таблицы office — `apps/office/models/`: `DocumentLink` (`link.py`), `OfficeDocumentRevision` (`revision.py`), `OfficeDocumentEvent` (`event.py`).
-- `document_catalogs` (`DocumentCatalog`, `core/documents/catalog.py`, база `shared`) — дерево каталогов namespace любой глубины (`parent_catalog_id`), имя у родителя уникально по `title_key`.
-- Место файла — `FileRecord.catalog_id`; публичный id документа — `file_id`. `document_links` (`DocumentLink`) — публичная ссылка каталога или файла.
+- Таблицы office — `apps/office/models/`: `DocumentLink` (`link.py`), `OfficeDocumentRevision` (`revision.py`), `OfficeDocumentEvent` (`event.py`). `OfficeDocumentEvent.append_new_event(*, file_id, company_id, event_type, user_id, payload) -> None` — строка журнала по `file_id`. Новый `event_id` на каждый вызов. `payload` пишется JSON-текстом. Строка не возвращается. `list_by_created_at_desc_for_file(file_id, *, limit) -> list[OfficeDocumentEvent]` — события файла, `ORDER BY created_at DESC`, не больше `limit`. `OfficeDocumentRevision.append` добавляет следующую ревизию `file_id` под блокировкой и возвращает строку. Первая — `revision_number` 1. `OfficeDocumentRevision.list_by_revision_number_desc(file_id, *, limit) -> list[OfficeDocumentRevision]` — ревизии файла, `ORDER BY revision_number DESC`, не больше `limit`.
+- `document_catalogs` (`DocumentCatalog`, `core/documents/catalog.py`, база `shared`) — дерево каталогов namespace любой глубины (`parent_catalog_id`), имя у родителя уникально по `title_key`. `list_by_title(company_id, query, limit) -> list[DocumentCatalog]` — каталоги компании по возрастанию `title`, не больше `limit`; пустой `query` не фильтрует заголовок, иначе `title` содержит подстроку без учёта регистра. Чужая компания не входит. `list_all_by_created_at(*, limit) -> list[DocumentCatalog]` — все каталоги, `ORDER BY created_at`. `limit is None` не ограничивает. `limit < 1` — `ValueError`. `list_by_title_key_in_namespace(company_id, namespace) -> list[DocumentCatalog]` — каталоги компании в namespace, `ORDER BY title_key`, без предела. `list_pending_authz_by_created_at(*, limit) -> list[DocumentCatalog]` — каталоги с пустым `authz_synced_at`, `ORDER BY created_at`, не больше `limit`.
+- Место файла — `FileRecord.catalog_id`; публичный id документа — `file_id`. `document_links` (`DocumentLink`) — публичная ссылка каталога или файла. `update_enabled_token_hash_and_permission(link, *, enabled, token_hash, permission) -> DocumentLink` пишет эти три поля и `updated_at`. `token_hash is None` снимает токен.
 - Публичная ссылка — `link_enabled`, `link_token_hash`, `link_permission` ∈ `viewer`/`editor` на `DocumentLink`; неверный permission — 400.
 - `OfficeIntegrationConfig` (`services.office.office`, ENV `OFFICE__*`): `document_server_public_url` (origin страницы `/documents`), `callback_public_base_url` (origin, с которого Document Server зовёт `office-download` и callback), `jwt_secret`.
 
@@ -45,7 +45,7 @@ Documents (`apps/office`) — каталог файлов компании по�
 - Команды — `OFFICE_OPERATIONS` (`apps/office/realtime/`), REST — `apps/office/api/commands.py`; namespace на WS — `PlatformEvent.meta.namespace` → `require_namespace`; списки — `ListResponse[T]`/`OffsetPage[T]`.
 - HTTP без команды (`COMMAND_WS_HTTP_ALLOWLIST`, `PROTOCOL_HANDLERS`): `office/document_upload` (chunked Files), `office/document_editor_config`, `office/public_*`, callback OnlyOffice, `office-download`, `viewer-stream`/`viewer-frame`/`viewer-save`, export/import DataTable.
 - Anonymous маршруты (`route_config`): `/documents/api/v1/office-download`, `/onlyoffice/callback`, `/public/*`, `/viewer-stream|viewer-frame|viewer-save`; остальной `/documents/api/v1/*` — сессия.
-- Общие фабрики для других сервисов: `office-catalog-items.resource.js` (`office/catalog_items`), `office-documents-browse.resource.js` (browse для `platform.file_picker`); BFF-клонов во flows и wiki нет.
+- Общие фабрики для других сервисов: `office-catalog-items.resource.ts` (`office/catalog_items`), `office-documents-browse.resource.ts` (browse для `platform.file_picker`); BFF-клонов во flows и wiki нет.
 - Tools flows и Lara — `ServiceClient("office")` → `/documents/api/v1/...` + `X-Platform-Namespace` (`apps/flows/tools/documents/`) → `tools.mdc`, `agent_skills.mdc`.
 - `POST /documents/api/v1/catalogs/ensure-path` — дерево исходников `code_agent` (маршрут до `/{catalog_id}`) → `guest_runtime.mdc`.
 
@@ -57,7 +57,7 @@ Documents (`apps/office`) — каталог файлов компании по�
 ## UI
 
 1. `apps/office/ui/` по канону фабрик (`frontend.mdc`, `ui_factories.mdc`); i18n-бандл `documents`, `this.t(...)` без кросс-сервисных префиксов.
-2. Проводник `office-documents-explorer-page`: в каталоге — сначала дочерние каталоги, затем файлы в тех же `platform-file-row`/`platform-file-card`; клик — выбор, двойной клик — открыть; дерево каталогов и nav-rail — в `<office-sidebar>`; стили — токены `--documents-*` и `documents-explorer.styles.js`.
+2. Проводник `office-documents-explorer-page`: в каталоге — сначала дочерние каталоги, затем файлы в тех же `platform-file-row`/`platform-file-card`; клик — выбор, двойной клик — открыть; дерево каталогов и nav-rail — в `<office-sidebar>`; стили — токены `--documents-*` и `documents-explorer.styles.ts`.
 3. Deep-link `/documents?namespace=<slug>&catalog_id=<id>` (`access=1` — модалка доступа); редактор — маршрут `document_editor` (`edit/:fileId`) с Paper Stage без sidebar.
 4. Список namespace — только `company_workspace` (`list_company_workspaces`).
 5. Иконки типов файлов — `core/frontend/static/assets/icons/files_icons/`, `<platform-icon file-icon name=...>` (`resolveFileIconBasename`, `FILE_ICON_ALIASES`).

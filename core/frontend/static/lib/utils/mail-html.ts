@@ -4,8 +4,14 @@
  */
 import DOMPurify from '../../assets/js/dompurify/purify.es.mjs';
 
-interface MailAttachmentRecord { content_id?: unknown; file_id?: unknown }
+import { isPlainRecord } from '../events/payload.js';
 import { escapeHtml } from './escape-html.js';
+
+interface MailAttachmentRecord { content_id?: unknown; file_id?: unknown }
+
+function isMailAttachment(value: unknown): value is MailAttachmentRecord {
+    return isPlainRecord(value);
+}
 
 const CID_ATTR_RE = /(?:src|href|background)\s*=\s*['"]cid:([^'"]+)['"]/gi;
 const CID_CSS_RE = /url\(\s*['"]?cid:([^'")\s]+)['"]?\s*\)/gi;
@@ -131,7 +137,9 @@ export function findCidRefs(html: string): Set<string> {
         re.lastIndex = 0;
         let match = re.exec(html);
         while (match) {
-            ids.add(normalizeContentId(`cid:${match[1] ?? ''}`));
+            const cid = match[1];
+            if (cid === undefined) throw new Error('findCidRefs: content id missing');
+            ids.add(normalizeContentId(`cid:${cid}`));
             match = re.exec(html);
         }
     }
@@ -196,10 +204,10 @@ export function buildCidFileMap(attachments: unknown[], html: string): Record<st
         return out;
     }
     for (const att of attachments) {
-        if (!att || typeof att !== 'object') {
+        if (!isMailAttachment(att)) {
             throw new Error('buildCidFileMap: attachment object required');
         }
-        const record = att as { content_id?: unknown; file_id?: unknown };
+        const record = att;
         if (typeof record.content_id !== 'string' || !record.content_id.trim()) {
             continue;
         }
@@ -232,10 +240,10 @@ export function attachmentsWithoutInlineCid(attachments: unknown[], html: string
         return attachments;
     }
     return attachments.filter((att: unknown) => {
-        if (!att || typeof att !== 'object') {
+        if (!isMailAttachment(att)) {
             throw new Error('attachmentsWithoutInlineCid: attachment object required');
         }
-        const record = att as { content_id?: unknown };
+        const record = att;
         if (typeof record.content_id !== 'string' || !record.content_id.trim()) {
             return true;
         }

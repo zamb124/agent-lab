@@ -150,11 +150,11 @@ export class FrontendEmbedCodeModal extends PlatformModal {
         }
         const entry = this._entry();
         const html_code = entry.html_code;
-        const page_url = entry.page_url || '';
+        const page_url = typeof entry.page_url === 'string' ? entry.page_url : '';
         const presentation = entry.presentation === 'page' ? 'page' : 'drawer';
         const token_endpoint = entry.token_endpoint;
-        const backendExample = entry.backend_proxy_code || '';
-        const clientExample = entry.browser_to_host_backend_code || '';
+        const backendExample = typeof entry.backend_proxy_code === 'string' ? entry.backend_proxy_code : '';
+        const clientExample = typeof entry.browser_to_host_backend_code === 'string' ? entry.browser_to_host_backend_code : '';
         const origins = Array.isArray(entry.allowed_origins) ? entry.allowed_origins : [];
         return html`
             ${presentation === 'page' && page_url ? html`

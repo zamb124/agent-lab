@@ -44,30 +44,30 @@ JSON_BUNDLE_ROOT = "apps/flows/bundles"
 
 UI_REFLECTION_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("apps/flows/src/models/flow_api.py", ('type="reflection"',)),
-    ("apps/flows/ui/_helpers/node-icons.js", ("reflection:",)),
+    ("apps/flows/ui/_helpers/node-icons.ts", ("reflection:",)),
     (
-        "apps/flows/ui/components/editor/flows-node-editor-surface.js",
-        ("flows-reflection-node-editor.js", "case 'reflection':"),
+        "apps/flows/ui/components/editor/flows-node-editor-surface.ts",
+        ("../nodes/flows-reflection-node-editor.js", "case 'reflection':"),
     ),
-    ("apps/flows/ui/pages/flow-editor-page.js", ("flows-property-panel.js",)),
-    ("apps/flows/ui/_helpers/lara-node-helper.js", ("reflection: 'reflection_node_helper'",)),
+    ("apps/flows/ui/pages/flow-editor-page.ts", ("../components/editor/flows-property-panel.js",)),
+    ("apps/flows/ui/_helpers/lara-node-helper.ts", ("reflection: 'reflection_node_helper'",)),
     ("core/i18n/translations/en/flows.json", ('"reflection_node_editor"',)),
     ("core/i18n/translations/ru/flows.json", ('"reflection_node_editor"',)),
 )
 
 UI_CODE_AGENT_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("apps/flows/src/models/flow_api.py", ('type="code_agent"',)),
-    ("apps/flows/ui/_helpers/node-icons.js", ("code_agent:", "icon: 'code_agent'")),
+    ("apps/flows/ui/_helpers/node-icons.ts", ("code_agent:", "icon: 'code_agent'")),
     (
-        "apps/flows/ui/components/editor/flows-node-editor-surface.js",
-        ("flows-code-agent-editor.js", "case 'code_agent':"),
+        "apps/flows/ui/components/editor/flows-node-editor-surface.ts",
+        ("../nodes/flows-code-agent-editor.js", "case 'code_agent':"),
     ),
-    ("apps/flows/ui/pages/flow-editor-page.js", ("flows-property-panel.js",)),
-    ("apps/flows/ui/_helpers/lara-node-helper.js", ("code_agent: 'code_agent_node_helper'",)),
+    ("apps/flows/ui/pages/flow-editor-page.ts", ("../components/editor/flows-property-panel.js",)),
+    ("apps/flows/ui/_helpers/lara-node-helper.ts", ("code_agent: 'code_agent_node_helper'",)),
     ("core/i18n/translations/en/flows.json", ('"code_agent_editor"', '"section_source"', '"invoke_listen_port"')),
     ("core/i18n/translations/ru/flows.json", ('"code_agent_editor"', '"section_source"', '"invoke_listen_port"')),
     (
-        "apps/flows/ui/components/nodes/flows-code-agent-editor.js",
+        "apps/flows/ui/components/nodes/flows-code-agent-editor.ts",
         (
             'data-testid="code-agent-import-git"',
             'data-testid="code-agent-file"',
@@ -80,11 +80,11 @@ UI_CODE_AGENT_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "apps/flows/ui/events/resources/code-agent.resource.js",
+        "apps/flows/ui/events/resources/code-agent.resource.ts",
         ("flows/code_agent_logs", "/code-agent/logs"),
     ),
     (
-        "apps/flows/ui/modals/flows-logs-modal.js",
+        "apps/flows/ui/modals/flows-logs-modal.ts",
         ("guest_runtime", "flows/code_agent_logs"),
     ),
 )
@@ -92,7 +92,7 @@ UI_CODE_AGENT_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 UI_OBSERVABILITY_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "apps/flows/ui/events/resources/logs.resource.js",
+        "apps/flows/ui/events/resources/logs.resource.ts",
         (
             "logsByRequestOp",
             "logsBySpanOp",
@@ -103,22 +103,22 @@ UI_OBSERVABILITY_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "apps/flows/ui/app/flows-app.js",
+        "apps/flows/ui/app/flows-app.ts",
         ("logsByRequestOp", "logsBySpanOp", "logsByUserOp"),
     ),
     (
-        "apps/flows/ui/modals/flows-logs-modal.js",
+        "apps/flows/ui/modals/flows-logs-modal.ts",
         ("requestId", "spanId", "userId", "logs_by_request", "logs_by_span", "logs_by_user"),
     ),
     (
-        "apps/flows/ui/modals/flows-span-details-modal.js",
+        "apps/flows/ui/modals/flows-span-details-modal.ts",
         ("openModal('flows.logs'", "spanId"),
     ),
 )
 
 UI_DURABLE_HISTORY_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "apps/flows/ui/events/resources/durable-history.resource.js",
+        "apps/flows/ui/events/resources/durable-history.resource.ts",
         (
             "durableHistoryOp",
             "durableBranchesOp",
@@ -134,7 +134,7 @@ UI_DURABLE_HISTORY_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "apps/flows/ui/app/flows-app.js",
+        "apps/flows/ui/app/flows-app.ts",
         (
             "durableHistoryOp",
             "durableBranchesOp",
@@ -146,7 +146,7 @@ UI_DURABLE_HISTORY_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "apps/flows/ui/modals/flows-durable-history-modal.js",
+        "apps/flows/ui/modals/flows-durable-history-modal.ts",
         (
             "flows.durable_history",
             "durable_history_modal.timeline_title",
@@ -159,17 +159,17 @@ UI_DURABLE_HISTORY_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "durable_history_modal.action_patch",
         ),
     ),
-    ("apps/flows/ui/index.js", ("flows-durable-history-modal.js",)),
+    ("apps/flows/ui/index.ts", ("./modals/flows-durable-history-modal.js",)),
     (
-        "apps/flows/ui/modals/flows-sessions-modal.js",
+        "apps/flows/ui/modals/flows-sessions-modal.ts",
         ("openModal('flows.durable_history'", "history_aria", "trace-timeline"),
     ),
     (
-        "apps/flows/ui/pages/chat-page.js",
+        "apps/flows/ui/pages/chat-page.ts",
         ("openModal('flows.durable_history'", "btn_history", "trace-timeline"),
     ),
     (
-        "apps/flows/ui/modals/flows-span-details-modal.js",
+        "apps/flows/ui/modals/flows-span-details-modal.ts",
         (
             "openModal('flows.durable_history'",
             "platform.workflow.session_id",
@@ -416,7 +416,7 @@ def _scan_observability_ui_contracts() -> list[Violation]:
         UI_OBSERVABILITY_CONTRACTS,
         message_prefix="observability UI contract",
     )
-    logs_modal = REPO_ROOT / "apps/flows/ui/modals/flows-logs-modal.js"
+    logs_modal = REPO_ROOT / "apps/flows/ui/modals/flows-logs-modal.ts"
     if logs_modal.exists():
         text = logs_modal.read_text(encoding="utf-8")
         for match in re.finditer(r"\bfallback\b", text, flags=re.IGNORECASE):
@@ -449,7 +449,7 @@ def _scan_durable_history_ui_contracts() -> list[Violation]:
         UI_DURABLE_HISTORY_CONTRACTS,
         message_prefix="durable history UI contract",
     )
-    durable_modal = REPO_ROOT / "apps/flows/ui/modals/flows-durable-history-modal.js"
+    durable_modal = REPO_ROOT / "apps/flows/ui/modals/flows-durable-history-modal.ts"
     if durable_modal.exists():
         text = durable_modal.read_text(encoding="utf-8")
         for match in re.finditer(r"\bfallback\b", text, flags=re.IGNORECASE):

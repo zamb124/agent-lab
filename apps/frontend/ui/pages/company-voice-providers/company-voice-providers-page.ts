@@ -14,6 +14,9 @@ import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { AuthState } from '@platform/lib/events/reducers/auth.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 // ─── Voice providers constants ────────────────────────────────────────────────
 const KINDS = ['stt', 'tts'];
@@ -88,8 +91,34 @@ function _providerOptions() {
     ];
 }
 
-const KIND_ICON  = { alias: 'edit', regex: 'settings', stress: 'microphone' };
+const KIND_ICON = { alias: 'edit', regex: 'settings', stress: 'microphone' };
 const KIND_CLASS = { alias: 'kind-alias', regex: 'kind-regex', stress: 'kind-stress' };
+
+function kindClass(kind: unknown): string {
+    switch (kind) {
+        case 'alias':
+            return KIND_CLASS.alias;
+        case 'regex':
+            return KIND_CLASS.regex;
+        case 'stress':
+            return KIND_CLASS.stress;
+        default:
+            return 'kind-alias';
+    }
+}
+
+function kindIcon(kind: unknown): string {
+    switch (kind) {
+        case 'alias':
+            return KIND_ICON.alias;
+        case 'regex':
+            return KIND_ICON.regex;
+        case 'stress':
+            return KIND_ICON.stress;
+        default:
+            return 'edit';
+    }
+}
 
 function _emptyRuleDraft() {
     return {
@@ -355,24 +384,32 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     declare _testText: string;
     declare _testProvider: string;
     declare _testResult: any;
+    private _catalog!: OpController;
+    private _load!: OpController;
+    private _upsert!: OpController;
     private _remove!: OpController;
+    private _rulesLoad!: OpController;
+    private _rulesCreate!: OpController;
+    private _rulesUpdate!: OpController;
+    private _rulesDelete!: OpController;
     private _rulesTest!: OpController;
+    private _auth!: SelectController<AuthState>;
 
     constructor() {
         super();
         // ── Voice providers ops ──────────────────────────────────────
-        (this as Record<string, any>)._catalog = this.useOp('voice/voice_providers_catalog_load');
-        (this as Record<string, any>)._load    = this.useOp('voice/company_voice_providers_load');
-        (this as Record<string, any>)._upsert  = this.useOp('voice/company_voice_providers_upsert');
+        this._catalog = this.useOp('voice/voice_providers_catalog_load');
+        this._load    = this.useOp('voice/company_voice_providers_load');
+        this._upsert  = this.useOp('voice/company_voice_providers_upsert');
         this._remove  = this.useOp('voice/company_voice_providers_remove');
         // ── Pronunciation ops ─────────────────────────────────────────
-        (this as Record<string, any>)._rulesLoad   = this.useOp('voice/company_pronunciation_rules_load');
-        (this as Record<string, any>)._rulesCreate = this.useOp('voice/company_pronunciation_rule_create');
-        (this as Record<string, any>)._rulesUpdate = this.useOp('voice/company_pronunciation_rule_update');
-        (this as Record<string, any>)._rulesDelete = this.useOp('voice/company_pronunciation_rule_delete');
+        this._rulesLoad   = this.useOp('voice/company_pronunciation_rules_load');
+        this._rulesCreate = this.useOp('voice/company_pronunciation_rule_create');
+        this._rulesUpdate = this.useOp('voice/company_pronunciation_rule_update');
+        this._rulesDelete = this.useOp('voice/company_pronunciation_rule_delete');
         this._rulesTest   = this.useOp('voice/company_pronunciation_rule_test');
         // ── Auth ──────────────────────────────────────────────────────
-        (this as Record<string, any>)._auth = this.select(s => s.auth);
+        this._auth = this.select(s => s.auth);
         // ── Реактивное состояние ──────────────────────────────────────
         this._activeTab        = 'providers';
         this._drafts           = { stt: _emptyProviderDraft(), tts: _emptyProviderDraft() };
@@ -390,7 +427,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     }
 
     _activeCompanyId() {
-        const auth = (this as Record<string, any>)._auth.value;
+        const auth = this._auth.value;
         if (!auth) return null;
         const cid = auth.activeCompanyId;
         if (typeof cid !== 'string' || cid.length === 0) return null;
@@ -401,15 +438,16 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         const company_id = this._activeCompanyId();
         if (!company_id) return;
         await Promise.all([
-            (this as Record<string, any>)._catalog.run({}),
-            (this as Record<string, any>)._load.run({ company_id }),
-            (this as Record<string, any>)._rulesLoad.run({ company_id }),
+            this._catalog.run({}),
+            this._load.run({ company_id }),
+            this._rulesLoad.run({ company_id }),
         ]);
-        const result = (this as Record<string, any>)._load.lastResult;
-        if (result && Array.isArray(result.items)) {
-            const drafts = { stt: _emptyProviderDraft(), tts: _emptyProviderDraft() };
-            for (const item of result.items) {
-                if (typeof item.kind === 'string') (drafts as Record<string, unknown>)[item.kind] = _itemToDraft(item);
+        const result = this._load.lastResult;
+        const items = isPlainRecord(result) && Array.isArray(result.items) ? result.items : null;
+        if (items !== null) {
+            const drafts: Record<string, ReturnType<typeof _emptyProviderDraft>> = { stt: _emptyProviderDraft(), tts: _emptyProviderDraft() };
+            for (const item of items) {
+                if (isPlainRecord(item) && typeof item.kind === 'string') drafts[item.kind] = _itemToDraft(item);
             }
             this._drafts = drafts;
         }
@@ -419,15 +457,15 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     async _reloadRules() {
         const company_id = this._activeCompanyId();
         if (!company_id) return;
-        await (this as Record<string, any>)._rulesLoad.run({ company_id });
+        await this._rulesLoad.run({ company_id });
     }
 
     // ── Voice providers helpers ──────────────────────────────────────────────
 
     _secretsMetaForKind(kind: string) {
-        const r = (this as Record<string, any>)._load.lastResult;
-        if (!r || !Array.isArray(r.items)) return null;
-        for (const it of r.items) {
+        const loaded = this._load.lastResult;
+        if (!isPlainRecord(loaded) || !Array.isArray(loaded.items)) return null;
+        for (const it of loaded.items) {
             if (it && it.kind === kind && it.secrets_meta) return it.secrets_meta;
         }
         return null;
@@ -452,12 +490,18 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     }
 
     _modelOptions(kind: string, provider: string) {
-        const catalog = (this as Record<string, any>)._catalog.lastResult;
-        if (!catalog) return [];
-        if (provider === 'litserve') return kind === 'stt' ? [...catalog.stt_litserve_models] : [...catalog.tts_litserve_models];
-        if (provider === 'cloud_ru')  return kind === 'stt' ? [...catalog.cloud_ru_stt_models] : [...catalog.cloud_ru_tts_models];
-        if (provider === 'yandex')    return [...catalog.yandex_speech_models];
-        if (provider === 'sber')      return [...catalog.sber_speech_models];
+        const catalog = this._catalog.lastResult;
+        if (!isPlainRecord(catalog)) return [];
+        const models = (value: unknown): unknown[] => {
+            if (!Array.isArray(value)) {
+                throw new Error('company voice providers: model list must be an array');
+            }
+            return value;
+        };
+        if (provider === 'litserve') return kind === 'stt' ? [...models(catalog.stt_litserve_models)] : [...models(catalog.tts_litserve_models)];
+        if (provider === 'cloud_ru')  return kind === 'stt' ? [...models(catalog.cloud_ru_stt_models)] : [...models(catalog.cloud_ru_tts_models)];
+        if (provider === 'yandex')    return [...models(catalog.yandex_speech_models)];
+        if (provider === 'sber')      return [...models(catalog.sber_speech_models)];
         return [];
     }
 
@@ -513,7 +557,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         const voiceTrim = _trimOrEmpty(draft.voice);
         const langTrim  = _trimOrEmpty(draft.language);
         const rfTrim    = _trimOrEmpty(draft.response_format);
-        const payload = {
+        const payload: Record<string, unknown> = {
             company_id,
             kind,
             provider:        draft.provider,
@@ -525,9 +569,9 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
             response_format: rfTrim    !== '' ? rfTrim    : null,
         };
         if (this._credEditedByKind[kind] && _needsCredentials(draft.provider)) {
-            (payload as Record<string, any>).secrets = this._secretsPayload(kind, draft.provider);
+            payload.secrets = this._secretsPayload(kind, draft.provider);
         }
-        await (this as Record<string, any>)._upsert.run(payload);
+        await this._upsert.run(payload);
         await this._reloadAll();
     }
 
@@ -543,8 +587,8 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     // ── Pronunciation helpers ────────────────────────────────────────────────
 
     _getRules() {
-        const result = (this as Record<string, any>)._rulesLoad.lastResult;
-        if (!result || !Array.isArray(result.items)) return [];
+        const result = this._rulesLoad.lastResult;
+        if (!isPlainRecord(result) || !Array.isArray(result.items)) return [];
         return result.items;
     }
 
@@ -592,8 +636,8 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
             note:           note.length > 0 ? note : null,
         };
         const result = this._ruleEditId
-            ? await (this as Record<string, any>)._rulesUpdate.run({ ...base, rule_id: this._ruleEditId })
-            : await (this as Record<string, any>)._rulesCreate.run(base);
+            ? await this._rulesUpdate.run({ ...base, rule_id: this._ruleEditId })
+            : await this._rulesCreate.run(base);
         if (result) {
             this._ruleEditId = null;
             this._ruleDraft = _emptyRuleDraft();
@@ -604,7 +648,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     async _deleteRule(ruleId: Record<string, any>) {
         const company_id = this._activeCompanyId();
         if (!company_id) return;
-        const result = await (this as Record<string, any>)._rulesDelete.run({ company_id, rule_id: ruleId });
+        const result = await this._rulesDelete.run({ company_id, rule_id: ruleId });
         if (result) {
             if (this._ruleEditId === ruleId) {
                 this._ruleEditId = null;
@@ -671,7 +715,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     // ── Providers tab ─────────────────────────────────────────────────────────
 
     _renderProviders() {
-        const loading = (this as Record<string, any>)._load.busy || (this as Record<string, any>)._catalog.busy;
+        const loading = this._load.busy || this._catalog.busy;
         return loading
             ? html`<glass-spinner></glass-spinner>`
             : html`<div class="grid">${KINDS.map((k) => this._renderProviderCard(k))}</div>`;
@@ -680,7 +724,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     _renderProviderCard(kind: string) {
         const draft       = this._drafts[kind];
         const secretsMeta = this._secretsMetaForKind(kind);
-        const busy        = (this as Record<string, any>)._upsert.busy || this._remove.busy;
+        const busy        = this._upsert.busy || this._remove.busy;
         const providerValues = [
             { value: '', label: this.t('company_voice_providers_page.option_default') },
             ...STT_TTS_UI.map((p) => ({ value: p, label: p })),
@@ -810,7 +854,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     _renderRuleForm() {
         const d      = this._ruleDraft;
         const isEdit = Boolean(this._ruleEditId);
-        const isBusy = (this as Record<string, any>)._rulesCreate.busy || (this as Record<string, any>)._rulesUpdate.busy;
+        const isBusy = this._rulesCreate.busy || this._rulesUpdate.busy;
         const canSave = (d.pattern as string).trim().length > 0 && (d.replacement as string).trim().length > 0 && !isBusy;
 
         return html`
@@ -899,8 +943,8 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
 
     _renderRulesList() {
         const rules      = this._getRules();
-        const isLoading  = (this as Record<string, any>)._rulesLoad.busy;
-        const isDeleting = (this as Record<string, any>)._rulesDelete.busy;
+        const isLoading  = this._rulesLoad.busy;
+        const isDeleting = this._rulesDelete.busy;
         return html`
             <div class="pron-card">
                 <h3 class="pron-card-title">
@@ -928,15 +972,15 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         `;
     }
 
-    _renderRuleItem(item: Record<string, any>, isDeleting: Record<string, any>) {
+    _renderRuleItem(item: Record<string, any>, isDeleting: boolean) {
         const isEditing = this._ruleEditId === item.pronunciation_rule_id;
         return html`
             <div class="rule-item
                 ${!item.enabled ? 'rule-disabled' : ''}
                 ${isEditing ? 'rule-editing' : ''}
             ">
-                <span class="kind-badge ${(KIND_CLASS as Record<string, string>)[item.kind] || 'kind-alias'}">
-                    <platform-icon name="${(KIND_ICON as Record<string, string>)[item.kind] || 'edit'}" size="11"></platform-icon>
+                <span class="kind-badge ${kindClass(item.kind)}">
+                    <platform-icon name="${kindIcon(item.kind)}" size="11"></platform-icon>
                     ${item.kind}
                 </span>
                 <span class="rule-mono rule-pattern">${item.pattern}</span>

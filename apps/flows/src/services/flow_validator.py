@@ -579,7 +579,7 @@ class FlowValidator:
             if node_type == "llm_node" and "node_id" in config:
                 ref_node_id = config["node_id"]
                 if isinstance(ref_node_id, str) and self._resolve_node_refs:
-                    node = await NodeConfig.get(NodeConfig.row_id(ref_node_id))
+                    node = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(ref_node_id))
                     if node is None:
                         result.add_error(
                             code="node_not_found",
@@ -608,17 +608,17 @@ class FlowValidator:
 
                 # Проверяем как tool, node или flow (flow может быть tool по ID)
                 tool_exists = False
-                tool = await ToolReference.get(ToolReference.row_id(tool_ref))
+                tool = await ToolReference.get(ToolReference.row_id_for_active_company(tool_ref))
                 if tool:
                     tool_exists = True
 
                 if not tool_exists and self._resolve_node_refs:
-                    node = await NodeConfig.get(NodeConfig.row_id(tool_ref))
+                    node = await NodeConfig.get(NodeConfig.node_row_id_for_active_company(tool_ref))
                     if node:
                         tool_exists = True
 
                 if not tool_exists:
-                    flow_cfg = await FlowConfig.get_latest(tool_ref)
+                    flow_cfg = await FlowConfig.current_for_flow(tool_ref)
                     if flow_cfg:
                         tool_exists = True
 
@@ -635,7 +635,7 @@ class FlowValidator:
                 has_code = "code" in config
 
                 if isinstance(tool_id, str) and tool_id and not has_code:
-                    tool = await ToolReference.get(ToolReference.row_id(tool_id))
+                    tool = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
                     if tool is None:
                         result.add_error(
                             code="tool_not_found",
@@ -647,7 +647,7 @@ class FlowValidator:
             if node_type == "flow":
                 ref_flow_id = config.get("flow_id")
                 if isinstance(ref_flow_id, str) and ref_flow_id:
-                    callee = await FlowConfig.get_latest(ref_flow_id)
+                    callee = await FlowConfig.current_for_flow(ref_flow_id)
                     if callee is None:
                         result.add_error(
                             code="flow_not_found",

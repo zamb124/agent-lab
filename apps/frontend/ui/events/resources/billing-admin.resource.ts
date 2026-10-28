@@ -292,3 +292,22 @@ export const systemAccessLeaveOp = createAsyncOp({
         ctx.dispatch(companiesOverviewLoadOp.events.REQUESTED, { limit: PAGE_SIZE, offset: 0 }, { source: 'local' });
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/admin_billing_companies': typeof companiesOverviewLoadOp;
+        'frontend/admin_billing_company_resolve': typeof companyResolveOp;
+        'frontend/admin_billing_prices_global_load': typeof pricesGlobalLoadOp;
+        'frontend/admin_billing_prices_global_update': typeof pricesGlobalUpdateOp;
+        'frontend/admin_billing_company_prices_load': typeof companyPricesLoadOp;
+        'frontend/admin_billing_company_prices_update': typeof companyPricesUpdateOp;
+        'frontend/admin_billing_rules_load': typeof settlementRulesLoadOp;
+        'frontend/admin_billing_rules_update': typeof settlementRulesUpdateOp;
+        'frontend/admin_billing_rules_default_load': typeof defaultSettlementRulesLoadOp;
+        'frontend/admin_billing_usage_load': typeof usageReportLoadOp;
+        'frontend/admin_billing_facets': typeof billingAdminFacets;
+        'frontend/admin_billing_balance_grant': typeof balanceGrantOp;
+        'frontend/admin_system_access_enter': typeof systemAccessEnterOp;
+        'frontend/admin_system_access_leave': typeof systemAccessLeaveOp;
+    }
+}

@@ -22,7 +22,12 @@ export function assertResourceName(name: unknown): asserts name is string {
  */
 export function deriveSliceKey(name: string): string {
     assertResourceName(name);
-    const [scope, entity] = name.split('/') as [string, string];
+    const parts = name.split('/');
+    const scope = parts[0];
+    const entity = parts[1];
+    if (scope === undefined || entity === undefined || parts.length !== 2) {
+        throw new Error(`deriveSliceKey: "${name}" must be scope/entity`);
+    }
     return _toCamel(scope) + _capitalize(_toCamel(entity));
 }
 
@@ -75,18 +80,30 @@ export function freeze<T>(value: T): T {
 /**
  * Безопасный assert: бросает с понятным контекстом.
  */
+function isPresent<T>(value: T): value is NonNullable<T> {
+    return value !== undefined && value !== null;
+}
+
+function isFunctionOf<T extends (...args: never[]) => unknown>(value: unknown): value is T {
+    return typeof value === 'function';
+}
+
 export function requireField<T, K extends keyof T>(obj: T | null | undefined, field: K, context: string): NonNullable<T[K]> {
-    if (obj === null || obj === undefined || obj[field] === undefined || obj[field] === null) {
+    if (obj === null || obj === undefined) {
         throw new Error(`${context}: option "${String(field)}" is required`);
     }
-    return obj[field] as NonNullable<T[K]>;
+    const value = obj[field];
+    if (!isPresent(value)) {
+        throw new Error(`${context}: option "${String(field)}" is required`);
+    }
+    return value;
 }
 
 export function requireFunction<T extends (...args: never[]) => unknown>(value: unknown, context: string): T {
-    if (typeof value !== 'function') {
+    if (!isFunctionOf<T>(value)) {
         throw new Error(`${context}: must be a function`);
     }
-    return value as T;
+    return value;
 }
 
 export function requireI18nKey(value: unknown, context: string): string {

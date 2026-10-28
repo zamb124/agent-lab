@@ -24,7 +24,7 @@ async def dispatch_email_triggers(
     dedup_ttl_seconds: int,
     di: Di,
 ) -> int:
-    binding = await MailboxBinding.find_in_company(company_id, mailbox_binding_id)
+    binding = await MailboxBinding.by_mailbox_binding_id(company_id, mailbox_binding_id)
     if binding is None:
         raise ValueError(f"mailbox_binding_id not found: {mailbox_binding_id}")
     inbound = [InboundMailMessage.model_validate(message) for message in messages]

@@ -252,7 +252,7 @@ class AmoCRMIntegrationService:
         entity_type: str,
         amo_record_id: str,
     ) -> str | None:
-        rows = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
+        rows = await CRMEntity.list_by_namespace_entity_type_and_external_ref(
             company_id=company_id,
             namespace=namespace,
             entity_type=entity_type,
@@ -1153,7 +1153,7 @@ class AmoCRMIntegrationService:
                 }
                 n_add += 1
             if n_add:
-                await EntityType.update_fields(
+                await EntityType.update_field_patch(
                     type_id,
                     namespace=namespace_name,
                     company_id=company_id,

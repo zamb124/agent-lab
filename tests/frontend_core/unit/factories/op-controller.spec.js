@@ -84,6 +84,26 @@ describe('OpController.run: zero unhandled rejection contract', () => {
             { causation_id: requestedId, source: 'system' },
         );
         await expect(promise).resolves.toBeNull();
+        expect(ctl.failureStatus).toBeNull();
+    });
+
+    it('FAILED с HTTP status запоминает failureStatus', async () => {
+        const op = _buildOp();
+        busHandle = buildBus({ slices: { [op.sliceKey]: { initial: op.slice.initial, reducer: op.slice.reducer } } });
+        setPlatformBus(busHandle.bus);
+        const host = _buildHost(busHandle.bus);
+        const ctl = new OpController(host, op);
+
+        const promise = ctl.run({ x: 1 });
+        const requestedId = busHandle.events().find((e) => e.type === op.events.REQUESTED).id;
+        busHandle.bus.dispatch(
+            op.events.FAILED,
+            { message: 'missing', status: 404 },
+            { causation_id: requestedId, source: 'http' },
+        );
+        await expect(promise).resolves.toBeNull();
+        expect(ctl.error).toBe('missing');
+        expect(ctl.failureStatus).toBe(404);
     });
 
     it('fire-and-forget run() не throws unhandled rejection при FAILED', async () => {

@@ -61,10 +61,10 @@ export class StockTransfersPage extends PlatformPage {
                             </tr></thead>
                             <tbody>
                                 ${items.map((row) => html`
-                                    <tr data-id=${String(row.transfer_id ?? '')} @click=${(event: Event) => this._open(event)}>
+                                    <tr data-id=${row.transfer_id === undefined || row.transfer_id === null ? '' : String(row.transfer_id)} @click=${(event: Event) => this._open(event)}>
                                         <td>${row.name}</td>
                                         <td>${row.state}</td>
-                                        <td>${row.scheduled_at || ''}</td>
+                                        <td>${typeof row.scheduled_at === 'string' ? row.scheduled_at : ''}</td>
                                     </tr>
                                 `)}
                             </tbody>

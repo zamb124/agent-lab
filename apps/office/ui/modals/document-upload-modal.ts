@@ -175,7 +175,15 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
 
     private _triggerFileInput() {
         if (this._uploading) return;
-        (this.shadowRoot!.querySelector('input[type="file"]') as HTMLInputElement | null)?.click();
+        const root = this.shadowRoot;
+        if (root === null) {
+            throw new Error('document-upload-modal: shadow root missing');
+        }
+        const input = root.querySelector('input[type="file"]');
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('document-upload-modal: file input missing');
+        }
+        input.click();
     }
 
     private _onFileChange(e: Event) {

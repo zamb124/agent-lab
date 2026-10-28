@@ -1,0 +1,252 @@
+/**
+ * flows-variable-editor-modal — создание/редактирование flow-level VariableEntry.
+ *
+ * Company variables редактируются через platform.company_variable_editor
+ * (core/frontend platform-company-variable-editor-modal).
+ */
+
+import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
+import { html, css } from 'lit';
+import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
+import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/fields/platform-field.js';
+import { isPlainObject } from '../_helpers/flows-resolvers.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
+
+export class FlowsVariableEditorModal extends PlatformFormModal {
+    static modalKind = 'flows.variable_editor';
+    static i18nNamespace = 'flows';
+
+    static override properties: PropertyDeclarations = {
+        ...PlatformFormModal.properties,
+        flowId: { type: String },
+        variableKey: { type: String },
+        variableValue: { type: String },
+        variableSecret: { type: Boolean },
+        variablePublic: { type: Boolean },
+        variableTitle: { type: String },
+        variableDescription: { type: String },
+        variableOrder: { type: String },
+        _key: { state: true },
+        _value: { state: true },
+        _secret: { state: true },
+        _public: { state: true },
+        _title: { state: true },
+        _description: { state: true },
+        _order: { state: true },
+    }
+    declare flowId: string;
+    declare variableKey: string;
+    declare variableValue: string;
+    declare variableSecret: boolean;
+    declare variablePublic: boolean;
+    declare variableTitle: string;
+    declare variableDescription: string;
+    declare variableOrder: string;
+    declare _key: string;
+    declare _value: string;
+    declare _secret: boolean;
+    declare _public: boolean;
+    declare _title: string;
+    declare _description: string;
+    declare _order: string;
+;
+
+    static override styles: CSSResultGroup = [
+        ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
+        css`
+            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
+            .hint {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                margin-bottom: var(--space-3);
+                line-height: 1.4;
+            }
+        `,
+    ];
+    private _editor: ControllerFor<'flows/editor'>;
+
+    constructor() {
+        super();
+        this.flowId = '';
+        this.variableKey = '';
+        this.variableValue = '';
+        this.variableSecret = false;
+        this.variablePublic = false;
+        this.variableTitle = '';
+        this.variableDescription = '';
+        this.variableOrder = '';
+        this._key = '';
+        this._value = '';
+        this._secret = false;
+        this._public = false;
+        this._title = '';
+        this._description = '';
+        this._order = '';
+        this._editor = this.useOp('flows/editor');
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated?.(changed);
+        if (!this.flowId) {
+            throw new Error('flows-variable-editor-modal: flowId required');
+        }
+        if (changed.has('variableKey')) this._key = this.variableKey;
+        if (changed.has('variableValue')) this._value = this.variableValue;
+        if (changed.has('variableSecret')) this._secret = Boolean(this.variableSecret);
+        if (changed.has('variablePublic')) this._public = Boolean(this.variablePublic);
+        if (changed.has('variableTitle')) this._title = this.variableTitle;
+        if (changed.has('variableDescription')) this._description = this.variableDescription;
+        if (changed.has('variableOrder')) this._order = this.variableOrder;
+    }
+
+    override renderHeader() {
+        return html`<h3>${this.t(this.variableKey ? 'variable_editor_modal.title_edit' : 'variable_editor_modal.title_create')}</h3>`;
+    }
+
+    override renderBody() {
+        const editing = this.variableKey.length > 0;
+        return html`
+            <p class="hint">${this.t('variables_modal.hint_flow_overrides_company')}</p>
+            <div class="field">
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('variable_editor_modal.field_key')}
+                    .value=${this._key}
+                    ?disabled=${editing}
+                    @change=${(e: CustomEvent) => {
+                        if (!editing) {
+                            this._key = typeof e.detail.value === 'string' ? e.detail.value : '';
+                            this.isDirty = true;
+                        }
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('variable_editor_modal.field_value')}
+                    .value=${this._value}
+                    @change=${(e: CustomEvent) => {
+                        this._value = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="boolean"
+                    mode="edit"
+                    .label=${this.t('variable_editor_modal.field_secret')}
+                    .value=${this._secret}
+                    @change=${(e: CustomEvent) => {
+                        this._secret = Boolean(e.detail.value);
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="boolean"
+                    mode="edit"
+                    .label=${this.t('api_console.var_field_public')}
+                    .value=${this._public}
+                    @change=${(e: CustomEvent) => {
+                        this._public = Boolean(e.detail.value);
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('api_console.var_field_title')}
+                    .value=${this._title}
+                    @change=${(e: CustomEvent) => {
+                        this._title = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('api_console.var_field_description')}
+                    .value=${this._description}
+                    @change=${(e: CustomEvent) => {
+                        this._description = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('api_console.var_field_order')}
+                    .value=${this._order}
+                    @change=${(e: CustomEvent) => {
+                        this._order = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+        `;
+    }
+
+    override renderFooter() {
+        const valid = (this._key.trim() as any).length > 0;
+        return html`
+            <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
+            <platform-button variant="primary" ?disabled=${!valid} @click=${this._onSubmit}>
+                ${this.t('common.action_save')}
+            </platform-button>
+        `;
+    }
+
+    override async _onSubmit(): Promise<void> {
+        const key = (this._key.trim() as any);
+        if (key.length === 0) {
+            return;
+        }
+        this._submitFlow(key);
+        this.closeAfterSave();
+    }
+
+    _submitFlow(key: string) {
+        const state = this._editor.state;
+        const skillsData = state.branchData;
+        const prevVars = isPlainObject((skillsData as any).variables) ? (skillsData as any).variables : {};
+        const prevRaw = prevVars[key];
+        const prevConfig = isPlainObject(prevRaw) ? prevRaw : null;
+        const orderRaw = (this._order.trim() as any);
+        let order = null;
+        if (orderRaw !== '') {
+            order = Number(orderRaw);
+            if (Number.isNaN(order)) {
+                throw new Error('flows-variable-editor-modal: order must be number');
+            }
+        }
+        const merged = {
+            ...(prevConfig !== null ? prevConfig : {}),
+            value: this._value,
+            secret: this._secret,
+            public: this._public,
+            title: (this._title.trim() as any) === '' ? null : (this._title.trim() as any),
+            description: (this._description.trim() as any) === '' ? null : (this._description.trim() as any),
+            order,
+        };
+        const nextVars = { ...prevVars, [key]: merged };
+        (this._editor.updateBranchData({ data: { ...skillsData, variables: nextVars } }) as any);
+        (this._editor.setDirty({ dirty: true }) as any);
+        this.toast('flows:toast.variable_applied', { type: 'success' });
+    }
+}
+
+customElements.define('flows-variable-editor-modal', FlowsVariableEditorModal);
+registerModalKind(FlowsVariableEditorModal.modalKind, 'flows-variable-editor-modal');

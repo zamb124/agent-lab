@@ -587,7 +587,7 @@ class StockMoveEngine:
             warehouse_id=warehouse_id,
             resource_id=quant_id,
         ):
-            run = await StockQuant.set_inventory_in_lane(
+            run = await StockQuant.update_inventory_quantity_in_lane(
                 company_id=company_id,
                 quant_id=quant_id,
                 warehouse_id=warehouse_id,

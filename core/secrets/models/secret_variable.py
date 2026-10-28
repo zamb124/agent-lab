@@ -86,13 +86,14 @@ class SecretVariable(PlatformModel):
         return platform_variable_from_current(row, include_secret_values=include_secret_values)
 
     @classmethod
-    async def list_for_company(
+    async def masked_page_by_variable_key(
         cls,
         company_id: str,
         *,
         limit: int = 1000,
         offset: int = 0,
     ) -> list[PlatformVariable]:
+        """Окно переменных компании, ORDER BY variable_key. Секреты замаскированы. limit по умолчанию 1000, offset 0."""
         rows = await (
             cls.objects.filter(company_id=company_id)
             .order_by("variable_key")
@@ -108,7 +109,8 @@ class SecretVariable(PlatformModel):
         ]
 
     @classmethod
-    async def count(cls, company_id: str) -> int:
+    async def count_for_company(cls, company_id: str) -> int:
+        """Число всех строк компании. Дополнительных фильтров нет."""
         return await cls.objects.filter(company_id=company_id).count()
 
     @classmethod

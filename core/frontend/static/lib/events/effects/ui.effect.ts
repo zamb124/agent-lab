@@ -13,22 +13,34 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
+import { isPlainRecord, payloadFields, stringField } from '../payload.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import { storageGet, storageSetJson } from '../../utils/platform-storage.js';
 
 import { LAST_NAMESPACE_STORAGE_KEY as NAMESPACE_STORAGE_KEY } from '../../utils/platform-namespace.js';
 const ALL_SENTINEL = '__ALL__';
 
+function errorMessage(err: unknown): string {
+    if (err instanceof Error && err.message.length > 0) return err.message;
+    if (isPlainRecord(err) && typeof err.message === 'string' && err.message.length > 0) return err.message;
+    throw new Error('ui.effect: clipboard failure has no message');
+}
+
 function _readMap(): Record<string, string> {
-    try {
-        const raw = storageGet(NAMESPACE_STORAGE_KEY);
-        if (!raw) return {};
-        const parsed = JSON.parse(raw) as unknown;
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-        return parsed as Record<string, string>;
-    } catch {
-        return {};
+    const raw = storageGet(NAMESPACE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!isPlainRecord(parsed)) {
+        throw new Error('ui.effect: namespace map must be an object');
     }
+    const map: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value !== 'string') {
+            throw new Error(`ui.effect: namespace map.${key} must be a string`);
+        }
+        map[key] = value;
+    }
+    return map;
 }
 
 function _writeMap(map: Record<string, string>): void {
@@ -39,7 +51,7 @@ export function createUiEffect(): (event: PlatformEvent, ctx: EffectCtx) => Prom
     return async function uiEffect(event: PlatformEvent, ctx: EffectCtx): Promise<void> {
         switch (event.type) {
             case CoreEvents.UI_NAMESPACE_SELECT_REQUESTED: {
-                const p = (event.payload ?? {}) as { company_id?: unknown; selection?: unknown };
+                const p = payloadFields(event);
                 const cid = p.company_id;
                 const raw = p.selection;
                 if (typeof cid !== 'string' || cid.trim().length === 0) {
@@ -67,11 +79,11 @@ export function createUiEffect(): (event: PlatformEvent, ctx: EffectCtx) => Prom
                 return;
             }
             case CoreEvents.UI_CLIPBOARD_COPY_REQUESTED: {
-                const text = ((event.payload ?? {}) as { text?: unknown }).text;
-                if (typeof text !== 'string' || text.length === 0) {
+                const pp = payloadFields(event);
+                const text = stringField(pp.text);
+                if (text === null) {
                     throw new Error('ui.effect: text is required for UI_CLIPBOARD_COPY_REQUESTED');
                 }
-                const pp = event.payload as { success_i18n_key?: unknown; error_i18n_key?: unknown };
                 const successKey = pp.success_i18n_key;
                 const errorKey = pp.error_i18n_key;
                 try {
@@ -89,7 +101,7 @@ export function createUiEffect(): (event: PlatformEvent, ctx: EffectCtx) => Prom
                         );
                     }
                 } catch (err) {
-                    const message = String(err && (err as Error).message ? (err as Error).message : err);
+                    const message = errorMessage(err);
                     ctx.dispatch(
                         CoreEvents.UI_CLIPBOARD_COPY_FAILED,
                         { message },

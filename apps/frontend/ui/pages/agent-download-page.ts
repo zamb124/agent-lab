@@ -18,6 +18,18 @@ import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function releaseFields(value: unknown): { ready: boolean; latestTag: string; detail: string } | null {
+    if (!isPlainRecord(value)) return null;
+    const latestTag = value.latest_tag;
+    const detail = value.detail;
+    return {
+        ready: value.ready === true,
+        latestTag: typeof latestTag === 'string' ? latestTag : '',
+        detail: typeof detail === 'string' ? detail : '',
+    };
+}
 
 const AGENT_LOGO_SRC = '/static/core/assets/service_logos/humanitec_agent_logo.svg';
 
@@ -113,8 +125,8 @@ export class AgentDownloadPage extends PlatformPage {
      * @returns {{ versionValue: string, releaseValue: string, releaseReady: boolean }}
      */
     _resolveReleaseStats() {
-        const releasePayload = this._releases.lastResult;
-        if (!releasePayload || typeof releasePayload !== 'object') {
+        const release = releaseFields(this._releases.lastResult);
+        if (release === null) {
             if (this._releases.busy) {
                 return {
                     versionValue: this._pt('stat_version_pending'),
@@ -128,9 +140,9 @@ export class AgentDownloadPage extends PlatformPage {
                 releaseReady: false,
             };
         }
-        const ready = (releasePayload as Record<string, any>).ready === true;
-        const latestTag = typeof (releasePayload as Record<string, any>).latest_tag === 'string' ? (releasePayload as Record<string, any>).latest_tag : '';
-        const detail = typeof (releasePayload as Record<string, any>).detail === 'string' ? (releasePayload as Record<string, any>).detail : '';
+        const ready = release.ready;
+        const latestTag = release.latestTag;
+        const detail = release.detail;
         if (ready) {
             return {
                 versionValue: latestTag || this._pt('stat_version_pending'),
@@ -196,9 +208,9 @@ export class AgentDownloadPage extends PlatformPage {
      * @param {import('../_helpers/agent-download-platforms.js').AgentPlatformSpec} platformSpec
      * @param {{ hero?: boolean, recommended?: boolean }} [options]
      */
-    _renderPlatformCard(platformSpec: Record<string, any>, options = {}) {
-        const hero = (options as Record<string, any>).hero === true;
-        const recommended = (options as Record<string, any>).recommended === true;
+    _renderPlatformCard(platformSpec: Record<string, any>, options: { hero?: boolean; recommended?: boolean } = {}) {
+        const hero = options.hero === true;
+        const recommended = options.recommended === true;
         const cardClasses = [
             'marketing-download-platform-card',
             'glass-medium',
@@ -308,8 +320,8 @@ export class AgentDownloadPage extends PlatformPage {
     }
 
     _renderReleaseBanner() {
-        const releasePayload = this._releases.lastResult;
-        if (!releasePayload || typeof releasePayload !== 'object') {
+        const release = releaseFields(this._releases.lastResult);
+        if (release === null) {
             if (this._releases.busy) {
                 return html``;
             }
@@ -319,9 +331,9 @@ export class AgentDownloadPage extends PlatformPage {
                 </div>
             `;
         }
-        const ready = (releasePayload as Record<string, any>).ready === true;
-        const latestTag = typeof (releasePayload as Record<string, any>).latest_tag === 'string' ? (releasePayload as Record<string, any>).latest_tag : '';
-        const detail = typeof (releasePayload as Record<string, any>).detail === 'string' ? (releasePayload as Record<string, any>).detail : '';
+        const ready = release.ready;
+        const latestTag = release.latestTag;
+        const detail = release.detail;
         const bannerText = ready
             ? `${this._pt('release_ready')}${latestTag ? ` ${latestTag}` : ''}`
             : detail || this._pt('release_not_ready');

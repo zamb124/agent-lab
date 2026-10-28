@@ -36,6 +36,52 @@ import {
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord, recordField } from '@platform/lib/events/payload.js';
+
+function companyIdOf(company: unknown): string | null {
+    if (!isPlainRecord(company) || typeof company.company_id !== 'string') return null;
+    return company.company_id;
+}
+
+function searchProviderMeta(providerId: unknown): { label: string; logo: string; tone: string; docs_url: string } {
+    switch (providerId) {
+        case 'tinyfish':
+            return SEARCH_PROVIDER_CATALOG.tinyfish;
+        case 'linkup':
+            return SEARCH_PROVIDER_CATALOG.linkup;
+        case 'serper':
+            return SEARCH_PROVIDER_CATALOG.serper;
+        case 'tavily':
+            return SEARCH_PROVIDER_CATALOG.tavily;
+        default:
+            throw new Error(`settings-page: unknown search provider ${String(providerId)}`);
+    }
+}
+
+function displayText(value: unknown): string {
+    if (value === undefined || value === null || value === false || value === 0 || value === '') return '';
+    if (typeof value === 'number' && !Number.isFinite(value)) return '';
+    return String(value);
+}
+
+function missingAsNull(value: unknown): unknown {
+    if (value === undefined || value === null || value === false || value === 0 || value === '') return null;
+    if (typeof value === 'number' && !Number.isFinite(value)) return null;
+    return value;
+}
+
+function arrayField(value: unknown, label: string): unknown[] {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+    return value;
+}
+
+function budgetNumber(value: unknown): number {
+    if (value === undefined || value === null || value === '') return 0;
+    const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+    if (!Number.isFinite(parsed)) throw new Error('settings: monthly_budget must be a number');
+    return parsed;
+}
 
 const INTEGRATION_LIST = Object.freeze([
     { id: 'crm', route: '/crm' },
@@ -725,14 +771,15 @@ export class FrontendSettingsPage extends PlatformPage {
             this._agentToolkits.run({});
         }
         const company = this._load.lastResult;
-        if (company && (company as Record<string, any>).company_id === 'system' && !this._scoresLoaded) {
+        const companyId = companyIdOf(company);
+        if (companyId === 'system' && !this._scoresLoaded) {
             this._scoresLoaded = true;
             this._scoreLoad.run();
         }
-        if (company && (company as Record<string, any>).company_id !== 'system' && this._activeTab === 'model_scoring') {
+        if (companyId !== null && companyId !== 'system' && this._activeTab === 'model_scoring') {
             this._activeTab = 'company';
         }
-        if (company && company !== this._lastSeededCompanyRef) {
+        if (isPlainRecord(company) && company !== this._lastSeededCompanyRef) {
             this._lastSeededCompanyRef = company;
             this._seedDraft(company);
         }
@@ -749,9 +796,9 @@ export class FrontendSettingsPage extends PlatformPage {
     }
 
     _seedDraft(company: Record<string, any>) {
-        this._name = company.name || '';
-        this._monthlyBudget = Number(company.monthly_budget || 0);
-        const metadata = company.metadata || {};
+        this._name = displayText(company.name);
+        this._monthlyBudget = budgetNumber(company.monthly_budget);
+        const metadata = recordField(company.metadata, 'settings: company.metadata');
         this._metadataJson = JSON.stringify(metadata, null, 2);
     }
 
@@ -800,7 +847,7 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _save() {
         let metadata = null;
-        const trimmed = (this._metadataJson || '').trim();
+        const trimmed = this._metadataJson.trim();
         if (trimmed) {
             try {
                 const parsed = JSON.parse(trimmed);
@@ -811,22 +858,22 @@ export class FrontendSettingsPage extends PlatformPage {
                     this._metadataError = this.t('settings_page.metadata_invalid');
                     return;
                 }
-            } catch {
+            } catch (err) {
+                if (!(err instanceof SyntaxError)) throw err;
                 this._metadataError = this.t('settings_page.metadata_invalid');
                 return;
             }
         }
-        const body = {
+        const body: Record<string, unknown> = {
             name: this._name.trim(),
             monthly_budget: this._monthlyBudget,
         };
-        if (metadata !== null) (body as Record<string, any>).metadata = metadata;
+        if (metadata !== null) body.metadata = metadata;
         this._update.run(body);
     }
 
     _renderTabs() {
-        const company = this._load.lastResult;
-        const isSystem = company && (company as Record<string, any>).company_id === 'system';
+        const isSystem = companyIdOf(this._load.lastResult) === 'system';
         const tabs = [
             { id: 'company', label: this.t('settings_page.tab_company') },
             { id: 'ai_providers', label: this.t('settings_page.tab_ai_providers') },
@@ -860,10 +907,10 @@ export class FrontendSettingsPage extends PlatformPage {
                 <section>
                     <h3>${this.t('settings_page.section_company')}</h3>
                     <div class="info-grid">
-                        <dt>${this.t('settings_page.company_id')}</dt><dd>${company.company_id || ''}</dd>
-                        <dt>${this.t('settings_page.company_status')}</dt><dd>${company.status || ''}</dd>
+                        <dt>${this.t('settings_page.company_id')}</dt><dd>${displayText(company.company_id)}</dd>
+                        <dt>${this.t('settings_page.company_status')}</dt><dd>${displayText(company.status)}</dd>
                         <dt>${this.t('settings_page.company_owner')}</dt><dd>${company.owner_user_id ? html`<platform-user-chip user-id=${company.owner_user_id} size="sm"></platform-user-chip>` : ''}</dd>
-                        <dt>${this.t('settings_page.tariff_plan')}</dt><dd>${company.tariff_plan || ''}</dd>
+                        <dt>${this.t('settings_page.tariff_plan')}</dt><dd>${displayText(company.tariff_plan)}</dd>
                         <dt>${this.t('settings_page.created_at')}</dt><dd>${company.created_at ? new Date(company.created_at).toLocaleString() : ''}</dd>
                     </div>
                 </section>
@@ -887,7 +934,7 @@ export class FrontendSettingsPage extends PlatformPage {
                             type="string"
                             mode="view"
                             label=${this.t('settings_page.label_subdomain')}
-                            .value=${company.subdomain || ''}
+                            .value=${displayText(company.subdomain)}
                         ></platform-field>
                         <platform-field
                             type="integer"
@@ -933,14 +980,20 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
-    _capabilityDraft(cap: Record<string, any>) {
-        return this._capabilityDrafts[cap.capability] || {
-            provider: cap.provider || (cap.platform_default_provider || ''),
+    _capabilityDraft(cap: Record<string, unknown>) {
+        if (typeof cap.capability !== 'string' || cap.capability.length === 0) {
+            throw new Error('settings: capability name required');
+        }
+        const saved = this._capabilityDrafts[cap.capability];
+        if (saved !== undefined) return saved;
+        const provider = displayText(cap.provider);
+        return {
+            provider: provider.length > 0 ? provider : displayText(cap.platform_default_provider),
             api_key: '',
-            base_url: cap.base_url || '',
-            model: cap.model || '',
-            dimension: cap.dimension || null,
-            mrl_output_dimension: cap.mrl_output_dimension || null,
+            base_url: displayText(cap.base_url),
+            model: displayText(cap.model),
+            dimension: missingAsNull(cap.dimension),
+            mrl_output_dimension: missingAsNull(cap.mrl_output_dimension),
         };
     }
 
@@ -957,16 +1010,16 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!draft || !draft.provider) {
             return;
         }
-        const body = { capability, provider: draft.provider };
-        if (draft.api_key) (body as Record<string, any>).api_key = draft.api_key;
-        if (draft.base_url) (body as Record<string, any>).base_url = draft.base_url;
-        if (draft.model) (body as Record<string, any>).model = draft.model;
-        if (draft.dimension) (body as Record<string, any>).dimension = draft.dimension;
-        if (draft.mrl_output_dimension) (body as Record<string, any>).mrl_output_dimension = draft.mrl_output_dimension;
-        if (draft.folder_id) (body as Record<string, any>).folder_id = draft.folder_id;
-        if (draft.extra_request_headers) (body as Record<string, any>).extra_request_headers = draft.extra_request_headers;
+        const body: Record<string, unknown> = { capability, provider: draft.provider };
+        if (draft.api_key) body.api_key = draft.api_key;
+        if (draft.base_url) body.base_url = draft.base_url;
+        if (draft.model) body.model = draft.model;
+        if (draft.dimension) body.dimension = draft.dimension;
+        if (draft.mrl_output_dimension) body.mrl_output_dimension = draft.mrl_output_dimension;
+        if (draft.folder_id) body.folder_id = draft.folder_id;
+        if (draft.extra_request_headers) body.extra_request_headers = draft.extra_request_headers;
         if (Array.isArray(draft.fallback_models) && draft.fallback_models.length > 0) {
-            (body as Record<string, any>).fallback_models = draft.fallback_models;
+            body.fallback_models = draft.fallback_models;
         }
         this._capPut.run(body);
     }
@@ -1009,7 +1062,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         .resolved=${info.resolved && typeof info.resolved === 'object' ? info.resolved : {}}
                         .profiles=${Array.isArray(info.profiles) ? info.profiles : []}
                         .budgets=${Array.isArray(info.budgets) ? info.budgets : []}
-                        .clearable=${configured || Object.keys(this._llmContextDraft || {}).length > 0}
+                        .clearable=${configured || Object.keys(this._llmContextDraft).length > 0}
                         @change=${(e: CustomEvent) => {
                             const cfg = e.detail && e.detail.config && typeof e.detail.config === 'object'
                                 ? e.detail.config
@@ -1040,10 +1093,19 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
-    _renderCapabilityCard(cap: Record<string, any>, catalog: Record<string, any>) {
+    _renderCapabilityCard(cap: Record<string, unknown>, catalog: Record<string, unknown>) {
         const draft = this._capabilityDraft(cap);
-        const providerCatalog = catalog[cap.capability] || [];
+        const capabilityName = cap.capability;
+        if (typeof capabilityName !== 'string' || capabilityName.length === 0) {
+            throw new Error('settings: capability name required');
+        }
+        const providerCatalog = arrayField(catalog[capabilityName], `settings: catalog.${capabilityName}`);
         const platformModel = this._platformModelForCapability(cap, draft);
+        const providerName = displayText(draft.provider);
+        const companyPaid = displayText(draft.api_key).length > 0
+            || displayText(draft.base_url).length > 0
+            || providerName.startsWith('custom:');
+        const keyMasked = displayText(cap.key_masked);
         return html`
             <div class="capability-card">
                 <div class="header">
@@ -1056,14 +1118,14 @@ export class FrontendSettingsPage extends PlatformPage {
                     .config=${draft}
                     .providerCatalog=${providerCatalog}
                     .platformModel=${platformModel}
-                    .costOrigin=${cap.configured ? (draft.api_key || draft.base_url || (draft.provider || '').startsWith('custom:') ? 'company' : 'platform') : null}
-                    .keyMasked=${cap.key_masked || null}
+                    .costOrigin=${cap.configured ? (companyPaid ? 'company' : 'platform') : null}
+                    .keyMasked=${keyMasked.length > 0 ? keyMasked : null}
                     .clearable=${cap.configured}
-                    @change=${(e: CustomEvent) => this._onCapabilityChange(cap.capability, e)}
-                    @clear-override=${() => this._clearCapability(cap.capability)}
+                    @change=${(e: CustomEvent) => this._onCapabilityChange(capabilityName, e)}
+                    @clear-override=${() => this._clearCapability(capabilityName)}
                 ></platform-llm-config-editor>
                 <div class="actions">
-                    <glass-button size="sm" @click=${() => this._saveCapability(cap.capability)}>
+                    <glass-button size="sm" @click=${() => this._saveCapability(capabilityName)}>
                         ${this.t('settings_page.ai_providers.save_capability')}
                     </glass-button>
                 </div>
@@ -1072,12 +1134,12 @@ export class FrontendSettingsPage extends PlatformPage {
     }
 
     _platformModelForCapability(cap: Record<string, any>, draft: Record<string, any>) {
-        const platformModel = cap.platform_default_model || '';
-        if (!platformModel) {
+        const platformModel = displayText(cap.platform_default_model);
+        if (platformModel.length === 0) {
             return '';
         }
-        const provider = (draft && draft.provider) || '';
-        if (provider !== (cap.platform_default_provider || '')) {
+        const provider = displayText(draft.provider);
+        if (provider !== displayText(cap.platform_default_provider)) {
             return '';
         }
         if (provider !== 'humanitec_llm') {
@@ -1090,8 +1152,8 @@ export class FrontendSettingsPage extends PlatformPage {
         return platformModel;
     }
 
-    _normalizeCustomProviderRow(raw: Record<string, any>) {
-        if (!raw || typeof raw !== 'object') {
+    _normalizeCustomProviderRow(raw: unknown) {
+        if (!isPlainRecord(raw)) {
             return {
                 id: '',
                 label: '',
@@ -1142,7 +1204,7 @@ export class FrontendSettingsPage extends PlatformPage {
         this.openModal('frontend.ai_custom_provider_create', { initialProvider: null });
     }
 
-    _openCustomProviderEdit(raw: Record<string, any>) {
+    _openCustomProviderEdit(raw: unknown) {
         const row = this._normalizeCustomProviderRow(raw);
         this.openModal('frontend.ai_custom_provider_create', { initialProvider: row });
     }
@@ -1152,9 +1214,12 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!data) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
-        const capabilities = (data as Record<string, any>).capabilities || [];
-        const customProviders = (data as Record<string, any>).custom_providers || [];
-        const catalog = (data as Record<string, any>).catalog || {};
+        if (!isPlainRecord(data)) {
+            throw new Error('settings: ai providers payload must be an object');
+        }
+        const capabilities = arrayField(data.capabilities, 'settings: capabilities');
+        const customProviders = arrayField(data.custom_providers, 'settings: custom_providers');
+        const catalog = recordField(data.catalog, 'settings: catalog');
         return html`
             ${this._renderLlmContextCard(data)}
 
@@ -1170,13 +1235,14 @@ export class FrontendSettingsPage extends PlatformPage {
                     ? html`<div class="empty">${this.t('settings_page.ai_providers.no_custom_providers')}</div>`
                     : html`
                           <div class="custom-provider-list">
-                              ${customProviders.map((raw: Record<string, any>) => {
+                              ${customProviders.map((raw) => {
+                                  if (!isPlainRecord(raw)) throw new Error('settings: custom provider must be an object');
                                   const p = this._normalizeCustomProviderRow(raw);
-                                  const title = p.label || p.id || '—';
+                                  const title = p.label.length > 0 ? p.label : (p.id.length > 0 ? p.id : '—');
                                   const ref = p.id ? `custom:${p.id}` : '—';
-                                  const url = p.base_url || '—';
+                                  const url = p.base_url.length > 0 ? p.base_url : '—';
                                   const caps = p.capabilities.length ? p.capabilities.join(', ') : '—';
-                                  const km = p.key_masked || '—';
+                                  const km = p.key_masked.length > 0 ? p.key_masked : '—';
                                   return html`
                                       <div class="custom-provider-card">
                                           <div class="meta">
@@ -1213,7 +1279,10 @@ export class FrontendSettingsPage extends PlatformPage {
                 <h3>${this.t('settings_page.ai_providers.section_capabilities')}</h3>
                 <div class="section-help">${this.t('settings_page.ai_providers.section_capabilities_help')}</div>
                 <div class="two-col">
-                    ${capabilities.map((cap: Record<string, any>) => this._renderCapabilityCard(cap, catalog))}
+                    ${capabilities.map((cap) => {
+                        if (!isPlainRecord(cap)) throw new Error('settings: capability must be an object');
+                        return this._renderCapabilityCard(cap, catalog);
+                    })}
                 </div>
             </section>
         `;
@@ -1257,7 +1326,7 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!draft || typeof draft !== 'object') {
             return;
         }
-        const body = {
+        const body: Record<string, unknown> = {
             provider_id: providerId,
             enabled: draft.enabled === true,
             credential_source: draft.credential_source === 'company' ? 'company' : 'platform',
@@ -1269,7 +1338,7 @@ export class FrontendSettingsPage extends PlatformPage {
             include_answer: typeof draft.include_answer === 'boolean' ? draft.include_answer : null,
         };
         if (draft.credential_source === 'company' && draft.api_key && String(draft.api_key).trim()) {
-            (body as Record<string, any>).api_key = String(draft.api_key).trim();
+            body.api_key = String(draft.api_key).trim();
         }
         this._searchProviderPut.run(body);
     }
@@ -1375,10 +1444,7 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _renderSearchProviderCard(provider: Record<string, any>) {
         const draft = this._searchProviderDraft(provider);
-        const meta = (SEARCH_PROVIDER_CATALOG as Record<string, { label: string; logo: string; tone: string; docs_url: string }>)[provider.provider_id];
-        if (!meta) {
-            throw new Error(`settings-page: unknown search provider ${provider.provider_id}`);
-        }
+        const meta = searchProviderMeta(provider.provider_id);
         const { label, logo, tone } = meta;
         const description = this.t(`settings_page.search_providers.catalog.${provider.provider_id}.description`);
         const tooltip = this.t(`settings_page.search_providers.catalog.${provider.provider_id}.tooltip`);
@@ -1517,7 +1583,7 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!data) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
-        const providers = Array.isArray((data as Record<string, any>).providers) ? (data as Record<string, any>).providers : [];
+        const providers = isPlainRecord(data) && Array.isArray(data.providers) ? data.providers : [];
         const order = Array.isArray(this._searchProviderOrder) ? this._searchProviderOrder : [];
         const orderedProviders = order
              .map((id: string) => providers.find((provider: Record<string, any>) => provider && provider.provider_id === id))
@@ -1625,9 +1691,9 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _createModelScore() {
         const draft = this._modelScoreNew;
-        const provider = String(draft.provider || '').trim();
-        const modelId = String(draft.model_id || '').trim();
-        const capability = String(draft.capability || '').trim();
+        const provider = displayText(draft.provider).trim();
+        const modelId = displayText(draft.model_id).trim();
+        const capability = displayText(draft.capability).trim();
         if (!capability || !provider || !modelId) {
             return;
         }
@@ -1708,13 +1774,13 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!result) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
-        if (!Array.isArray((result as Record<string, any>).items)) {
+        if (!isPlainRecord(result) || !Array.isArray(result.items)) {
             throw new Error('model scoring: items must be an array');
         }
-        if (!Array.isArray((result as Record<string, any>).providers)) {
+        if (!Array.isArray(result.providers)) {
             throw new Error('model scoring: providers must be an array');
         }
-        const items = (result as Record<string, any>).items;
+        const items = result.items;
         const visibleItems = this._filteredScoreItems(items);
         return html`
             <section>
@@ -1752,7 +1818,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         >${this.t('settings_page.model_scoring.refresh_cache')}</glass-button>
                     </div>
                 </div>
-                <llm-provider-status-strip .providers=${(result as Record<string, any>).providers}></llm-provider-status-strip>
+                <llm-provider-status-strip .providers=${result.providers}></llm-provider-status-strip>
                 <div class="section-help">${this.t('settings_page.model_scoring.providers_help')}</div>
                 ${items.length === 0
                     ? html`<div class="empty">${this.t('settings_page.model_scoring.empty')}</div>`
@@ -1956,11 +2022,11 @@ export class FrontendSettingsPage extends PlatformPage {
 
     async _createAgentPairingCode() {
         const result = await this._agentPairing.run();
-        if (!result || typeof result !== 'object') {
+        if (!isPlainRecord(result)) {
             return;
         }
-        const pairingCode = (result as Record<string, any>).pairing_code;
-        const expiresIn = (result as Record<string, any>).expires_in_seconds;
+        const pairingCode = result.pairing_code;
+        const expiresIn = result.expires_in_seconds;
         if (typeof pairingCode !== 'string' || typeof expiresIn !== 'number') {
             throw new Error('agent pairing: invalid response shape');
         }
@@ -2037,11 +2103,11 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _renderAgentReleaseBanner() {
         const releasePayload = this._agentReleases.lastResult;
-        if (!releasePayload || typeof releasePayload !== 'object') {
+        if (!isPlainRecord(releasePayload)) {
             return '';
         }
-        if ((releasePayload as Record<string, any>).ready === true) {
-            const latestTag = (releasePayload as Record<string, any>).latest_tag;
+        if (releasePayload.ready === true) {
+            const latestTag = releasePayload.latest_tag;
             const tagLabel = typeof latestTag === 'string' && latestTag ? latestTag : '';
             return html`
                 <div class="section-help">
@@ -2049,16 +2115,16 @@ export class FrontendSettingsPage extends PlatformPage {
                 </div>
             `;
         }
-        const detail = (releasePayload as Record<string, any>).detail;
+        const detail = releasePayload.detail;
         const detailText = typeof detail === 'string' && detail ? detail : this.t('settings_page.agent.release_not_ready');
         return html`<div class="section-help">${detailText}</div>`;
     }
 
-    _agentAuditEventLabel(eventType: Record<string, any>) {
-        if (typeof eventType !== 'string' || !eventType) {
+    _agentAuditEventLabel(eventType: unknown) {
+        if (typeof eventType !== 'string' || eventType.length === 0) {
             throw new Error('agent audit event_type required');
         }
-        const key = `settings_page.agent.audit_event_${(eventType as Record<string, any>).replace(/\./g, '_')}`;
+        const key = `settings_page.agent.audit_event_${eventType.replace(/\./g, '_')}`;
         const translated = this.t(key);
         if (translated !== key) {
             return translated;
@@ -2069,7 +2135,7 @@ export class FrontendSettingsPage extends PlatformPage {
     _renderAgentAuditSection() {
         const auditPayload = this._agentAudit.lastResult;
         const auditBusy = this._agentAudit.busy;
-        const items = auditPayload && Array.isArray((auditPayload as Record<string, any>).items) ? (auditPayload as Record<string, any>).items : [];
+        const items = isPlainRecord(auditPayload) && Array.isArray(auditPayload.items) ? auditPayload.items : [];
         return html`
             <section>
                 <h3>${this.t('settings_page.agent.audit_title')}</h3>
@@ -2079,19 +2145,25 @@ export class FrontendSettingsPage extends PlatformPage {
                     : ''}
                 ${!auditBusy && items.length > 0 ? html`
                     <div class="custom-provider-list">
-                        ${items.map((event: Record<string, any>) => html`
+                        ${items.map((event) => {
+                            if (!isPlainRecord(event)) {
+                                throw new Error('settings-page: audit event must be an object');
+                            }
+                            const recordedAt = event.recorded_at;
+                            const recordedLabel = typeof recordedAt === 'string' || typeof recordedAt === 'number'
+                                ? new Date(recordedAt).toLocaleString()
+                                : '';
+                            return html`
                             <div class="custom-provider-card">
                                 <div class="meta">
-                                    <div class="title-line">${this._agentAuditEventLabel((event as Record<string, any>).event_type)}</div>
-                                    <div class="ref-line">${event.detail || ''}</div>
+                                    <div class="title-line">${this._agentAuditEventLabel(event.event_type)}</div>
+                                    <div class="ref-line">${displayText(event.detail)}</div>
                                     <div class="capability-line">
-                                        ${(event as Record<string, any>).recorded_at
-                                            ? new Date((event as Record<string, any>).recorded_at).toLocaleString()
-                                            : ''}
+                                        ${recordedLabel}
                                     </div>
                                 </div>
                             </div>
-                        `)}
+                        `; })}
                     </div>
                 ` : ''}
             </section>
@@ -2100,7 +2172,7 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _renderAgentTab() {
         const devicesPayload = this._agentDevices.lastResult;
-        const items = devicesPayload && Array.isArray((devicesPayload as Record<string, any>).items) ? (devicesPayload as Record<string, any>).items : [];
+        const items = isPlainRecord(devicesPayload) && Array.isArray(devicesPayload.items) ? devicesPayload.items : [];
         const pairingBusy = this._agentPairing.busy;
         const devicesBusy = this._agentDevices.busy;
 
@@ -2206,10 +2278,10 @@ export class FrontendSettingsPage extends PlatformPage {
                 </section>
             `;
         }
-        if (typeof payload !== 'object' || !Array.isArray((payload as Record<string, any>).items)) {
+        if (!isPlainRecord(payload) || !Array.isArray(payload.items)) {
             throw new Error('flows/agent_toolkits: items[] required');
         }
-        const toolkits = (payload as Record<string, any>).items;
+        const toolkits = payload.items;
         return html`
             <section>
                 <h3>${this.t('settings_page.agent.toolkits_title')}</h3>
@@ -2283,13 +2355,16 @@ export class FrontendSettingsPage extends PlatformPage {
 
     override render(): TemplateResult {
         const company = this._load.lastResult;
-        if (!company) {
+        if (company === null || company === undefined) {
             return html`
                 <page-header title=${this.t('settings_page.title')}></page-header>
                 <div class="page-body">
                 <div class="empty"><glass-spinner></glass-spinner></div>
                 </div>
             `;
+        }
+        if (!isPlainRecord(company)) {
+            throw new Error('settings-page: company must be an object');
         }
         return html`
             <page-header title=${this.t('settings_page.title')}></page-header>

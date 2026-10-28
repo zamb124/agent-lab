@@ -47,7 +47,7 @@ class RuleService:
         warehouse_id: str | None,
     ) -> list[StockReorderRule]:
         """Каталог min/max-правил — «полка не должна пустеть»."""
-        return await StockReorderRule.list_for_company(
+        return await StockReorderRule.list_by_rule_id(
             company_id, warehouse_id=warehouse_id
         )
 
@@ -101,7 +101,7 @@ class RuleService:
                 raise _not_found(
                     "Route not found", "route_not_found"
                 )
-        return await StockReorderRule.create_rule(
+        return await StockReorderRule.create(
             company_id=company_id,
             warehouse_id=warehouse_id,
             product_id=product_id,
@@ -121,7 +121,7 @@ class RuleService:
             raise _not_found(
                 "Reorder rule not found", "reorder_rule_not_found"
             )
-        await StockReorderRule.set_active(company_id, rule_id, is_active)
+        await StockReorderRule.update_is_active_and_updated_at(company_id, rule_id, is_active)
         rule.is_active = is_active
         return rule
 
@@ -134,7 +134,7 @@ class RuleService:
         warehouse = await StockWarehouse.by_id(company_id, warehouse_id)
         if warehouse is None:
             raise _not_found("Warehouse not found", "warehouse_not_found")
-        return await StockPutawayRule.list_for_warehouse(
+        return await StockPutawayRule.list_by_sequence_and_rule_id_for_warehouse(
             company_id, warehouse_id
         )
 
@@ -200,7 +200,7 @@ class RuleService:
                 raise _not_found(
                     "Product not found", "product_not_found"
                 )
-        return await StockPutawayRule.create_rule(
+        return await StockPutawayRule.create(
             company_id=company_id,
             warehouse_id=warehouse_id,
             location_in_id=location_in_id,
@@ -249,7 +249,7 @@ class RuleService:
                 raise _not_found(
                     "Product not found", "product_not_found"
                 )
-        fresh = await StockPutawayRule.update_rule(
+        fresh = await StockPutawayRule.update_locations_filters_and_sequence(
             company_id,
             rule_id,
             location_in_id=location_in_id,
@@ -271,7 +271,7 @@ class RuleService:
             raise _not_found(
                 "Putaway rule not found", "putaway_rule_not_found"
             )
-        await StockPutawayRule.set_active(company_id, rule_id, is_active)
+        await StockPutawayRule.update_is_active(company_id, rule_id, is_active)
         rule.is_active = is_active
         return rule
 
@@ -298,7 +298,7 @@ class RuleService:
         offset: int = 0,
     ) -> list[StockRoute]:
         """Каталог маршрутов компании, опционально — по складу."""
-        items = await StockRoute.list_for_company(
+        items = await StockRoute.list_active_by_name(
             company_id, warehouse_id=warehouse_id, limit=limit + offset
         )
         return items[offset:]
@@ -353,7 +353,7 @@ class RuleService:
                     "Route step operation type belongs to another warehouse",
                     "route_step_warehouse_mismatch",
                 )
-        return await StockRoute.create_route(
+        return await StockRoute.create(
             company_id=company_id,
             warehouse_id=warehouse_id,
             name=name,

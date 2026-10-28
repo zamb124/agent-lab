@@ -19,19 +19,15 @@ const ALL_NAMESPACES_SENTINEL = '__ALL__';
  * @returns {Record<string, string> | null}
  */
 function readNamespaceMap(): Record<string, string> | null {
-    try {
-        const raw = storageGet(LAST_NAMESPACE_STORAGE_KEY);
-        if (!raw) {
-            return null;
-        }
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            return null;
-        }
-        return parsed;
-    } catch {
+    const raw = storageGet(LAST_NAMESPACE_STORAGE_KEY);
+    if (!raw) {
         return null;
     }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+    }
+    return parsed;
 }
 
 /**
@@ -78,7 +74,7 @@ export function getEffectiveCrmNamespaceApiFilter(companyId: string, selectionBy
             : {};
     if (Object.prototype.hasOwnProperty.call(map, cid)) {
         const s = map[cid];
-        return s === 'all' ? null : (s ?? null);
+        return s === undefined || s === 'all' ? null : s;
     }
     const sidebar = getPlatformNamespaceSidebarSelection(cid);
     return sidebar === 'all' ? null : sidebar;

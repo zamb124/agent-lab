@@ -91,7 +91,7 @@ class StockWave(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_warehouse(
+    async def list_by_created_at_desc_for_warehouse(
         cls,
         company_id: str,
         warehouse_id: str,
@@ -100,6 +100,7 @@ class StockWave(PlatformModel):
         limit: int = 100,
         offset: int = 0,
     ) -> list[Self]:
+        """Окно волн склада, ORDER BY created_at DESC. state равный None не фильтрует. limit по умолчанию 100, offset по умолчанию 0."""
         q = cls.objects.filter(
             company_id=company_id, warehouse_id=warehouse_id
         )
@@ -293,13 +294,8 @@ class StockWave(PlatformModel):
         )
 
     @classmethod
-    async def refresh_state(cls, company_id: str, wave_id: str) -> None:
-        """Пересчёт состояния по дочерним строкам — вызывается после done.
-
-        Все строки закрыты (done/cancelled) → волна ``done``. Дешёвая
-        денормализация для пульса, без собственной транзакции: читает
-        то, что уже закоммичено.
-        """
+    async def mark_done_when_no_open_lines(cls, company_id: str, wave_id: str) -> None:
+        """Открытые строки не меняют волну. Если открытых нет, волна в RELEASED становится DONE. Своей транзакции нет: читает уже закоммиченные строки."""
         from apps.stock.models.move_line import StockMoveLine
 
         open_count = await StockMoveLine.objects.filter(

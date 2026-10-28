@@ -326,13 +326,11 @@ describe('ws.effect: push frames', () => {
         await expect(promise).resolves.toEqual({ ok: true });
     });
 
-    it('publication с невалидным типом игнорируется без падения', async () => {
+    it('publication с невалидным типом бросает и не попадает в bus', async () => {
         const dispatched = [];
         await _connect(dispatched);
         const client = MockCentrifuge.latest();
-        const before = dispatched.length;
-        client.emitPublication({ type: 'NotValid', payload: null });
-        expect(dispatched.length).toBeGreaterThan(before);
+        expect(() => client.emitPublication({ type: 'NotValid', payload: null })).toThrow(/violates contract/);
         expect(dispatched.find((d) => d.type === 'NotValid')).toBeUndefined();
     });
 });

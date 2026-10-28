@@ -29,7 +29,7 @@ class SearchIndexService:
 
     async def get(self, search_index_id: str, *, company_id: str) -> SearchIndexDefinition:
         slug = _slug(search_index_id)
-        row = await SearchIndexDefinition.find_in_company(company_id, slug)
+        row = await SearchIndexDefinition.by_search_index_id(company_id, slug)
         if row is None:
             raise SearchIndexNotFoundError(slug)
         return row

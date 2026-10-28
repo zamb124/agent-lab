@@ -44,7 +44,7 @@ class WorkItemComment(PlatformModel):
         return await cls.objects.create(instance=comment)
 
     @classmethod
-    async def list_comments(cls, company_id: str, work_item_id: str) -> list[Self]:
+    async def list_for_work_item(cls, company_id: str, work_item_id: str) -> list[Self]:
         return await (
             cls.objects.filter(company_id=company_id, work_item_id=work_item_id)
             .order_by("created_at")

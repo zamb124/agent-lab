@@ -85,7 +85,7 @@ async def test_resolve_creates_user_and_mapping(
 
 
 @pytest.mark.asyncio
-async def test_find_all_by_email_ci_finds_mixed_case(
+async def test_list_by_email_ci_finds_mixed_case(
     crm_di,
     unique_id: str,
 ) -> None:
@@ -98,5 +98,44 @@ async def test_find_all_by_email_ci_finds_mixed_case(
         active_company_id="",
     )
     _ = await User.set(user)
-    found = await User.find_all_by_email_ci(email_lower)
+    found = await User.list_by_email_ci(email_lower)
     assert any(candidate.user_id == user.user_id for candidate in found)
+
+
+@pytest.mark.asyncio
+async def test_list_by_query_matches_name_or_email_in_user_id_order(
+    crm_di,
+    unique_id: str,
+) -> None:
+    token = f"qtok{unique_id}"
+    first = User(
+        user_id=f"user_a_{unique_id}",
+        name=f"Alpha {token}",
+        emails=[f"other_{unique_id}@test.local"],
+        companies={},
+        active_company_id="",
+    )
+    second = User(
+        user_id=f"user_b_{unique_id}",
+        name="Beta",
+        emails=[f"{token}@test.local"],
+        companies={},
+        active_company_id="",
+    )
+    outsider = User(
+        user_id=f"user_c_{unique_id}",
+        name="Gamma",
+        emails=[f"gamma_{unique_id}@test.local"],
+        companies={},
+        active_company_id="",
+    )
+    _ = await User.set(first)
+    _ = await User.set(second)
+    _ = await User.set(outsider)
+
+    found = await User.list_by_query(token, limit=20)
+    assert [row.user_id for row in found] == [first.user_id, second.user_id]
+    limited = await User.list_by_query(token, limit=1)
+    assert [row.user_id for row in limited] == [first.user_id]
+    with pytest.raises(ValueError, match="limit must be >= 1"):
+        _ = await User.list_by_query(token, limit=0)

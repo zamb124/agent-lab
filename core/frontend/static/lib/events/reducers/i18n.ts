@@ -20,6 +20,7 @@ export interface I18nState {
     error: string | null;
 }
 import { resolveInitialUiLocale } from '../../utils/i18n-initial-locale.js';
+import { isPlainRecord, payloadFields, stringField } from '../payload.js';
 
 // До ответа GET /api/i18n/{locale}: только common.loading.
 // Не считать !!translations[locale] признаком полного бандла.
@@ -54,18 +55,18 @@ export function i18nReducer(state: I18nState = initialI18nState, event: Platform
             return { ...state, loading: true, error: null };
 
         case CoreEvents.I18N_LOCALE_LOADED: {
-            const p = (event.payload || {}) as { locale?: unknown; bundle?: unknown };
-            if (typeof p.locale !== 'string' || !p.locale || !p.bundle || typeof p.bundle !== 'object') return state;
+            const p = payloadFields(event);
+            if (typeof p.locale !== 'string' || p.locale.length === 0 || !isPlainRecord(p.bundle)) return state;
             return {
                 ...state,
                 loading: false,
                 error: null,
-                translations: { ...state.translations, [p.locale]: p.bundle as Record<string, unknown> },
+                translations: { ...state.translations, [p.locale]: p.bundle },
             };
         }
 
         case CoreEvents.I18N_LOCALE_CHANGED: {
-            const p = (event.payload || {}) as { locale?: unknown; default_namespace?: unknown };
+            const p = payloadFields(event);
             if (typeof p.locale !== 'string' || !p.locale) return state;
             return {
                 ...state,
@@ -74,17 +75,17 @@ export function i18nReducer(state: I18nState = initialI18nState, event: Platform
             };
         }
 
-        case CoreEvents.I18N_LOCALE_FAILED:
+        case CoreEvents.I18N_LOCALE_FAILED: {
+            const message = stringField(payloadFields(event).message);
             return {
                 ...state,
                 loading: false,
-                error: typeof ((event.payload || {}) as { message?: unknown }).message === 'string'
-                    ? ((event.payload || {}) as { message?: string }).message!
-                    : 'i18n_error',
+                error: message === null ? 'i18n_error' : message,
             };
+        }
 
         case I18N_NAMESPACE_SET_REQUESTED: {
-            const ns = ((event.payload || {}) as { namespace?: unknown }).namespace;
+            const ns = (payloadFields(event)).namespace;
             if (typeof ns !== 'string' || ns === state.defaultNamespace) return state;
             return { ...state, defaultNamespace: ns };
         }

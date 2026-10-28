@@ -8,6 +8,7 @@ import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../platform-button.js';
 import '../glass-spinner.js';
+import { isPlainRecord } from '../../events/payload.js';
 import type { OpController } from '../../base/use-resource.js';
 
 interface ResolvedVariableBase {
@@ -23,13 +24,37 @@ interface ResolvedVariableItem {
     payload?: { base?: ResolvedVariableBase } | null;
 }
 
+function isResolvedVariableItem(value: unknown): value is ResolvedVariableItem {
+    if (!isPlainRecord(value)) return false;
+    if (value.variable_key !== undefined && typeof value.variable_key !== 'string') return false;
+    if (value.resolvable !== undefined && typeof value.resolvable !== 'boolean') return false;
+    if (value.secret !== undefined && typeof value.secret !== 'boolean') return false;
+    if (value.payload === undefined || value.payload === null) return true;
+    if (!isPlainRecord(value.payload)) return false;
+    return value.payload.base === undefined || isPlainRecord(value.payload.base);
+}
+
+function resolvedItems(response: unknown): ResolvedVariableItem[] {
+    if (!isPlainRecord(response) || !Array.isArray(response.items)) {
+        throw new Error('platform-variable-resolve-preview: items array required');
+    }
+    const items: ResolvedVariableItem[] = [];
+    for (const item of response.items) {
+        if (!isResolvedVariableItem(item)) {
+            throw new Error('platform-variable-resolve-preview: item must be an object');
+        }
+        items.push(item);
+    }
+    return items;
+}
+
 function _stringifyResolvedItem(item: ResolvedVariableItem): string {
     if (!item.resolvable || !item.payload || !item.payload.base) {
         return '';
     }
     const base = item.payload.base;
     if (base.value_kind === 'expression') {
-        return base.expression ?? '';
+        return base.expression === undefined || base.expression === null ? '' : base.expression;
     }
     const value = base.value;
     if (value === null || value === undefined) {
@@ -111,9 +136,7 @@ export class PlatformVariableResolvePreview extends PlatformElement {
                 namespace: this._namespace.trim() === '' ? null : this._namespace.trim(),
                 channel: this._channel.trim() === '' ? null : this._channel.trim(),
             });
-            const resp = (response ?? null) as { items?: unknown } | null;
-            const items: ResolvedVariableItem[] =
-                resp && Array.isArray(resp.items) ? (resp.items as ResolvedVariableItem[]) : [];
+            const items = response === null ? [] : resolvedItems(response);
             if (this.variableKey) {
                 this._items = items.filter((item: ResolvedVariableItem) => item.variable_key === this.variableKey);
             } else {

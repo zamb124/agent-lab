@@ -179,7 +179,7 @@ async def test_personal_unbind_by_owner_deletes_connection(
         company_id=company_id,
     )
     assert await CompanyMailConnection.get(connection_id) is None
-    assert await MailboxBinding.find_in_company(company_id, binding.mailbox_binding_id) is None
+    assert await MailboxBinding.by_mailbox_binding_id(company_id, binding.mailbox_binding_id) is None
 
 
 @pytest.mark.asyncio

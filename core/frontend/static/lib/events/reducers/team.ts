@@ -9,6 +9,7 @@
  */
 
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, payloadFields } from '../payload.js';
 
 export interface TeamMemberRecord extends Record<string, unknown> {
     user_id?: string;
@@ -42,34 +43,53 @@ export const initialTeamState: TeamState = Object.freeze({
     inviteLinks: {},
 });
 
+function unknownItems(value: unknown, eventType: string): unknown[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`${eventType}: payload.items must be an array`);
+    }
+    const items: unknown[] = [];
+    for (const item of value) items.push(item);
+    return items;
+}
+
+function isTeamMember(value: unknown): value is TeamMemberRecord {
+    if (!isPlainRecord(value)) return false;
+    const userId = value.user_id;
+    return userId === undefined || typeof userId === 'string';
+}
+
+function memberRecords(value: unknown, eventType: string): TeamMemberRecord[] {
+    const records: TeamMemberRecord[] = [];
+    for (const item of unknownItems(value, eventType)) {
+        if (!isTeamMember(item)) {
+            throw new Error(`${eventType}: payload item must be a member object`);
+        }
+        records.push(item);
+    }
+    return records;
+}
+
 export function teamReducer(state: TeamState = initialTeamState, event: PlatformEvent): TeamState {
     switch (event.type) {
         case TEAM_EVENTS.MEMBERS_LOAD_REQUESTED:
             return { ...state, loading: true };
         case TEAM_EVENTS.MEMBERS_LOADED: {
-            const items = ((event.payload || {}) as { items?: unknown }).items;
-            if (!Array.isArray(items)) {
-                throw new Error(`${event.type}: payload.items must be an array`);
-            }
-            return { ...state, loading: false, members: items as TeamMemberRecord[] };
+            return { ...state, loading: false, members: memberRecords(payloadFields(event).items, event.type) };
         }
         case TEAM_EVENTS.MEMBERS_LOAD_FAILED:
             return { ...state, loading: false };
         case TEAM_EVENTS.SEARCH_LOADED: {
-            const p = (event.payload || {}) as { q?: unknown; items?: unknown };
+            const p = payloadFields(event);
             if (typeof p.q !== 'string' || !p.q) return state;
-            if (!Array.isArray(p.items)) {
-                throw new Error(`${event.type}: payload.items must be an array`);
-            }
-            return { ...state, searchByQ: { ...state.searchByQ, [p.q]: p.items as TeamMemberRecord[] } };
+            return { ...state, searchByQ: { ...state.searchByQ, [p.q]: memberRecords(p.items, event.type) } };
         }
         case TEAM_EVENTS.INVITE_GENERATED: {
-            const p = (event.payload || {}) as { role?: unknown; link?: unknown };
+            const p = payloadFields(event);
             if (typeof p.role !== 'string' || !p.role || typeof p.link !== 'string' || !p.link) return state;
             return { ...state, inviteLinks: { ...state.inviteLinks, [p.role]: p.link } };
         }
         case TEAM_EVENTS.MEMBER_REMOVED: {
-            const userId = ((event.payload || {}) as { user_id?: unknown }).user_id;
+            const userId = (payloadFields(event)).user_id;
             if (typeof userId !== 'string' || !userId) return state;
             return { ...state, members: state.members.filter((m) => m.user_id !== userId) };
         }

@@ -80,7 +80,7 @@ async def run_storage_migration_batch(storage_migration_id: str) -> StorageMigra
     migration.updated_at = datetime.now(timezone.utc)
     if remaining == 0:
         migration.state = StorageMigrationState.COMPLETED.value
-        routes = await StorageRoute.list_for_storage(migration.source_storage_id)
+        routes = await StorageRoute.list_unordered_for_storage(migration.source_storage_id)
         if not routes:
             source = await ObjectStorage.get(migration.source_storage_id)
             if source is not None:

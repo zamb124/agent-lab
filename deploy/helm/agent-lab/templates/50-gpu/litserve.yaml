@@ -77,13 +77,17 @@ spec:
             - auto
             - --ws
             - --static-path-route
+            - /static/core/lib
+            - --static-path-mount
+            - core/frontend/embed-dist
+            - --static-path-route
             - /static/core
             - --static-path-mount
             - core/frontend/static
             - --static-path-route
             - /litserve/ui/static
             - --static-path-mount
-            - apps/provider_litserve/ui
+            - apps/provider_litserve/ui-dist
           env:
             - name: PROVIDER_LITSERVE__INFRA__BACKEND
               value: flagllm

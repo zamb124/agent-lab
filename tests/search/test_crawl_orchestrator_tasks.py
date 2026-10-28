@@ -56,7 +56,7 @@ async def test_enqueue_domain_fetch_respects_http_concurrency(
     )
     profile_bundle = CrawlProfileWithIndex(profile=profile, search_index=search_index)
 
-    async def _get_with_index(crawl_profile_id: str) -> CrawlProfileWithIndex:
+    async def _require_with_index(crawl_profile_id: str) -> CrawlProfileWithIndex:
         assert crawl_profile_id == "cr_test"
         return profile_bundle
 
@@ -64,7 +64,7 @@ async def test_enqueue_domain_fetch_respects_http_concurrency(
         assert crawl_domain_id == "dom-1"
         return 10
 
-    monkeypatch.setattr(CrawlProfile, "get_with_index", _get_with_index)
+    monkeypatch.setattr(CrawlProfile, "require_with_index", _require_with_index)
     monkeypatch.setattr(CrawlUrl, "count_pending", _count_pending)
 
     await search_di.crawl_orchestrator_service._enqueue_domain_fetch(

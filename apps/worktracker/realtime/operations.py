@@ -159,7 +159,7 @@ async def op_work_items_list(
 ) -> OffsetPage[WorkItem]:
     _ = user, di
     company_id = _company_id()
-    items = await WorkItem.list_work_items(
+    items = await WorkItem.list_created_desc(
         company_id,
         board_id=payload.board_id,
         namespace=payload.namespace,
@@ -174,7 +174,7 @@ async def op_work_items_list(
         limit=payload.limit,
         offset=payload.offset,
     )
-    total = await WorkItem.count_work_items(
+    total = await WorkItem.count_for_filters(
         company_id,
         board_id=payload.board_id,
         namespace=payload.namespace,
@@ -364,7 +364,7 @@ async def op_work_items_comments_list(
     di: Di,
 ) -> WorkItemCommentsList:
     _ = user, di
-    items = await WorkItemComment.list_comments(_company_id(), payload.work_item_id)
+    items = await WorkItemComment.list_for_work_item(_company_id(), payload.work_item_id)
     return WorkItemCommentsList(items=items)
 
 
@@ -432,7 +432,7 @@ async def op_boards_get(
 ) -> Board:
     _ = user, di
     try:
-        return await Board.get_board(_company_id(), payload.board_id)
+        return await Board.require_in_company(_company_id(), payload.board_id)
     except ValueError as exc:
         raise_not_found(exc)
 

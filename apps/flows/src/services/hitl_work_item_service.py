@@ -89,7 +89,7 @@ class HitlWorkItemService:
         cid = command.correlation_id
         cid_str = str(cid)
 
-        existing = await WorkItem.find_work_item_by_correlation(company_id, cid_str)
+        existing = await WorkItem.any_by_correlation_id(company_id, cid_str)
         if existing is not None:
             return cid, existing.work_item_id
 

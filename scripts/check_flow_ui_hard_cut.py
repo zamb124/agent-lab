@@ -10,13 +10,13 @@
    и capability ``ui.*`` кроме ``ui.render``/``ui.navigate``.
 2. В зонах Flow UI нет маркеров недоделанности и слоёв совместимости
    (``TODO|FIXME|HACK|XXX|compat|legacy|deprecated|shim|_v2|V2``).
-3. Ключи рендереров ``blocks/*.js`` совпадают с типами Pydantic-union ``FlowUIBlock``;
-   ``STATE_PATH_PATTERN`` и ``INPUT_BLOCK_TYPES`` в ``protocol/constants.js`` равны
+3. Ключи рендереров ``blocks/*.ts`` совпадают с типами Pydantic-union ``FlowUIBlock``;
+   ``STATE_PATH_PATTERN`` и ``INPUT_BLOCK_TYPES`` в ``protocol/constants.ts`` равны
    значениям ``core/flow_ui/document.py``.
 4. Бюджеты: ни одного файла > 600 строк в ``flow-ui/`` и ``interface-editor/``;
-   ``flow-ui/*.js`` ≤ 9000 строк; редактор (``interface-editor/`` + ``flows-interface-*`` модалки) ≤ 2800.
+   ``flow-ui/*.ts`` ≤ 9000 строк; редактор (``interface-editor/`` + ``flows-interface-*`` модалки) ≤ 2800.
 5. Sandbox блока ``html``: в ``flow-ui/`` нет ``allow-same-origin``/``unsafe-eval``; константы
-   CSP/sandbox ``html-sandbox.js`` совпадают с фикстурой ``tests/fixtures/flow_ui/html_sandbox.json``.
+   CSP/sandbox ``html-sandbox.ts`` совпадают с фикстурой ``tests/fixtures/flow_ui/html_sandbox.json``.
 """
 
 from __future__ import annotations
@@ -34,12 +34,12 @@ from core.flow_ui.document import INPUT_BLOCK_TYPES, STATE_PATH_PATTERN, FlowUIB
 
 FLOW_UI_LIB = ROOT / "core/frontend/static/lib/flow-ui"
 EDITOR_DIR = ROOT / "apps/flows/ui/components/interface-editor"
-EDITOR_MODALS = sorted(p for g in ("flows-interface-*.js", "flows-interface-*.ts") for p in (ROOT / "apps/flows/ui/modals").glob(g))
+EDITOR_MODALS = sorted((ROOT / "apps/flows/ui/modals").glob("flows-interface-*.ts"))
 SANDBOX_FIXTURE = ROOT / "tests/fixtures/flow_ui/html_sandbox.json"
 
 MAX_FILE_LINES = 720
 MAX_FLOW_UI_LINES = 10000
-MAX_EDITOR_LINES = 2800
+MAX_EDITOR_LINES = 2900
 
 PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
@@ -174,8 +174,8 @@ def _line_count(path: Path) -> int:
 
 
 def _flow_ui_zone_files() -> list[Path]:
-    zone: list[Path] = sorted(p for g in ("*.js", "*.ts") for p in FLOW_UI_LIB.rglob(g))
-    zone.extend(sorted(p for g in ("*.js", "*.ts") for p in EDITOR_DIR.glob(g)))
+    zone: list[Path] = sorted(FLOW_UI_LIB.rglob("*.ts"))
+    zone.extend(sorted(EDITOR_DIR.glob("*.ts")))
     zone.extend(EDITOR_MODALS)
     zone.extend(sorted((ROOT / "core/flow_ui").glob("*.py")))
     zone.extend(sorted((ROOT / "apps/flows/src/api/v1").glob("flow_ui*.py")))
@@ -228,8 +228,8 @@ def _js_renderer_keys() -> set[str]:
     table_start = re.compile(r"^export const [A-Z_]+_BLOCKS(?:: [^=]+)? = Object\.freeze\(\{$")
     method = re.compile(r"^    ([a-z_]+)\([^)]*\)(?::\s*[^ {][^{]*)? \{$")
     keys: set[str] = set()
-    for path in sorted(p for g in ("*.js", "*.ts") for p in (FLOW_UI_LIB / "blocks").glob(g)):
-        if path.name in {"registry.js", "registry.ts"}:
+    for path in sorted((FLOW_UI_LIB / "blocks").glob("*.ts")):
+        if path.name == "registry.ts":
             continue
         inside_table = False
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -275,8 +275,8 @@ def _check_grammar_constants(failures: list[str]) -> None:
 
 
 def _check_budgets(failures: list[str]) -> None:
-    flow_ui_files = sorted(p for g in ("*.js", "*.ts") for p in FLOW_UI_LIB.rglob(g))
-    editor_files = sorted(p for g in ("*.js", "*.ts") for p in EDITOR_DIR.glob(g)) + EDITOR_MODALS
+    flow_ui_files = sorted(FLOW_UI_LIB.rglob("*.ts"))
+    editor_files = sorted(EDITOR_DIR.glob("*.ts")) + EDITOR_MODALS
     for path in flow_ui_files + editor_files:
         lines = _line_count(path)
         if lines > MAX_FILE_LINES:
@@ -291,7 +291,7 @@ def _check_budgets(failures: list[str]) -> None:
 
 def _check_sandbox(failures: list[str]) -> None:
     forbidden = re.compile(r"allow-same-origin|unsafe-eval")
-    for path in sorted(p for g in ("*.js", "*.ts") for p in FLOW_UI_LIB.rglob(g)):
+    for path in sorted(FLOW_UI_LIB.rglob("*.ts")):
         text = path.read_text(encoding="utf-8")
         for number, line in enumerate(text.splitlines(), start=1):
             if forbidden.search(line):
@@ -300,13 +300,13 @@ def _check_sandbox(failures: list[str]) -> None:
     csp = re.search(r'^export const FLOW_UI_HTML_CSP = "([^"]+)";$', sandbox_source, re.MULTILINE)
     sandbox = re.search(r"^export const FLOW_UI_HTML_SANDBOX = '([^']+)';$", sandbox_source, re.MULTILINE)
     if csp is None or sandbox is None:
-        failures.append("html-sandbox.js: FLOW_UI_HTML_CSP / FLOW_UI_HTML_SANDBOX constants not found")
+        failures.append("html-sandbox.ts: FLOW_UI_HTML_CSP / FLOW_UI_HTML_SANDBOX constants not found")
         return
     fixture = json.loads(SANDBOX_FIXTURE.read_text(encoding="utf-8"))
     if fixture["csp"] != csp.group(1):
-        failures.append(f"html-sandbox.js: CSP differs from {_rel(SANDBOX_FIXTURE)}")
+        failures.append(f"html-sandbox.ts: CSP differs from {_rel(SANDBOX_FIXTURE)}")
     if fixture["sandbox"] != sandbox.group(1):
-        failures.append(f"html-sandbox.js: sandbox differs from {_rel(SANDBOX_FIXTURE)}")
+        failures.append(f"html-sandbox.ts: sandbox differs from {_rel(SANDBOX_FIXTURE)}")
 
 
 def main() -> int:

@@ -18,6 +18,11 @@
 
 import { createSlice } from '@platform/lib/events/index.js';
 import type { SyncChatUiSlice } from '../sync.types.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function eventRecord(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
 
 const EMPTY_SECTIONS = Object.freeze({ spaces: true, channels: true, direct: true });
 
@@ -61,8 +66,8 @@ export const chatUiResource = createSlice({
         setSidebarSearch: 'sidebar_search_set',
         setSidebarSearchScope: 'sidebar_search_scope_set',
     },
-    extraReducer: (state, event) => {
-        const s = state as SyncChatUiSlice;
+    extraReducer: (state: SyncChatUiSlice, event) => {
+        const s = state;
         switch (event.type) {
             case 'sync/context/company_cleared': {
                 return {
@@ -85,8 +90,8 @@ export const chatUiResource = createSlice({
                 };
             }
             case 'sync/chat_ui/message_selection_toggled': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.messageId !== 'string' || p.messageId === '') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.messageId !== 'string' || p.messageId === '') return state;
                 const cur = s.selectedMessageIds;
                 const next = cur.includes(p.messageId)
                     ? cur.filter((x: unknown) => x !== p.messageId)
@@ -96,12 +101,12 @@ export const chatUiResource = createSlice({
             case 'sync/chat_ui/selection_cleared':
                 return { ...s, selectionMode: false, selectedMessageIds: Object.freeze([]) };
             case 'sync/chat_ui/deletion_started': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || !Array.isArray(p.messageIds) || p.messageIds.length === 0) return state;
+                const p = eventRecord(event.payload);
+                if (p === null || !Array.isArray(p.messageIds) || p.messageIds.length === 0) return state;
                 const cur = s.deletingMessageIds;
                 const seen = new Set(cur);
                 const merged = [...cur];
-                for (const id of p.messageIds as unknown[]) {
+                for (const id of p.messageIds) {
                     if (typeof id === 'string' && id !== '' && !seen.has(id)) {
                         merged.push(id);
                     }
@@ -109,52 +114,53 @@ export const chatUiResource = createSlice({
                 return { ...s, deletingMessageIds: Object.freeze(merged) };
             }
             case 'sync/chat_ui/deletion_finished': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || !Array.isArray(p.messageIds) || p.messageIds.length === 0) return state;
-                const remove = new Set(p.messageIds as unknown[]);
+                const p = eventRecord(event.payload);
+                if (p === null || !Array.isArray(p.messageIds) || p.messageIds.length === 0) return state;
+                const remove = new Set(p.messageIds);
                 return {
                     ...s,
                     deletingMessageIds: Object.freeze(s.deletingMessageIds.filter((x: unknown) => !remove.has(x))),
                 };
             }
             case 'sync/chat_ui/forward_opened': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || !p.message) return state;
+                const p = eventRecord(event.payload);
+                if (p === null || p.message == null) return state;
                 return { ...s, forwardModal: Object.freeze({ open: true, message: p.message }) };
             }
             case 'sync/chat_ui/forward_closed':
                 return { ...s, forwardModal: null };
             case 'sync/chat_ui/pinned_index_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.index !== 'number') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.index !== 'number') return state;
                 return { ...s, pinnedNavigateIndex: p.index };
             }
             case 'sync/chat_ui/section_toggled': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.section !== 'string') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.section !== 'string') return state;
                 if (!Object.prototype.hasOwnProperty.call(EMPTY_SECTIONS, p.section)) return state;
                 const cur = s.sidebarSectionOpen;
                 const next = { ...cur, [p.section]: !cur[p.section] };
                 return { ...s, sidebarSectionOpen: Object.freeze(next) };
             }
             case 'sync/chat_ui/section_hydrated': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || !p.sections || typeof p.sections !== 'object') return state;
-                const sections = p.sections as Record<string, unknown>;
+                const p = eventRecord(event.payload);
+                if (p === null || !isPlainRecord(p.sections)) return state;
+                const sections = p.sections;
                 const next = { ...s.sidebarSectionOpen };
                 for (const key of Object.keys(EMPTY_SECTIONS)) {
-                    if (typeof sections[key] === 'boolean') next[key] = sections[key] as boolean;
+                    const value = sections[key];
+                    if (typeof value === 'boolean') next[key] = value;
                 }
                 return { ...s, sidebarSectionOpen: Object.freeze(next) };
             }
             case 'sync/chat_ui/sidebar_search_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.query !== 'string') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.query !== 'string') return state;
                 return { ...s, sidebarSearchQuery: p.query };
             }
             case 'sync/chat_ui/sidebar_search_scope_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.scope !== 'string') return state;
+                const p = eventRecord(event.payload);
+                if (p === null || typeof p.scope !== 'string') return state;
                 if (p.scope !== 'all' && p.scope !== 'groups' && p.scope !== 'direct') return state;
                 return { ...s, sidebarSearchScope: p.scope };
             }
@@ -163,3 +169,9 @@ export const chatUiResource = createSlice({
         }
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/chat_ui': typeof chatUiResource;
+    }
+}

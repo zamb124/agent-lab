@@ -16,7 +16,7 @@ alwaysApply: false
 ## Модель
 
 - Capabilities — `AICapability` (`core.ai.providers`); спецификации провайдеров — `core.ai.providers` (новый провайдер добавляется там один раз, нестандартный discovery — adapter `core.ai.adapters.*`).
-- Каталог — `AIModelRecord` (`core/ai/models/model_record.py`, таблица `ai_models` в `platform_shared`, PK `ai_model_id` = `{provider}:{model_id}`): modalities, pricing/`is_free`, typed AA indices, размерности embedding; score и editorial в каталоге нет.
+- Каталог — `AIModelRecord` (`core/ai/models/model_record.py`, таблица `ai_models` в `platform_shared`, PK `ai_model_id` = `{provider}:{model_id}`): modalities, pricing/`is_free`, typed AA indices, размерности embedding; score и editorial в каталоге нет. `by_provider_and_model_id` читает строку по этому ключу: нет строки — `None`. Повтор читает ту же.
 - Overlay оценок — `LLMModelScore` (`core/ai/models/model_score.py`, таблица `llm_model_scores`, только компания `system`: `enabled`, `editorial_prior`, `note`).
 - Вызов — `LLMCallConfig` (`core/ai/llm_config.py`); выбор — `AIRequestRequirements`, `AISelection` (`core.ai.requirements`).
 - Модель — не строка: строка допустима только как выбор пользователя и сразу резолвится в typed record.

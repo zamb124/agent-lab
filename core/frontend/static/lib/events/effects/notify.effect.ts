@@ -7,14 +7,15 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
+import { payloadFields, stringField } from '../payload.js';
 
 export function createNotifyEffect() {
     return async function notifyEffect(event: PlatformEvent, ctx: EffectCtx<{ notify?: { toasts?: Array<{ id?: string }> } }>): Promise<void> {
         if (event.type !== CoreEvents.UI_TOAST_SHOW) return;
-        const p = (event.payload ?? {}) as { duration?: unknown; id?: unknown };
+        const p = payloadFields(event);
         const duration = typeof p.duration === 'number' ? p.duration : 3000;
         if (duration <= 0) return;
-        const id = (typeof p.id === 'string' && p.id) || _findLatestToastId(ctx);
+        const id = stringField(p.id) ?? _findLatestToastId(ctx);
         if (!id) return;
         setTimeout(() => {
             ctx.dispatch(CoreEvents.UI_TOAST_DISMISS, { id }, { causation_id: event.id, source: 'timer' });

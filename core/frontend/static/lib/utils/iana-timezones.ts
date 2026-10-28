@@ -1,49 +1,9 @@
 /**
- * Стабильный IANA-список, если Intl.supportedValuesOf('timeZone') недоступен.
- */
-const FALLBACK_IANA_TIME_ZONES = [
-    'UTC',
-    'Europe/Moscow',
-    'Europe/London',
-    'Europe/Berlin',
-    'Europe/Paris',
-    'Europe/Istanbul',
-    'America/New_York',
-    'America/Chicago',
-    'America/Denver',
-    'America/Los_Angeles',
-    'America/Sao_Paulo',
-    'America/Toronto',
-    'America/Vancouver',
-    'Asia/Dubai',
-    'Asia/Almaty',
-    'Asia/Kolkata',
-    'Asia/Bangkok',
-    'Asia/Singapore',
-    'Asia/Shanghai',
-    'Asia/Tokyo',
-    'Asia/Seoul',
-    'Australia/Sydney',
-    'Pacific/Auckland',
-];
-
-/**
  * Все известные IANA time zones, отсортированные (Unicode order).
- * Предпочтительно из Intl.supportedValuesOf (современные браузеры); иначе жёсткий fallback.
+ * Источник — Intl.supportedValuesOf('timeZone'); без него браузер не поддерживается.
  */
 export function getSortedIanaTimeZones(): string[] {
-    let list: string[] | null | undefined;
-    if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
-        try {
-            list = Intl.supportedValuesOf('timeZone');
-        } catch {
-            list = null;
-        }
-    }
-    if (!Array.isArray(list) || list.length === 0) {
-        list = [...FALLBACK_IANA_TIME_ZONES];
-    }
-    const unique = [...new Set(list)];
+    const unique = [...new Set(Intl.supportedValuesOf('timeZone'))];
     unique.sort((a, b) => a.localeCompare(b, 'en'));
     if (!unique.includes('UTC')) {
         unique.push('UTC');
@@ -60,4 +20,3 @@ export function getCachedSortedIanaTimeZones(): string[] {
     return _cacheAll;
 }
 
-export { FALLBACK_IANA_TIME_ZONES };

@@ -133,3 +133,17 @@ export const companyStorageMigrationSlice = createSlice({
         return { ...state, progress: payload };
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/company_storages_load': typeof companyStoragesLoadOp;
+        'frontend/company_storages_probe': typeof companyStoragesProbeOp;
+        'frontend/company_storages_create': typeof companyStoragesCreateOp;
+        'frontend/company_storages_rotate': typeof companyStoragesRotateOp;
+        'frontend/company_storages_delete': typeof companyStoragesDeleteOp;
+        'frontend/company_storage_create_form': typeof companyStorageCreateForm;
+        'frontend/company_storage_routes_set': typeof companyStorageRoutesSetOp;
+        'frontend/company_storage_migrations_start': typeof companyStorageMigrationsStartOp;
+        'frontend/company_storage_migration': typeof companyStorageMigrationSlice;
+    }
+}

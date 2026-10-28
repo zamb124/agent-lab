@@ -5,20 +5,19 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import type { PlatformEvent, EffectCtx } from '@platform/lib/events/contract.js';
-
-interface DocumentStatusPush {
-    document_id: string;
-    status?: unknown;
-    document_name?: unknown;
-    error_message?: unknown;
-    chunks_count?: unknown;
-    namespace_id?: unknown;
-}
+import { isPlainRecord } from '../payload.js';
 
 const RAG_DOCUMENT_STATUS_UPDATED = 'rag/document/status_updated';
 
-function _toastTerminal(ctx: EffectCtx, status: DocumentStatusPush, documentId: string, causationId: string): void {
-    const documentName = typeof status.document_name === 'string' ? status.document_name : documentId;
+function requestDocumentId(payload: unknown): string {
+    if (!isPlainRecord(payload)) return '';
+    const documentId = payload.document_id;
+    return typeof documentId === 'string' ? documentId : '';
+}
+
+function _toastTerminal(ctx: EffectCtx, status: Record<string, unknown>, documentId: string, causationId: string): void {
+    const name = status.document_name;
+    const documentName = typeof name === 'string' ? name : documentId;
     if (status.status === 'completed') {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
@@ -44,27 +43,32 @@ export const documentStatusResource = createAsyncOp({
     commandType: 'rag/documents/status_requested',
     restMirror: { method: 'GET', path: '/rag/api/v1/documents/:document_id/status' },
     onSuccess: (ctx, status, event) => {
-        const documentId = (event.payload as { document_id?: string } | null)?.document_id ?? '';
-        _toastTerminal(ctx, status as DocumentStatusPush, documentId, event.id);
+        if (!isPlainRecord(status)) {
+            throw new Error('rag document status: result must be an object');
+        }
+        _toastTerminal(ctx, status, requestDocumentId(event.payload), event.id);
     },
     extraReducer: (state, event) => {
         if (event.type !== RAG_DOCUMENT_STATUS_UPDATED) {
             return state;
         }
-        const payload = event.payload as DocumentStatusPush | null;
-        if (!payload || typeof payload !== 'object') {
+        if (!isPlainRecord(event.payload)) {
             return state;
         }
+        const payload = event.payload;
         const documentId = payload.document_id;
         if (typeof documentId !== 'string' || documentId.length === 0) {
             return state;
         }
+        const documentName = payload.document_name;
+        const errorMessage = payload.error_message;
+        const chunksCount = payload.chunks_count;
         const nextStatus = {
             document_id: documentId,
             status: payload.status,
-            document_name: typeof payload.document_name === 'string' ? payload.document_name : documentId,
-            error_message: typeof payload.error_message === 'string' ? payload.error_message : null,
-            chunks_count: typeof payload.chunks_count === 'number' ? payload.chunks_count : null,
+            document_name: typeof documentName === 'string' ? documentName : documentId,
+            error_message: typeof errorMessage === 'string' ? errorMessage : null,
+            chunks_count: typeof chunksCount === 'number' ? chunksCount : null,
             namespace_id: payload.namespace_id,
         };
         return {
@@ -77,3 +81,9 @@ export const documentStatusResource = createAsyncOp({
 });
 
 export { RAG_DOCUMENT_STATUS_UPDATED };
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'rag/document_status': typeof documentStatusResource;
+    }
+}

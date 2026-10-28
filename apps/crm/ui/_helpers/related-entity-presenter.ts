@@ -2,7 +2,15 @@
  * Единые правила тона, иконки и подписи для карточек связанных сущностей (CRM).
  */
 
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { NOTE_ROOT_ENTITY_TYPE_ID } from './entity-type-ids.js';
+
+function entityRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
 
 /** Если строк каталога типов нет или в каталоге нет icon для type_id — без угадывания типа в коде. */
 const FALLBACK_ENTITY_GLYPH = 'box';
@@ -65,20 +73,20 @@ function iconFromEntityTypesRow(typeId: unknown, rows: unknown, namespace: strin
     if (typeof typeId !== 'string' || typeId.length === 0 || !Array.isArray(rows)) {
         return null;
     }
-    let firstMatch = null;
+    let firstMatch: Record<string, unknown> | null = null;
     for (const row of rows) {
-        if (typeof row !== 'object' || row === null) continue;
-        if ((row as Record<string, unknown>).type_id !== typeId) continue;
+        if (!isPlainRecord(row)) continue;
+        if (row.type_id !== typeId) continue;
         if (firstMatch === null) firstMatch = row;
-        if (typeof namespace === 'string' && namespace.length > 0 && (row as Record<string, unknown>).namespace !== namespace) continue;
-        const ic = (row as Record<string, unknown>).icon;
+        if (typeof namespace === 'string' && namespace.length > 0 && row.namespace !== namespace) continue;
+        const ic = row.icon;
         if (typeof ic === 'string' && ic.trim().length > 0) {
             return normalizeCatalogIconName(ic.trim());
         }
         return null;
     }
     if (firstMatch !== null) {
-        const ic = (firstMatch as Record<string, unknown>).icon;
+        const ic = firstMatch.icon;
         if (typeof ic === 'string' && ic.trim().length > 0) {
             return normalizeCatalogIconName(ic.trim());
         }
@@ -118,6 +126,16 @@ export function summaryChipUnresolvedIconName() {
     return 'folder';
 }
 
+function rememberSummaryEntity(map: Map<string, Record<string, any>>, value: unknown): void {
+    const ent = entityRecord(value);
+    if (ent === null || typeof ent.entity_id !== 'string') return;
+    if (ent.entity_type === 'note') return;
+    const rawName = typeof ent.name === 'string' ? ent.name : '';
+    const key = normalizeSummaryEntityLabelKey(rawName);
+    if (!key || map.has(key)) return;
+    map.set(key, ent);
+}
+
 export function resolveSummaryChipEntity(label: unknown, lookup: ReadonlyMap<string, Record<string, any>>): Record<string, any> | null {
     const key = normalizeSummaryEntityLabelKey(label);
     if (!key) return null;
@@ -131,14 +149,7 @@ export function buildSummaryEntityLookupFromNoteBuckets(noteEntitiesByNoteId: un
     if (!noteEntitiesByNoteId || typeof noteEntitiesByNoteId !== 'object') return map;
     for (const list of Object.values(noteEntitiesByNoteId)) {
         if (!Array.isArray(list)) continue;
-        for (const ent of list) {
-            if (!ent || typeof ent !== 'object' || typeof (ent as Record<string, unknown>).entity_id !== 'string') continue;
-            if ((ent as Record<string, unknown>).entity_type === 'note') continue;
-            const rawName = typeof (ent as Record<string, unknown>).name === 'string' ? (ent as Record<string, unknown>).name as string : '';
-            const key = normalizeSummaryEntityLabelKey(rawName);
-            if (!key || map.has(key)) continue;
-            map.set(key, ent as Record<string, any>);
-        }
+        for (const ent of list) rememberSummaryEntity(map, ent);
     }
     return map;
 }
@@ -147,13 +158,6 @@ export function buildSummaryEntityLookupFromNoteBuckets(noteEntitiesByNoteId: un
 export function buildSummaryEntityLookupFromRelated(relatedEntities: unknown): Map<string, Record<string, any>> {
     const map = new Map<string, Record<string, any>>();
     if (!Array.isArray(relatedEntities)) return map;
-    for (const ent of relatedEntities) {
-        if (!ent || typeof ent !== 'object' || typeof (ent as Record<string, unknown>).entity_id !== 'string') continue;
-        if ((ent as Record<string, unknown>).entity_type === 'note') continue;
-        const rawName = typeof (ent as Record<string, unknown>).name === 'string' ? (ent as Record<string, unknown>).name as string : '';
-        const key = normalizeSummaryEntityLabelKey(rawName);
-        if (!key || map.has(key)) continue;
-        map.set(key, ent as Record<string, any>);
-    }
+    for (const ent of relatedEntities) rememberSummaryEntity(map, ent);
     return map;
 }

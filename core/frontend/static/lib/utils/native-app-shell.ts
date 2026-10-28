@@ -75,7 +75,10 @@ export function isStandaloneOrNativeAppShell(): boolean {
 }
 
 function _hostnameOnly(host: string): string {
-    const part = host.split(':')[0] ?? '';
+    const part = host.split(':')[0];
+    if (part === undefined) {
+        throw new Error('native shell: host segment missing');
+    }
     return part.toLowerCase();
 }
 
@@ -139,7 +142,7 @@ export function installNativeAppShellWindowOpenPatch(): void {
             return originalOpen.call(window, url, target, features);
         }
         if (url === undefined || url === null) {
-            return originalOpen.call(window, url ?? undefined, target, features);
+            return originalOpen.call(window, undefined, target, features);
         }
         if (typeof url !== 'string') {
             return originalOpen.call(window, url, target, features);
@@ -147,12 +150,10 @@ export function installNativeAppShellWindowOpenPatch(): void {
         if (url === '') {
             return originalOpen.call(window, url, target, features);
         }
-        let parsed;
-        try {
-            parsed = new URL(url, window.location.href);
-        } catch {
+        if (!URL.canParse(url, window.location.href)) {
             return originalOpen.call(window, url, target, features);
         }
+        const parsed = new URL(url, window.location.href);
         if (isInternalProductNavigationUrl(parsed)) {
             assignInNativeShell(parsed.href);
             return null;
@@ -185,19 +186,21 @@ export function installNativeAppShellLinkCapture(): void {
             if (event.defaultPrevented) {
                 return;
             }
-            const el = (event.target as Element | null)?.closest?.('a[href]');
-            if (!el || !(el instanceof HTMLAnchorElement)) {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+            const el = target.closest('a[href]');
+            if (!(el instanceof HTMLAnchorElement)) {
                 return;
             }
             if (el.getAttribute('download') != null) {
                 return;
             }
-            let url;
-            try {
-                url = new URL(el.href);
-            } catch {
+            if (!URL.canParse(el.href)) {
                 return;
             }
+            const url = new URL(el.href);
             if (!isInternalProductNavigationUrl(url)) {
                 return;
             }

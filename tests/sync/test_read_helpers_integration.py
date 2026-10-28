@@ -41,8 +41,8 @@ async def test_channel_read_direct_peer_without_user_repo(
         created_by_user_id="alice",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    await SyncChannelMember.ensure_channel_member_row(ch_dir, "alice", company_id=company_id)
-    await SyncChannelMember.ensure_channel_member_row(ch_dir, "bob", company_id=company_id)
+    await SyncChannelMember.ensure_member(ch_dir, "alice", company_id=company_id)
+    await SyncChannelMember.ensure_member(ch_dir, "bob", company_id=company_id)
     await channel_access.sync_channel_created(
         ch_dir,
         company_id=company_id,
@@ -93,8 +93,8 @@ async def test_channel_read_direct_peer_with_user_repository(
         created_by_user_id="viewer_x",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    await SyncChannelMember.ensure_channel_member_row(ch_dir2, "viewer_x", company_id=company_id)
-    await SyncChannelMember.ensure_channel_member_row(ch_dir2, peer_id, company_id=company_id)
+    await SyncChannelMember.ensure_member(ch_dir2, "viewer_x", company_id=company_id)
+    await SyncChannelMember.ensure_member(ch_dir2, peer_id, company_id=company_id)
     await channel_access.sync_channel_created(
         ch_dir2,
         company_id=company_id,
@@ -134,7 +134,7 @@ async def test_channel_read_topic_no_peer_lane_summary(
         created_by_user_id="u1",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    await SyncChannelMember.ensure_channel_member_row(ch_top, "u1", company_id=company_id)
+    await SyncChannelMember.ensure_member(ch_top, "u1", company_id=company_id)
     await channel_access.sync_channel_created(
         ch_top,
         company_id=company_id,

@@ -44,6 +44,7 @@ import {
     requireField,
 } from './_internal.js';
 import type { EffectCtx, PlatformEvent } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 import type { PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 
@@ -91,6 +92,42 @@ export interface FormFactory extends PlatformFactory {
         isValid: (state: Record<string, unknown>) => boolean;
     };
     effect: (event: PlatformEvent, ctx: EffectCtx) => void;
+}
+
+function openedSeed(payload: unknown, label: string): Record<string, unknown> {
+    if (payload === null || payload === undefined) return {};
+    if (!isPlainRecord(payload)) {
+        throw new Error(`${label}: OPENED payload must be an object`);
+    }
+    if (!('initial' in payload) || payload.initial === null || payload.initial === undefined) {
+        return {};
+    }
+    if (!isPlainRecord(payload.initial)) {
+        throw new Error(`${label}: OPENED payload.initial must be an object`);
+    }
+    return payload.initial;
+}
+
+function stringMap(value: unknown, label: string): Record<string, string> {
+    if (!isPlainRecord(value)) {
+        throw new Error(`${label} required (object)`);
+    }
+    const errors: Record<string, string> = {};
+    for (const [key, message] of Object.entries(value)) {
+        if (typeof message !== 'string') {
+            throw new Error(`${label}: ${key} must be a string`);
+        }
+        errors[key] = message;
+    }
+    return errors;
+}
+
+function isFormSlice(value: unknown): value is FormSlice {
+    if (!isPlainRecord(value) || typeof value.open !== 'boolean' || typeof value.submitting !== 'boolean') {
+        return false;
+    }
+    if (!isPlainRecord(value.draft) || !isPlainRecord(value.errors)) return false;
+    return Object.values(value.errors).every((message) => typeof message === 'string');
 }
 
 export function createForm(options: FormOptions): FormFactory {
@@ -152,10 +189,7 @@ export function createForm(options: FormOptions): FormFactory {
     function reducer(state: FormSlice = initialSlice, event: PlatformEvent): FormSlice {
         switch (event.type) {
             case events.OPENED: {
-                const p = event.payload as { initial?: unknown } | null;
-                const seed = p && p.initial && typeof p.initial === 'object'
-                    ? p.initial as Record<string, unknown>
-                    : {};
+                const seed = openedSeed(event.payload, `createForm(${name})`);
                 return freeze({
                     open: true,
                     draft: freeze({ ...initial, ...seed }),
@@ -166,18 +200,21 @@ export function createForm(options: FormOptions): FormFactory {
             case events.CLOSED:
                 return initialSlice;
             case events.FIELD_CHANGED: {
-                const p = event.payload as { field?: unknown; value?: unknown } | null;
-                if (!p || typeof p.field !== 'string') {
+                const payload = event.payload;
+                if (!isPlainRecord(payload)) {
                     throw new Error(`createForm(${name}): FIELD_CHANGED payload.field required (string)`);
                 }
-                const field = p.field;
+                const field = payload.field;
+                if (typeof field !== 'string') {
+                    throw new Error(`createForm(${name}): FIELD_CHANGED payload.field required (string)`);
+                }
                 if (!(field in schema)) {
                     throw new Error(`createForm(${name}): FIELD_CHANGED unknown field "${field}"`);
                 }
-                if (!('value' in p)) {
+                if (!('value' in payload)) {
                     throw new Error(`createForm(${name}): FIELD_CHANGED payload.value required`);
                 }
-                const value = p.value;
+                const value = payload.value;
                 const draft = freeze({ ...state.draft, [field]: value });
                 const fieldError = _validateField(field, value, draft, schema);
                 const errors: Record<string, string> = { ...state.errors };
@@ -190,14 +227,14 @@ export function createForm(options: FormOptions): FormFactory {
             case events.SUBMIT_REQUESTED:
                 return freeze({ ...state, submitting: true });
             case events.SUBMIT_INVALID: {
-                const p = event.payload as { errors?: unknown } | null;
-                if (!p || !p.errors || typeof p.errors !== 'object') {
+                const payload = event.payload;
+                if (!isPlainRecord(payload)) {
                     throw new Error(`createForm(${name}): SUBMIT_INVALID payload.errors required (object)`);
                 }
                 return freeze({
                     ...state,
                     submitting: false,
-                    errors: freeze(p.errors as Record<string, string>) as Readonly<Record<string, string>>,
+                    errors: freeze(stringMap(payload.errors, `createForm(${name}): SUBMIT_INVALID payload.errors`)),
                 });
             }
             default: {
@@ -210,9 +247,12 @@ export function createForm(options: FormOptions): FormFactory {
     }
 
     function _readSlice(state: Record<string, unknown>): FormSlice {
-        const slice = state[sliceKey] as FormSlice | undefined;
+        const slice = state[sliceKey];
         if (slice === undefined) {
             throw new Error(`createForm(${name}): slice "${sliceKey}" not registered in bus`);
+        }
+        if (!isFormSlice(slice)) {
+            throw new Error(`createForm(${name}): slice "${sliceKey}" must be a form`);
         }
         return slice;
     }
@@ -228,7 +268,11 @@ export function createForm(options: FormOptions): FormFactory {
 
     function effect(event: PlatformEvent, ctx: EffectCtx): void {
         if (event.type !== events.SUBMIT_REQUESTED) return;
-        const slice = _readSlice(ctx.getState() as Record<string, unknown>);
+        const bus = ctx.getState();
+        if (!isPlainRecord(bus)) {
+            throw new Error(`createForm(${name}): bus state must be an object`);
+        }
+        const slice = _readSlice(bus);
         const errors = _validateAll(slice.draft, schema);
         if (Object.keys(errors).length > 0) {
             ctx.dispatch(events.SUBMIT_INVALID, { errors }, { causation_id: event.id });

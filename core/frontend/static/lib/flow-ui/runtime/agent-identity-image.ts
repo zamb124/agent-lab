@@ -51,6 +51,11 @@ export function flowUIMediaSrc(platformUiOrigin: unknown, raw: unknown): string 
     return `${platformUiOrigin.trim().replace(/\/+$/, '')}${value}`;
 }
 
+function flowIdentityImageUrl(flowIdentity: Record<string, unknown> | null | undefined): string | null {
+    if (flowIdentity == null) return null;
+    return nonemptyString(flowIdentity.image_url);
+}
+
 export function resolveAgentIdentityImageSrc({ document = null, flowIdentity = null, imageUrl = null, platformUiOrigin = '' }: {
     document?: { pages?: unknown } | null;
     flowIdentity?: Record<string, unknown> | null;
@@ -59,7 +64,7 @@ export function resolveAgentIdentityImageSrc({ document = null, flowIdentity = n
 } = {}): string {
     const raw = nonemptyString(imageUrl)
         ?? agentIdentityImageUrlFromDocument(document)
-        ?? nonemptyString(flowIdentity && typeof flowIdentity === 'object' ? (flowIdentity as Record<string, unknown>).image_url : null);
+        ?? flowIdentityImageUrl(flowIdentity);
     if (raw === null) return brandLogoSrc(platformUiOrigin);
     return flowUIMediaSrc(platformUiOrigin, raw);
 }

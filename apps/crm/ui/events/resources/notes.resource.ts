@@ -75,9 +75,9 @@ function _buildNoteDateFilter(filters: Record<string, any>): Record<string, unkn
     if (typeof filters.date_to === 'string' && filters.date_to.length > 0) {
         leaves.push({ field: 'note_date', op: '$lte', value: filters.date_to });
     }
-    if (leaves.length === 0) return null;
-    if (leaves.length === 1) return leaves[0] ?? null;
-    return { $and: leaves };
+    const [first, ...rest] = leaves;
+    if (first === undefined) return null;
+    return rest.length === 0 ? first : { $and: leaves };
 }
 
 /**
@@ -333,3 +333,18 @@ export const noteMarkdownFormatOp = createAsyncOp({
         );
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/notes_list': typeof notesListResource;
+        'crm/note_latest_range': typeof noteLatestRangeOp;
+        'crm/note_analysis_draft_save': typeof noteAnalysisDraftSaveOp;
+        'crm/note_analysis_draft_discard': typeof noteAnalysisDraftDiscardOp;
+        'crm/note_analysis_error_dismiss': typeof noteAnalysisErrorDismissOp;
+        'crm/note_analysis_draft_repair': typeof noteAnalysisDraftRepairOp;
+        'crm/note_search': typeof noteSearchOp;
+        'crm/entity_cards_bulk': typeof entityCardsBulkOp;
+        'crm/note_analyze_start': typeof noteAnalyzeStartOp;
+        'crm/note_markdown_format': typeof noteMarkdownFormatOp;
+    }
+}

@@ -68,7 +68,7 @@ async def test_bootstrap_queues_tranco_import_via_search_worker(
     domain_count = await CrawlDomain.count_for_profile(crawl_profile_id)
     assert domain_count >= 1
 
-    page = await CrawlDomain.list_page(
+    page = await CrawlDomain.page_by_domain(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=10,

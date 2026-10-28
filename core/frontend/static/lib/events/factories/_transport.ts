@@ -12,6 +12,7 @@
  */
 
 import { platformWs, WsTransportError } from '../effects/ws.effect.js';
+import { isPlainRecord } from '../payload.js';
 import type { PlatformEvent } from '../contract.js';
 import { HttpError, httpRequest } from '../http.js';
 
@@ -23,12 +24,16 @@ const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
  */
 export type FactoryTransport = 'http' | 'ws';
 
+function isFactoryTransport(value: string): value is FactoryTransport {
+    return VALID_TRANSPORTS.has(value);
+}
+
 export function normalizeTransport(value: unknown, ownerLabel: string): FactoryTransport {
     if (value === undefined || value === null) return 'http';
-    if (typeof value !== 'string' || !VALID_TRANSPORTS.has(value as FactoryTransport)) {
+    if (typeof value !== 'string' || !isFactoryTransport(value)) {
         throw new Error(`${ownerLabel}: transport must be 'http' or 'ws', got ${JSON.stringify(value)}`);
     }
-    return value as FactoryTransport;
+    return value;
 }
 
 /**
@@ -45,21 +50,29 @@ export function normalizeWsTimeout(value: unknown, transport: FactoryTransport, 
 export interface RestMirrorEntry {
     method: string;
     path: string;
+    /** Опционально: cross-service вызов или 'ui-only' — читается гейтом check_command_rest_mirror. */
+    service?: string;
 }
 
 function _assertRestMirrorEntry(entry: unknown, ownerLabel: string): RestMirrorEntry {
-    if (!entry || typeof entry !== 'object') {
+    if (!isPlainRecord(entry)) {
         throw new Error(`${ownerLabel}: restMirror entry must be { method, path } object`);
     }
-    const raw = entry as { method?: unknown; path?: unknown };
-    if (typeof raw.method !== 'string' || !HTTP_METHODS.has(raw.method.toUpperCase())) {
+    const method = entry.method;
+    const path = entry.path;
+    if (typeof method !== 'string' || !HTTP_METHODS.has(method.toUpperCase())) {
         throw new Error(`${ownerLabel}: restMirror.method must be one of ${[...HTTP_METHODS].join('|')}`);
     }
-    if (typeof raw.path !== 'string' || raw.path.length === 0 || !raw.path.startsWith('/')) {
+    if (typeof path !== 'string' || path.length === 0 || !path.startsWith('/')) {
         throw new Error(`${ownerLabel}: restMirror.path must be non-empty string starting with "/"`);
     }
-    const e = entry as { method: string; path: string };
-    return Object.freeze({ method: e.method.toUpperCase(), path: e.path });
+    const service = entry.service;
+    if (service !== undefined && typeof service !== 'string') {
+        throw new Error(`${ownerLabel}: restMirror.service must be a string when present`);
+    }
+    const normalized: RestMirrorEntry = { method: method.toUpperCase(), path };
+    if (typeof service === 'string') normalized.service = service;
+    return Object.freeze(normalized);
 }
 
 /**
@@ -89,10 +102,10 @@ export function normalizeRestMirrorCollection(
     extraActionOps: string[] | undefined,
     ownerLabel: string,
 ): Readonly<Record<string, RestMirrorEntry>> {
-    if (!value || typeof value !== 'object') {
+    if (!isPlainRecord(value)) {
         throw new Error(`${ownerLabel}: restMirror is required ({ <op>: { method, path }, ... })`);
     }
-    const v = value as Record<string, unknown>;
+    const v = value;
     const required = new Set(operations);
     if (extraActionOps) {
         for (const op of extraActionOps) required.add(op);
@@ -154,7 +167,7 @@ export async function transportRequest(opts: TransportRequestOpts): Promise<unkn
             type: opts.commandType,
             payload: opts.payload === undefined ? null : opts.payload,
             timeoutMs: opts.wsTimeoutMs as number,
-            causationEventId: opts.causationEventId || null,
+            causationEventId: typeof opts.causationEventId === 'string' && opts.causationEventId.length > 0 ? opts.causationEventId : null,
             expectedSucceeded: opts.expectedSucceeded,
             expectedFailed: opts.expectedFailed,
         });

@@ -416,7 +416,7 @@ async def ensure_actor_may_send_to_channel(
             raise ValueError("call_id does not belong to this channel.")
         if call.status not in ("ringing", "active"):
             raise PermissionError("Call is not active.")
-        participants = await SyncCallParticipant.list_for_call(body.call_id)
+        participants = await SyncCallParticipant.list_unordered_for_call(body.call_id)
         mine = next((p for p in participants if p.user_id == actor_user_id), None)
         if mine is None or mine.status != "joined":
             raise PermissionError("Guest is not in this call.")
@@ -544,7 +544,7 @@ async def send_message_with_side_effects(
                 await SyncMessage.replace_contents(
                     message.message_id, processing_contents, edited_at
                 )
-                proc_entity = await SyncMessage.find_in_company(
+                proc_entity = await SyncMessage.by_message_id(
                     company_id, message.message_id
                 )
                 if proc_entity is None:
@@ -690,7 +690,7 @@ class SyncMessageService:
                 "thread_id does not belong to channel_id",
                       error_code='ws_invalid_payload',
                   )
-        rows = await SyncMessage.list_by_thread(
+        rows = await SyncMessage.list_alive_by_sent_at(
             thread_id=thread_id,
             limit=limit,
             offset=offset,
@@ -754,7 +754,7 @@ class SyncMessageService:
             AuthzObject.sync_channel(channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-        m = await SyncMessage.find_in_company(company_id, message_id)
+        m = await SyncMessage.by_message_id(company_id, message_id)
         if m is None:
             raise WsCommandError("not_found", "Message not found.", error_code='not_found')
         if m.channel_id != channel_id:
@@ -767,7 +767,7 @@ class SyncMessageService:
         await SyncMessage.replace_contents(
             message_id, contents, edited_at
         )
-        m2 = await SyncMessage.find_in_company(company_id, message_id)
+        m2 = await SyncMessage.by_message_id(company_id, message_id)
         if m2 is None:
             raise WsCommandError("internal", "Message disappeared after edit.", error_code='internal')
         read = await message_read_from_db(
@@ -797,7 +797,7 @@ class SyncMessageService:
             AuthzObject.sync_channel(channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-        m = await SyncMessage.find_in_company(company_id, message_id)
+        m = await SyncMessage.by_message_id(company_id, message_id)
         if m is None:
             raise WsCommandError("not_found", "Message not found.", error_code='not_found')
         if m.channel_id != channel_id:
@@ -826,7 +826,7 @@ class SyncMessageService:
             pids = list(ch.pinned_message_ids)
             if message_id in pids:
                 new_pids = [x for x in pids if x != message_id]
-                await SyncChannel.set_channel_pinned_message_ids(
+                await SyncChannel.update_pinned_message_ids(
                     channel_id,
                     new_pids,
                     company_id=company_id,
@@ -861,7 +861,7 @@ class SyncMessageService:
             AuthzObject.sync_channel(to_channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to the target channel.", error_code='forbidden')
-        m = await SyncMessage.find_in_company(company_id, message_id)
+        m = await SyncMessage.by_message_id(company_id, message_id)
         if m is None:
             raise WsCommandError("not_found", "Message not found.", error_code='not_found')
         if m.channel_id != from_channel_id:
@@ -921,7 +921,7 @@ class SyncMessageService:
             AuthzObject.sync_channel(channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-        m = await SyncMessage.find_in_company(company_id, message_id)
+        m = await SyncMessage.by_message_id(company_id, message_id)
         if m is None:
             raise WsCommandError("not_found", "Message not found.", error_code='not_found')
         if m.channel_id != channel_id:
@@ -930,8 +930,8 @@ class SyncMessageService:
             raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
         now = datetime.now(tz=UTC)
         new_reactions = _apply_reaction_json(m.reactions, user_id, emoji, now)
-        await SyncMessage.set_reactions(message_id, new_reactions)
-        m2 = await SyncMessage.find_in_company(company_id, message_id)
+        await SyncMessage.update_reactions(message_id, new_reactions)
+        m2 = await SyncMessage.by_message_id(company_id, message_id)
         if m2 is None:
             raise WsCommandError("internal", "Message disappeared after reaction.", error_code='internal')
         read = await message_read_from_db(
@@ -975,7 +975,7 @@ class SyncMessageService:
             AuthzObject.sync_channel(channel_id),
         ):
             raise WsCommandError("forbidden", "Only the channel owner can pin.", error_code='forbidden')
-        m = await SyncMessage.find_in_company(company_id, message_id)
+        m = await SyncMessage.by_message_id(company_id, message_id)
         if m is None:
             raise WsCommandError("not_found", "Message not found.", error_code='not_found')
         if m.channel_id != channel_id:
@@ -991,7 +991,7 @@ class SyncMessageService:
                 pids.insert(0, message_id)
         else:
             pids = [x for x in pids if x != message_id]
-        await SyncChannel.set_channel_pinned_message_ids(
+        await SyncChannel.update_pinned_message_ids(
             channel_id,
             pids,
             company_id=company_id,
@@ -1024,7 +1024,7 @@ class SyncMessageService:
             AuthzObject.sync_channel(channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-        source = await SyncMessage.find_in_company(
+        source = await SyncMessage.by_message_id(
             company_id, message_id
         )
         if source is None:
@@ -1047,7 +1047,7 @@ class SyncMessageService:
         await SyncMessage.replace_contents(
             message_id, processing_contents, edited_at
         )
-        updated_entity = await SyncMessage.find_in_company(
+        updated_entity = await SyncMessage.by_message_id(
             company_id, message_id
         )
         if updated_entity is None:
@@ -1087,7 +1087,7 @@ class SyncMessageService:
             AuthzObject.sync_channel(channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-        source = await SyncMessage.find_in_company(
+        source = await SyncMessage.by_message_id(
             company_id, message_id
         )
         if source is None:
@@ -1110,7 +1110,7 @@ class SyncMessageService:
         await SyncMessage.replace_contents(
             message_id, processing_contents, edited_at
         )
-        updated_entity = await SyncMessage.find_in_company(
+        updated_entity = await SyncMessage.by_message_id(
             company_id, message_id
         )
         if updated_entity is None:

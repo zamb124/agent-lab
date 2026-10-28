@@ -65,7 +65,7 @@ class StockReorderRule(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_company(
+    async def list_by_rule_id(
         cls,
         company_id: str,
         *,
@@ -73,6 +73,7 @@ class StockReorderRule(PlatformModel):
         active_only: bool = False,
         limit: int = 500,
     ) -> list[Self]:
+        """Окно правил пополнения, ORDER BY rule_id, limit по умолчанию 500, без offset. warehouse_id None не фильтрует. active_only False не сужает до активных."""
         q = cls.objects.filter(company_id=company_id)
         if warehouse_id is not None:
             q = q.filter(warehouse_id=warehouse_id)
@@ -81,7 +82,7 @@ class StockReorderRule(PlatformModel):
         return await q.order_by("rule_id").limit(limit).all()
 
     @classmethod
-    async def create_rule(
+    async def create(
         cls,
         *,
         company_id: str,
@@ -93,6 +94,7 @@ class StockReorderRule(PlatformModel):
         operation_type_id: str,
         route_id: str | None = None,
     ) -> Self:
+        """Вставляет правило. rule_id новый."""
         now = utcnow()
         return await cls.objects.create(
             instance=cls(
@@ -111,9 +113,10 @@ class StockReorderRule(PlatformModel):
         )
 
     @classmethod
-    async def set_active(
+    async def update_is_active_and_updated_at(
         cls, company_id: str, rule_id: str, active: bool
     ) -> None:
+        """Пишет is_active и updated_at по company_id и rule_id. Нет строки — ничего не меняет."""
         _ = await cls.objects.filter(
             company_id=company_id, rule_id=rule_id
         ).update(using=STOCK_DB, is_active=active, updated_at=utcnow())

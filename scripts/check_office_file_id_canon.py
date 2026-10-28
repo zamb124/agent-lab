@@ -34,7 +34,7 @@ SKIP_DIR_NAMES: frozenset[str] = frozenset(
 )
 
 ALLOWED_SUFFIXES: frozenset[str] = frozenset(
-    {".py", ".js", ".mdc", ".md", ".json", ".sh", ".yml", ".yaml"}
+    {".py", ".js", ".ts", ".mdc", ".md", ".json", ".sh", ".yml", ".yaml"}
 )
 
 def main() -> int:

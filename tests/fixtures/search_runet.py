@@ -50,7 +50,7 @@ async def _seed_runet_platform_index(di) -> None:
         except IntegrityError:
             pass
     try:
-        _ = await CrawlProfile.get_with_index("runet_platform")
+        _ = await CrawlProfile.require_with_index("runet_platform")
     except ValueError:
         try:
             _ = await di.crawl_service.create_profile(

@@ -29,6 +29,12 @@ interface WikiTreeMenuItem {
 import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
 import '@platform/lib/components/platform-tree.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 export class WikiTreeSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'wiki.tree';
     static i18nNamespace = 'wiki';
@@ -90,13 +96,13 @@ export class WikiTreeSheet extends PlatformBottomSheet {
     }
 
     private _onSelect(event: CustomEvent<{ id?: unknown }>) {
-        this.navigate('wiki_page', { pageId: String(event.detail.id ?? '') });
+        this.navigate('wiki_page', { pageId: missingAsEmpty(event.detail.id) });
         this._requestClose();
     }
 
     private _onAction(event: CustomEvent<{ action?: string; id?: unknown }>) {
         const { action, id } = event.detail;
-        const pageId = String(id ?? '');
+        const pageId = missingAsEmpty(id);
         if (action === 'open') {
             this.navigate('wiki_page', { pageId });
             this._requestClose();

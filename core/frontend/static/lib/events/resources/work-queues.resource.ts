@@ -16,3 +16,9 @@ export const workQueuesResource = createResourceCollection({
         create_error: 'worktracker:toast.queue_create_failed',
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'worktracker/work_queues': typeof workQueuesResource;
+    }
+}

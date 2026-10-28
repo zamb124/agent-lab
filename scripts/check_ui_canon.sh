@@ -25,7 +25,7 @@ fi
 
 # 1. Только PlatformElement / PlatformApp / PlatformPage наследование.
 if rg -q 'extends LitElement' apps -g '*.{js,ts}'; then
-    fail "запрещено extends LitElement в apps/**/*.js"
+    fail "запрещено extends LitElement в apps/**/*.ts"
     rg 'extends LitElement' apps -g '*.{js,ts}' >&2 || true
 fi
 while IFS= read -r platform_app_file; do
@@ -229,6 +229,7 @@ RUNTIME_ANTI_GLOBS=(
     core/frontend/static/lib -g '*.{js,ts}'
     --glob '!core/frontend/static/lib/platform-element/**'
     --glob '!core/frontend/static/lib/events/**'
+    --glob '!core/frontend/static/lib/base/use-resource.ts'
 )
 if rg -q 'super\.showModal\s*\(' "${RUNTIME_ANTI_GLOBS[@]}"; then
     fail "super.showModal() запрещено — у GlassModal нет showModal(), открывайте через openModal('<kind>')"
@@ -248,18 +249,21 @@ if rg -q 'this\.i18n\.(getCurrentLocale|t)\s*\(' "${RUNTIME_ANTI_GLOBS[@]}"; the
 fi
 
 # 15. Запрет фолбеков `|| [] / || {} / || null / || ''` в events/resources/**
+if [ -z "$(rg --files apps -g '*.resource.ts' | head -n 1)" ]; then
+    fail "п.15: маска *.resource.ts не нашла ни одного файла фабрик — гейт слепой"
+fi
 #     (zero-fallback канон фабрик; дефолты — только в initialSlice / extraInitial).
 RESOURCES_FALLBACK_PATTERN='\|\|\s*\[\]|\|\|\s*\{\}|\|\|\s*null\b|\|\|\s*['\''"]\s*['\''"]'
-if rg -q "${RESOURCES_FALLBACK_PATTERN}" apps -g '*.resource.js'; then
-    fail "фолбеки '|| [] / || {} / || null / ' в apps/**/events/resources/**.resource.js запрещены — нормализуйте через _normalize<X> или initialSlice"
-    rg -n "${RESOURCES_FALLBACK_PATTERN}" apps -g '*.resource.js' >&2 || true
+if rg -q "${RESOURCES_FALLBACK_PATTERN}" apps -g '*.resource.ts'; then
+    fail "фолбеки '|| [] / || {} / || null / ' в apps/**/events/resources/**.resource.ts запрещены — нормализуйте через _normalize<X> или initialSlice"
+    rg -n "${RESOURCES_FALLBACK_PATTERN}" apps -g '*.resource.ts' >&2 || true
 fi
 # Запрет `?? []` / `?? {}` / `?? null` / `?? '—'` в events/resources/** — та же
 # логика фолбеков, но через nullish coalescing.
 RESOURCES_NULLISH_PATTERN='\?\?\s*\[\]|\?\?\s*\{\}|\?\?\s*null\b|\?\?\s*['\''"]'
-if rg -q "${RESOURCES_NULLISH_PATTERN}" apps -g '*.resource.js'; then
-    fail "фолбеки '?? [] / ?? {} / ?? null / ?? \"\"' в apps/**/events/resources/**.resource.js запрещены"
-    rg -n "${RESOURCES_NULLISH_PATTERN}" apps -g '*.resource.js' >&2 || true
+if rg -q "${RESOURCES_NULLISH_PATTERN}" apps -g '*.resource.ts'; then
+    fail "фолбеки '?? [] / ?? {} / ?? null / ?? \"\"' в apps/**/events/resources/**.resource.ts запрещены"
+    rg -n "${RESOURCES_NULLISH_PATTERN}" apps -g '*.resource.ts' >&2 || true
 fi
 
 # 16. Field canon (raw <input>/<textarea>/<select>) — отдельный детектор
@@ -267,11 +271,11 @@ fi
 #     CSS в apps/<svc>/ui/**) и 18 (импорт glass-input/glass-textarea).
 
 # 17. Локальные .form-* / .field-pill* CSS правила в apps/<svc>/ui/** запрещены —
-#     стили только в core/frontend/static/lib/styles/shared/field-pill.styles.js;
+#     стили только в core/frontend/static/lib/styles/shared/field-pill.styles.ts;
 #     кастомизация — токены --field-pill-* в core/frontend/static/assets/css/tokens.css.
 PILL_CSS_PATTERN='\.(form-(input|textarea|select|group|label)|field-pill(-(input|textarea|select|label|empty|readonly-text|readonly-muted|readonly-inline)|--(textarea|tags))?)\s*[\{,]'
 if rg -nP "${PILL_CSS_PATTERN}" apps -g '*.{js,ts}' >/dev/null 2>&1; then
-    fail "локальные .form-*/.field-pill* CSS правила в apps/<svc>/ui/**.js запрещены — стили только в core/frontend/static/lib/styles/shared/field-pill.styles.js (токены --field-pill-* в tokens.css)"
+    fail "локальные .form-*/.field-pill* CSS правила в apps/<svc>/ui/**.ts запрещены — стили только в core/frontend/static/lib/styles/shared/field-pill.styles.ts (токены --field-pill-* в tokens.css)"
     rg -nP "${PILL_CSS_PATTERN}" apps -g '*.{js,ts}' >&2 || true
 fi
 
@@ -383,32 +387,32 @@ fi
 # 23. Flows UI: hardcoded hex/rgba в JS запрещены (Design System tokens only).
 FLOWS_HEX_HITS="$(rg -n '#[0-9a-fA-F]{3,8}|rgba?\(' apps/flows/ui -g '*.{js,ts}' \
     --glob '!apps/flows/ui/components/flow-canvas/**' \
-    --glob '!apps/flows/ui/_helpers/flow-cover-gradients.js' || true)"
+    --glob '!apps/flows/ui/_helpers/flow-cover-gradients.ts' || true)"
 if [ -n "$FLOWS_HEX_HITS" ]; then
-    fail "apps/flows/ui/**/*.js: hardcoded hex/rgba запрещены — используйте tokens.css (--flows-*, --accent, --glass-*)"
+    fail "apps/flows/ui/**/*.ts: hardcoded hex/rgba запрещены — используйте tokens.css (--flows-*, --accent, --glass-*)"
     echo "$FLOWS_HEX_HITS" >&2
 fi
 
-# 24. Flows UI: raw <button в apps/flows/ui/**/*.js запрещён — action chrome только <platform-button>.
+# 24. Flows UI: raw <button в apps/flows/ui/**/*.ts запрещён — action chrome только <platform-button>.
 #     Selectable cards / list rows — <article role="button" tabindex="0"> + keyboard (Enter/Space).
 #     Resize handles — role="separator" + pointer handlers, не <button>.
 FLOWS_BUTTON_HITS="$(rg -n '<button' apps/flows/ui -g '*.{js,ts}' || true)"
 if [ -n "$FLOWS_BUTTON_HITS" ]; then
-    fail "apps/flows/ui/**/*.js: raw <button запрещён — используйте <platform-button> или <article role=\"button\">"
+    fail "apps/flows/ui/**/*.ts: raw <button запрещён — используйте <platform-button> или <article role=\"button\">"
     echo "$FLOWS_BUTTON_HITS" >&2
 fi
 
 # 25. Flows UI: legacy action-button CSS class definitions запрещены — удалять в том же PR, что и миграция на platform-button.
 FLOWS_LEGACY_BTN_CSS_PATTERN='\.(action-btn|icon-btn|ghost-btn|mini-btn|add-btn|mcp-preset)\s*[\{,]'
 if rg -nP "${FLOWS_LEGACY_BTN_CSS_PATTERN}" apps/flows/ui -g '*.{js,ts}' >/dev/null 2>&1; then
-    fail "apps/flows/ui/**/*.js: legacy .action-btn/.icon-btn/.ghost-btn/.mini-btn/.add-btn/.mcp-preset CSS запрещены — удаляйте вместе с миграцией на <platform-button>"
+    fail "apps/flows/ui/**/*.ts: legacy .action-btn/.icon-btn/.ghost-btn/.mini-btn/.add-btn/.mcp-preset CSS запрещены — удаляйте вместе с миграцией на <platform-button>"
     rg -nP "${FLOWS_LEGACY_BTN_CSS_PATTERN}" apps/flows/ui -g '*.{js,ts}' >&2 || true
 fi
 
 # 26. Flows UI: glass-button запрещён — используйте <platform-button>.
 FLOWS_GLASS_BUTTON_HITS="$(rg -n '<glass-button|glass-button\.js' apps/flows/ui -g '*.{js,ts}' || true)"
 if [ -n "$FLOWS_GLASS_BUTTON_HITS" ]; then
-    fail "apps/flows/ui/**/*.js: <glass-button> запрещён — используйте <platform-button>"
+    fail "apps/flows/ui/**/*.ts: <glass-button> запрещён — используйте <platform-button>"
     echo "$FLOWS_GLASS_BUTTON_HITS" >&2
 fi
 
@@ -416,7 +420,7 @@ fi
 FLOWS_ICON_SIZE_HITS="$(rg -n 'platform-button-icon-size:\s*[0-9]' apps/flows/ui -g '*.{js,ts}' \
     --glob '!apps/flows/ui/components/flow-canvas/**' || true)"
 if [ -n "$FLOWS_ICON_SIZE_HITS" ]; then
-    fail "apps/flows/ui/**/*.js: literal --platform-button-icon-size запрещён — используйте density=\"compact|dense\" или var(--flows-*)"
+    fail "apps/flows/ui/**/*.ts: literal --platform-button-icon-size запрещён — используйте density=\"compact|dense\" или var(--flows-*)"
     echo "$FLOWS_ICON_SIZE_HITS" >&2
 fi
 
@@ -468,7 +472,7 @@ fi
 # 30. Flows UI: literal color: white запрещён — используйте semantic tokens (--text-inverse, --flows-avatar-text).
 FLOWS_COLOR_WHITE_HITS="$(rg -n 'color:\s*white\b' apps/flows/ui -g '*.{js,ts}' || true)"
 if [ -n "$FLOWS_COLOR_WHITE_HITS" ]; then
-    fail "apps/flows/ui/**/*.js: color: white запрещён — используйте var(--text-inverse) или var(--flows-avatar-text)"
+    fail "apps/flows/ui/**/*.ts: color: white запрещён — используйте var(--text-inverse) или var(--flows-avatar-text)"
     echo "$FLOWS_COLOR_WHITE_HITS" >&2
 fi
 
@@ -515,13 +519,13 @@ if rg -q "prompt-editor|PromptEditor|prompt_editor\.js" apps core/frontend tests
     fail "prompt-editor запрещён — используйте <platform-markdown-editor> (ui_components.mdc)"
     rg -n "prompt-editor|PromptEditor|prompt_editor\.js" apps core/frontend tests -g '*.{js,ts}' -g '*.py' -g '*.html' >&2 || true
 fi
-if [ -f core/frontend/static/lib/components/prompt-editor.js ]; then
-    fail "core/.../prompt-editor.js должен быть удалён — логика в platform-markdown-editor.js"
+if [ -f core/frontend/static/lib/components/prompt-editor.ts ]; then
+    fail "core/.../prompt-editor.ts должен быть удалён — логика в platform-markdown-editor.ts"
 fi
 
 # 37. Подвал сайдбара: колокольчик живёт внутри <platform-user> в слоте user-toolbar.
 #     Рядом с блоком пользователя он повисает отдельной кнопкой и ломает ряд футера.
-STRAY_NOTIF=$(rg -l "platform-notification-manager" apps/*/ui/components/*-sidebar.js 2>/dev/null | while read -r file; do
+STRAY_NOTIF=$(rg -l "platform-notification-manager" apps -g '*-sidebar.{js,ts}' 2>/dev/null | while read -r file; do
     if rg -q "<platform-notification-manager(?![^>]*slot=\"user-toolbar\")" -P "$file" 2>/dev/null; then
         echo "$file"
     fi

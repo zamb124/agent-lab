@@ -25,7 +25,7 @@
  *     компании — инлайн-секция «Роли»: чекбоксы owner/admin/developer/viewer.
  *     Чекбокс owner блокируется, если у member.roles есть 'owner' (защита
  *     владельца компании).
- *   - Сохранение ролей → useResource('frontend/team_members').update(userId, { roles }).
+ *   - Сохранение ролей → useResource('frontend/team').update(userId, { roles }).
  *   - Футер: Save roles (если admin и роли изменены), Message in Sync,
  *     Открыть в Team, Close.
  *   - Копирование user id: иконка в шапке слева от Save.
@@ -40,6 +40,7 @@
  * i18n namespace: 'platform'.
  */
 
+import { isPlainRecord } from '../events/payload.js';
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformFormModal } from './glass-form-modal.js';
@@ -119,9 +120,76 @@ import './platform-icon.js';
 import './platform-work-item-badge.js';
 import './platform-user-chip.js';
 
-const TEAM_MEMBERS_RESOURCE_NAME = 'frontend/team_members';
+const TEAM_MEMBERS_RESOURCE_NAME = 'frontend/team';
 const SYNC_SHARED_CHANNELS_OP_NAME = 'sync/shared_channels';
 const AVAILABLE_ROLES = Object.freeze(['owner', 'admin', 'developer', 'viewer']);
+
+function teamMemberView(member: Record<string, unknown>): TeamMemberRecord {
+    const view: TeamMemberRecord = {};
+    if (typeof member.user_id === 'string') view.user_id = member.user_id;
+    if (typeof member.name === 'string') view.name = member.name;
+    if (typeof member.email === 'string') view.email = member.email;
+    if (typeof member.avatar_url === 'string') view.avatar_url = member.avatar_url;
+    if (Array.isArray(member.roles)) view.roles = member.roles;
+    if (typeof member.joined_at === 'string') view.joined_at = member.joined_at;
+    if (member.is_flow_employee === true) view.is_flow_employee = true;
+    if (typeof member.flow_id === 'string') view.flow_id = member.flow_id;
+    if (Array.isArray(member.curator_user_ids)) view.curator_user_ids = member.curator_user_ids;
+    return view;
+}
+
+function teamSliceView(team: { loading: boolean; members: readonly Record<string, unknown>[] }): TeamSliceView {
+    return {
+        loading: team.loading,
+        members: team.members.map(teamMemberView),
+    };
+}
+
+function authUserView(user: Record<string, unknown>): AuthUserRecord {
+    const view: AuthUserRecord = {};
+    if (typeof user.id === 'string') view.id = user.id;
+    if (typeof user.user_id === 'string') view.user_id = user.user_id;
+    if (typeof user.name === 'string') view.name = user.name;
+    if (user.canAdmin === true) view.canAdmin = true;
+    if (isPlainRecord(user.raw)) view.raw = user.raw;
+    return view;
+}
+
+function authSliceView(auth: { status: string; user: Record<string, unknown> | null }): AuthSliceView {
+    if (auth.user === null) return { status: auth.status };
+    return { status: auth.status, user: authUserView(auth.user) };
+}
+
+function workCountsView(value: unknown): WorkCountsView | undefined {
+    if (value === undefined) return undefined;
+    if (!isPlainRecord(value)) {
+        throw new Error('platform-user-info-modal: work item counts must be an object');
+    }
+    if (value.total_open_count !== undefined && typeof value.total_open_count !== 'number') {
+        throw new Error('platform-user-info-modal: total_open_count must be a number');
+    }
+    const view: WorkCountsView = {};
+    if (typeof value.total_open_count === 'number') view.total_open_count = value.total_open_count;
+    return view;
+}
+
+function preferenceRecord(value: unknown): Record<string, unknown> {
+    if (value === undefined || value === null) return {};
+    if (!isPlainRecord(value)) {
+        throw new Error('platform-user-info-modal: ui_preferences must be an object');
+    }
+    return value;
+}
+
+function isSharedChannel(channel: unknown): channel is SharedChannelRecord {
+    return isPlainRecord(channel) && typeof channel.channel_id === 'string' && channel.channel_id !== '';
+}
+
+function sharedChannelItems(source: unknown): unknown[] {
+    if (Array.isArray(source)) return source;
+    if (isPlainRecord(source) && Array.isArray(source.items)) return source.items;
+    return [];
+}
 
 export class PlatformUserInfoModal extends PlatformFormModal {
     static modalKind = 'platform.user_info';
@@ -148,9 +216,9 @@ export class PlatformUserInfoModal extends PlatformFormModal {
     private _avatarLgSig: string;
     private _sharedChannelsPeerId: string;
     private _sharedChannelsOp: OpController | null;
-    private _teamSel: SelectController<TeamSliceView | undefined>;
-    private _authSel: SelectController<AuthSliceView | undefined>;
-    private _localeSel: SelectController<string | undefined>;
+    private _teamSel: SelectController<TeamSliceView>;
+    private _authSel: SelectController<AuthSliceView>;
+    private _localeSel: SelectController<string>;
     private _workCountsSel: SelectController<WorkCountsView | undefined>;
     private _loadDispatched: boolean;
     private _members: ResourceController | null;
@@ -376,13 +444,13 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._sharedChannelsError = '';
         this._sharedChannelsPeerId = '';
         this._sharedChannelsOp = null;
-        this._teamSel = this.select((s) => s.team as TeamSliceView | undefined);
-        this._authSel = this.select((s) => s.auth as AuthSliceView | undefined);
-        this._localeSel = this.select((s) => (s.i18n as { locale?: string }).locale);
-        this._workCountsSel = this.select((s) => s.worktrackerWorkItemCounts as WorkCountsView | undefined);
+        this._teamSel = this.select((s) => teamSliceView(s.team));
+        this._authSel = this.select((s) => authSliceView(s.auth));
+        this._localeSel = this.select((s) => s.i18n.locale);
+        this._workCountsSel = this.select((s) => workCountsView(s.worktrackerWorkItemCounts));
         this._loadDispatched = false;
         // Редактирование ролей живёт в фабрике сервиса frontend
-        // (`frontend/team_members`). В сервисах без админ-панели команд
+        // (`frontend/team`). В сервисах без админ-панели команд
         // (office, rag, ...) фабрика не зарегистрирована — секция ролей
         // в модалке скрывается, а резолвить контроллер мы будем лениво
         // при сохранении ролей у админа.
@@ -407,7 +475,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         super.updated(changed);
         const auth = this._authSel.value;
         const team = this._teamSel.value;
-        const members = team?.members || [];
+        const members = team === undefined || !Array.isArray(team.members) ? [] : team.members;
         if (
             !this._loadDispatched
             && auth?.status === 'authenticated'
@@ -472,16 +540,8 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         try {
             const result = await op.run({ peer_user_id: peerId });
             if (this.userId !== peerId || this._sharedChannelsPeerId !== peerId) return;
-            const source = result && typeof result === 'object' ? result : op.lastResult;
-            const items = source && typeof source === 'object' && Array.isArray((source as { items?: unknown }).items)
-                ? (source as { items: unknown[] }).items
-                : (Array.isArray(source) ? source : []);
-            this._sharedChannels = items.filter((channel): channel is SharedChannelRecord => (
-                Boolean(channel)
-                && typeof channel === 'object'
-                && typeof (channel as SharedChannelRecord).channel_id === 'string'
-                && (channel as SharedChannelRecord).channel_id !== ''
-            ));
+            const source = isPlainRecord(result) || Array.isArray(result) ? result : op.lastResult;
+            this._sharedChannels = sharedChannelItems(source).filter(isSharedChannel);
         } catch (err) {
             if (this.userId === peerId && this._sharedChannelsPeerId === peerId) {
                 this._sharedChannels = [];
@@ -508,10 +568,8 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             ? ((rawRecord && typeof rawRecord.user_id === 'string' ? rawRecord.user_id : undefined) || currentUser.id)
             : null;
         if (currentUser && currentId === userId) {
-            const raw = rawRecord || {};
-            const prefs = typeof raw.ui_preferences === 'object' && raw.ui_preferences !== null
-                ? raw.ui_preferences as Record<string, unknown>
-                : {};
+            const raw = isPlainRecord(rawRecord) ? rawRecord : {};
+            const prefs = preferenceRecord(raw.ui_preferences);
             const prefLanguage = typeof prefs.language === 'string' ? prefs.language : undefined;
             const emails = Array.isArray(raw.emails) ? raw.emails : [];
             return {
@@ -533,18 +591,19 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             };
         }
         const team = this._teamSel.value;
-        const member = (team?.members || []).find((m) => m.user_id === userId);
+        const members = team === undefined || !Array.isArray(team.members) ? [] : team.members;
+        const member = members.find((m) => m.user_id === userId);
         if (member) {
             return {
                 isOwn: false,
                 source: 'team',
                 user: {
-                    user_id: member.user_id || '',
-                    name: member.name || '',
+                    user_id: userId,
+                    name: typeof member.name === 'string' ? member.name : '',
                     email: member.email,
                     avatar_url: member.avatar_url,
                     roles: Array.isArray(member.roles) ? member.roles.filter((r): r is string => typeof r === 'string') : [],
-                    joined_at: member.joined_at || null,
+                    joined_at: typeof member.joined_at === 'string' && member.joined_at.length > 0 ? member.joined_at : null,
                     is_flow_employee: member.is_flow_employee === true,
                     flow_id: typeof member.flow_id === 'string' ? member.flow_id : null,
                     curator_user_ids: Array.isArray(member.curator_user_ids)
@@ -574,7 +633,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         }
         const hadUrl = typeof user.avatar_url === 'string' && user.avatar_url.length > 0;
         const resolved = resolveAvatarImageSrc({
-            avatarUrl: this._avatarLgFallback === 0 && hadUrl ? user.avatar_url || null : null,
+            avatarUrl: this._avatarLgFallback === 0 && hadUrl && typeof user.avatar_url === 'string' ? user.avatar_url : null,
             seed: user.user_id,
         });
         return html`<div class="avatar-lg"><img src=${resolved.src} alt=${user.name} @error=${this._onAvatarLgError} /></div>`;
@@ -702,7 +761,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                         type="email"
                         id="email"
                         class="form-input"
-                        .value=${user.email || ''}
+                        .value=${user.email === undefined || user.email === null ? '' : user.email}
                         disabled
                     />
                     <small class="form-help">${this.t('user_info_modal.field_email_locked')}</small>
@@ -907,7 +966,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         const members = this._ensureTeamMembersResource();
         if (!members) {
             throw new Error(
-                'platform-user-info-modal: frontend/team_members factory required to update roles',
+                'platform-user-info-modal: frontend/team factory required to update roles',
             );
         }
         this.formErrors = {};

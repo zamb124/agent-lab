@@ -11,6 +11,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import type { CrmGraphUiSlice } from '../crm.types.js';
 
 const DEFAULT_PANELS = Object.freeze({
     search: true,
@@ -35,7 +36,7 @@ export const graphUiSlice = createSlice({
         hydratePanels: 'panels_hydrated',
         markTimelineSeeded: 'timeline_seeded',
     },
-    extraReducer: (state, event) => {
+    extraReducer: (state: CrmGraphUiSlice, event) => {
         switch (event.type) {
             case 'crm/graph_ui/panels_hydrated': {
                 const p = (event.payload as Record<string, any>);
@@ -66,3 +67,9 @@ export const graphUiSlice = createSlice({
         }
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/graph_ui': typeof graphUiSlice;
+    }
+}

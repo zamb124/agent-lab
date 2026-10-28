@@ -3,7 +3,7 @@
 
 Строится замыкание относительных импортов от Flow UI embed entrypoints
 ``core/frontend/static/lib/embed-flow-ui/`` и публичного CDN shim
-``embed-chat/humanitec-embed-autoload.js``. Любой файл в замыкании
+``embed-chat/humanitec-embed-autoload.ts``. Любой файл в замыкании
 не должен содержать bare ``from 'lit'`` / ``from 'lit/...`` или
 ``from '@platform/...``. Иначе в браузере на чужом origin —
 ``Failed to resolve module specifier``.

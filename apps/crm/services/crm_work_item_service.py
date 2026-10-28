@@ -153,7 +153,7 @@ class CrmWorkItemService:
         entity_subtype: str | None = None,
     ) -> WorkItem:
         """Создать или обновить парный WorkItem CRM-задачи (1:1 по entity_id)."""
-        existing = await WorkItem.find_work_item_by_crm_entity(company_id, entity_id)
+        existing = await WorkItem.any_crm_activity_by_entity_id(company_id, entity_id)
         fields_set = seed.model_fields_set
 
         if existing is None:
@@ -229,19 +229,19 @@ class CrmWorkItemService:
         return await WorkItem.require_in_company(company_id, existing.work_item_id)
 
     async def delete_for_task(self, *, company_id: str, entity_id: str) -> None:
-        existing = await WorkItem.find_work_item_by_crm_entity(company_id, entity_id)
+        existing = await WorkItem.any_crm_activity_by_entity_id(company_id, entity_id)
         if existing is not None:
             _ = await WorkItem.delete_in_company(
                 company_id, existing.work_item_id
             )
 
     async def get_for_task(self, *, company_id: str, entity_id: str) -> WorkItem | None:
-        return await WorkItem.find_work_item_by_crm_entity(company_id, entity_id)
+        return await WorkItem.any_crm_activity_by_entity_id(company_id, entity_id)
 
     async def map_work_item_ids_by_entities(
         self, *, company_id: str, entity_ids: list[str]
     ) -> dict[str, str]:
-        return await WorkItem.map_work_item_ids_by_crm_entities(company_id, entity_ids)
+        return await WorkItem.ids_by_crm_entity_id(company_id, entity_ids)
 
     async def list_crm_activity_work_items(
         self,
@@ -252,7 +252,7 @@ class CrmWorkItemService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[WorkItem]:
-        return await WorkItem.list_work_items(
+        return await WorkItem.list_created_desc(
             company_id,
             namespace=namespace,
             kind=WorkItemKind.CRM_ACTIVITY,

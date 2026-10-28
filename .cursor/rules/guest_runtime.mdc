@@ -7,8 +7,8 @@ globs:
   - "apps/flows/src/api/v1/code_agent.py"
   - "apps/flows/realtime/code_agent_operations.py"
   - "apps/flows/src/services/code_agent_source_service.py"
-  - "apps/flows/ui/components/nodes/flows-code-agent-editor.js"
-  - "apps/flows/ui/events/resources/code-agent.resource.js"
+  - "apps/flows/ui/components/nodes/flows-code-agent-editor.ts"
+  - "apps/flows/ui/events/resources/code-agent.resource.ts"
 alwaysApply: false
 ---
 

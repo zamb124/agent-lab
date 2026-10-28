@@ -95,7 +95,7 @@ async def test_thread_list_by_channel_order(
     _ = await SyncThread.objects.create(instance=thread_old)
     _ = await SyncThread.objects.create(instance=thread_new)
 
-    rows = await SyncThread.list_threads_in_channel(
+    rows = await SyncThread.list_in_channel(
         company_id,
         channel_id,
         limit=100,
@@ -123,7 +123,7 @@ async def test_thread_list_empty_channel(
         created_by_user_id="u1",
     )
     _ = await SyncChannel.objects.create(instance=ch)
-    rows = await SyncThread.list_threads_in_channel(
+    rows = await SyncThread.list_in_channel(
         company_id,
         empty_id,
         limit=100,

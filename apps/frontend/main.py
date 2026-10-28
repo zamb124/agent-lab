@@ -67,7 +67,7 @@ from apps.frontend.services.flow_ui_shared_session_html import (
 from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
-from core.app.spa import register_embed_bundle_routes, resolve_ui_static_dir
+from core.app.spa import mount_core_frontend, resolve_ui_static_dir
 from core.app_state import get_request_correlation_ids
 from core.authz.service import AuthzService
 from core.billing.service import BillingService
@@ -247,7 +247,7 @@ async def _seed_platform_pronunciation_rules() -> None:
     """Засевает платформенные правила произношения при первом старте (идемпотентно)."""
     if not get_settings().voice.tts.pronunciation_seed_enabled:
         return
-    existing = await PronunciationRule.all_for_company_scope(company_id=None)
+    existing = await PronunciationRule.list_for_company_scope(company_id=None)
     existing_patterns = {(r.kind, r.pattern, r.language) for r in existing}
 
     seed_rules: list[tuple[PronunciationRuleKind, str, str, str]] = [
@@ -382,15 +382,7 @@ app.include_router(payments_webhook_router, tags=["payments-webhook-root"])
 app.include_router(public_site_router)
 
 # Монтирование core/frontend (общая библиотека) - СНАЧАЛА монтируем статику!
-core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
-if core_frontend_path.exists():
-    register_embed_bundle_routes(app)
-    app.mount(
-        "/static/core",
-        StaticFiles(directory=str(core_frontend_path)),
-        name="core-frontend"
-    )
-    logger.info("frontend.core_lib_mounted", path=str(core_frontend_path))
+mount_core_frontend(app)
 
 # Монтирование apps/frontend/ui (само приложение; ui-dist/ после `npm run build:ui`)
 if _UI_STATIC_PATH.exists():

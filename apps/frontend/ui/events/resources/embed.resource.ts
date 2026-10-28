@@ -115,3 +115,10 @@ export const embedCodeLoadOp = createAsyncOp({
         return state;
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/embed_configs': typeof embedConfigsResource;
+        'frontend/embed_code': typeof embedCodeLoadOp;
+    }
+}

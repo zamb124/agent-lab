@@ -17,3 +17,9 @@ export const teamSearchFacets = createFacets({
     minQueryLength: 2,
     pageSize: 20,
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/team_search': typeof teamSearchFacets;
+    }
+}

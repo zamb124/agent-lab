@@ -13,6 +13,7 @@ import '@platform/lib/components/platform-user-chip.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export class JoinPage extends PlatformPage {
     static override properties: PropertyDeclarations = {
@@ -90,8 +91,9 @@ export class JoinPage extends PlatformPage {
         this._previewRanFor = null;
         this.useEvent('auth/oauth/failed', (event) => {
             this._oauthLoading = false;
-            const p = event.payload;
-            const msg = p && typeof (p as Record<string, any>).message === 'string' ? (p as Record<string, any>).message : '';
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const message = payload === null ? undefined : payload.message;
+            const msg = typeof message === 'string' ? message : '';
             this._oauthError = msg.length > 0 ? msg : this.t('join_page.oauth_failed');
         });
     }
@@ -159,11 +161,19 @@ export class JoinPage extends PlatformPage {
         if (!res) {
             return html``;
         }
+        const preview = isPlainRecord(res) ? res : null;
+        if (preview === null) {
+            throw new Error('join_page: preview response shape');
+        }
+        const companyName = preview.company_name;
+        const role = preview.role;
+        const invitedByName = preview.invited_by_name;
+        const invitedByUserId = preview.invited_by_user_id;
         if (
-            typeof (res as Record<string, any>).company_name !== 'string'
-            || typeof (res as Record<string, any>).role !== 'string'
-            || typeof (res as Record<string, any>).invited_by_name !== 'string'
-            || typeof (res as Record<string, any>).invited_by_user_id !== 'string'
+            typeof companyName !== 'string'
+            || typeof role !== 'string'
+            || typeof invitedByName !== 'string'
+            || typeof invitedByUserId !== 'string'
         ) {
             throw new Error('join_page: preview response shape');
         }
@@ -171,15 +181,15 @@ export class JoinPage extends PlatformPage {
             <div class="invite-preview">
                 <p>
                     <span class="preview-label">${this.t('join_page.preview_company')}</span>
-                    ${(res as Record<string, any>).company_name}
+                    ${companyName}
                 </p>
                 <p>
                     <span class="preview-label">${this.t('join_page.preview_role')}</span>
-                    ${(res as Record<string, any>).role}
+                    ${role}
                 </p>
                 <p>
                     <span class="preview-label">${this.t('join_page.preview_inviter')}</span>
-                    ${(res as Record<string, any>).invited_by_name}
+                    ${invitedByName}
                 </p>
             </div>
         `;

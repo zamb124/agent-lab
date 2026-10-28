@@ -58,7 +58,7 @@ async def test_create_flow_persists_typed_handoff_on_exact_tool_attachment(
     )
 
     assert response.status_code == 200, response.text
-    stored = await FlowConfig.get_latest(parent_flow_id)
+    stored = await FlowConfig.current_for_flow(parent_flow_id)
     assert stored is not None
     assert stored.nodes is not None
     assert "call_type" not in stored.nodes["main"]

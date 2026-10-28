@@ -85,3 +85,13 @@ export const templateTypeDeleteOp = createAsyncOp({
     commandType: 'crm/templates/type_remove_requested',
     restMirror: { method: 'DELETE', path: '/crm/api/v1/namespaces/templates/:template_id/types/:type_id' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/templates': typeof templatesResource;
+        'crm/template_update': typeof templateUpdateOp;
+        'crm/template_schema_options': typeof templateSchemaOptionsOp;
+        'crm/template_type_upsert': typeof templateTypeUpsertOp;
+        'crm/template_type_delete': typeof templateTypeDeleteOp;
+    }
+}

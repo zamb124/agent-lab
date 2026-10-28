@@ -45,7 +45,7 @@ class SyncThread(PlatformModel):
     title: str | None = DbField(default=None, max_length=255)
 
     @classmethod
-    async def list_threads_in_channel(
+    async def list_in_channel(
         cls,
         company_id: str,
         channel_id: str,
@@ -53,13 +53,15 @@ class SyncThread(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Треды канала, ORDER BY created_at DESC, окно limit и offset."""
         return await cls.objects.filter(
             company_id=company_id,
             channel_id=channel_id,
         ).order_by("-created_at").limit(limit).offset(offset).all()
 
     @classmethod
-    async def create_thread(cls, thread: Self) -> Self:
+    async def create(cls, thread: Self) -> Self:
+        """Вставляет строку. Повтор того же PK — ошибка хранилища."""
         return await cls.objects.create(instance=thread)
 
 

@@ -5,12 +5,33 @@
 import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
-import {
-    buildSpanAttributeViewModel,
-    isTracePlainObject,
-    prettyTraceJsonText,
-    traceScalarText,
-} from '../utils/trace-attribute-view-model.js';
+import { buildSpanAttributeViewModel, prettyTraceJsonText, traceScalarText } from '../utils/trace-attribute-view-model.js';
+import { isJsonObject } from '../utils/json-object.js';
+import { isPlainRecord } from '../events/payload.js';
+
+function isSpanMessage(value: unknown): value is SpanMessageItem {
+    if (!isPlainRecord(value)) return false;
+    return typeof value.role === 'string' && typeof value.id === 'string' && typeof value.text === 'string';
+}
+
+function spanMessages(value: unknown): SpanMessageItem[] {
+    if (!Array.isArray(value)) return [];
+    const messages: SpanMessageItem[] = [];
+    for (const item of value) {
+        if (!isSpanMessage(item)) {
+            throw new Error('platform-span-attributes-viewer: message must have role, id and text strings');
+        }
+        messages.push(item);
+    }
+    return messages;
+}
+
+function unknownItems(value: unknown): unknown[] {
+    if (!Array.isArray(value)) return [];
+    const items: unknown[] = [];
+    for (const item of value) items.push(item);
+    return items;
+}
 
 interface SpanFieldItem {
     key?: unknown;
@@ -348,7 +369,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
     }
 
     _renderJsonBlock(value: unknown) {
-        const text = isTracePlainObject(value) || Array.isArray(value)
+        const text = isJsonObject(value) || Array.isArray(value)
             ? JSON.stringify(value, null, 2)
             : traceScalarText(value);
         if (text.length === 0) {
@@ -382,14 +403,15 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
     }
 
     _renderMessages(messages: SpanMessageItem[] | unknown) {
-        if (!Array.isArray(messages) || messages.length === 0) {
+        const list = spanMessages(messages);
+        if (list.length === 0) {
             return nothing;
         }
         return html`
             <div>
                 <div class="subheading">${this.t('span_attributes.messages')}</div>
                 <div class="message-list">
-                    ${(messages as SpanMessageItem[]).map((message) => html`
+                    ${list.map((message) => html`
                         <article class="message">
                             <div class="message-head">
                                 <span class="badge">${message.role.length > 0 ? message.role : this.t('span_attributes.message')}</span>
@@ -405,35 +427,37 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
     }
 
     _renderPills(titleKey: string, items: unknown) {
-        if (!Array.isArray(items) || items.length === 0) {
+        const list = unknownItems(items);
+        if (list.length === 0) {
             return nothing;
         }
         return html`
             <div>
                 <div class="subheading">${this.t(titleKey)}</div>
                 <div class="chips">
-                    ${(items as unknown[]).map((item) => html`<span class="badge">${item}</span>`)}
+                    ${list.map((item) => html`<span class="badge">${item}</span>`)}
                 </div>
             </div>
         `;
     }
 
     _renderList(titleKey: string, items: unknown) {
-        if (!Array.isArray(items) || items.length === 0) {
+        const list = unknownItems(items);
+        if (list.length === 0) {
             return nothing;
         }
         return html`
             <div>
                 <div class="subheading">${this.t(titleKey)}</div>
                 <ul class="list">
-                    ${(items as unknown[]).map((item) => html`<li>${item}</li>`)}
+                    ${list.map((item) => html`<li>${item}</li>`)}
                 </ul>
             </div>
         `;
     }
 
     _renderStatistics(statistics: unknown) {
-        if (!isTracePlainObject(statistics) || Object.keys(statistics).length === 0) {
+        if (!isJsonObject(statistics) || Object.keys(statistics).length === 0) {
             return nothing;
         }
         return html`
@@ -456,7 +480,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
             || structured.entities.length > 0
             || structured.highlights.length > 0
             || structured.keyEvents.length > 0
-            || (isTracePlainObject(structured.statistics) && Object.keys(structured.statistics).length > 0);
+            || (isJsonObject(structured.statistics) && Object.keys(structured.statistics).length > 0);
         if (hasParsedBlocks) {
             return html`
                 ${hasSummary ? html`
@@ -602,7 +626,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const vm = buildSpanAttributeViewModel(this.span) as unknown as SpanViewModel;
+        const vm = buildSpanAttributeViewModel(this.span);
         return html`
             <div class="trace-attrs">
                 ${vm.quickFacts.length > 0

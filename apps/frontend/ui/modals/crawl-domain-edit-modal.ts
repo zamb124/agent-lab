@@ -14,6 +14,17 @@ import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 
+function fieldText(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+function joinedLines(value: unknown, label: string): string {
+    if (value === undefined || value === null) return '';
+    if (!Array.isArray(value)) throw new Error(`crawl domain: ${label} must be an array`);
+    return value.map((item) => String(item)).join('\n');
+}
+
 const STATUS_VALUES = Object.freeze(['active', 'paused', 'blocked']);
 
 export class FrontendCrawlDomainEditModal extends PlatformFormModal {
@@ -88,8 +99,8 @@ export class FrontendCrawlDomainEditModal extends PlatformFormModal {
             this._refreshInterval = typeof this.refresh_interval_seconds === 'number'
                 ? String(this.refresh_interval_seconds)
                 : '';
-            this._includePatterns = (this.include_url_patterns || []).join('\n');
-            this._excludePatterns = (this.exclude_url_patterns || []).join('\n');
+            this._includePatterns = joinedLines(this.include_url_patterns, 'include_url_patterns');
+            this._excludePatterns = joinedLines(this.exclude_url_patterns, 'exclude_url_patterns');
         }
     }
 
@@ -171,7 +182,7 @@ export class FrontendCrawlDomainEditModal extends PlatformFormModal {
                         mode="edit"
                         label=${this.t('crawl_report_page.field_include_patterns')}
                         .value=${this._includePatterns}
-                        @change=${(e: CustomEvent) => { this._includePatterns = String(e.detail.value ?? ''); }}
+                        @change=${(e: CustomEvent) => { this._includePatterns = fieldText(e.detail.value); }}
                     ></platform-field>
                     <div class="field-help">${this.t('crawl_report_page.help_include_patterns')}</div>
                 </div>
@@ -181,7 +192,7 @@ export class FrontendCrawlDomainEditModal extends PlatformFormModal {
                         mode="edit"
                         label=${this.t('crawl_report_page.field_exclude_patterns')}
                         .value=${this._excludePatterns}
-                        @change=${(e: CustomEvent) => { this._excludePatterns = String(e.detail.value ?? ''); }}
+                        @change=${(e: CustomEvent) => { this._excludePatterns = fieldText(e.detail.value); }}
                     ></platform-field>
                     <div class="field-help">${this.t('crawl_report_page.help_exclude_patterns')}</div>
                 </div>

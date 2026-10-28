@@ -15,13 +15,7 @@ TOKENS_PATH = ROOT / "core/frontend/static/assets/css/tokens.css"
 FONTS_CSS_PATH = ROOT / "core/frontend/static/assets/fonts/platform-fonts.css"
 FONTS_DIR = ROOT / "core/frontend/static/assets/fonts"
 RESET_PATH = ROOT / "core/frontend/static/assets/css/reset.css"
-PLATFORM_ELEMENT_STYLES_PATH = (
-    ROOT / "core/frontend/static/lib/platform-element/styles.js"
-)
-if not PLATFORM_ELEMENT_STYLES_PATH.is_file():
-    _ts = PLATFORM_ELEMENT_STYLES_PATH.with_suffix(".ts")
-    if _ts.is_file():
-        PLATFORM_ELEMENT_STYLES_PATH = _ts
+PLATFORM_ELEMENT_STYLES_PATH = ROOT / "core/frontend/static/lib/platform-element/styles.ts"
 
 SPA_SHELLS = (
     ROOT / "apps/frontend/ui/index.html",
@@ -46,7 +40,7 @@ SCAN_DIRS = (
     ROOT / "apps/agent/desktop/branding",
 )
 
-SCAN_SUFFIXES = {".js", ".css", ".html"}
+SCAN_SUFFIXES = {".js", ".ts", ".css", ".html"}
 
 SKIP_DIR_NAMES = {
     "vendor",
@@ -207,12 +201,12 @@ def _check_platform_element_shadow_reset(errors: list[str]) -> None:
     if "font-family: var(--font-sans);" not in styles_text:
         _fail(
             errors,
-            "platform-element/styles.js :host must use font-family: var(--font-sans)",
+            "platform-element/styles.ts :host must use font-family: var(--font-sans)",
         )
     if ":host button" not in styles_text or "font: inherit;" not in styles_text:
         _fail(
             errors,
-            "platform-element/styles.js must reset :host button/input/textarea/select with font: inherit",
+            "platform-element/styles.ts must reset :host button/input/textarea/select with font: inherit",
         )
 
 

@@ -487,7 +487,7 @@ class PgVectorProvider(BaseRAGProvider):
         self, name: str, description: str | None = None
     ) -> RAGNamespace:
         """Namespace -- логическое понятие, фильтр по namespace_id."""
-        count = await VectorDocument.count_in_namespace(name)
+        count = await VectorDocument.count_rows_for_namespace(name)
         return RAGNamespace(
             namespace_id=name,
             name=name,
@@ -497,7 +497,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def get_namespace(self, namespace_id: str) -> RAGNamespace | None:
-        count = await VectorDocument.count_in_namespace(namespace_id)
+        count = await VectorDocument.count_rows_for_namespace(namespace_id)
         if count == 0:
             return None
 
@@ -510,19 +510,19 @@ class PgVectorProvider(BaseRAGProvider):
     @override
     async def list_namespaces(self) -> list[RAGNamespace]:
         namespaces: list[RAGNamespace] = []
-        for row_namespace_id, doc_count in await VectorDocument.namespace_document_counts():
+        for row_namespace_id, chunk_count in await VectorDocument.chunk_counts_by_namespace():
             namespaces.append(
                 RAGNamespace(
                     namespace_id=row_namespace_id,
                     name=row_namespace_id,
-                    document_count=doc_count,
+                    document_count=chunk_count,
                 )
             )
         return namespaces
 
     @override
     async def delete_namespace(self, namespace_id: str) -> bool:
-        deleted = await VectorDocument.delete_namespace_chunks(namespace_id)
+        deleted = await VectorDocument.delete_by_namespace(namespace_id)
 
         logger.info("rag.pgvector.namespace_deleted", namespace_id=namespace_id, deleted=deleted)
         return deleted > 0
@@ -738,7 +738,7 @@ class PgVectorProvider(BaseRAGProvider):
                 )
             )
 
-        deleted_count = await VectorDocument.replace_document_chunks(rows)
+        deleted_count = await VectorDocument.replace_chunks(rows)
         if deleted_count:
             logger.info(
                 "rag.pgvector.stale_chunks_deleted",
@@ -796,7 +796,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def get_document(self, namespace_id: str, document_id: str) -> RAGDocument | None:
-        loaded = await VectorDocument.chunks_for_document(namespace_id, document_id, limit=1)
+        loaded = await VectorDocument.list_by_namespace_and_document_id(namespace_id, document_id, limit=1)
         if len(loaded) == 0:
             return None
         row = loaded[0]
@@ -814,7 +814,7 @@ class PgVectorProvider(BaseRAGProvider):
         namespace_id: str,
         document_id: str,
     ) -> RAGDocumentContent | None:
-        rows = await VectorDocument.chunks_for_document(namespace_id, document_id)
+        rows = await VectorDocument.list_by_namespace_and_document_id(namespace_id, document_id)
         if not rows:
             return None
         first_row = rows[0]
@@ -842,7 +842,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def list_documents(self, namespace_id: str, limit: int = 100) -> list[RAGDocument]:
-        rows = await VectorDocument.distinct_documents(namespace_id, limit=limit)
+        rows = await VectorDocument.any_chunk_rows_by_document_id(namespace_id, limit=limit)
         docs: list[RAGDocument] = []
         for row in rows:
             meta = row.metadata
@@ -870,7 +870,7 @@ class PgVectorProvider(BaseRAGProvider):
         if where is not None:
             validate_metadata_filters(where)
             filter_sql = " AND " + _metadata_filter_sql(binder, where)
-        loaded = await VectorDocument.distinct_documents_where(
+        loaded = await VectorDocument.any_chunk_rows_by_document_id_where(
             namespace_id,
             filter_sql=filter_sql,
             filter_params=binder.params,
@@ -898,7 +898,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def delete_document(self, namespace_id: str, document_id: str) -> bool:
-        deleted = await VectorDocument.delete_document_chunks(namespace_id, document_id)
+        deleted = await VectorDocument.delete_by_namespace_and_document_id(namespace_id, document_id)
         if deleted:
             logger.info("rag.pgvector.document_deleted", document_id=document_id, deleted=deleted)
         return deleted > 0
@@ -914,7 +914,7 @@ class PgVectorProvider(BaseRAGProvider):
         out: dict[tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]] = {
             key: "absent" for key in unique_keys
         }
-        counted = await VectorDocument.semantic_index_counts(unique_keys)
+        counted = await VectorDocument.chunk_and_null_count_rows(unique_keys)
         for namespace_id, document_id, company_id, chunk_count, null_chunks in counted:
             key = (namespace_id, document_id, company_id)
             if key not in out:
@@ -932,7 +932,7 @@ class PgVectorProvider(BaseRAGProvider):
         target_embedding_model: str,
     ) -> list[tuple[str, str, str]]:
         """Кандидаты на перевекторизацию: (id, content, company_id)."""
-        return await VectorDocument.stale_chunks_for_reembed(
+        return await VectorDocument.stale_id_content_company_rows(
             limit=limit,
             target_embedding_model=target_embedding_model,
         )
@@ -943,7 +943,7 @@ class PgVectorProvider(BaseRAGProvider):
         target_embedding_model: str,
     ) -> int:
         """Записывает векторы для списка (chunk_id, embedding)."""
-        return await VectorDocument.write_reembed_embeddings(
+        return await VectorDocument.update_embedding_and_model(
             doc_embeddings,
             target_embedding_model,
         )
@@ -951,7 +951,7 @@ class PgVectorProvider(BaseRAGProvider):
     @override
     async def delete_orphan_company_chunks(self, *, limit: int) -> int:
         """Удаляет чанки без company_id."""
-        return await VectorDocument.delete_orphan_company_chunks(limit=limit)
+        return await VectorDocument.delete_without_company_id(limit=limit)
 
     # — Поиск —
 
@@ -1010,7 +1010,7 @@ class PgVectorProvider(BaseRAGProvider):
             validate_metadata_filters(filters)
             filter_sql = " AND " + _metadata_filter_sql(binder, filters)
         limit_placeholder = binder.next_index()
-        rows = await VectorDocument.semantic_hits(
+        rows = await VectorDocument.rows_with_similarity(
             namespace_id=namespace_id,
             embedding_model=embedding_model,
             query_embedding=query_embedding,
@@ -1081,7 +1081,7 @@ class PgVectorProvider(BaseRAGProvider):
         if filters is not None:
             lexical_filter = " AND " + _metadata_filter_sql(lexical_binder, filters)
         lexical_limit = lexical_binder.next_index()
-        semantic_ids, lexical_ids = await VectorDocument.hybrid_channel_ids(
+        semantic_ids, lexical_ids = await VectorDocument.semantic_and_lexical_chunk_ids(
             namespace_id=namespace_id,
             embedding_model=embedding_model,
             query_embedding=query_embedding,
@@ -1100,7 +1100,7 @@ class PgVectorProvider(BaseRAGProvider):
             return []
         candidate_pairs = fused if freshness_enabled else fused[:limit]
         candidate_ids = [doc_id for doc_id, _score in candidate_pairs]
-        by_id = await VectorDocument.chunks_by_ids(candidate_ids)
+        by_id = await VectorDocument.found_by_ids(candidate_ids)
         scored: list[tuple[str, float]] = []
         now = datetime.now(timezone.utc)
         freshness_provenance: dict[str, RAGMetadata] = {}
@@ -1123,7 +1123,7 @@ class PgVectorProvider(BaseRAGProvider):
         top_ids = [doc_id for doc_id, _score in top]
         if not top_ids:
             return []
-        headline_by_id = await VectorDocument.lexical_headlines(
+        headline_by_id = await VectorDocument.stripped_headlines_by_id(
             doc_ids=top_ids,
             query=query,
             lexical_config=LEXICAL_TS_CONFIG,

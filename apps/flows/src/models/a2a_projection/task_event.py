@@ -58,7 +58,8 @@ class A2ATaskEvent(PlatformModel):
 
 
     @classmethod
-    async def list_unpublished(cls, *, limit: int = 100) -> list[A2APendingEvent]:
+    async def pending_events_by_created_at(cls, *, limit: int = 100) -> list[A2APendingEvent]:
+        """Неопубликованные события, ORDER BY created_at, не больше limit. Возврат — A2APendingEvent. limit <= 0 — A2ATaskRepositoryError."""
         if limit <= 0:
             raise A2ATaskRepositoryError("unpublished event limit must be positive")
         rows = await (
@@ -79,12 +80,8 @@ class A2ATaskEvent(PlatformModel):
         ]
 
     @classmethod
-    async def get_submitted_task(cls, *, company_id: str, task_id: str) -> Task | None:
-        """Sequence-0 snapshot: SUBMITTED Task with history and without artifacts.
-
-        Every status/artifact event of the task has sequence >= 1, so a stream that
-        starts with this snapshot and continues from sequence 1 never duplicates parts.
-        """
+    async def any_submitted_task(cls, *, company_id: str, task_id: str) -> Task | None:
+        """Снимок sequence 0: Task без артефактов. События статуса и артефактов начинаются с sequence 1, поэтому поток со снимка и хвоста с 1 не дублирует части. Порядка нет. Нет строки — None."""
         row = await A2ATaskEvent.objects.filter(
             company_id=company_id,
             task_id=task_id,
@@ -96,13 +93,14 @@ class A2ATaskEvent(PlatformModel):
         return task_from_json_dict(require_json_object(row.event_json, "A2ATaskEvent.task"))
 
     @classmethod
-    async def mark_published(
+    async def mark_published_by_event_identity(
         cls,
         *,
         company_id: str,
         task_id: str,
         event_identity: str,
     ) -> None:
+        """Неопубликованная строка получает published_at. Нет строки — A2ATaskRepositoryError. Уже опубликованная не меняется."""
         async with atomic(using="flows"):
             updated_rows = await cls.objects.filter(
                 company_id=company_id,

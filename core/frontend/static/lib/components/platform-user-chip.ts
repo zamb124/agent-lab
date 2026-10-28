@@ -26,6 +26,36 @@ import type { TeamState } from '../events/reducers/team.js';
 import type { AuthState } from '../events/reducers/auth.js';
 import type { SelectController } from '../events/select-controller.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
+import { isPlainRecord } from '../events/payload.js';
+
+interface WorkCountsView {
+    total_open_count?: number;
+}
+
+function workCountsView(value: unknown): WorkCountsView | undefined {
+    if (value === undefined) return undefined;
+    if (!isPlainRecord(value)) {
+        throw new Error('platform-user-chip: work item counts must be an object');
+    }
+    const total = value.total_open_count;
+    if (total !== undefined && typeof total !== 'number') {
+        throw new Error('platform-user-chip: total_open_count must be a number');
+    }
+    const view: WorkCountsView = {};
+    if (typeof total === 'number') view.total_open_count = total;
+    return view;
+}
+
+function userRaw(value: unknown): Record<string, unknown> {
+    if (value === undefined || value === null) {
+        const empty: Record<string, unknown> = {};
+        return empty;
+    }
+    if (!isPlainRecord(value)) {
+        throw new Error('platform-user-chip: auth user raw must be an object');
+    }
+    return value;
+}
 
 const ALLOWED_SIZES = new Set(['sm', 'md']);
 
@@ -57,7 +87,7 @@ export class PlatformUserChip extends PlatformElement {
     _chipAvatarSig: string;
     _teamSel: SelectController<TeamState>;
     _authSel: SelectController<AuthState>;
-    _workCountsSel: SelectController<{ total_open_count?: unknown } | undefined>;
+    _workCountsSel: SelectController<WorkCountsView | undefined>;
     _loadDispatched: boolean;
 
     static override styles: CSSResultGroup = [
@@ -188,9 +218,9 @@ export class PlatformUserChip extends PlatformElement {
         this.showWorkCount = false;
         this._chipAvatarFallback = 0;
         this._chipAvatarSig = '';
-        this._teamSel = this.select((s) => s.team as TeamState);
-        this._authSel = this.select((s) => s.auth as AuthState);
-        this._workCountsSel = this.select((s) => s.worktrackerWorkItemCounts as { total_open_count?: unknown } | undefined);
+        this._teamSel = this.select((s) => s.team);
+        this._authSel = this.select((s) => s.auth);
+        this._workCountsSel = this.select((s) => workCountsView(s.worktrackerWorkItemCounts));
         this._loadDispatched = false;
     }
 
@@ -199,8 +229,8 @@ export class PlatformUserChip extends PlatformElement {
         if (!ALLOWED_SIZES.has(this.size)) {
             throw new Error(`platform-user-chip: invalid size "${this.size}" (allowed: sm | md)`);
         }
-        const auth = this._authSel.value!;
-        const team = this._teamSel.value!;
+        const auth = this._authSel.value;
+        const team = this._teamSel.value;
         if (
             !this._loadDispatched
             && auth.status === 'authenticated'
@@ -232,10 +262,10 @@ export class PlatformUserChip extends PlatformElement {
         if (typeof userId !== 'string' || userId.length === 0) {
             throw new Error('platform-user-chip: user-id required (non-empty string)');
         }
-        const auth = this._authSel.value!;
+        const auth = this._authSel.value;
         const currentUser = auth.user;
         if (currentUser) {
-            const raw = (currentUser.raw ?? {}) as Record<string, unknown>;
+            const raw = userRaw(currentUser.raw);
             const currentId = raw.user_id || currentUser.id;
             if (currentId === userId) {
                 return {
@@ -247,7 +277,7 @@ export class PlatformUserChip extends PlatformElement {
                 };
             }
         }
-        const team = this._teamSel.value!;
+        const team = this._teamSel.value;
         const member = team.members.find((m) => m.user_id === userId);
         if (member) {
             return {
@@ -277,7 +307,10 @@ export class PlatformUserChip extends PlatformElement {
         if (!this.showWorkCount || !user.is_self) {
             return null;
         }
-        const counts = this._workCountsSel.value!;
+        const counts = this._workCountsSel.value;
+        if (counts === undefined) {
+            throw new Error('platform-user-chip: work counts missing');
+        }
         const total = typeof counts.total_open_count === 'number' ? counts.total_open_count : 0;
         if (total <= 0) {
             return null;

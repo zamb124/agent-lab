@@ -51,14 +51,14 @@ async def test_get_by_id_for_company(
             MessageContentModel(type=MessageContentType.TEXT_PLAIN, data=TextPlainContent(body="x"), order=0),
         ],
     )
-    row = await SyncMessage.find_in_company(company_id, m_gc)
+    row = await SyncMessage.by_message_id(company_id, m_gc)
     assert row is not None
     assert row.message_id == m_gc
-    assert await SyncMessage.find_in_company(other_co, m_gc) is None
+    assert await SyncMessage.by_message_id(other_co, m_gc) is None
     with pytest.raises(ValueError, match="company_id cannot be empty"):
-        _ = await SyncMessage.find_in_company("", m_gc)
+        _ = await SyncMessage.by_message_id("", m_gc)
     with pytest.raises(ValueError, match="message_id cannot be empty"):
-        _ = await SyncMessage.find_in_company(company_id, "")
+        _ = await SyncMessage.by_message_id(company_id, "")
 
 
 @pytest.mark.asyncio
@@ -111,16 +111,20 @@ async def test_replace_contents_soft_delete_reactions_max_sent(
     assert isinstance(contents[0].data, TextPlainContent)
     assert contents[0].data.body == "b"
 
-    await SyncMessage.set_reactions(
+    await SyncMessage.update_reactions(
         m_r,
         [ReactionEntry(user_id="u1", emoji="x", created_at=ed)],
     )
-    m2 = await SyncMessage.find_in_company(company_id, m_r)
+    m2 = await SyncMessage.by_message_id(company_id, m_r)
     assert m2 is not None
     assert len(m2.reactions) == 1
+    await SyncMessage.update_reactions(f"missing_{unique_id}", [])
+    still = await SyncMessage.by_message_id(company_id, m_r)
+    assert still is not None
+    assert len(still.reactions) == 1
 
     await SyncMessage.soft_delete(m_r, datetime.now(tz=UTC))
-    m3 = await SyncMessage.find_in_company(company_id, m_r)
+    m3 = await SyncMessage.by_message_id(company_id, m_r)
     assert m3 is not None
     assert m3.deleted_at is not None
 

@@ -42,7 +42,7 @@ class SyncThreadService:
         limit: int,
         offset: int,
     ) -> OffsetPage[ThreadRow]:
-        threads = await SyncThread.list_threads_in_channel(
+        threads = await SyncThread.list_in_channel(
             company_id,
             channel_id,
             limit=limit,
@@ -83,7 +83,7 @@ class SyncThreadService:
             created_at=datetime.now(tz=UTC),
             created_by_user_id=actor_user_id,
         )
-        _ = await SyncThread.create_thread(entity)
+        _ = await SyncThread.create(entity)
         created_by = await _user_brief(actor_user_id, resolve_user=True)
         thread = ThreadRead(
             thread_id=thread_id,

@@ -12,11 +12,8 @@
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
 import type { ResourceCollectionSlice } from '@platform/lib/events/factories/resource-collection.js';
+import type { SyncThreadsSlice } from '../sync.types.js';
 
-interface SyncThreadsSlice extends ResourceCollectionSlice {
-    selectedThreadId: string | null;
-    byChannelId: Readonly<Record<string, readonly Record<string, any>[]>>;
-}
 
 export const threadsResource = createResourceCollection({
     name: 'sync/threads',
@@ -42,7 +39,7 @@ export const threadsResource = createResourceCollection({
         openThread: 'open_requested',
         closeThread: 'drawer_closed',
     },
-    extraReducer: (state, event, events) => {
+    extraReducer: (state: SyncThreadsSlice, event, events) => {
         const s = state as SyncThreadsSlice;
         switch (event.type) {
             case 'sync/context/company_cleared': {
@@ -95,3 +92,9 @@ export const threadsResource = createResourceCollection({
         }
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/threads': typeof threadsResource;
+    }
+}

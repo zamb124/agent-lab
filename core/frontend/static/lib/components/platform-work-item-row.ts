@@ -8,7 +8,7 @@ import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResu
 import { PlatformElement } from '../platform-element/index.js';
 import { openWorkItemDetail, isMobileViewport } from '../utils/work-item-deeplink.js';
 import type { OpController } from '../base/use-resource.js';
-import type { I18nState } from '../events/reducers/i18n.js';
+import { isPlainRecord } from '../events/payload.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
 import './platform-icon.js';
 import './platform-user-chip.js';
@@ -34,6 +34,11 @@ export interface WorkItemLite {
     assignment?: WorkItemAssignment;
     links?: WorkItemLink[];
     [key: string]: unknown;
+}
+
+function isLoadedWorkItem(value: unknown): value is WorkItemLite {
+    if (!isPlainRecord(value)) return false;
+    return typeof value.work_item_id === 'string';
 }
 
 export function isIsoDateLike(value: unknown): value is string {
@@ -190,11 +195,12 @@ export class PlatformWorkItemRow extends PlatformElement {
     }
 
     _resolvedItem(): WorkItemLite | null {
-        if (this.item && typeof this.item === 'object' && typeof this.item.work_item_id === 'string') {
+        if (isLoadedWorkItem(this.item)) {
             return this.item;
         }
-        const result = (this._getOp?.lastResult ?? null) as WorkItemLite | null;
-        if (result && typeof result === 'object' && typeof result.work_item_id === 'string') {
+        const op = this._getOp;
+        const result = op === null ? null : op.lastResult;
+        if (isLoadedWorkItem(result)) {
             return result;
         }
         return null;
@@ -225,7 +231,7 @@ export class PlatformWorkItemRow extends PlatformElement {
             return html`<div class="loading">${this.t('work_item_badge.loading')}</div>`;
         }
         const state = item.state && (STATES as readonly string[]).includes(item.state) ? item.state : 'open';
-        const locale = this.select((s) => (s.i18n as I18nState).locale).value ?? 'ru';
+        const locale = this.select((s) => s.i18n.locale).value;
         const due = typeof item.due_date === 'string' && item.due_date.length >= 10
             ? formatPlatformDate(item.due_date, locale)
             : '';

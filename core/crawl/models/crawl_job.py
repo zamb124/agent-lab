@@ -16,6 +16,7 @@ from core.crawl.models.contracts import (
     CrawlStatusCount,
 )
 from core.crawl.models.crawl_profile import CrawlProfileWithIndex
+from core.errors.boundary import PlatformNotFoundError
 from core.models import StrictBaseModel
 from core.models.platform_model import PlatformModel
 from core.pagination import OffsetPage
@@ -96,13 +97,13 @@ class CrawlJob(PlatformModel):
             domains_scheduled=F("domains_scheduled") + domains_scheduled,
         )
         if updated != 1:
-            raise ValueError(f"crawl job not found: {crawl_job_id}")
+            raise PlatformNotFoundError(f"crawl job not found: {crawl_job_id}")
 
     @classmethod
     async def finish(cls, crawl_job_id: str, *, status: CrawlJobStatus) -> Self:
         row = await cls.get(crawl_job_id)
         if row is None:
-            raise ValueError(f"crawl job not found: {crawl_job_id}")
+            raise PlatformNotFoundError(f"crawl job not found: {crawl_job_id}")
         row.status = status
         row.finished_at = datetime.now(UTC)
         _ = await row.save()
@@ -132,7 +133,7 @@ class CrawlJob(PlatformModel):
         ).update(using="search", status="failed", finished_at=datetime.now(UTC))
 
     @classmethod
-    async def list_page(
+    async def page_by_started_at_desc(
         cls,
         *,
         crawl_profile_id: str,
@@ -140,6 +141,7 @@ class CrawlJob(PlatformModel):
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlJob]:
+        """Страница запусков профиля, ORDER BY started_at DESC. status равный None не фильтрует. total — COUNT этого фильтра."""
         rows = cls.objects.filter(crawl_profile_id=crawl_profile_id)
         if status is not None:
             rows = rows.filter(status=status)

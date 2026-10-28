@@ -137,7 +137,7 @@ class StockTransfer(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def by_ids(
+    async def found_in_company_by_ids(
         cls, company_id: str, transfer_ids: list[str]
     ) -> dict[str, Self]:
         if not transfer_ids:
@@ -154,7 +154,7 @@ class StockTransfer(PlatformModel):
         ).for_update().get_or_none()
 
     @classmethod
-    async def list_for_company(
+    async def list_by_created_at_desc(
         cls,
         company_id: str,
         *,
@@ -163,6 +163,7 @@ class StockTransfer(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Окно накладных компании, ORDER BY created_at DESC, limit и offset. warehouse_id и state равные None не фильтруют."""
         query = cls.objects.filter(company_id=company_id)
         if warehouse_id is not None:
             query = query.filter(warehouse_id=warehouse_id)
@@ -171,13 +172,14 @@ class StockTransfer(PlatformModel):
         return await query.order_by("-created_at").limit(limit).offset(offset).all()
 
     @classmethod
-    async def count_for_company(
+    async def count_by_warehouse_and_state(
         cls,
         company_id: str,
         *,
         warehouse_id: str | None,
         state: StockTransferState | None,
     ) -> int:
+        """Счёт накладных компании. warehouse_id и state равные None не фильтруют."""
         query = cls.objects.filter(company_id=company_id)
         if warehouse_id is not None:
             query = query.filter(warehouse_id=warehouse_id)

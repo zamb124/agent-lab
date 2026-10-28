@@ -140,7 +140,7 @@ async def ensure_flow_bundle(di: FlowsDi, flow_id: str) -> FlowConfig:
     loaded_id = await loader._load_flow_bundle(flow_id)
     if loaded_id is None:
         raise AssertionError(f"Failed to load {flow_id} bundle")
-    loaded = await FlowConfig.get_latest(flow_id)
+    loaded = await FlowConfig.current_for_flow(flow_id)
     if loaded is None:
         raise AssertionError(f"{flow_id} missing after bundle load")
     return loaded

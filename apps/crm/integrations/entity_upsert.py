@@ -41,7 +41,7 @@ async def upsert_canonical_by_external_ref(
 
     ref = external_ref_now(record_id=rid, account_key=account_key, raw_version=raw_version)
 
-    existing_list = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
+    existing_list = await CRMEntity.list_by_namespace_entity_type_and_external_ref(
         company_id=company_id,
         namespace=namespace,
         entity_type=entity_type,
@@ -69,7 +69,7 @@ async def upsert_canonical_by_external_ref(
             ent.note_date = note_date
         elif entity_type == NOTE_ROOT_ENTITY_TYPE_ID and ent.note_date is None:
             ent.note_date = datetime.now(UTC).date()
-        updated = await CRMEntity.save_loaded(ent)
+        updated = await CRMEntity.update_loaded(ent)
         await index_crm_entity(rag, updated, replace=True)
         return updated, False
 
@@ -96,7 +96,7 @@ async def upsert_canonical_by_external_ref(
     try:
         await entity_access.sync_entity_created(created)
     except Exception:
-        removed = await CRMEntity.take_by_id(created.entity_id)
+        removed = await CRMEntity.delete_returning(created.entity_id)
         if removed is not None:
             _ = await rag.delete_document(entity_namespace(removed), removed.entity_id)
         raise

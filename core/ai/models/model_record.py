@@ -95,7 +95,7 @@ class AIModelRecord(PlatformModel):
         return [row for row in rows if capability in row.capabilities]
 
     @classmethod
-    async def get_provider_model(cls, provider: str, model_id: str) -> Self | None:
+    async def by_provider_and_model_id(cls, provider: str, model_id: str) -> Self | None:
         return await cls.get(f"{provider}:{model_id}")
 
     @classmethod

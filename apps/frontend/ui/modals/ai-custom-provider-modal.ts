@@ -13,6 +13,12 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-switch.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function thrownMessage(error: unknown): string {
+    if (!(error instanceof Error)) throw error;
+    return error.message;
+}
 
 const ALL_CAPABILITIES = Object.freeze([
     'llm_chat',
@@ -136,7 +142,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
             return;
         }
         const pid = p.id != null ? String(p.id) : '';
-        this._editingId = pid || null;
+        this._editingId = pid.length > 0 ? pid : null;
         this._id = pid;
         this._label = p.label != null ? String(p.label) : '';
         const bu = p.base_url != null ? String(p.base_url) : (p.baseUrl != null ? String(p.baseUrl) : '');
@@ -177,6 +183,14 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
             : this.t('settings_page.ai_providers.custom_modal_title');
     }
 
+    _fieldString(event: CustomEvent, label: string): string {
+        const detail = event.detail;
+        if (!isPlainRecord(detail) || typeof detail.value !== 'string') {
+            throw new Error(`ai-custom-provider: ${label} expects detail.value string`);
+        }
+        return detail.value;
+    }
+
     _toggleCapability(cap: string, checked: boolean) {
         const set = new Set(this._capabilities);
         if (checked) set.add(cap);
@@ -186,7 +200,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
     }
 
     _parseJsonObject(raw: string, label: string) {
-        const trimmed = (raw || '').trim();
+        const trimmed = raw.trim();
         if (!trimmed) return null;
         let parsed;
         try {
@@ -202,79 +216,79 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
 
     override validateForm() {
         const errors: Record<string, any> = {};
-        const id = (this._id || '').trim();
+        const id = this._id.trim();
         if (!id || !/^[a-z0-9_-]{1,32}$/.test(id)) {
             errors.id = this.t('settings_page.ai_providers.custom_modal_id_invalid');
         }
-        if (!(this._label || '').trim()) {
+        if (!this._label.trim()) {
             errors.label = this.t('settings_page.ai_providers.custom_modal_label_required');
         }
-        const url = (this._baseUrl || '').trim();
+        const url = this._baseUrl.trim();
         if (!url || !(url.startsWith('http://') || url.startsWith('https://'))) {
             errors.base_url = this.t('settings_page.ai_providers.custom_modal_base_url_invalid');
         }
-        if (!this._editingId && !(this._apiKey || '').trim()) {
+        if (!this._editingId && !this._apiKey.trim()) {
             errors.api_key = this.t('settings_page.ai_providers.custom_modal_api_key_required');
         }
         if (!this._capabilities.length) {
             errors.capabilities = this.t('settings_page.ai_providers.custom_modal_caps_required');
         }
-        if (this._capabilities.includes('rerank') && !(this._rerankPath || '').trim()) {
+        if (this._capabilities.includes('rerank') && !this._rerankPath.trim()) {
             errors.rerank_path = this.t('settings_page.ai_providers.custom_modal_rerank_path_required');
         }
         try {
             this._parseJsonObject(this._modelByCapJson, 'model_by_capability');
-        } catch (e) {
-            errors.model_by_capability = (e as Error).message;
+        } catch (error) {
+            errors.model_by_capability = thrownMessage(error);
         }
         try {
             this._parseJsonObject(this._headersJson, 'extra_request_headers');
-        } catch (e) {
-            errors.extra_request_headers = (e as Error).message;
+        } catch (error) {
+            errors.extra_request_headers = thrownMessage(error);
         }
         try {
             this._parseJsonObject(this._extraBodyJson, 'extra_request_body');
-        } catch (e) {
-            errors.extra_request_body = (e as Error).message;
+        } catch (error) {
+            errors.extra_request_body = thrownMessage(error);
         }
         return errors;
     }
 
     override async handleSubmit() {
         if (this._editingId) {
-            const body = {
+            const body: Record<string, unknown> = {
                 provider_id: this._editingId,
                 label: this._label.trim(),
                 base_url: this._baseUrl.trim(),
                 capabilities: [...this._capabilities],
             };
-            const keyTrim = (this._apiKey || '').trim();
-            if (keyTrim) (body as Record<string, any>).api_key = keyTrim;
-            const rerankPath = (this._rerankPath || '').trim();
-            if (rerankPath) (body as Record<string, any>).rerank_path = rerankPath;
+            const keyTrim = this._apiKey.trim();
+            if (keyTrim) body.api_key = keyTrim;
+            const rerankPath = this._rerankPath.trim();
+            if (rerankPath) body.rerank_path = rerankPath;
             const modelByCap = this._parseJsonObject(this._modelByCapJson, 'model_by_capability');
-            if (modelByCap) (body as Record<string, any>).model_by_capability = modelByCap;
+            if (modelByCap) body.model_by_capability = modelByCap;
             const headers = this._parseJsonObject(this._headersJson, 'extra_request_headers');
-            if (headers) (body as Record<string, any>).extra_request_headers = headers;
+            if (headers) body.extra_request_headers = headers;
             const extraBody = this._parseJsonObject(this._extraBodyJson, 'extra_request_body');
-            if (extraBody) (body as Record<string, any>).extra_request_body = extraBody;
+            if (extraBody) body.extra_request_body = extraBody;
             this._update.run(body);
         } else {
-            const body = {
+            const body: Record<string, unknown> = {
                 id: this._id.trim(),
                 label: this._label.trim(),
                 base_url: this._baseUrl.trim(),
                 api_key: this._apiKey.trim(),
                 capabilities: [...this._capabilities],
             };
-            const rerankPath = (this._rerankPath || '').trim();
-            if (rerankPath) (body as Record<string, any>).rerank_path = rerankPath;
+            const rerankPath = this._rerankPath.trim();
+            if (rerankPath) body.rerank_path = rerankPath;
             const modelByCap = this._parseJsonObject(this._modelByCapJson, 'model_by_capability');
-            if (modelByCap) (body as Record<string, any>).model_by_capability = modelByCap;
+            if (modelByCap) body.model_by_capability = modelByCap;
             const headers = this._parseJsonObject(this._headersJson, 'extra_request_headers');
-            if (headers) (body as Record<string, any>).extra_request_headers = headers;
+            if (headers) body.extra_request_headers = headers;
             const extraBody = this._parseJsonObject(this._extraBodyJson, 'extra_request_body');
-            if (extraBody) (body as Record<string, any>).extra_request_body = extraBody;
+            if (extraBody) body.extra_request_body = extraBody;
             this._create.run(body);
         }
         this.closeAfterSave();
@@ -291,14 +305,14 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
                         .label=${this.t('settings_page.ai_providers.custom_modal_id_label')}
                         .value=${this._id}
                         ?disabled=${!!this._editingId}
-                        @change=${(e: CustomEvent) => { this._id = (e.detail && e.detail.value) || ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._id = this._fieldString(e, 'id'); this.isDirty = true; }}
                     ></platform-field>
                     <platform-field
                         type="string"
                         mode="edit"
                         .label=${this.t('settings_page.ai_providers.custom_modal_label_label')}
                         .value=${this._label}
-                        @change=${(e: CustomEvent) => { this._label = (e.detail && e.detail.value) || ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._label = this._fieldString(e, 'label'); this.isDirty = true; }}
                     ></platform-field>
                 </div>
                 <platform-field
@@ -307,7 +321,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
                     .label=${this.t('settings_page.ai_providers.custom_modal_base_url_label')}
                     .value=${this._baseUrl}
                     .placeholder=${'https://api.your-provider.com/v1'}
-                    @change=${(e: CustomEvent) => { this._baseUrl = (e.detail && e.detail.value) || ''; this.isDirty = true; }}
+                    @change=${(e: CustomEvent) => { this._baseUrl = this._fieldString(e, 'base_url'); this.isDirty = true; }}
                 ></platform-field>
                 <platform-field
                     type="password"
@@ -315,7 +329,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
                     .label=${this.t('settings_page.ai_providers.custom_modal_api_key_label')}
                     .value=${this._apiKey}
                     .placeholder=${this._editingId ? this.t('settings_page.ai_providers.custom_modal_api_key_placeholder_edit') : 'sk-...'}
-                    @change=${(e: CustomEvent) => { this._apiKey = (e.detail && e.detail.value) || ''; this.isDirty = true; }}
+                    @change=${(e: CustomEvent) => { this._apiKey = this._fieldString(e, 'api_key'); this.isDirty = true; }}
                 ></platform-field>
                 ${this._editingId ? html`<small class="help">${this.t('settings_page.ai_providers.custom_modal_api_key_keep_edit')}</small>` : ''}
                 <div class="caps-block">
@@ -339,7 +353,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
                         mode="edit"
                         .label=${this.t('settings_page.ai_providers.custom_modal_rerank_path_label')}
                         .value=${this._rerankPath}
-                        @change=${(e: CustomEvent) => { this._rerankPath = (e.detail && e.detail.value) || ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._rerankPath = this._fieldString(e, 'rerank_path'); this.isDirty = true; }}
                     ></platform-field>
                 ` : ''}
                 <div class="caps-block">
@@ -349,7 +363,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
                         .label=${this.t('settings_page.ai_providers.custom_modal_model_by_cap_label')}
                         .value=${this._modelByCapJson}
                         .placeholder=${'{\n  "llm_chat": "llama-3.1-70b",\n  "embedding": "bge-m3"\n}'}
-                        @change=${(e: CustomEvent) => { this._modelByCapJson = (e.detail && e.detail.value) || ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._modelByCapJson = this._fieldString(e, 'model_by_capability'); this.isDirty = true; }}
                     ></platform-field>
                     <small class="help">${this.t('settings_page.ai_providers.custom_modal_model_by_cap_help')}</small>
                 </div>
@@ -360,7 +374,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
                         .label=${this.t('settings_page.ai_providers.custom_modal_headers_label')}
                         .value=${this._headersJson}
                         .placeholder=${'{\n  "X-Org": "acme",\n  "X-Project": "internal-rag"\n}'}
-                        @change=${(e: CustomEvent) => { this._headersJson = (e.detail && e.detail.value) || ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._headersJson = this._fieldString(e, 'extra_request_headers'); this.isDirty = true; }}
                     ></platform-field>
                     <small class="help">${this.t('settings_page.ai_providers.custom_modal_headers_help')}</small>
                 </div>
@@ -371,7 +385,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
                         .label=${this.t('settings_page.ai_providers.custom_modal_extra_body_label')}
                         .value=${this._extraBodyJson}
                         .placeholder=${'{\n  "top_p": 0.9,\n  "safety_settings": {\n    "harassment": "block_none"\n  }\n}'}
-                        @change=${(e: CustomEvent) => { this._extraBodyJson = (e.detail && e.detail.value) || ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._extraBodyJson = this._fieldString(e, 'extra_request_body'); this.isDirty = true; }}
                     ></platform-field>
                     <small class="help">${this.t('settings_page.ai_providers.custom_modal_extra_body_help')}</small>
                 </div>

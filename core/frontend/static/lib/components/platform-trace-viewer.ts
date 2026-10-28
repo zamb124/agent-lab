@@ -5,6 +5,7 @@
 
 import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { isPlainRecord } from '../events/payload.js';
 import { PlatformElement } from '../platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-icon.js';
@@ -337,11 +338,14 @@ export class PlatformTraceViewer extends PlatformElement {
     }
 
     _onSearchInput(e: Event) {
-        const d = (e as CustomEvent<{ value?: string }>).detail;
-        if (d == null || typeof d !== 'object' || typeof d.value !== 'string') {
+        if (!(e instanceof CustomEvent) || !isPlainRecord(e.detail)) {
             throw new Error('platform-trace-viewer: platform-field must emit detail.value');
         }
-        this._search = d.value.trim().toLowerCase();
+        const value = e.detail.value;
+        if (typeof value !== 'string') {
+            throw new Error('platform-trace-viewer: platform-field must emit detail.value');
+        }
+        this._search = value.trim().toLowerCase();
         this._applySearchExpand();
         this.requestUpdate();
     }

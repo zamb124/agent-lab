@@ -261,7 +261,7 @@ async def _resolve_livekit_egress_result(
 
 
 async def _load_message_read(*, message_id: str, company_id: str) -> MessageRead:
-    message_entity = await SyncMessage.find_in_company(company_id, message_id)
+    message_entity = await SyncMessage.by_message_id(company_id, message_id)
     if message_entity is None:
         raise ValueError(f"Message {message_id} not found.")
     contents = await SyncMessageContent.list_for_message(message_id)
@@ -699,7 +699,7 @@ async def transcribe_audio_message_core(
     if actor_user_id == "":
         raise ValueError("actor_user_id is required.")
 
-    source_message = await SyncMessage.find_in_company(company_id, message_id)
+    source_message = await SyncMessage.by_message_id(company_id, message_id)
     if source_message is None:
         raise ValueError(f"Message {message_id} not found.")
     if source_message.channel_id != channel_id:
@@ -852,7 +852,7 @@ async def transcribe_video_message_core(
     actor_user_id: str,
     di: Di,
 ) -> None:
-    source_message = await SyncMessage.find_in_company(company_id, message_id)
+    source_message = await SyncMessage.by_message_id(company_id, message_id)
     if source_message is None:
         raise ValueError(f"Message {message_id} not found.")
     if source_message.channel_id != channel_id:

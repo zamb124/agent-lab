@@ -34,20 +34,20 @@ class TestNodeRepository:
         )
 
         await NodeConfig.set(node)
-        loaded = await NodeConfig.get(NodeConfig.row_id("test_node_repo"))
+        loaded = await NodeConfig.get(NodeConfig.node_row_id_for_active_company("test_node_repo"))
 
         assert loaded is not None
         assert loaded.node_id == "test_node_repo"
         assert loaded.name == "Test Node"
 
         # Cleanup
-        await NodeConfig.delete_by_id(NodeConfig.row_id("test_node_repo"))
+        await NodeConfig.delete_by_id(NodeConfig.node_row_id_for_active_company("test_node_repo"))
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_node(self, app, di):
         """Получение несуществующей ноды возвращает None."""
 
-        result = await NodeConfig.get(NodeConfig.row_id("nonexistent_node_xyz"))
+        result = await NodeConfig.get(NodeConfig.node_row_id_for_active_company("nonexistent_node_xyz"))
         assert result is None
 
     @pytest.mark.asyncio
@@ -60,9 +60,9 @@ class TestNodeRepository:
             name="Delete Me",
         )
         await NodeConfig.set(node)
-        await NodeConfig.delete_by_id(NodeConfig.row_id("node_to_delete"))
+        await NodeConfig.delete_by_id(NodeConfig.node_row_id_for_active_company("node_to_delete"))
 
-        result = await NodeConfig.get(NodeConfig.row_id("node_to_delete"))
+        result = await NodeConfig.get(NodeConfig.node_row_id_for_active_company("node_to_delete"))
         assert result is None
 
 
@@ -88,7 +88,7 @@ class TestFlowRepository:
         )
 
         await FlowConfig.create_version(flow)
-        loaded = await FlowConfig.get_latest("test_flow_repo")
+        loaded = await FlowConfig.current_for_flow("test_flow_repo")
 
         assert loaded is not None
         assert loaded.flow_id == "test_flow_repo"
@@ -122,12 +122,12 @@ class TestToolRepository:
         )
 
         await ToolReference.set(tool)
-        loaded = await ToolReference.get(ToolReference.row_id("test_tool_repo"))
+        loaded = await ToolReference.get(ToolReference.row_id_for_active_company("test_tool_repo"))
 
         assert loaded is not None
         assert loaded.tool_id == "test_tool_repo"
 
-        await ToolReference.delete_by_id(ToolReference.row_id("test_tool_repo"))
+        await ToolReference.delete_by_id(ToolReference.row_id_for_active_company("test_tool_repo"))
 
 
 class TestDurableWorkflowRuntime:

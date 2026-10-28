@@ -62,7 +62,7 @@ async def test_crawl_enrichment_second_fetch_skips_unchanged_url(
             browser_fallback_enabled=False,
         )
     )
-    await CrawlProfile.set_llm_enrichment(
+    await CrawlProfile.update_llm_enrichment_enabled_and_model(
         crawl_profile_id,
         llm_enrichment_enabled=True,
         enrichment_model=CRAWL_STRICT_ENRICHMENT_MODEL,

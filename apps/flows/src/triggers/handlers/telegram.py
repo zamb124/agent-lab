@@ -253,7 +253,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         2. Валидирует (allowed_users, commands)
         3. Запускает агента
         """
-        flow_config = await FlowConfig.get_latest(flow_id)
+        flow_config = await FlowConfig.current_for_flow(flow_id)
 
         if not flow_config:
             raise TriggerValidationError(f"Flow not found: {flow_id}")

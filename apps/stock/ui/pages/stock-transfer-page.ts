@@ -84,7 +84,7 @@ export class StockTransferPage extends PlatformPage {
             return html`<div class="wrap"><h1>${this.t('transfer.loading')}</h1></div>`;
         }
         const transfer = detail.transfer;
-        const lines: NonNullable<TransferDetail['lines']> = detail.lines || [];
+        const lines: NonNullable<TransferDetail['lines']> = detail.lines === undefined ? [] : detail.lines;
         return html`
             <div class="wrap">
                 <h1>${transfer.name}</h1>

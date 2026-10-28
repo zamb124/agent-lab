@@ -1,16 +1,26 @@
-# Frontend Recipes — пошаговые сценарии
+# Frontend Recipes — пошаговые сценарии на TS
 
-Каждый рецепт — путь от фабрики до компонента. Нормы, которые рецепт выполняет, — в `.cursor/rules/ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`, `frontend.mdc`; здесь только шаги. После любого рецепта — гейты из `SKILL.md` § 5.
+Рецепт — путь от фабрики до компонента. Нормы — `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`, `frontend.mdc`; после любого рецепта — гейты `SKILL.md` § Гейты перед «готово». Живые файлы фабрик и страниц содержат долг (`.cursor/skills/frontend-engineer/scripts/ui_audit.py`): форма берётся из рецепта, живой файл — только пример API.
+
+## Типизация во всех рецептах
+
+Рецепты записаны в форме `references/target-architecture.md` § Типовой контракт:
+
+- Модуль фабрик регистрирует каждое имя в `PlatformFactoryRegistry` (блок `declare module` в § 1); `use*` принимает только зарегистрированное имя своего вида.
+- Тип состояния `S` — аннотация параметра `state` в `extraReducer` типом slice, объявленным рядом с фабрикой; тип элемента коллекции — возврат `mapItem`; методы контроллера — ключи `actions`.
+- Поле контроллера — инициализатор `private readonly _x = this.useX('<svc>/<entity>')` (тип выводится) или объявление `ControllerFor<'<svc>/<entity>'>` (`@platform/lib/base/use-resource.js`, только `import type`).
+- Тип элемента коллекции ограничен `ResourceItem` (`TItem extends ResourceItem`): объектный тип (`type Widget = { … }`), не `interface` без индекс-сигнатуры. Ограничение снимает корень «внутренности фабрик без erased-типов» (`idField: keyof TItem`).
+- Нет `wire.gen.ts` сервиса — тип объявляется в файле фабрики, функция границы `require<Entity>(raw: ResourceItem): <Entity>` проверяет обязательные поля и бросает; открытый корень «Wire-типы из Pydantic» называется в отчёте.
+- Нужной возможности нет в kit (generic `createForm`, `createCursorList`, `createFacets`, типизированная статическая конфигурация баз) — корень P2, рекурсия; при ограниченной границе — блокер `kit_gap`. Каст, `any`, non-null и переобъявление типа в странице не заменяют ни один шаг.
 
 ## 1. CRUD-коллекция (`createResourceCollection`)
 
-Эталон: [`api-keys.resource.js`](apps/frontend/ui/events/resources/api-keys.resource.js) + [`api-keys-page.js`](apps/frontend/ui/pages/api-keys/api-keys-page.js).
+1. Backend: `GET/POST /<svc>/api/<entities>`, `GET/PATCH/DELETE /<svc>/api/<entities>/{<entity>_id}` и команды `<svc>/<entities>/{list,create,update,remove}_requested`.
+2. Файл `apps/<svc>/ui/events/resources/<entity>.resource.ts`:
 
-1. Проверить backend: `GET/POST /<svc>/api/<entities>`, `GET/PATCH/DELETE /<svc>/api/<entities>/{<entity>_id}` и команды `<svc>/<entities>/{list,create,update,remove}_requested`.
-2. Файл `apps/<svc>/ui/events/resources/<entity>.resource.js`:
-
-```js
+```ts
 import { createResourceCollection } from '@platform/lib/events/index.js';
+import { requireWidget } from '../wire.gen.js';
 
 export const widgetsResource = createResourceCollection({
     name: '<svc>/widgets',
@@ -20,23 +30,24 @@ export const widgetsResource = createResourceCollection({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     toastKeys: { create: '<svc>:widgets.toast_created', update: '<svc>:widgets.toast_updated', remove: '<svc>:widgets.toast_removed' },
-    mapItem: (raw) => {
-        if (typeof raw.widget_id !== 'string') throw new Error('<svc>/widgets.mapItem: widget_id required');
-        return { widget_id: raw.widget_id, name: raw.name, tags: raw.tags };
-    },
+    mapItem: requireWidget,
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        '<svc>/widgets': typeof widgetsResource;
+    }
+}
 ```
 
-3. `apps/<svc>/ui/app/<svc>-app.js`: импорт и `static factories = [widgetsResource, …]`.
-4. Страница: `this._widgets = this.useResource('<svc>/widgets', { autoload: true })`; список — `this._widgets.items`, строка занята — `this._widgets.isBusy(id)`, кнопка «создать» — `?disabled=${this._widgets.createInFlight}`.
+3. `apps/<svc>/ui/app/<svc>-app.ts`: импорт и `static factories = [widgetsResource, …]`.
+4. Страница: `private readonly _widgets = this.useResource('<svc>/widgets', { autoload: true })`; список — `this._widgets.items` (`readonly Widget[]`), строка занята — `this._widgets.isBusy(id)`, кнопка «создать» — `?disabled=${this._widgets.createInFlight}`.
 5. Ключи toast — парой в `core/i18n/translations/{ru,en}/<svc>.json` (§ 12).
-6. Нестандартный путь операции — запись `restMirror: { update: { method: 'PUT', path: '/<svc>/api/widgets/:widget_id' } }`; операция вне CRUD — отдельный `createAsyncOp` (§ 2).
+6. Нестандартный путь операции — `restMirror: { update: { method: 'PUT', path: '/<svc>/api/widgets/:widget_id' } }`; операция вне CRUD — отдельный `createAsyncOp` (§ 2).
 
 ## 2. Команда (`createAsyncOp`)
 
-Эталоны: `tracingTraceLoadOp` в [`tracing.resource.js`](apps/frontend/ui/events/resources/tracing.resource.js), `callInviteOp` в [`calls.resource.js`](apps/sync/ui/events/resources/calls.resource.js).
-
-```js
+```ts
 export const callInviteOp = createAsyncOp({
     name: 'sync/calls_invite',
     transport: 'ws',
@@ -47,39 +58,35 @@ export const callInviteOp = createAsyncOp({
 });
 ```
 
-1. WS-фабрике `request` не нужен: фабрика шлёт кадр `commandType` и ждёт `*_succeeded`/`*_failed`.
-2. HTTP-вариант (сервис вне `COMMAND_WS_SERVICES` или allowlist) — `request: async ({ payload }) => httpRequest({ method, url, body })`; проверка обязательных полей payload — `throw`, `HttpError` не ловим.
+1. Payload и результат выводятся из `CommandMap['sync/calls/invite_requested']`; WS-фабрике `request` не нужен: она шлёт кадр `commandType` и ждёт `*_succeeded`/`*_failed`.
+2. HTTP-вариант (сервис вне `COMMAND_WS_SERVICES` или allowlist) — `request: async ({ payload }) => requireInviteResult(await httpRequest({ method, url, body: payload }))`; `HttpError` не ловится.
 3. Toast — `silent: true` либо пара `successToastKey` + `errorToastKey`; своя реакция на ошибку — `onFailure(ctx, …)`.
-4. Компонент: `this._invite = this.useOp('sync/calls_invite')`; кнопка — `?disabled=${this._invite.busy}`; вызов — `const result = await this._invite.run({ call_id })`, ошибка — `this._invite.error` (`run` на FAILED резолвит `null`).
+4. Регистрация имени — блок `declare module` как в § 1.
+5. Компонент: `private readonly _invite = this.useOp('sync/calls_invite')`; кнопка — `?disabled=${this._invite.busy}`; вызов — `const result = await this._invite.run({ call_id: callId })`; `null` — ошибка уже в `this._invite.error` и toast фабрики.
 
 ## 3. Цепочка команд и ожидание исхода
 
-Эталоны: [`namespace-modal.js`](apps/crm/ui/modals/namespace-modal.js) (lock create), [`daily-notes-page.js`](apps/crm/ui/pages/daily-notes-page.js) (фильтр по `lastRequestId`), [`note-page.js`](apps/crm/ui/pages/note-page.js) (`_waitForResourceResult`), [`knowledge-import-modal.js`](apps/crm/ui/modals/knowledge-import-modal.js) (`_awaitOp`).
-
 | Задача | Шаг |
 |---|---|
-| кнопка «создать» | `?disabled=${res.createInFlight}`; форма + коллекция — `form.submitting \|\| res.createInFlight` |
+| кнопка «создать» | `?disabled=${resource.createInFlight}`; форма + коллекция — `form.submitting \|\| resource.createInFlight` |
 | кнопка действия | `?disabled=${op.busy}` + `await op.run(payload)` |
-| нужен `result` для следующего шага | `await op.run(payload)` или `op.lastResult` |
-| нужен созданный `item` коллекции | helper ожидания `CREATED` по `causation_id` (ниже) |
+| результат для следующего шага | `await op.run(payload)` или `op.lastResult` |
+| созданный элемент коллекции | ожидание `CREATED` по `causation_id` (ниже) |
 | поиск с debounce | фильтр `useEvent` по `op.lastRequestId` |
 
-Ожидание созданного элемента коллекции:
-
-```js
-async _createEntity(payload) {
+```ts
+private _createEntity(payload: CrmEntityCreate): Promise<CrmEntity> {
     const requested = this._entities.create(payload);
-    if (!requested || typeof requested.id !== 'string') {
-        throw new Error('createEntity: create already in flight');
-    }
+    if (!requested) throw new Error('createEntity: create already in flight');
+    const requestId = requested.id;
+    const { CREATED, CREATE_FAILED } = this._entities.resource.events;
     return new Promise((resolve, reject) => {
-        const { CREATED, CREATE_FAILED } = this._entities.resource.events;
         const offOk = this.bus.subscribeType(CREATED, (event) => {
-            if (event.meta.causation_id !== requested.id) return;
+            if (event.meta.causation_id !== requestId) return;
             offOk(); offFail(); resolve(event.payload.item);
         });
         const offFail = this.bus.subscribeType(CREATE_FAILED, (event) => {
-            if (event.meta.causation_id !== requested.id) return;
+            if (event.meta.causation_id !== requestId) return;
             offOk(); offFail(); reject(new Error(event.payload.message));
         });
     });
@@ -88,7 +95,7 @@ async _createEntity(payload) {
 
 Поиск с debounce — ответ устаревшего запроса отбрасывается:
 
-```js
+```ts
 this.useEvent(this._search.op.events.SUCCEEDED, (event) => {
     if (event.meta.causation_id !== this._search.lastRequestId) return;
     this._results = event.payload.result.items;
@@ -97,9 +104,7 @@ this.useEvent(this._search.op.events.SUCCEEDED, (event) => {
 
 ## 4. Лента (`createCursorList`)
 
-Эталон: `tracingSpansList` в [`tracing.resource.js`](apps/frontend/ui/events/resources/tracing.resource.js).
-
-```js
+```ts
 export const tracingSpansList = createCursorList({
     name: 'frontend/tracing_spans',
     baseUrl: '/frontend/api/platform-tracing/spans',
@@ -107,26 +112,25 @@ export const tracingSpansList = createCursorList({
     wsTimeoutMs: 15_000,
     commandType: 'frontend/platform_tracing/spans_requested',
     pageSize: 50,
-    buildQuery: _buildSpansQuery,
+    buildQuery: buildSpansQuery,
+    mapItem: requireTraceSpan,
     statusMap: { 403: 'forbidden', 503: 'unavailable' },
     errorToastKey: 'frontend:tracing_page.load_error',
 });
 ```
 
-1. `buildQuery(filters)` — чистая функция; WS-payload = REST-query `{ ...buildQuery(filters), limit, cursor? }`, payload команды на backend совпадает с query REST-зеркала.
-2. Компонент: `this._spans = this.useCursorList('frontend/tracing_spans', { autoload: true })`; `items`, `hasMore`, `loadingMore`, `terminal` (`forbidden`/`unavailable`), `loadMore()`, `changeFilters(patch)`, `resetFilters()`.
+1. `buildQuery(filters: SpansFilters)` — чистая функция; WS-payload равен REST-query `{ ...buildQuery(filters), limit, cursor? }`.
+2. Компонент: `private readonly _spans = this.useCursorList('frontend/tracing_spans', { autoload: true })`; `items`, `hasMore`, `loadingMore`, `terminal` (`forbidden`/`unavailable`), `loadMore()`, `changeFilters(patch)`, `resetFilters()`.
 
 ## 5. Typeahead (`createFacets`)
 
-Эталон: `tracingFacets` в [`tracing.resource.js`](apps/frontend/ui/events/resources/tracing.resource.js).
-
 1. Фабрика: `facets: { companies: 'companies', users: 'users' }`, `debounceMs: 200`, `minQueryLength: 2`; URL — `${baseUrl}/${facets[key]}`, транспорт HTTP.
-2. Компонент: `this._facets = this.useFacets('frontend/tracing_facets')`; ввод — `<platform-field type="string" input-type="search" @change=${(e) => this._facets.search('companies', e.detail.value)}>`; результат — `this._facets.items('companies')`, загрузка — `this._facets.loading('companies')`.
+2. Компонент: `private readonly _facets = this.useFacets('frontend/tracing_facets')`; ввод — `<platform-field type="string" input-type="search" @change=${(event: PlatformFieldChangeEvent<string>) => this._facets.search('companies', event.detail.value)}>`; результат — `this._facets.items('companies')`, загрузка — `this._facets.loading('companies')`.
 
 ## 6. Форма (`createForm`)
 
-```js
-export const widgetCreateForm = createForm({
+```ts
+export const widgetCreateForm = createForm<WidgetCreateDraft>({
     name: '<svc>/widget_create_form',
     schema: { name: { required: true, minLength: 1, maxLength: 64, errorKey: '<svc>:widget_modal.err_name' } },
     initial: { name: '' },
@@ -134,81 +138,133 @@ export const widgetCreateForm = createForm({
 });
 ```
 
-1. Регистрация — рядом с коллекцией в `static factories`.
-2. Модалка: `this._form = this.useForm('<svc>/widget_create_form')`; `openForm(initial)` в `connectedCallback`, поле — `<platform-field .value=${this._form.draft.name} @change=${(e) => this._form.setField('name', e.detail.value)}>`, ошибки — `this._form.errors`, отправка — `this._form.submit()`, дизейбл — `this._form.submitting`.
+1. Регистрация — рядом с коллекцией в `static factories` и в `PlatformFactoryRegistry`.
+2. Модалка: `private readonly _form = this.useForm('<svc>/widget_create_form')`; `openForm(initial)` в `connectedCallback`; поле — `<platform-field .value=${this._form.draft.name} @change=${(event: PlatformFieldChangeEvent<string>) => this._form.setField('name', event.detail.value)}>`; ошибки — `this._form.errors`; отправка — `this._form.submit()`; дизейбл — `this._form.submitting`.
 
 ## 7. UI-only slice (`createSlice`)
 
-Эталоны: `sync/call_ui` в [`calls.resource.js`](apps/sync/ui/events/resources/calls.resource.js), `sync/presence` в [`presence.resource.js`](apps/sync/ui/events/resources/presence.resource.js).
-
-```js
+```ts
 export const callUiSlice = createSlice({
     name: 'sync/call_ui',
     extraInitial: { activeCall: null, overlayMinimized: false },
     extraEvents: { OVERLAY_MINIMIZED: 'overlay_minimized' },
     actions: { minimizeOverlay: 'overlay_minimized' },
-    extraReducer: (state, event, events) => {
-        if (event.type === 'sync/call/ended') return { ...state, activeCall: null, overlayMinimized: false };
+    extraReducer: (state: SyncCallUiSlice, event, events) => {
+        if (event.type === SYNC_CALL_ENDED) return { ...state, activeCall: null, overlayMinimized: false };
         if (event.type === events.OVERLAY_MINIMIZED) return { ...state, overlayMinimized: true };
         return state;
     },
 });
 ```
 
-Компонент: `this._callUi = this.useSlice('sync/call_ui')`; чтение — `this._callUi.value`, действие — `this._callUi.minimizeOverlay(null)`.
+Компонент: `private readonly _callUi = this.useSlice('sync/call_ui')`; чтение — `this._callUi.value.overlayMinimized`, действие — `this._callUi.minimizeOverlay(null)`: payload действия обязателен, пустое событие несёт `null`. Точный тип `value` — аннотация `extraReducer: (state: SyncCallUiSlice, event, events) => …`; `extraInitial` проверяется по тому же типу.
 
 ## 8. Страница и маршрут
 
-Эталон: [`api-keys-page.js`](apps/frontend/ui/pages/api-keys/api-keys-page.js).
+```ts
+import { html } from 'lit';
+import type { TemplateResult } from 'lit';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
+import type { Widget } from '../events/wire.gen.js';
 
-1. `apps/<svc>/ui/pages/<entity>-page.js` — `class … extends PlatformPage`, `static i18nNamespace = '<svc>'` (или `defaultI18nNamespace` приложения), импорт `lit`, `@platform/lib/**` и локальных модулей сервиса.
-2. Разметка: `<platform-breadcrumbs>` первым (динамический хвост — `current-label`), `<page-header title subtitle>` с кнопками в `slot="actions"`, тело — данные контроллеров, загрузка — `<platform-spinner>`.
-3. Маршрут в `getRoutes()` приложения: `{ key: 'widgets', path: 'widgets', titleKey: 'routes.widgets' }`, вложенный — `{ key: 'widget', path: 'widgets/:widgetId', parent: 'widgets', titleKey: 'routes.widget' }`.
-4. `renderRoute(routeKey, params)` → тег страницы; импорт страницы в `<svc>-app.js`.
-5. `routes.<key>` в ru и en; таб мобильной навигации — § 10.
-6. Вложенность внутри маршрута (дерево, папки) — `.trail=${[{ label, routeKey, params }]}` у `<platform-breadcrumbs>`.
+export class WidgetsPage extends PlatformPage {
+    static i18nNamespace = '<svc>';
+    private readonly _widgets = this.useResource('<svc>/widgets', { autoload: true });
+
+    override render(): TemplateResult {
+        return html`
+            <platform-breadcrumbs></platform-breadcrumbs>
+            <page-header .title=${this.t('widgets.title')}></page-header>
+            ${this._widgets.loading
+                ? html`<platform-spinner></platform-spinner>`
+                : this._widgets.items.map((widget) => this._renderRow(widget))}
+        `;
+    }
+
+    private _renderRow(widget: Widget): TemplateResult {
+        return html`<div class="row">${widget.name}</div>`;
+    }
+}
+customElements.define('<svc>-widgets-page', WidgetsPage);
+```
+
+1. Разметка: `<platform-breadcrumbs>` первым (динамический хвост — `current-label`), `<page-header>` с кнопками в `slot="actions"`, тело — данные контроллеров, загрузка — `<platform-spinner>`.
+2. Маршрут в `getRoutes()` приложения: `{ key: 'widgets', path: 'widgets', titleKey: 'routes.widgets' }`, вложенный — `{ key: 'widget', path: 'widgets/:widgetId', parent: 'widgets', titleKey: 'routes.widget' }`.
+3. `renderRoute(routeKey, params)` → тег страницы; импорт страницы в `<svc>-app.ts`.
+4. `routes.<key>` в ru и en; таб мобильной навигации — § 10.
+5. Вложенность внутри маршрута (дерево, папки) — `.trail=${[{ label, routeKey, params }]}` у `<platform-breadcrumbs>`.
 
 ## 9. Модалка
 
-Эталон: [`create-api-key-modal.js`](apps/frontend/ui/modals/create-api-key-modal.js).
-
-```js
+```ts
 import { html } from 'lit';
+import type { PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
 
 export class WidgetCreateModal extends PlatformFormModal {
     static modalKind = '<svc>.widget_create';
-    static properties = { ...PlatformFormModal.properties, _name: { state: true } };
-    constructor() { super(); this._name = ''; this.size = 'md'; this._widgets = this.useResource('<svc>/widgets'); }
-    willUpdate(changed) { super.willUpdate(changed); this.title = this.t('widget_modal.header_create'); }
-    validateForm() { return this._name.trim() ? {} : { name: this.t('widget_modal.err_name') }; }
-    async handleSubmit() { this._widgets.create({ name: this._name.trim() }); this.closeAfterSave(); }
-    renderFormBody() {
-        return html`<platform-field type="string" .label=${this.t('widget_modal.field_name')}
-            .value=${this._name} @change=${(e) => { this._name = e.detail.value; }}></platform-field>`;
+    static override properties: PropertyDeclarations = { ...PlatformFormModal.properties, _name: { state: true } };
+    declare _name: string;
+    private readonly _widgets = this.useResource('<svc>/widgets');
+
+    constructor() {
+        super();
+        this._name = '';
+        this.size = 'md';
+    }
+
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate(changed);
+        this.title = this.t('widget_modal.header_create');
+    }
+
+    override validateForm(): Record<string, string> {
+        return this._name.trim() ? {} : { name: this.t('widget_modal.err_name') };
+    }
+
+    override async handleSubmit(): Promise<void> {
+        this._widgets.create({ name: this._name.trim() });
+        this.closeAfterSave();
+    }
+
+    override renderBody(): TemplateResult {
+        return html`<platform-field type="string" .label=${this.t('widget_modal.field_name')} .value=${this._name}
+            @change=${(event: PlatformFieldChangeEvent<string>) => { this._name = event.detail.value; }}></platform-field>`;
     }
 }
 customElements.define('<svc>-widget-create-modal', WidgetCreateModal);
 registerModalKind(WidgetCreateModal.modalKind, '<svc>-widget-create-modal');
 ```
 
-1. Модуль модалки импортируется в `<svc>-app.js` или в странице, иначе реестр не знает kind.
+1. Модуль модалки импортируется в `<svc>-app.ts` или в странице, иначе реестр не знает kind.
 2. Открытие — `this.openModal(WidgetCreateModal)` или `this.openModal('<svc>.widget_create', props)`; закрытие снаружи — `this.closeModal('<svc>.widget_create')`.
-3. Подтверждение — `const ok = await platformConfirm(this.t('widgets.confirm_delete'), { title, variant: 'danger', confirmText, cancelText })` из `@platform/lib/components/platform-confirm-modal.js`.
+3. Подтверждение — `if ((await platformConfirm(this.t('widgets.confirm_delete'), { title, variant: 'danger', confirmText, cancelText })) !== true) return;` (`@platform/lib/components/platform-confirm-modal.js`).
+4. `PlatformFieldChangeEvent<T>` — тип события kit (`references/target-architecture.md` § Типовой контракт п.7); нет экспорта в kit — срез kit, а не `any` в обработчике.
 
 ## 10. Bottom sheet и таб навигации
 
-```js
+```ts
+import { html } from 'lit';
+import type { TemplateResult } from 'lit';
 import { PlatformBottomSheet } from '@platform/lib/components/layout/platform-bottom-sheet.js';
 import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
 
 export class WidgetFilterSheet extends PlatformBottomSheet {
     static bottomSheetKind = '<svc>.widget_filter';
     static i18nNamespace = '<svc>';
-    connectedCallback() { super.connectedCallback(); this.heading = this.t('widgets.filter_title'); }
-    renderBody() { /* поля фильтра */ }
+
+    override connectedCallback(): void {
+        super.connectedCallback();
+        this.heading = this.t('widgets.filter_title');
+    }
+
+    override renderBody(): TemplateResult {
+        return html`…`;
+    }
 }
 customElements.define('<svc>-widget-filter-sheet', WidgetFilterSheet);
 registerBottomSheetKind(WidgetFilterSheet.bottomSheetKind, '<svc>-widget-filter-sheet');
@@ -220,92 +276,77 @@ registerBottomSheetKind(WidgetFilterSheet.bottomSheetKind, '<svc>-widget-filter-
 
 ## 11. Push с backend → мерж в фабрике
 
-Эталоны: `crm/access_requests` в [`access-requests.resource.js`](apps/crm/ui/events/resources/access-requests.resource.js), досинхронизация — `crm/tasks` в [`tasks.resource.js`](apps/crm/ui/events/resources/tasks.resource.js).
-
 1. Backend: `register_platform_event` в `apps/<svc>/events.py`, публикация `publish_event_to_user(s)` в сервисе; имя push — другое entity, чем у команды (`crm/note/updated` при команде `crm/notes/update_requested`) → `events.mdc`.
-2. Тип push — константа в `apps/<svc>/ui/events/types.js`.
-3. Мерж — `extraReducer` фабрики, которая владеет данными:
+2. Тип push — константа в `apps/<svc>/ui/events/types.ts`; payload — из `PlatformEventMap` (`wire.gen.ts`).
+3. Мерж — `extraReducer` фабрики-владельца данных:
 
-```js
+```ts
 extraReducer: (state, event) => {
     if (event.type !== WIDGET_UPDATED) return state;
     const widget = event.payload.widget;
-    if (!widget || typeof widget.widget_id !== 'string') return state;
+    if (typeof widget.widget_id !== 'string') return state;
     return upsertItem(state, widget, 'widget_id');
 },
 ```
 
 4. Данные, которые не мержатся из события (граф, карточка со связями), — `rerunLastRequest(ctx, op, { when })` или `reloadLastList(ctx, resource)` в `extraEffect`/`onSuccess`; после переподключения сокета — `extraEffect` на `CoreEvents.WS_CONNECTED`.
-5. В странице — только UI-реакция без данных: `this.useEvent(WIDGET_UPDATED, (e) => this._highlight(e.payload.widget.widget_id))`.
+5. В странице — только UI-реакция без данных: `this.useEvent(WIDGET_UPDATED, (event) => this._highlight(event.payload.widget.widget_id))`.
 
 ## 12. Ключ i18n
 
 1. Ключ в `core/i18n/translations/ru/<ns>.json` и `en/<ns>.json` одной структурой: `{ "widgets": { "toast_created": "Виджет создан" } }` / `"Widget created"`; переменные — `{{name}}`.
 2. Код: `this.t('widgets.toast_created')`, чужой namespace — `this.t('action_save', null, 'common')`; toast-ключ фабрики — `'<ns>:widgets.toast_created'`.
-3. Конечный набор статусов — отдельный ключ на статус и явная ветка кода.
+3. Конечный набор статусов — отдельный ключ на статус и явная ветка кода с `throw` на неизвестном.
 4. Прогон: `make check-i18n`, `make check-i18n-keys`, `uv run python scripts/report_ui_i18n_gaps.py --app <svc>`.
 
 ## 13. Bridge-effect
 
-Эталон: [`sync-persist.effect.js`](apps/sync/ui/events/sync-persist.effect.js).
-
-```js
+```ts
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 
 const SELECTED_KEY = platformStorageKey('<svc>', 'selected_widget_id');
 
-export function create<Svc>PersistEffect() {
+export function create<Svc>PersistEffect(): (event: PlatformEvent, ctx: EffectCtx) => void {
     return (event, ctx) => {
-        if (event.type === '<svc>/widgets/widget_selected') {
-            ctx.dispatch(CoreEvents.STORAGE_PERSIST_REQUESTED, { key: SELECTED_KEY, value: event.payload.widget_id }, { source: 'local' });
-        }
+        if (event.type !== WIDGET_SELECTED) return;
+        ctx.dispatch(CoreEvents.STORAGE_PERSIST_REQUESTED, { key: SELECTED_KEY, value: event.payload.widget_id }, { source: 'local' });
     };
 }
 ```
 
-Подключение — `getServiceEffects() { return [createRouterEffect(ROUTES), create<Svc>PersistEffect()]; }`. HTTP, WS и мутация slice в bridge-effect не пишутся.
+Подключение — `override getServiceEffects() { return [createRouterEffect({ routes: ROUTES }), create<Svc>PersistEffect()]; }`. HTTP, WS и мутация slice в bridge-effect не пишутся. Пример API — `apps/sync/ui/events/sync-persist.effect.ts`.
 
 ## 14. Загрузка файла
 
 1. `static factories` приложения содержит `platformFileCreateOp` (`@platform/lib/events/factories/platform-file-create.js`); отдельное имя — `createPlatformFileCreateOp({ name: '<svc>/file_create' })`.
-2. Компонент: `this._upload = this.useOp('platform/file_create')`; `await this._upload.run({ file, spec })`, где `spec` — JSON-строка `FileCreateSpec` (→ `files.mdc` § Загрузка), прогресс — `onProgress`.
-3. Результат — `FileRef` в `this._upload.lastResult` (`file_id`, `original_name`, `content_type`); дальше в команду уходит `file_id`, не байты.
+2. Компонент: `private readonly _upload = this.useOp('platform/file_create')`; `await this._upload.run({ file, spec })`, где `spec` — JSON-строка `FileCreateSpec` (→ `files.mdc` § Загрузка).
+3. Результат — `FileRef` (`file_id`, `original_name`, `content_type`); дальше в команду уходит `file_id`, не байты.
 
 ## 15. Core-компонент UI Kit и тесты
 
-1. Файл `core/frontend/static/lib/components/platform-<name>.js`: `extends PlatformElement`, presentational — только `t()` и `this.emit(...)`; container — `select`/`use*`; прямой `dispatch(CoreEvents.*)` — только здесь.
-2. UIKDS-карточка `tests/ui/design-system/components/platform-<name>/`: `README.md`, `README.en.md`, `manifest.yaml`, `contract.spec.js`, `playwright.spec.py`; запись в `tests/ui/design-system/catalog.yaml`.
+1. Файл `core/frontend/static/lib/components/platform-<name>.ts`: `extends PlatformElement`; presentational — только `t()` и `this.emit(...)`; container — `select`/`use*`; прямой `dispatch(CoreEvents.*)` — только здесь. Тип каждого события компонента экспортируется из его файла.
+2. UIKDS-карточка `tests/ui/design-system/components/platform-<name>/`: `README.md`, `README.en.md`, `manifest.yaml`, `contract.spec.ts`, `playwright.spec.py`; запись в `tests/ui/design-system/catalog.yaml`.
 3. i18n компонента — namespace `platform` (`core/i18n/translations/{ru,en}/platform.json`).
-4. Тест фабрики: reducer — `(state, event) => state` без bus; effect — фейковый `ctx = { dispatch, getState }`; контроллер — WTR, перед каждым тестом `clearFactoryRegistry()`, `_resetResourceRegistryForTests()`, `resetPlatformBusForTests()`, затем `registerFactory(factory)`.
-5. Прогон: `make ui`; сценарии и доки UIKDS — `make ui-doc`; компонентные тесты сервисов — `make test-ui-components`.
+4. Тест фабрики: reducer — `(state, event) => state` без bus; effect — фейковый `ctx = { dispatch, getState }`; контроллер — WTR на настоящей фабрике, перед каждым тестом `clearFactoryRegistry()`, `_resetResourceRegistryForTests()`, `resetPlatformBusForTests()`, затем `registerFactory(factory)`.
+5. Прогон: `make ui`; сценарии и доки UIKDS — `make ui-doc`; компонентные тесты — `make test-ui-components`.
 
-## 16. Конверсия файла .js → .ts
+## 16. Конверсия файла `.js` → `.ts`
 
-Порядок — рекурсивный цикл `references/migration-loop.md`; здесь — сама правка.
+1. `git mv x.js x.ts` — история файла сохраняется; спецификаторы импортёров не меняются: `from './x.js'` резолвится в `x.ts`.
+2. Реактивные поля Lit:
 
-1. `git mv x.js x.ts`. Спецификаторы импортёров не трогаем: `from './x.js'`
-   резолвится в `x.ts` и esbuild, и tsc.
-2. Реактивные поля Lit (паттерн `static properties`):
-   ```ts
-   static properties = { label: { type: String }, count: { type: Number } };
-   declare label: string;
-   declare count: number;
-   ```
-   `declare` обязателен: `useDefineForClassFields` включён — поле с
-   инициализатором стало бы own-property и заглушило accessor Lit.
-   Без декораторов — они не канон.
-3. `import type` для типов (`verbatimModuleSyntax`); смешанный импорт —
-   `import { foo, type Bar }`.
-4. JSDoc-типы → настоящие: `@param {string} x` → `x: string`; typedef'ы →
-   `interface`/`type` в том же файле или рядом с фабрикой.
-5. Payload'ы фабрик: `interface XxxItem { id: string; … }` в
-   `events/resources/<entity>.ts`, экспорт; страницы импортируют тип, не
-   переобъявляют.
-6. DOM: `querySelector` → generic или `this.shadowRoot?.querySelector<HTMLInputElement>(...)`;
-   события — `CustomEvent<T>`/`Event` с сужением; `event.target as HTMLElement`
-   — нормально (target не типизирован), `as any` — нет.
-7. Запрещено: `any`, `// @ts-ignore`, `// @ts-nocheck`, `!` без основания.
-   Не типизируется честно — конфликт в kit/API, чиним источник.
-8. Прогон: `npm run build:ui -- --apps=<svc>` + `npx tsc -p tsconfig.json` +
-   затронутые specs.
+```ts
+static override properties: PropertyDeclarations = { label: { type: String }, count: { type: Number } };
+declare label: string;
+declare count: number;
+```
+
+   `declare` обязателен: при `useDefineForClassFields` инициализатор поля создал бы own-property и заглушил accessor Lit. Значение — в `constructor()`. Декораторы не канон.
+3. `import type` для типов (`verbatimModuleSyntax`); смешанный импорт — `import { foo, type Bar }`.
+4. JSDoc-типы → настоящие типы; typedef → `interface`/`type` рядом с фабрикой или в wire-модуле.
+5. DOM: `this.renderRoot.querySelector<HTMLInputElement>('…')` с `throw` на `null`; `event.target` — `instanceof`-проверка; событие kit — его экспортированный тип.
+6. Тест: `*.spec.js` → `*.spec.ts`, фикстуры и helpers — тоже `.ts`.
+7. Запрещено: `any`, `as unknown as`, non-null без контракта, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`. Не типизируется честно — корень в kit или фабрике, рекурсия (`SKILL.md` § Рекурсия).
+8. Прогон: `npm run build:ui -- --apps=<svc>`, `npx tsc -p tsconfig.json`, затронутые specs.

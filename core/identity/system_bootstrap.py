@@ -43,7 +43,7 @@ async def ensure_system_company_exists() -> Company:
 
 
 async def _users_for_admin_email(user_email: str) -> list[User]:
-    matched_users = await User.find_all_by_email_ci(user_email)
+    matched_users = await User.list_by_email_ci(user_email)
     if len(matched_users) > 1:
         matched_user_ids = ", ".join(user.user_id for user in matched_users)
         raise ValueError(f"Multiple users found for {user_email}: {matched_user_ids}")

@@ -626,7 +626,7 @@ async def test_reset_catalog_defaults_restores_snapshot_and_resyncs_tools(
     assert len(body["cached_tools"]) == 1
     assert body["last_sync_at"] is not None
 
-    stored = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+    stored = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
     assert stored is not None
     assert stored.catalog_snapshot_hash == entry.catalog_snapshot_hash
 
@@ -681,7 +681,7 @@ async def test_resync_catalog_tools_for_company_refreshes_cached_tools(
     with mcp_catalog_settings(auto_provision="all_verified"):
         _ = await provision_mcp_catalog_for_company(di=di)
 
-    before = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+    before = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
     assert before is not None
     assert len(before.cached_tools) == 1
     before_sync_at = before.last_sync_at
@@ -689,7 +689,7 @@ async def test_resync_catalog_tools_for_company_refreshes_cached_tools(
     sync_ok, _sync_failed = await resync_catalog_tools_for_company(di=di)
     assert sync_ok >= 1
 
-    after = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+    after = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
     assert after is not None
     assert len(after.cached_tools) == 1
     assert after.last_sync_at is not None
@@ -757,7 +757,7 @@ async def test_mcp_catalog_auto_provision_disabled_is_noop(
     assert stats.updated == 0
     assert task_result["added"] == 0
 
-    stored = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+    stored = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
     assert stored is None
 
     _ = await MCPCatalogEntry.delete_by_id(catalog_id)
@@ -975,13 +975,13 @@ async def test_auto_provisioned_catalog_entry_allows_store_uninstall(
     with mcp_catalog_settings(auto_provision="approved_only"):
         _ = await provision_mcp_catalog_for_company(di=di)
 
-    stored = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+    stored = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
     assert stored is not None
     assert stored.catalog_auto_provisioned is True
 
     uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
     assert uninstall_response.status_code == 200, uninstall_response.text
-    assert await MCPServerConfig.get(MCPServerConfig.row_id(server_id)) is None
+    assert await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id)) is None
 
     _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
@@ -1142,7 +1142,7 @@ async def test_mcp_catalog_install_and_uninstall_platform_curated(
 
     uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
     assert uninstall_response.status_code == 200, uninstall_response.text
-    assert await MCPServerConfig.get(MCPServerConfig.row_id(server_id)) is None
+    assert await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id)) is None
 
     _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
@@ -1173,4 +1173,4 @@ async def test_mcp_servers_search_matches_context7_alias(
     matched_ids = [item["server_id"] for item in search_response.json()["items"]]
     assert server_id in matched_ids
 
-    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(server_id))
+    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.server_row_id_for_active_company(server_id))

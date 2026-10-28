@@ -14,8 +14,18 @@ import type { FlowUiBlockRenderer } from '../runtime/flow-ui-store.js';
 
 import type { FlowUiActivityItem } from '../runtime/conversation.js';
 
+function shown(value: string | null): string {
+    return value === null ? '' : value;
+}
+
 function initials(name: string): string {
-    return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => (part[0] ?? '').toUpperCase()).join('');
+    return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => {
+        const letter = part[0];
+        if (letter === undefined) {
+            throw new Error('flow-ui: avatar initial missing');
+        }
+        return letter.toUpperCase();
+    }).join('');
 }
 
 export function activityChips(items: readonly FlowUiActivityItem[]) {
@@ -36,7 +46,7 @@ export const PLATFORM_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Ob
     },
 
     slot(block, ctx) {
-        const title = text(ctx, block.title) ?? '';
+        const title = shown(text(ctx, block.title));
         const blocks = ctx.slots[String(block.block_id)];
         const filled = Array.isArray(blocks) && blocks.length > 0;
         if (!filled && !ctx.editing) return title === '' ? nothing : html`<div class="fu-slot"><div class="title">${title}</div></div>`;
@@ -47,7 +57,7 @@ export const PLATFORM_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Ob
     },
 
     agent_identity(block, ctx) {
-        const fromBlock = text(ctx, block.title) ?? '';
+        const fromBlock = shown(text(ctx, block.title));
         const fromFlow = typeof ctx.flowIdentity?.title === 'string' ? ctx.flowIdentity.title.trim() : '';
         const title = fromBlock !== '' ? fromBlock : fromFlow;
         const src = resolveAgentIdentityImageSrc({
@@ -61,7 +71,7 @@ export const PLATFORM_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Ob
     avatar(block, ctx) {
         const name = text(ctx, block.name);
         if (name === null) return nothing;
-        const imageUrl = blockUrl(ctx, block.image_url) ?? '';
+        const imageUrl = shown(blockUrl(ctx, block.image_url));
         return html`<span class="fu-avatar">
             ${imageUrl !== '' ? html`<img src=${flowUIMediaSrc(ctx.platformUiOrigin, imageUrl)} alt="">` : html`<span class="initials">${initials(name)}</span>`}
             <span>${name}</span>
@@ -82,8 +92,8 @@ export const PLATFORM_BLOCKS: Readonly<Record<string, FlowUiBlockRenderer>> = Ob
     browser_preview(block, ctx) {
         const url = blockUrl(ctx, block.url);
         if (url === null || url === '') return nothing;
-        const title = text(ctx, block.title) ?? '';
-        const screenshot = blockUrl(ctx, block.screenshot_url) ?? '';
+        const title = shown(text(ctx, block.title));
+        const screenshot = shown(blockUrl(ctx, block.screenshot_url));
         return html`<div class="fu-card fu-preview" data-status=${block.status}>
             <div class="head"><span>${title !== '' ? title : url}</span><span class="fu-status" data-tone=${statusTone(block.status)}>${flowUIText(ctx.locale, `browser_status_${block.status}`)}</span></div>
             <span class="sub">${url}</span>

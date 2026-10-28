@@ -16,7 +16,7 @@ async def test_reload_from_bundle_restores_config_from_disk(client, di, auth_hea
     После порчи имени flow в БД reload подтягивает данные из bundle с диска обратно.
     """
     flow_id = "example_react"
-    cfg = await FlowConfig.get_latest(flow_id)
+    cfg = await FlowConfig.current_for_flow(flow_id)
     if cfg is None:
         pytest.fail(f"Ожидался загруженный при старте flow {flow_id} (registry / lifespan)")
     assert cfg.source == "file"
@@ -24,7 +24,7 @@ async def test_reload_from_bundle_restores_config_from_disk(client, di, auth_hea
     corrupted = "__CORRUPTED_BY_TEST_RELOAD__"
     cfg.name = corrupted
     await FlowConfig.create_version(cfg)
-    after_corrupt = await FlowConfig.get_latest(flow_id)
+    after_corrupt = await FlowConfig.current_for_flow(flow_id)
     assert after_corrupt is not None
     assert after_corrupt.name == corrupted
     response = await client.post(
@@ -34,7 +34,7 @@ async def test_reload_from_bundle_restores_config_from_disk(client, di, auth_hea
     payload = response.json()
     assert payload["flow_id"] == flow_id
     assert flow_id in payload.get("message", "")
-    restored = await FlowConfig.get_latest(flow_id)
+    restored = await FlowConfig.current_for_flow(flow_id)
     assert restored is not None
     assert restored.name == original_name
     assert restored.source == "file"
@@ -70,7 +70,7 @@ async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
         f"/flows/api/v1/flows/{flow_id}/reload-from-bundle", headers=auth_headers_system
     )
     assert reload_resp.status_code == 200, reload_resp.text
-    cfg = await FlowConfig.get_latest(flow_id)
+    cfg = await FlowConfig.current_for_flow(flow_id)
     if cfg is None:
         pytest.fail(f"Ожидался загруженный при старте flow {flow_id} (registry / lifespan)")
     assert (getattr(cfg, "source", None) or "manual") == "file"

@@ -160,7 +160,7 @@ class WarehouseService:
         preset = layout_preset
         now = utcnow()
         warehouse_id = new_id("whs")
-        view = await StockLocation.create_child(
+        view = await StockLocation.create_with_parent_path(
             company_id=company_id,
             warehouse_id=warehouse_id,
             parent=None,
@@ -171,7 +171,7 @@ class WarehouseService:
         for spec in _PRESET_TOPOLOGY[preset]:
             for path_name, usage, parent_name in _flatten_topology(spec):
                 parent = view if parent_name is None else created[parent_name]
-                loc = await StockLocation.create_child(
+                loc = await StockLocation.create_with_parent_path(
                     company_id=company_id,
                     warehouse_id=warehouse_id,
                     parent=parent,
@@ -262,7 +262,7 @@ class WarehouseService:
     async def list_warehouses(
         self, *, company_id: str, limit: int, offset: int
     ) -> OffsetPage[StockWarehouse]:
-        rows = await StockWarehouse.list_for_company(
+        rows = await StockWarehouse.list_by_code(
             company_id, limit=limit, offset=offset
         )
         total = await StockWarehouse.count_for_company(company_id)
@@ -281,7 +281,7 @@ class WarehouseService:
     async def list_operation_types(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockOperationType]:
-        return await StockOperationType.list_for_warehouse(company_id, warehouse_id)
+        return await StockOperationType.list_by_code_for_warehouse(company_id, warehouse_id)
 
     async def update_operation_type(
         self,
@@ -343,10 +343,10 @@ class WarehouseService:
         limit: int,
         offset: int,
     ) -> OffsetPage[StockTransfer]:
-        rows = await StockTransfer.list_for_company(
+        rows = await StockTransfer.list_by_created_at_desc(
             company_id, warehouse_id=warehouse_id, state=state, limit=limit, offset=offset
         )
-        total = await StockTransfer.count_for_company(
+        total = await StockTransfer.count_by_warehouse_and_state(
             company_id, warehouse_id=warehouse_id, state=state
         )
         return OffsetPage(items=rows, total=total, limit=limit, offset=offset)

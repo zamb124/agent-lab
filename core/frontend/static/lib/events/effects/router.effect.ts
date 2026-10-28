@@ -12,7 +12,9 @@
  */
 
 import { CoreEvents } from '../contract.js';
-import type { PlatformEvent, EffectCtx } from '../contract.js';import type { RouterRoute } from '../reducers/router.js';
+import type { PlatformEvent, EffectCtx } from '../contract.js';
+import type { RouterRoute } from '../reducers/router.js';
+import { isPlainRecord, payloadFields, stringField } from '../payload.js';
 
 interface CompiledRoute extends RouterRoute {
     _paramNames: string[];
@@ -34,11 +36,35 @@ function _matchRoute(routes: CompiledRoute[], pathRel: string): { route: Compile
         const m = pathRel.match(r._pattern);
         if (m) {
             const params: Record<string, string> = {};
-            r._paramNames.forEach((name, i) => { params[name] = decodeURIComponent(m[i + 1] ?? ''); });
+            r._paramNames.forEach((name, i) => {
+                const raw = m[i + 1];
+                if (raw === undefined) {
+                    throw new Error(`router.effect: missing capture for "${name}"`);
+                }
+                params[name] = decodeURIComponent(raw);
+            });
             return { route: r, params };
         }
     }
     return null;
+}
+
+function _navigateParams(value: unknown): Record<string, string> {
+    if (value === undefined || value === null) {
+        return {};
+    }
+    if (!isPlainRecord(value)) {
+        throw new Error('router.effect: params must be an object');
+    }
+    const params: Record<string, string> = {};
+    for (const key of Object.keys(value)) {
+        const item = value[key];
+        if (typeof item !== 'string') {
+            throw new Error(`router.effect: param "${key}" must be a string`);
+        }
+        params[key] = item;
+    }
+    return params;
 }
 
 function _buildPath(route: CompiledRoute, params: Record<string, string>): string {
@@ -57,7 +83,7 @@ export function createRouterEffect({ baseUrl, routes }: { baseUrl?: string; rout
     if (!Array.isArray(routes) || routes.length === 0) {
         throw new Error('router.effect: non-empty routes[] required');
     }
-    const base = baseUrl || '';
+    const base = typeof baseUrl === 'string' ? baseUrl : '';
     const compiled = routes.map((r) => ({
         ...r,
         _paramNames: _extractParams(r.path),
@@ -66,8 +92,9 @@ export function createRouterEffect({ baseUrl, routes }: { baseUrl?: string; rout
     const publicRoutes = routes.map((r) => {
         const out: { key: string; path: string; parent?: string; titleKey?: string } = { key: r.key, path: r.path };
         if (typeof r.parent === 'string' && r.parent.length > 0) out.parent = r.parent;
-        if (typeof (r as { titleKey?: string }).titleKey === 'string' && (r as { titleKey?: string }).titleKey!.length > 0) {
-            out.titleKey = (r as { titleKey?: string }).titleKey;
+        const titleKey = 'titleKey' in r ? r.titleKey : undefined;
+        if (typeof titleKey === 'string' && titleKey.length > 0) {
+            out.titleKey = titleKey;
         }
         return out;
     });
@@ -116,12 +143,14 @@ export function createRouterEffect({ baseUrl, routes }: { baseUrl?: string; rout
                 return;
 
             case CoreEvents.ROUTER_NAVIGATE_REQUESTED: {
-                const p = (event.payload ?? {}) as { routeKey?: string; params?: Record<string, string>; search?: unknown; replace?: boolean };
-                const route = compiled.find((r) => r.key === p.routeKey);
+                const p = payloadFields(event);
+                const routeKey = stringField(p.routeKey);
+                const route = routeKey === null ? undefined : compiled.find((r) => r.key === routeKey);
                 if (!route) {
-                    throw new Error(`router.effect: unknown routeKey "${p.routeKey}"`);
+                    throw new Error(`router.effect: unknown routeKey "${String(p.routeKey)}"`);
                 }
-                const path = _buildPath(route, p.params || {});
+                const params = _navigateParams(p.params);
+                const path = _buildPath(route, params);
                 const fullPath = `${base}/${path}`;
                 let search = '';
                 if (Object.prototype.hasOwnProperty.call(p, 'search')) {
@@ -145,7 +174,7 @@ export function createRouterEffect({ baseUrl, routes }: { baseUrl?: string; rout
                     CoreEvents.ROUTER_ROUTE_CHANGED,
                     {
                         routeKey: route.key,
-                        params: p.params || {},
+                        params,
                         pathname: fullPath,
                         search,
                     },

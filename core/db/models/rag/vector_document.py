@@ -51,14 +51,16 @@ class VectorDocument(PlatformModel):
     content_tsv: str | None = DbField(default=None, db_type="tsvector")
 
     @classmethod
-    async def count_in_namespace(cls, namespace_id: str) -> int:
+    async def count_rows_for_namespace(cls, namespace_id: str) -> int:
+        """Число строк чанков в namespace, не разных document_id."""
         return await cls.objects.filter(namespace_id=namespace_id).count()
 
     @classmethod
-    async def namespace_document_counts(cls) -> list[tuple[str, int]]:
+    async def chunk_counts_by_namespace(cls) -> list[tuple[str, int]]:
+        """Число строк чанков по namespace_id. Порядка нет."""
         rows = await execute_raw(
             """
-            SELECT namespace_id, COUNT(*)::int AS doc_count
+            SELECT namespace_id, COUNT(*)::int AS chunk_count
             FROM vector_documents
             GROUP BY namespace_id
             """,
@@ -68,29 +70,32 @@ class VectorDocument(PlatformModel):
         for row in rows:
             parsed = require_json_object(row, "rag_namespace")
             namespace_id = parsed["namespace_id"]
-            doc_count = parsed["doc_count"]
+            chunk_count = parsed["chunk_count"]
             if not isinstance(namespace_id, str):
                 raise TypeError("vector_documents.namespace_id must be a string")
-            if isinstance(doc_count, bool) or not isinstance(doc_count, int):
-                raise TypeError("namespace document count must be an integer")
-            counts.append((namespace_id, doc_count))
+            if isinstance(chunk_count, bool) or not isinstance(chunk_count, int):
+                raise TypeError("namespace chunk count must be an integer")
+            counts.append((namespace_id, chunk_count))
         return counts
 
     @classmethod
-    async def delete_namespace_chunks(cls, namespace_id: str) -> int:
+    async def delete_by_namespace(cls, namespace_id: str) -> int:
+        """Удаляет строки namespace. Возвращает число удалённых. Нет строк — 0."""
         return await cls.objects.filter(namespace_id=namespace_id).delete(using="rag")
 
     @classmethod
-    async def delete_document_chunks(cls, namespace_id: str, document_id: str) -> int:
+    async def delete_by_namespace_and_document_id(cls, namespace_id: str, document_id: str) -> int:
+        """Удаляет чанки пары namespace_id и document_id. Возвращает число удалённых строк. Нет строк — 0."""
         return await cls.objects.filter(
             namespace_id=namespace_id,
             document_id=document_id,
         ).delete(using="rag")
 
     @classmethod
-    async def replace_document_chunks(cls, rows: list[Self]) -> int:
+    async def replace_chunks(cls, rows: list[Self]) -> int:
+        """Удаляет чанки namespace_id и document_id первой строки, затем вставляет все rows. Возвращает число удалённых, не вставленных. Пустой список — ValueError."""
         if len(rows) == 0:
-            raise ValueError("replace_document_chunks requires at least one chunk")
+            raise ValueError("replace_chunks requires at least one chunk")
         namespace_id = rows[0].namespace_id
         document_id = rows[0].document_id
         async with atomic(using="rag"):
@@ -99,7 +104,7 @@ class VectorDocument(PlatformModel):
                 [f"{namespace_id}:{document_id}"],
                 using="rag",
             )
-            deleted_count = await cls.delete_document_chunks(namespace_id, document_id)
+            deleted_count = await cls.delete_by_namespace_and_document_id(namespace_id, document_id)
             for row in rows:
                 embedding = None if row.embedding is None else _vector_literal(row.embedding)
                 _ = await execute_raw(
@@ -132,13 +137,14 @@ class VectorDocument(PlatformModel):
         return deleted_count
 
     @classmethod
-    async def chunks_for_document(
+    async def list_by_namespace_and_document_id(
         cls,
         namespace_id: str,
         document_id: str,
         *,
         limit: int | None = None,
     ) -> list[VectorDocument]:
+        """Чанки пары namespace_id и document_id, ORDER BY chunk_index ASC. limit None не ограничивает. Нет строк — []."""
         sql = (
             f"SELECT {_CHUNK_COLUMNS} FROM vector_documents "
             "WHERE namespace_id = $1 AND document_id = $2 ORDER BY chunk_index ASC"
@@ -151,7 +157,8 @@ class VectorDocument(PlatformModel):
         return [_chunk_from_row(row) for row in rows]
 
     @classmethod
-    async def distinct_documents(cls, namespace_id: str, *, limit: int) -> list[VectorDocument]:
+    async def any_chunk_rows_by_document_id(cls, namespace_id: str, *, limit: int) -> list[VectorDocument]:
+        """По одной строке чанка на document_id, ORDER BY document_id, не больше limit. Какой чанк внутри документа, не задано."""
         rows = await execute_raw(
             f"""
             SELECT DISTINCT ON (document_id) {_CHUNK_COLUMNS}
@@ -166,7 +173,7 @@ class VectorDocument(PlatformModel):
         return [_chunk_from_row(row) for row in rows]
 
     @classmethod
-    async def distinct_documents_where(
+    async def any_chunk_rows_by_document_id_where(
         cls,
         namespace_id: str,
         *,
@@ -175,6 +182,7 @@ class VectorDocument(PlatformModel):
         limit: int,
         limit_placeholder: int,
     ) -> list[VectorDocument]:
+        """По одной строке чанка на document_id в namespace с filter_sql, ORDER BY document_id, не больше limit. Какой чанк внутри документа, не задано. filter_sql дописывается к предикату namespace."""
         rows = await execute_raw(
             f"""
             SELECT DISTINCT ON (document_id) {_CHUNK_COLUMNS}
@@ -189,10 +197,11 @@ class VectorDocument(PlatformModel):
         return [_chunk_from_row(row) for row in rows]
 
     @classmethod
-    async def semantic_index_counts(
+    async def chunk_and_null_count_rows(
         cls,
         keys: list[tuple[str, str, str]],
     ) -> list[tuple[str, str, str, int, int]]:
+        """Строки (namespace_id, document_id, company_id, chunk_count, null_chunks). Пустые keys — []. Ключ без чанков не входит. Порядка нет. company_id не строка — строка пропускается."""
         if len(keys) == 0:
             return []
         tuple_sql: list[str] = []
@@ -233,14 +242,15 @@ class VectorDocument(PlatformModel):
         return counts
 
     @classmethod
-    async def stale_chunks_for_reembed(
+    async def stale_id_content_company_rows(
         cls,
         *,
         limit: int,
         target_embedding_model: str,
     ) -> list[tuple[str, str, str]]:
+        """Строки (id, content, company_id) для перевекторизации: модель пустая или не target, content непустой. Порядок company_rank, company_id, id. limit <= 0 — ValueError."""
         if limit <= 0:
-            raise ValueError("fetch_stale_chunks_for_reembed: limit must be positive")
+            raise ValueError("stale_id_content_company_rows: limit must be positive")
         rows = await execute_raw(
             """
             SELECT id, content, company_id
@@ -269,16 +279,17 @@ class VectorDocument(PlatformModel):
             if not isinstance(chunk_id, str) or not isinstance(content, str) or not isinstance(company_id, str):
                 raise TypeError("stale chunk row must contain strings")
             if company_id == "":
-                raise ValueError("fetch_stale_chunks_for_reembed returned chunk without company_id")
+                raise ValueError("stale_id_content_company_rows returned row without company_id")
             stale_chunks.append((chunk_id, content, company_id))
         return stale_chunks
 
     @classmethod
-    async def write_reembed_embeddings(
+    async def update_embedding_and_model(
         cls,
         doc_embeddings: list[tuple[str, list[float]]],
         target_embedding_model: str,
     ) -> int:
+        """Пишет embedding, embedding_model и updated_at по id. Пустой список — 0. Нет строки — она не входит в число."""
         if len(doc_embeddings) == 0:
             return 0
         updated = 0
@@ -299,9 +310,10 @@ class VectorDocument(PlatformModel):
         return updated
 
     @classmethod
-    async def delete_orphan_company_chunks(cls, *, limit: int) -> int:
+    async def delete_without_company_id(cls, *, limit: int) -> int:
+        """Удаляет строки с пустым company_id, ORDER BY id ASC, не больше limit. Возвращает число выбранных id. Нет строк — 0. limit <= 0 — ValueError."""
         if limit <= 0:
-            raise ValueError("delete_orphan_company_chunks: limit must be positive")
+            raise ValueError("delete_without_company_id: limit must be positive")
         async with atomic(using="rag"):
             rows = await execute_raw(
                 """
@@ -332,7 +344,7 @@ class VectorDocument(PlatformModel):
         return len(chunk_ids)
 
     @classmethod
-    async def hybrid_channel_ids(
+    async def semantic_and_lexical_chunk_ids(
         cls,
         *,
         namespace_id: str,
@@ -348,6 +360,7 @@ class VectorDocument(PlatformModel):
         lexical_limit_placeholder: int,
         per_channel: int,
     ) -> tuple[list[str], list[str]]:
+        """Два списка id: семантический по расстоянию embedding и лексический по ts_rank_cd DESC. Каждый не длиннее per_channel."""
         async with atomic(using="rag"):
             _ = await execute_raw("SET hnsw.iterative_scan = relaxed_order", using="rag")
             semantic_rows = await execute_raw(
@@ -386,7 +399,7 @@ class VectorDocument(PlatformModel):
         return ([_row_id(row) for row in semantic_rows], [_row_id(row) for row in lexical_rows])
 
     @classmethod
-    async def semantic_hits(
+    async def rows_with_similarity(
         cls,
         *,
         namespace_id: str,
@@ -397,6 +410,7 @@ class VectorDocument(PlatformModel):
         limit: int,
         limit_placeholder: int,
     ) -> list[tuple[VectorDocument, float]]:
+        """Пары (строка, similarity) ближайших чанков, ORDER BY embedding <=> query. filter_sql дописывается к предикату. similarity не число — TypeError."""
         async with atomic(using="rag"):
             _ = await execute_raw("SET hnsw.iterative_scan = relaxed_order", using="rag")
             rows = await execute_raw(
@@ -429,7 +443,8 @@ class VectorDocument(PlatformModel):
         return hits
 
     @classmethod
-    async def chunks_by_ids(cls, chunk_ids: list[str]) -> dict[str, VectorDocument]:
+    async def found_by_ids(cls, chunk_ids: list[str]) -> dict[str, VectorDocument]:
+        """Найденные строки по id. Пустой список — {}. Отсутствующие id не входят. Порядка нет. Пустой id не отклоняется."""
         if len(chunk_ids) == 0:
             return {}
         placeholders = ", ".join(f"${index}" for index in range(1, len(chunk_ids) + 1))
@@ -442,7 +457,7 @@ class VectorDocument(PlatformModel):
         return {document.id: document for document in documents}
 
     @classmethod
-    async def lexical_headlines(
+    async def stripped_headlines_by_id(
         cls,
         *,
         doc_ids: list[str],
@@ -450,6 +465,7 @@ class VectorDocument(PlatformModel):
         lexical_config: str,
         headline_options: str,
     ) -> dict[str, str]:
+        """id к ts_headline после strip. Заголовок не строка или пустой не входит. Порядка нет."""
         placeholders = ", ".join(f"${index}" for index in range(4, len(doc_ids) + 4))
         rows = await execute_raw(
             f"""

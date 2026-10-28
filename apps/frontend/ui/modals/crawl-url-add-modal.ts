@@ -11,6 +11,11 @@ import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 
+function fieldText(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
 export class FrontendCrawlUrlAddModal extends PlatformFormModal {
     static modalKind = 'frontend.crawl_url_add';
     static i18nNamespace = 'frontend';
@@ -96,7 +101,7 @@ export class FrontendCrawlUrlAddModal extends PlatformFormModal {
                         placeholder="https://example.com/page"
                         .value=${this._urls}
                         .error=${this.fieldError('urls')}
-                        @change=${(e: CustomEvent) => { this._urls = String(e.detail.value ?? ''); }}
+                        @change=${(e: CustomEvent) => { this._urls = fieldText(e.detail.value); }}
                     ></platform-field>
                     <div class="field-help">${this.t('crawl_report_page.help_urls')}</div>
                 </div>

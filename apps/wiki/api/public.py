@@ -53,7 +53,7 @@ def _public_page_response(page: WikiPage, link_token: str) -> WikiPublicPageResp
 @router.get("/pages/{link_token}", response_model=WikiPublicPageResponse)
 async def get_public_page(di: Di, link_token: str) -> WikiPublicPageResponse:
     _ = di
-    page = await WikiPage.get_public_page(link_token)
+    page = await WikiPage.find_published_link(link_token)
     if page is None:
         raise WsCommandError("not_found", "Page not found", error_code="not_found")
     return _public_page_response(page, link_token)
@@ -64,7 +64,7 @@ async def get_public_page_markdown(
     di: Di, link_token: str
 ) -> WikiMarkdownResponse:
     _ = di
-    page = await WikiPage.get_public_page(link_token)
+    page = await WikiPage.find_published_link(link_token)
     if page is None:
         raise WsCommandError("not_found", "Page not found", error_code="not_found")
     return WikiMarkdownResponse(

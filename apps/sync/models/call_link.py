@@ -112,7 +112,7 @@ class SyncCallLink(PlatformModel):
         )
 
     @classmethod
-    async def list_scheduled_calendar_links_for_user(
+    async def list_unordered_scheduled_calendar_links_for_user(
         cls,
         company_id: str,
         user_id: str,
@@ -121,6 +121,7 @@ class SyncCallLink(PlatformModel):
         range_end: datetime,
         channel_id: str | None,
     ) -> list[Self]:
+        """Календарные ссылки каналов, где пользователь участник, пересекающие [range_start, range_end) по строгому неравенству. channel_id None — все такие каналы. Чужой channel_id и пустое членство — []. Порядка и limit нет."""
         member_rows = await SyncChannelMember.objects.filter(
             company_id=company_id,
             user_id=user_id,
@@ -162,7 +163,8 @@ class SyncCallLink(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def set_expires_at(cls, link_token: str, expires_at: datetime) -> None:
+    async def update_expires_at_by_link_token(cls, link_token: str, expires_at: datetime) -> None:
+        """Пишет expires_at по PK link_token. Нет строки — ничего не меняет."""
         _ = await cls.objects.filter(link_token=link_token).update(
             using="sync", expires_at=expires_at
         )

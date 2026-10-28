@@ -38,7 +38,7 @@ class WikiComment(PlatformModel):
     resolved_by_user_id: str | None = DbField(default=None, max_length=100)
 
     @classmethod
-    async def list_comments(
+    async def list_for_page(
         cls,
         company_id: str,
         namespace: str,
@@ -55,11 +55,11 @@ class WikiComment(PlatformModel):
         )
 
     @classmethod
-    async def create_comment(cls, comment: Self) -> Self:
+    async def create(cls, comment: Self) -> Self:
         return await cls.objects.create(instance=comment)
 
     @classmethod
-    async def get_comment(
+    async def in_namespace(
         cls,
         company_id: str,
         namespace: str,
@@ -72,7 +72,7 @@ class WikiComment(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def delete_comment(
+    async def delete_in_namespace(
         cls,
         company_id: str,
         namespace: str,

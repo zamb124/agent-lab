@@ -191,7 +191,7 @@ async def test_generic_webhook_persists_secret_header_and_ips(
     assert created["status"] == "active"
     assert created["webhook_url"] is not None
 
-    saved = await FlowConfig.get_latest(flow_id)
+    saved = await FlowConfig.current_for_flow(flow_id)
     assert saved is not None
     trigger = saved.triggers["wh_persist"]
     assert trigger.config["secret_header"] == "Authorization"

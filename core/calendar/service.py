@@ -748,7 +748,7 @@ class CalendarService:
                 invited_ids.add(attendee.attendee_id)
         if invited_emails:
             for email in invited_emails:
-                for member_user in await User.find_all_by_email_ci(email):
+                for member_user in await User.list_by_email_ci(email):
                     if member_user.user_id in company_member_ids or company_id in member_user.companies:
                         invited_ids.add(member_user.user_id)
         invited_ids.discard(organizer_user_id)
@@ -919,7 +919,7 @@ class CalendarService:
             created_at = now
             created_by = user_id
         else:
-            current = await CalendarEvent.find_in_company(event_id=event_id, company_id=company_id)
+            current = await CalendarEvent.by_event_id(event_id=event_id, company_id=company_id)
             if current is None:
                 raise ValueError(f"Calendar event {event_id} not found")
             final_event_id = current.event_id
@@ -1012,7 +1012,7 @@ class CalendarService:
         return event
 
     async def delete_event(self, event_id: str, company_id: str) -> None:
-        event = await CalendarEvent.find_in_company(event_id=event_id, company_id=company_id)
+        event = await CalendarEvent.by_event_id(event_id=event_id, company_id=company_id)
         if event is None:
             raise ValueError(f"Calendar event {event_id} not found")
         token = event.metadata.get(SYNC_LINK_TOKEN_META)
@@ -1040,7 +1040,7 @@ class CalendarService:
         return sorted(recipients)
 
     async def mark_sync_meeting_reminder_sent(self, event_id: str, company_id: str) -> None:
-        event = await CalendarEvent.find_in_company(event_id=event_id, company_id=company_id)
+        event = await CalendarEvent.by_event_id(event_id=event_id, company_id=company_id)
         if event is None:
             return
         md = dict(event.metadata)
@@ -1051,7 +1051,7 @@ class CalendarService:
         await CalendarEvent.upsert_by_event_id(updated)
 
     async def list_integrations(self, user_id: str, company_id: str) -> list[CalendarIntegration]:
-        credentials = await IntegrationCredential.list_by_user(
+        credentials = await IntegrationCredential.list_by_created_at_for_user(
             company_id=company_id,
             user_id=user_id,
         )
@@ -1200,7 +1200,7 @@ class CalendarService:
         mailbox_binding_id: str,
     ) -> int:
         """Снять календарные интеграции ящика при его отвязке."""
-        return await IntegrationCredential.delete_by_mailbox_binding(
+        return await IntegrationCredential.delete_count_by_mailbox_binding_and_service(
             company_id=company_id,
             mailbox_binding_id=mailbox_binding_id,
             service="calendar",

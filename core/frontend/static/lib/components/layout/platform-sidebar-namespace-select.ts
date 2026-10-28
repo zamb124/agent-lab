@@ -206,9 +206,12 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
 
     _onFieldChange(e: Event) {
         e.stopPropagation();
+        if (!(e instanceof CustomEvent)) {
+            throw new Error('platform-sidebar-namespace-select: change must be a CustomEvent');
+        }
         this.dispatchEvent(
             new CustomEvent('change', {
-                detail: (e as CustomEvent).detail,
+                detail: e.detail,
                 bubbles: true,
                 composed: true,
             }),

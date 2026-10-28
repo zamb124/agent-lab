@@ -6,6 +6,14 @@ import { html, css } from '../lit-shim.js';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 
+function inputElement(event: Event): HTMLInputElement {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('tag-input: event target must be an input');
+    }
+    return target;
+}
+
 export class TagInput extends PlatformElement {
     static override styles: CSSResultGroup = [
         PlatformElement.styles,
@@ -145,12 +153,12 @@ export class TagInput extends PlatformElement {
     _onKeyDown(e: KeyboardEvent): void {
         if (e.key === 'Enter' || e.key === ',') {
             e.preventDefault();
-            const input = e.target as HTMLInputElement;
+            const input = inputElement(e);
             if (input.value.trim()) {
                 this._addTag(input.value);
                 input.value = '';
             }
-        } else if (e.key === 'Backspace' && !(e.target as HTMLInputElement).value) {
+        } else if (e.key === 'Backspace' && !inputElement(e).value) {
             const tags = this._getTags();
             if (tags.length > 0) {
                 this._removeTag(tags.length - 1);
@@ -159,7 +167,7 @@ export class TagInput extends PlatformElement {
     }
 
     _onBlur(e: FocusEvent): void {
-        const input = e.target as HTMLInputElement;
+        const input = inputElement(e);
         if (input.value.trim()) {
             this._addTag(input.value);
             input.value = '';

@@ -55,6 +55,7 @@ import type {
 } from '../editor/pm-types.js';
 import type { CmModule } from '../codemirror/variable-extensions.js';
 import type { PopoverAnchor } from './platform-popover.js';
+import { isPlainRecord } from '../events/payload.js';
 import './fields/platform-field.js';
 import './platform-icon.js';
 import './platform-menu.js';
@@ -124,6 +125,34 @@ const TABLE_ACTIONS = Object.freeze([
     { id: 'deleteColumn', icon: 'minus' },
     { id: 'deleteTable', icon: 'trash' },
 ]);
+
+function eventRecord(event: Event, label: string): Record<string, unknown> {
+    if (!(event instanceof CustomEvent) || !isPlainRecord(event.detail)) {
+        throw new Error(`platform-rich-editor: ${label} detail must be an object`);
+    }
+    return event.detail;
+}
+
+function isPmCommand(value: unknown): value is PmCommand {
+    return typeof value === 'function';
+}
+
+function dragBlockFrom(dragging: unknown): number | null {
+    if (dragging === null) return null;
+    if (!isPlainRecord(dragging)) {
+        throw new Error('platform-rich-editor: dragging must be an object');
+    }
+    const node = dragging.node;
+    if (node === undefined || node === null) return null;
+    if (!isPlainRecord(node)) {
+        throw new Error('platform-rich-editor: dragging.node must be an object');
+    }
+    const from = node.from;
+    if (typeof from !== 'number') {
+        throw new Error('platform-rich-editor: dragging.node.from must be a number');
+    }
+    return from;
+}
 
 export class PlatformRichEditor extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -577,7 +606,9 @@ export class PlatformRichEditor extends PlatformElement {
         const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\n', '\n');
         const pattern = trigger === '/' ? /\/([\p{L}\w-]*)$/u : /@([\p{L}\w-]*)$/u;
         const match = pattern.exec(textBefore);
-        return match ? match[1] ?? null : null;
+        if (match === null) return null;
+        const query = match[1];
+        return query === undefined ? null : query;
     }
 
     _bubbleState(state: PmStateLike): BubbleState | null {
@@ -611,7 +642,8 @@ export class PlatformRichEditor extends PlatformElement {
                 if (linkHref !== '') return false;
                 for (const mark of node.marks) {
                     if (mark.type === marks.link) {
-                        linkHref = String(mark.attrs.href || '');
+                        const href = mark.attrs.href;
+                        linkHref = typeof href === 'string' ? href : '';
                         return false;
                     }
                 }
@@ -654,7 +686,7 @@ export class PlatformRichEditor extends PlatformElement {
     // --- команды по слэшу ---
 
     _filteredSlashItems(): SlashItem[] {
-        const query = (this._slashQuery || '').toLowerCase();
+        const query = this._slashQuery.toLowerCase();
         const items = SLASH_MENU_ITEMS.map((item) => ({
             ...item,
             label: this.t(item.labelKey),
@@ -873,7 +905,11 @@ export class PlatformRichEditor extends PlatformElement {
     }
 
     _onBlockMenuSelect(event: Event): void {
-        const actionId = String((event as CustomEvent<{ id: unknown }>).detail.id);
+        const detail = eventRecord(event, 'menu-select');
+        if (typeof detail.id !== 'string' || detail.id.length === 0) {
+            throw new Error('platform-rich-editor: menu-select id must be a non-empty string');
+        }
+        const actionId = detail.id;
         this._blockMenuAnchor = null;
         if (!this._view || this._handleBlockPos < 0) return;
 
@@ -969,9 +1005,9 @@ export class PlatformRichEditor extends PlatformElement {
         this._suppressBlockMenuClick = true;
         const view = this._view;
         const dragging = view === null ? null : view.dragging;
-        const dragNode = (dragging && typeof dragging === 'object' ? dragging : null) as { node?: { from: number } } | null;
-        if (view !== null && dragNode && dragNode.node) {
-            const blockDom = view.nodeDOM(dragNode.node.from);
+        const from = dragBlockFrom(dragging);
+        if (view !== null && from !== null) {
+            const blockDom = view.nodeDOM(from);
             if (blockDom instanceof HTMLElement) {
                 blockDom.classList.remove('ProseMirror-selectednode');
             }
@@ -989,11 +1025,11 @@ export class PlatformRichEditor extends PlatformElement {
     _runTableCommand(actionId: string): void {
         if (!this._pm || !this._view) return;
         const command = this._pm[actionId];
-        if (typeof command !== 'function') {
+        if (!isPmCommand(command)) {
             throw new Error(`platform-rich-editor: нет табличной команды ${actionId}`);
         }
         const view = this._view;
-        (command as PmCommand)(view.state, view.dispatch.bind(view));
+        command(view.state, view.dispatch.bind(view));
         view.focus();
     }
 
@@ -1308,7 +1344,8 @@ export class PlatformRichEditor extends PlatformElement {
                                 label=${this.t('editor.link.href')}
                                 .value=${this._linkHref}
                                 @change=${(event: Event) => {
-                                    this._linkHref = String((event as CustomEvent<{ value: unknown }>).detail.value ?? '');
+                                    const value = eventRecord(event, 'link change').value;
+                                    this._linkHref = value === undefined || value === null ? '' : String(value);
                                 }}
                             ></platform-field>
                             <div class="pm-link-actions">

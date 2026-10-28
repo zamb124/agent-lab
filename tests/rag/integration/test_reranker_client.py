@@ -251,7 +251,7 @@ async def test_rerank_billing_span_pending_settlement(
     finally:
         clear_context()
 
-    spans = await Span.list_by_user_id(user_id)
+    spans = await Span.list_by_user_id_desc(user_id)
     rerank_spans = [span for span in spans if span.operation_name == "rerank.bge-test"]
     assert len(rerank_spans) == 1, [span.operation_name for span in spans]
     attributes = rerank_spans[0].attributes

@@ -169,7 +169,7 @@ class BarcodeService:
                 )
         for name in (parsed.serial, parsed.lot_name):
             if name and product_id is not None:
-                lot = await StockLot.by_name(company_id, product_id, name)
+                lot = await StockLot.by_product_and_name(company_id, product_id, name)
                 if lot is not None:
                     return StockBarcodeResolveResult(
                         StockBarcodeEntityType.LOT, lot.lot_id, parsed

@@ -73,3 +73,11 @@ export const attachmentDeleteOp = createAsyncOp({
     restMirror: { method: 'DELETE', path: '/crm/api/v1/entities/:entity_id/attachments/:attachment_id' },
     onSuccess: (ctx, _result, event) => _rerunAttachmentsFor(ctx, (event.payload as Record<string, any>).entity_id),
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/attachments_list': typeof attachmentsListOp;
+        'crm/attachment_upload': typeof attachmentUploadOp;
+        'crm/attachment_delete': typeof attachmentDeleteOp;
+    }
+}

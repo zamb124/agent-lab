@@ -53,6 +53,25 @@ const DROP_AFTER = 'after';
 /** Доля высоты строки сверху и снизу, попадание в которую значит «между». */
 const EDGE_RATIO = 0.28;
 
+function visibleAt(
+    rows: readonly { node: PlatformTreeNode; depth: number }[],
+    index: number,
+): { node: PlatformTreeNode; depth: number } {
+    const row = rows[index];
+    if (row === undefined) {
+        throw new Error('platform-tree: visible row missing');
+    }
+    return row;
+}
+
+function eventElement(event: Event, label: string): Element {
+    const target = event.currentTarget;
+    if (!(target instanceof Element)) {
+        throw new Error(`platform-tree: ${label} target must be an element`);
+    }
+    return target;
+}
+
 export class PlatformTree extends PlatformElement {
     static i18nNamespace = 'platform';
 
@@ -392,7 +411,7 @@ export class PlatformTree extends PlatformElement {
             return;
         }
         this._menuNode = node;
-        this._menuAnchor = event.currentTarget as Element | null;
+        this._menuAnchor = eventElement(event, 'row menu');
     }
 
     _onMenuSelect(event: CustomEvent<{ id?: unknown }>): void {
@@ -411,8 +430,12 @@ export class PlatformTree extends PlatformElement {
             return;
         }
         this._dragId = node.id;
-        event.dataTransfer!.effectAllowed = 'move';
-        event.dataTransfer!.setData('text/plain', node.id);
+        const transfer = event.dataTransfer;
+        if (transfer === null) {
+            throw new Error('platform-tree: dataTransfer missing');
+        }
+        transfer.effectAllowed = 'move';
+        transfer.setData('text/plain', node.id);
     }
 
     _onDragEnd(): void {
@@ -455,8 +478,12 @@ export class PlatformTree extends PlatformElement {
             return;
         }
         event.preventDefault();
-        event.dataTransfer!.dropEffect = 'move';
-        const position = this._dropPositionFor(event, event.currentTarget as Element);
+        const transfer = event.dataTransfer;
+        if (transfer === null) {
+            throw new Error('platform-tree: dataTransfer missing');
+        }
+        transfer.dropEffect = 'move';
+        const position = this._dropPositionFor(event, eventElement(event, 'drop'));
         if (this._dropTarget === null
             || this._dropTarget.id !== node.id
             || this._dropTarget.position !== position) {
@@ -504,18 +531,24 @@ export class PlatformTree extends PlatformElement {
             return;
         }
         const currentIndex = visible.findIndex((entry) => entry.node.id === this._focusedId);
-        const current = currentIndex === -1 ? null : visible[currentIndex]!.node;
+        const currentEntry = currentIndex === -1 ? null : visible[currentIndex];
+        if (currentIndex !== -1 && currentEntry === undefined) {
+            throw new Error('platform-tree: focused row missing');
+        }
+        const current = currentEntry === null || currentEntry === undefined ? null : currentEntry.node;
 
         if (event.key === 'ArrowDown') {
             event.preventDefault();
-            const next = visible[Math.min(currentIndex + 1, visible.length - 1)]!;
-            this._focusedId = (currentIndex === -1 ? visible[0]! : next).node.id;
+            const next = visibleAt(visible, Math.min(currentIndex + 1, visible.length - 1));
+            const target = currentIndex === -1 ? visibleAt(visible, 0) : next;
+            this._focusedId = target.node.id;
             return;
         }
         if (event.key === 'ArrowUp') {
             event.preventDefault();
-            const prev = visible[Math.max(currentIndex - 1, 0)]!;
-            this._focusedId = (currentIndex === -1 ? visible[0]! : prev).node.id;
+            const prev = visibleAt(visible, Math.max(currentIndex - 1, 0));
+            const target = currentIndex === -1 ? visibleAt(visible, 0) : prev;
+            this._focusedId = target.node.id;
             return;
         }
         if (event.key === 'ArrowRight' && current) {
@@ -525,7 +558,11 @@ export class PlatformTree extends PlatformElement {
             } else {
                 const children = this._childrenOf(current.id);
                 if (children.length > 0) {
-                    this._focusedId = children[0]!.id;
+                    const firstChild = children[0];
+                    if (firstChild === undefined) {
+                        throw new Error('platform-tree: first child missing');
+                    }
+                    this._focusedId = firstChild.id;
                 }
             }
             return;

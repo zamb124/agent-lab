@@ -8,33 +8,18 @@ import json
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.types import JsonObject
 
-_IMPORT_MAP_SCRIPT = (
-    '<script type="importmap">'
-    + json.dumps(
-        {
-            "imports": {
-                "lit": "/static/core/assets/js/lit/lit.min.js",
-                "lit/": "/static/core/assets/js/lit/",
-                "@platform/lib/": "/static/core/lib/",
-            },
-        },
-        separators=(",", ":"),
-    )
-    + "</script>"
-)
-
 
 def build_design_system_preview_html(
     *,
     component: str,
     variant_id: str,
-    import_path: str,
+    import_url: str,
     props: JsonObject,
     title: str,
 ) -> str:
     safe_title = html.escape(title, quote=True)
     props_json = json.dumps(props, ensure_ascii=False)
-    import_json = json.dumps(import_path, ensure_ascii=False)
+    import_json = json.dumps(import_url, ensure_ascii=False)
     component_json = json.dumps(component, ensure_ascii=False)
     variant_json = json.dumps(variant_id, ensure_ascii=False)
 
@@ -61,7 +46,6 @@ def build_design_system_preview_html(
       margin: 0 auto;
     }}
   </style>
-  {_IMPORT_MAP_SCRIPT}
 </head>
 <body>
   <ui-kit-root data-testid="ui-kit-root">
@@ -69,10 +53,10 @@ def build_design_system_preview_html(
   </ui-kit-root>
   <script type="module">
     const componentTag = {component_json};
-    const importPath = {import_json};
+    const importUrl = {import_json};
     const props = {props_json};
 
-    await import(importPath);
+    await import(importUrl);
     const mount = document.querySelector('#mount');
     if (!mount) {{
       throw new Error('ui-kit mount node missing');

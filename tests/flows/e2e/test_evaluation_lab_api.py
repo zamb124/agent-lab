@@ -1340,7 +1340,7 @@ class TestEvaluationLabAPI:
         await _create_code_flow(client, flow_id)
         service: EvaluationLabService = di.evaluation_lab_service
         try:
-            flow = await FlowConfig.get_latest(flow_id)
+            flow = await FlowConfig.current_for_flow(flow_id)
             assert flow is not None
             state = _state(flow_id, unique_id, flow.version)
             await service._start_evaluation_workflow(
@@ -2069,7 +2069,7 @@ class TestEvaluationLabAPI:
             assert context is not None
             assert context.active_company is not None
             trace_id = f"trace-scheduler-{unique_id}"
-            await Span.insert_once(
+            await Span.insert_span_once(
                 _trace_span(
                     unique_id=unique_id,
                     flow_id=flow_id,
@@ -2172,7 +2172,7 @@ class TestEvaluationLabAPI:
             assert context.active_company is not None
             trace_id = f"trace-monitor-{unique_id}"
             session_id = f"{flow_id}:monitor-session-{unique_id}"
-            await Span.insert_once(
+            await Span.insert_span_once(
                 _trace_span(
                     unique_id=unique_id,
                     flow_id=flow_id,
@@ -2278,7 +2278,7 @@ class TestEvaluationLabAPI:
             assert context is not None
             assert context.active_company is not None
             trace_id = f"trace-builtin-{unique_id}"
-            await Span.insert_once(
+            await Span.insert_span_once(
                 _trace_span(
                     unique_id=unique_id,
                     flow_id=flow_id,
@@ -2374,7 +2374,7 @@ class TestEvaluationLabAPI:
             assert context is not None
             assert context.active_company is not None
             trace_id = f"trace-cycle-{unique_id}"
-            await Span.insert_once(
+            await Span.insert_span_once(
                 _trace_span(
                     unique_id=unique_id,
                     flow_id=flow_id,
@@ -2796,7 +2796,7 @@ class TestEvaluationLabAPI:
             assert run_payload.case_runs[0].scores == {"turn_1.check_1.quality": 8.5}
             assert run_payload.case_runs[0].dialog[0].content == "generated judge input"
 
-            flow = await FlowConfig.get_latest(flow_id)
+            flow = await FlowConfig.current_for_flow(flow_id)
             assert flow is not None
             state = _state(flow_id, f"{unique_id}-llm", flow.version)
             dialog = [EvaluationDialogMessage(role="assistant", content="ok")]
@@ -2920,7 +2920,7 @@ class TestEvaluationLabAPI:
         flow_id = f"eval_lab_flow_judge_{unique_id}"
         await _create_code_flow(client, flow_id)
         try:
-            flow = await FlowConfig.get_latest(flow_id)
+            flow = await FlowConfig.current_for_flow(flow_id)
             assert flow is not None
             nodes = dict(flow.nodes or {})
             nodes["eval_judge"] = {
@@ -3023,7 +3023,7 @@ class TestEvaluationLabAPI:
             assert run_payload.case_runs[0].dialog[0].content == "ping from tester node"
 
             service: EvaluationLabService = di.evaluation_lab_service
-            updated_flow = await FlowConfig.get_latest(flow_id)
+            updated_flow = await FlowConfig.current_for_flow(flow_id)
             assert updated_flow is not None
             resolution_state = _state(flow_id, f"{unique_id}-flow-judge", updated_flow.version)
             prompt = await service._judge_prompt(

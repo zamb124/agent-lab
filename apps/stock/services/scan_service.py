@@ -257,7 +257,7 @@ class ScanService:
             count_location_ids = sorted(
                 {ln.location_id for ln in context.lines if ln.location_id}
             )
-            count_locations = await StockLocation.by_ids(
+            count_locations = await StockLocation.found_in_company_by_ids(
                 company_id, count_location_ids
             )
             for line in context.lines:
@@ -277,7 +277,7 @@ class ScanService:
                         "Count is allowed only on quant locations",
                         error_code="location_usage_invalid",
                     )
-                quant = await StockQuant.get_or_create_locked(
+                quant = await StockQuant.ensure_locked(
                     company_id=company_id,
                     product_id=line.product_id,
                     location_id=line.location_id,
@@ -286,7 +286,7 @@ class ScanService:
                     warehouse_id=warehouse_id,
                     quant_id=new_id("qnt"),
                 )
-                await StockQuant.set_inventory_quantity(
+                await StockQuant.update_inventory_quantity_counted_at_and_user(
                     quant.quant_id,
                     line.quantity,
                     counted_at=utcnow(),

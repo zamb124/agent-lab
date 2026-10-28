@@ -25,6 +25,13 @@
  */
 
 import { html, css, nothing } from 'lit';
+
+function grantUserId(user: { user_id: string } | null): string {
+    if (user === null || user.user_id.length === 0) {
+        throw new Error('share-modal: grant user required');
+    }
+    return user.user_id;
+}
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
@@ -528,7 +535,7 @@ export class CRMShareModal extends PlatformModal {
                 resource_type: 'entity',
                 resource_id: this.entityId,
                 subject: SUBJECT_USER,
-                user_id: this._selectedUser!.user_id,
+                user_id: grantUserId(this._selectedUser),
                 role: this._role,
             });
             return;

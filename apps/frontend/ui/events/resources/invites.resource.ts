@@ -49,3 +49,10 @@ export const acceptInviteOp = createAsyncOp({
         window.location.replace(buildCompanySubdomainUrl((result as Record<string, any>).subdomain.trim(), path));
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'frontend/invite_preview': typeof previewInviteOp;
+        'frontend/invite_accept': typeof acceptInviteOp;
+    }
+}

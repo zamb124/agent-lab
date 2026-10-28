@@ -50,6 +50,7 @@ import {
     transportRequest,
 } from './_transport.js';
 import type { EffectCtx, PlatformEvent } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 import type { PlatformFactory } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 import type { FactoryTransport, RestMirrorEntry } from './_transport.js';
@@ -83,6 +84,47 @@ function _normalizeCommandType(value: unknown, name: string, transport: FactoryT
 
 function _deriveReplyType(commandType: string, replySuffix: string): string {
     return commandType.slice(0, -_REQUESTED_SUFFIX.length) + replySuffix;
+}
+
+type HttpQueryValue = string | number | boolean | null | undefined;
+
+function isHttpQueryValue(value: unknown): value is HttpQueryValue {
+    return value === null
+        || value === undefined
+        || typeof value === 'string'
+        || typeof value === 'number'
+        || typeof value === 'boolean';
+}
+
+function httpQuery(params: Record<string, unknown>, label: string): Record<string, HttpQueryValue> {
+    const query: Record<string, HttpQueryValue> = {};
+    for (const [key, value] of Object.entries(params)) {
+        if (!isHttpQueryValue(value)) {
+            throw new Error(`${label}: query ${key} must be a scalar`);
+        }
+        query[key] = value;
+    }
+    return query;
+}
+
+function objectPayload(payload: unknown, label: string): Record<string, unknown> {
+    if (!isPlainRecord(payload)) {
+        throw new Error(`${label} payload must be object`);
+    }
+    return payload;
+}
+
+function isCursorListSlice(value: unknown): value is CursorListSlice {
+    if (!isPlainRecord(value) || !Array.isArray(value.items) || !isPlainRecord(value.filters)) {
+        return false;
+    }
+    if (value.nextCursor !== null && typeof value.nextCursor !== 'string') return false;
+    if (typeof value.hasMore !== 'boolean') return false;
+    if (typeof value.loading !== 'boolean') return false;
+    if (typeof value.loadingMore !== 'boolean') return false;
+    if (value.error !== null && typeof value.error !== 'string') return false;
+    if (value.terminal !== null && typeof value.terminal !== 'string') return false;
+    return true;
 }
 
 export interface CursorListSlice {
@@ -176,7 +218,8 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
     const initialFilters = options.initialFilters && typeof options.initialFilters === 'object'
         ? options.initialFilters
         : {};
-    const errorToastKey = options.errorToastKey || null;
+    const toastKey = options.errorToastKey;
+    const errorToastKey = typeof toastKey === 'string' && toastKey.length > 0 ? toastKey : null;
     if (errorToastKey) {
         requireI18nKey(errorToastKey, `createCursorList(${name}).errorToastKey`);
     }
@@ -206,8 +249,9 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
     }
     const events = freeze({ ...baseEvents, ...terminalEvents });
 
+    const emptyItems: unknown[] = [];
     const initialSlice: CursorListSlice = freeze({
-        items: freeze([] as unknown[]),
+        items: freeze(emptyItems),
         nextCursor: null,
         hasMore: false,
         loading: false,
@@ -220,8 +264,8 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
     function _baseReducer(state: CursorListSlice, event: PlatformEvent): CursorListSlice {
         switch (event.type) {
             case events.LOAD_REQUESTED: {
-                _assertObjectPayload(event, 'LOAD_REQUESTED');
-                const append = (event.payload as Record<string, unknown>).append === true;
+                const payload = objectPayload(event.payload, `createCursorList(${name}): LOAD_REQUESTED`);
+                const append = payload.append === true;
                 return freeze({
                     ...state,
                     loading: !append,
@@ -231,8 +275,7 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
                 });
             }
             case events.LOADED: {
-                _assertListPayload(event, 'LOADED');
-                const p = event.payload as unknown as _ListPayload;
+                const p = _readListPayload(event, 'LOADED');
                 return freeze({
                     ...state,
                     items: freeze(p.items),
@@ -245,8 +288,7 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
                 });
             }
             case events.PAGE_LOADED: {
-                _assertListPayload(event, 'PAGE_LOADED');
-                const p = event.payload as unknown as _ListPayload;
+                const p = _readListPayload(event, 'PAGE_LOADED');
                 return freeze({
                     ...state,
                     items: freeze([...state.items, ...p.items]),
@@ -256,29 +298,32 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
                 });
             }
             case events.FAILED: {
-                const p = event.payload as { message?: unknown } | null;
-                if (!p || typeof p.message !== 'string') {
+                if (!isPlainRecord(event.payload) || typeof event.payload.message !== 'string') {
                     throw new Error(`createCursorList(${name}): FAILED payload must include "message" (string)`);
                 }
+                const message = event.payload.message;
                 return freeze({
                     ...state,
                     loading: false,
                     loadingMore: false,
-                    error: p.message,
+                    error: message,
                 });
             }
             case events.FILTERS_CHANGED: {
-                const p = event.payload as { filters?: unknown } | null;
-                if (!p || !p.filters || typeof p.filters !== 'object') {
+                if (!isPlainRecord(event.payload) || !isPlainRecord(event.payload.filters)) {
                     throw new Error(`createCursorList(${name}): FILTERS_CHANGED payload.filters required (object)`);
                 }
-                return freeze({ ...state, filters: freeze({ ...state.filters, ...(p.filters as Record<string, unknown>) }) });
+                return freeze({ ...state, filters: freeze({ ...state.filters, ...event.payload.filters }) });
             }
             case events.FILTERS_RESET:
                 return freeze({ ...state, filters: freeze({ ...initialFilters }) });
             default:
                 if (Object.values(terminalEvents).includes(event.type)) {
-                    const terminalKey = Object.entries(terminalEvents).find(([, t]) => t === event.type)![0].toLowerCase();
+                    const found = Object.entries(terminalEvents).find(([, t]) => t === event.type);
+                    if (found === undefined) {
+                        throw new Error(`createCursorList(${name}): terminal event ${event.type} missing`);
+                    }
+                    const terminalKey = found[0].toLowerCase();
                     return freeze({
                         ...state,
                         loading: false,
@@ -305,29 +350,30 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
         return next;
     }
 
-    function _assertObjectPayload(event: PlatformEvent, eventKey: string): void {
-        if (event.payload === undefined || event.payload === null || typeof event.payload !== 'object') {
+    function _readListPayload(event: PlatformEvent, eventKey: string): _ListPayload {
+        const p = event.payload;
+        if (p === undefined || p === null || typeof p !== 'object' || Array.isArray(p)) {
             throw new Error(`createCursorList(${name}): ${eventKey} payload must be object`);
         }
-    }
-
-    function _assertListPayload(event: PlatformEvent, eventKey: string): void {
-        const p = event.payload as { items?: unknown } | null;
-        if (!p || !Array.isArray(p.items)) {
+        if (!('items' in p) || !Array.isArray(p.items)) {
             throw new Error(`createCursorList(${name}): ${eventKey} payload.items must be array`);
         }
-        if (!('next_cursor' in p)) {
+        if (!('next_cursor' in p) || (p.next_cursor !== null && typeof p.next_cursor !== 'string')) {
             throw new Error(`createCursorList(${name}): ${eventKey} payload.next_cursor required (string|null)`);
         }
-        if (!('has_more' in p)) {
+        if (!('has_more' in p) || typeof p.has_more !== 'boolean') {
             throw new Error(`createCursorList(${name}): ${eventKey} payload.has_more required (boolean)`);
         }
+        return { items: p.items, next_cursor: p.next_cursor, has_more: p.has_more };
     }
 
     function _readSlice(state: Record<string, unknown>): CursorListSlice {
-        const slice = state[sliceKey] as CursorListSlice | undefined;
+        const slice = state[sliceKey];
         if (slice === undefined) {
             throw new Error(`createCursorList(${name}): slice "${sliceKey}" not registered in bus`);
+        }
+        if (!isCursorListSlice(slice)) {
+            throw new Error(`createCursorList(${name}): slice "${sliceKey}" must be a cursor list`);
         }
         return slice;
     }
@@ -356,18 +402,18 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
             }
         }
         if (event.type !== events.LOAD_REQUESTED) return;
-        if (!event.payload || typeof event.payload !== 'object') {
-            throw new Error(`createCursorList(${name}): LOAD_REQUESTED payload must be object`);
+        const p = objectPayload(event.payload, `createCursorList(${name}): LOAD_REQUESTED`);
+        if (p.filters !== undefined && !isPlainRecord(p.filters)) {
+            throw new Error(`createCursorList(${name}): LOAD_REQUESTED payload.filters must be an object`);
         }
-        const p = event.payload as { filters?: unknown; cursor?: unknown; append?: unknown; limit?: unknown };
-        const filters = p.filters && typeof p.filters === 'object' ? p.filters as Record<string, unknown> : {};
+        const filters = isPlainRecord(p.filters) ? p.filters : {};
         const cursor = typeof p.cursor === 'string' ? p.cursor : null;
         const append = p.append === true;
         const limit = typeof p.limit === 'number' && p.limit > 0 ? p.limit : pageSize;
         const params: Record<string, unknown> = { ...buildQuery(filters), limit };
         if (cursor !== null) params.cursor = cursor;
         try {
-            const data = (transport === 'ws'
+            const data = transport === 'ws'
                 ? await transportRequest({
                     transport: 'ws',
                     commandType,
@@ -379,8 +425,12 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
                 })
                 : httpMethod === 'POST'
                     ? await httpRequest({ method: 'POST', url: baseUrl, body: params })
-                    : await httpRequest({ method: 'GET', url: baseUrl, query: params as Record<string, string | number | boolean | null | undefined> })) as { items?: unknown; next_cursor?: unknown; has_more?: unknown } | null;
-            if (!data || !Array.isArray(data.items)) {
+                    : await httpRequest({
+                        method: 'GET',
+                        url: baseUrl,
+                        query: httpQuery(params, `createCursorList(${name})`),
+                    });
+            if (!isPlainRecord(data) || !Array.isArray(data.items)) {
                 throw new Error(`createCursorList(${name}): response.items missing or not array`);
             }
             ctx.dispatch(
@@ -399,7 +449,11 @@ export function createCursorList(options: CursorListOptions): CursorListFactory 
                 ? statusMap[httpStatus]
                 : (err instanceof WsTransportError && err.code ? wsCodeTerminalKeys[err.code] : undefined);
             if (terminalKey) {
-                ctx.dispatch((events as Record<string, string>)[terminalKey.toUpperCase()]!, null, { causation_id: event.id, source: _transportSource() });
+                const terminalEvent = terminalEvents[terminalKey.toUpperCase()];
+                if (terminalEvent === undefined) {
+                    throw new Error(`createCursorList(${name}): terminal event ${terminalKey} missing`);
+                }
+                ctx.dispatch(terminalEvent, null, { causation_id: event.id, source: _transportSource() });
                 return;
             }
             ctx.dispatch(

@@ -81,7 +81,7 @@ class WikiPage(PlatformModel):
         ).order_by("-deleted_at").all()
 
     @classmethod
-    async def get_public_page(cls, raw_token: str) -> Self | None:
+    async def find_published_link(cls, raw_token: str) -> Self | None:
         """Корень публичного сайта — страница, на которой включена ссылка.
 
         Черновик по ссылке не отдаётся: включённая ссылка — намерение поделиться
@@ -95,24 +95,24 @@ class WikiPage(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def create_page(cls, page: Self) -> Self:
+    async def create(cls, page: Self) -> Self:
         return await cls.objects.create(instance=page)
 
     @classmethod
-    async def delete_page_in_namespace(
+    async def delete_in_namespace(
         cls,
         company_id: str,
         namespace: str,
         wiki_page_id: str,
-    ) -> None:
-        _ = await cls.objects.filter(
+    ) -> int:
+        return await cls.objects.filter(
             company_id=company_id,
             namespace=namespace,
             wiki_page_id=wiki_page_id,
         ).delete()
 
     @classmethod
-    async def update_page_location(
+    async def update_location(
         cls,
         *,
         company_id: str,
@@ -136,7 +136,7 @@ class WikiPage(PlatformModel):
         )
 
     @classmethod
-    async def mark_pages_deleted(
+    async def mark_deleted(
         cls,
         *,
         company_id: str,
@@ -151,7 +151,7 @@ class WikiPage(PlatformModel):
         ).update(using="wiki", deleted_at=deleted_at)
 
     @classmethod
-    async def set_deleted_at(
+    async def update_deleted_at(
         cls,
         *,
         company_id: str,
@@ -166,7 +166,7 @@ class WikiPage(PlatformModel):
         ).update(using="wiki", deleted_at=deleted_at)
 
     @classmethod
-    async def update_depth(
+    async def update_depth_and_root(
         cls,
         *,
         company_id: str,
@@ -182,7 +182,7 @@ class WikiPage(PlatformModel):
         ).update(using="wiki", depth=depth, root_page_id=root_page_id)
 
     @classmethod
-    async def list_alive_by_created_at(cls, *, limit: int | None) -> list[Self]:
+    async def alive_by_created_at(cls, *, limit: int | None) -> list[Self]:
         query = cls.objects.filter(deleted_at=None).order_by("created_at")
         if limit is not None:
             if limit < 1:
@@ -203,7 +203,7 @@ class WikiPage(PlatformModel):
             return
         async with atomic(using="wiki"):
             for wiki_page_id, depth in depths.items():
-                await cls.update_depth(
+                await cls.update_depth_and_root(
                     company_id=company_id,
                     namespace=namespace,
                     wiki_page_id=wiki_page_id,
@@ -224,12 +224,13 @@ class WikiPage(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def search_alive_pages(
+    async def list_alive_by_title(
         cls,
         company_id: str,
         query: str,
         limit: int,
     ) -> list[Self]:
+        """Живые страницы компании по возрастанию title, не больше limit. Пустой query не фильтрует заголовок."""
         rows = cls.objects.filter(company_id=company_id, deleted_at=None)
         if query != "":
             rows = rows.filter(title__icontains=query)
@@ -250,7 +251,7 @@ class WikiPage(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def update_existing(cls, page: Self) -> Self:
+    async def update_in_namespace(cls, page: Self) -> Self:
         existing = await cls.objects.filter(
             company_id=page.company_id,
             namespace=page.namespace,
@@ -263,7 +264,7 @@ class WikiPage(PlatformModel):
         return page
 
     @classmethod
-    async def write_link_token(
+    async def update_link(
         cls,
         company_id: str,
         namespace: str,
@@ -285,7 +286,7 @@ class WikiPage(PlatformModel):
         )
 
     @classmethod
-    async def write_company_visible(
+    async def update_company_visible(
         cls,
         company_id: str,
         namespace: str,
@@ -300,6 +301,8 @@ class WikiPage(PlatformModel):
 
     @classmethod
     async def list_alive(cls, company_id: str, wiki_page_ids: list[str]) -> list[Self]:
+        if len(wiki_page_ids) == 0:
+            return []
         return await cls.objects.filter(
             company_id=company_id,
             wiki_page_id__in=wiki_page_ids,
@@ -358,7 +361,7 @@ class WikiPage(PlatformModel):
         )
 
     @classmethod
-    async def list_tree(cls, company_id: str, namespace: str) -> list[WikiPageSummary]:
+    async def tree_summaries(cls, company_id: str, namespace: str) -> list[WikiPageSummary]:
         """Всё дерево namespace, отсортированное для отрисовки sidebar."""
         pages = await cls._alive(company_id, namespace).order_by("depth", "position", "title").all()
         parents = {page.parent_page_id for page in pages if page.parent_page_id is not None}
@@ -386,7 +389,7 @@ class WikiPage(PlatformModel):
         return collected
 
     @classmethod
-    async def list_public_subtree(
+    async def published_subtree_summaries(
         cls, company_id: str, namespace: str, root_page_id: str
     ) -> list[WikiPageSummary]:
         """Опубликованное поддерево. Черновик обрывает ветку вместе с потомками."""
@@ -415,7 +418,7 @@ class WikiPage(PlatformModel):
         ]
 
     @classmethod
-    async def list_ancestors(
+    async def ancestors_toward_root(
         cls, company_id: str, namespace: str, wiki_page_id: str
     ) -> list[Self]:
         """Цепочка предков от ближайшего родителя к корню."""
@@ -435,7 +438,7 @@ class WikiPage(PlatformModel):
         return chain
 
     @classmethod
-    async def move_subtree_to_namespace(
+    async def move_subtree_bundle_to_namespace(
         cls,
         company_id: str,
         source_namespace: str,
@@ -503,7 +506,7 @@ class WikiPage(PlatformModel):
         return max_position + 1
 
     @classmethod
-    async def search_pages(
+    async def list_search_hits(
         cls,
         company_id: str,
         namespace: str,
@@ -511,7 +514,7 @@ class WikiPage(PlatformModel):
         limit: int,
         allowed_page_ids: list[str] | None,
     ) -> list[WikiSearchHit]:
-        """Лексический поиск по generated ``search_vector``."""
+        """Живые страницы namespace по search_vector как WikiSearchHit. Ранг по убыванию, затем updated_at. Не больше limit. Пустой allowed_page_ids — []."""
         if allowed_page_ids is not None and len(allowed_page_ids) == 0:
             return []
         params: list[str | int] = [query, company_id, namespace, limit]

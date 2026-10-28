@@ -204,7 +204,7 @@ class TestAllFlowConfigs:
     async def test_flow_creates_from_config(self, flow_id: str, app: object, di):
         """Agent создаётся из конфига в БД без ошибок."""
         _ = app
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
 
         assert config is not None, f"Agent {flow_id} не загружен в БД"
 
@@ -238,7 +238,7 @@ class TestAllFlowConfigs:
     async def test_flow_nodes_have_valid_types(self, flow_id: str, app: object, di):
         """Все ноды имеют валидный тип."""
         _ = app
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
 
         assert config is not None, f"Agent {flow_id} не загружен в БД"
         assert config.nodes is not None, f"Agent {flow_id} must define nodes"
@@ -266,7 +266,7 @@ class TestAllFlowsExecution:
     async def test_flow_executes_with_mock_llm(self, flow_id: str, app: object, di):
         """Самодостаточный flow выполняется с test LLM и возвращает ответ."""
         _ = app
-        config = await FlowConfig.get_latest(flow_id)
+        config = await FlowConfig.current_for_flow(flow_id)
 
         assert config is not None, f"Agent {flow_id} не загружен в БД"
 

@@ -329,7 +329,7 @@ class TestQuantsOwnerFilter:
             _ = await env.di.move_engine.validate_transfer(
                 company_id=env.company_id, transfer_id=transfer.transfer_id
             )
-        rows_a = await StockQuant.list_for_company(
+        rows_a = await StockQuant.list_by_product_and_location(
             env.company_id,
             location_id=env.warehouse.stock_location_id,
             product_id=env.product.product_id,
@@ -339,7 +339,7 @@ class TestQuantsOwnerFilter:
         )
         assert len(rows_a) == 1
         assert rows_a[0].quantity == Decimal("4")
-        total_all = await StockQuant.count_for_company(
+        total_all = await StockQuant.count_by_location_product_and_owner(
             env.company_id,
             location_id=env.warehouse.stock_location_id,
             product_id=env.product.product_id,

@@ -819,7 +819,10 @@ export class GlassModal extends PlatformElement {
             return;
         }
 
-        const first = modal!.getBoundingClientRect();
+        if (!(modal instanceof Element)) {
+            throw new Error('glass-modal: modal element missing');
+        }
+        const first = modal.getBoundingClientRect();
         this._isFullscreen = !this._isFullscreen;
         if (this._isFullscreen) {
             this._position = { x: null, y: null };
@@ -1080,7 +1083,7 @@ export class GlassModal extends PlatformElement {
     }
 
     renderHeader(): unknown {
-        return this.heading || this.title || '';
+        return this.heading.length > 0 ? this.heading : this.title;
     }
 
     renderHeaderActions(): unknown {

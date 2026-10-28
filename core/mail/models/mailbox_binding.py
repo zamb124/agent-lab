@@ -134,14 +134,16 @@ class MailboxBinding(PlatformModel):
         return secret is not None and secret.strip() != ""
 
     @classmethod
-    async def list_for_authz(cls, *, limit: int | None) -> list[Self]:
+    async def list_all_by_mailbox_binding_id(cls, *, limit: int | None) -> list[Self]:
+        """Все привязки, ORDER BY mailbox_binding_id. limit is None не ограничивает."""
         ordered = cls.objects.order_by("mailbox_binding_id")
         if limit is None:
             return await ordered.all()
         return await ordered.limit(limit).all()
 
     @classmethod
-    async def list_with_user_for_authz(cls, *, limit: int | None) -> list[Self]:
+    async def list_with_user_by_mailbox_binding_id(cls, *, limit: int | None) -> list[Self]:
+        """Привязки с user_id, ORDER BY mailbox_binding_id. limit is None не ограничивает."""
         ordered = cls.objects.filter(user_id__isnull=False).order_by("mailbox_binding_id")
         if limit is None:
             return await ordered.all()
@@ -149,7 +151,8 @@ class MailboxBinding(PlatformModel):
 
 
     @classmethod
-    async def find_in_company(cls, company_id: str, mailbox_binding_id: str) -> Self | None:
+    async def by_mailbox_binding_id(cls, company_id: str, mailbox_binding_id: str) -> Self | None:
+        """Строка компании по mailbox_binding_id. Нет строки — None. Пустые company_id и mailbox_binding_id — ValueError."""
         return await cls.objects.filter(
             mailbox_binding_id=mail_required(mailbox_binding_id, "mailbox_binding_id"),
             company_id=mail_required(company_id, "company_id"),
@@ -163,7 +166,8 @@ class MailboxBinding(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_by_user(cls, company_id: str, user_id: str) -> list[Self]:
+    async def list_user_kind_by_default_and_email(cls, company_id: str, user_id: str) -> list[Self]:
+        """Привязки kind user, ORDER BY is_default DESC, email_address. Предела нет. Пустые company_id и user_id — ValueError."""
         return await cls.objects.filter(
             company_id=mail_required(company_id, "company_id"),
             user_id=mail_required(user_id, "user_id"),
@@ -172,7 +176,7 @@ class MailboxBinding(PlatformModel):
 
     @classmethod
     async def preferred_for_user(cls, company_id: str, user_id: str) -> Self | None:
-        bindings = await cls.list_by_user(company_id, user_id)
+        bindings = await cls.list_user_kind_by_default_and_email(company_id, user_id)
         if len(bindings) == 0:
             return None
         for binding in bindings:
@@ -181,7 +185,8 @@ class MailboxBinding(PlatformModel):
         return bindings[0]
 
     @classmethod
-    async def list_by_company(cls, company_id: str) -> list[Self]:
+    async def list_by_email_address_for_company(cls, company_id: str) -> list[Self]:
+        """Все привязки компании, ORDER BY email_address. Предела нет. Пустой company_id — ValueError."""
         return await cls.objects.filter(
             company_id=mail_required(company_id, "company_id"),
         ).order_by("email_address").all()
@@ -238,7 +243,7 @@ class MailboxBinding(PlatformModel):
         bindings: list[Self] = []
         for row in rows:
             payload = require_json_object(row, "mailbox_sync_candidate")
-            binding = await cls.find_in_company(
+            binding = await cls.by_mailbox_binding_id(
                 mail_json_str(payload, "company_id"),
                 mail_json_str(payload, "mailbox_binding_id"),
             )
@@ -382,7 +387,7 @@ class MailboxBinding(PlatformModel):
             password_encrypted=binding.password_encrypted,
             updated_at=datetime.now(timezone.utc),
         )
-        stored = await cls.find_in_company(binding.company_id, binding.mailbox_binding_id)
+        stored = await cls.by_mailbox_binding_id(binding.company_id, binding.mailbox_binding_id)
         if stored is None:
             raise RuntimeError(
                 f"MailboxBinding upsert failed for email_address={binding.email_address}"

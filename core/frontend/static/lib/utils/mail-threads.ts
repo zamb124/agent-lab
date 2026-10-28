@@ -79,21 +79,29 @@ export function normalizeMailSubject(subject: string | null | undefined): string
  * @param {{ message_id?: string | null, in_reply_to?: string | null, references?: string | null, subject?: string | null, uid?: string }} msg
  * @returns {string}
  */
+function firstToken(tokens: readonly string[], label: string): string {
+    const token = tokens[0];
+    if (token === undefined) {
+        throw new Error(`threadRootId: ${label} token missing`);
+    }
+    return token;
+}
+
 export function threadRootId(msg: MailMessageLike): string {
     if (!msg || typeof msg !== 'object') {
         throw new Error('threadRootId: msg required');
     }
     const references = parseMessageIdTokens(msg.references);
     if (references.length > 0) {
-        return references[0]!;
+        return firstToken(references, 'references');
     }
     const inReply = parseMessageIdTokens(msg.in_reply_to);
     if (inReply.length > 0) {
-        return inReply[0]!;
+        return firstToken(inReply, 'in_reply_to');
     }
     const own = parseMessageIdTokens(msg.message_id);
     if (own.length > 0) {
-        return own[0]!;
+        return firstToken(own, 'message_id');
     }
     const subjectKey = normalizeMailSubject(msg.subject);
     if (subjectKey) {
@@ -151,6 +159,18 @@ export interface MailThread {
     subject: string;
 }
 
+export function mailMessagesFromRecords(messages: readonly Record<string, unknown>[]): MailMessageLike[] {
+    if (!Array.isArray(messages)) {
+        throw new Error('mailMessagesFromRecords: messages must be an array');
+    }
+    return messages.map((message) => {
+        if (typeof message.uid !== 'string' || message.uid.length === 0) {
+            throw new Error('mailMessagesFromRecords: each message needs uid');
+        }
+        return { ...message, uid: message.uid };
+    });
+}
+
 export function groupMailThreads(messages: MailMessageLike[]): MailThread[] {
     if (!Array.isArray(messages)) {
         throw new Error('groupMailThreads: messages must be an array');
@@ -177,7 +197,10 @@ export function groupMailThreads(messages: MailMessageLike[]): MailThread[] {
             }
             return String(left.uid).localeCompare(String(right.uid), 'en');
         });
-        const latest = ordered[ordered.length - 1]!;
+        const latest = ordered[ordered.length - 1];
+        if (latest === undefined) {
+            throw new Error('groupMailThreads: thread message missing');
+        }
         const participants: string[] = [];
         const seen = new Set<string>();
         for (const item of ordered) {

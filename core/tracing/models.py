@@ -346,7 +346,8 @@ class Span(PlatformModel):
         return value
 
     @classmethod
-    async def insert_once(cls, span: Span) -> None:
+    async def insert_span_once(cls, span: Span) -> None:
+        """Пустой service_name — ValueError. Повтор того же span_id ничего не делает. IntegrityError без строки пробрасывается."""
         if span.service_name == "":
             raise ValueError("span.service_name is required to persist the span")
         attributes: JsonObject = dict(span.attributes)
@@ -370,7 +371,7 @@ class Span(PlatformModel):
                 raise
 
     @classmethod
-    async def list_spans_for_service(
+    async def span_page_and_cursor_for_service(
         cls,
         *,
         service_name: str,
@@ -381,7 +382,7 @@ class Span(PlatformModel):
         limit: int = 50,
         cursor: str | None = None,
     ) -> tuple[list[Span], str | None]:
-        """Список spans сервиса. Сортировка: start_time DESC, span_id DESC."""
+        """Страница спанов сервиса ORDER BY start_time DESC, span_id DESC и курсор следующей страницы. Короче limit — курсор None. limit < 1 — ValueError. Битый курсор — ValueError. None в company_id, namespace, operation_name и event_type не фильтрует."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         query = Span.objects.filter(service_name=service_name)
@@ -397,31 +398,12 @@ class Span(PlatformModel):
         return rows, _next_cursor(rows, limit)
 
     @classmethod
-    async def list_spans_for_resource(
-        cls,
-        *,
-        company_id: str,
-        resource_type: str,
-        resource_id: str,
-        event_type: str | None = None,
-        limit: int = 100,
-    ) -> list[Span]:
-        """Хронология событий по сущности (чат, заметка, документ и т.д.)."""
-        query = Span.objects.filter(
-            company_id=company_id,
-            resource_type=resource_type,
-            resource_id=resource_id,
-        )
-        if event_type is not None:
-            query = query.filter(event_type=event_type)
-        return await query.order_by("-start_time").limit(limit).all()
-
-    @classmethod
     async def list_for_trace(cls, trace_id: str) -> list[Span]:
         return await Span.objects.filter(trace_id=trace_id).order_by("start_time").all()
 
     @classmethod
-    async def list_by_task_id(cls, task_id: str) -> list[Span]:
+    async def list_by_task_id_asc(cls, task_id: str) -> list[Span]:
+        """Все спаны задачи, ORDER BY start_time ASC, без limit. Нет строк — []."""
         return await Span._load_spans(
             """
             SELECT row_to_json(spans) AS span
@@ -433,11 +415,12 @@ class Span(PlatformModel):
         )
 
     @classmethod
-    async def list_by_session_agent(
+    async def list_by_session_agent_desc(
         cls,
         session_agent: str,
         limit: int = 100,
     ) -> list[Span]:
+        """Спаны session_agent, ORDER BY start_time DESC, не больше limit. Окна по времени нет. Нет строк — []."""
         return await (
             Span.objects.filter(session_agent=session_agent)
             .order_by("-start_time")
@@ -446,13 +429,14 @@ class Span(PlatformModel):
         )
 
     @classmethod
-    async def list_by_user_id(
+    async def list_by_user_id_desc(
         cls,
         user_id: str,
         from_time: datetime | None = None,
         to_time: datetime | None = None,
         limit: int = 100,
     ) -> list[Span]:
+        """Спаны user_id, ORDER BY start_time DESC, не больше limit. from_time и to_time включительно; None не фильтрует."""
         query = Span.objects.filter(user_id=user_id)
         if from_time is not None:
             query = query.filter(start_time__gte=from_time)
@@ -461,13 +445,14 @@ class Span(PlatformModel):
         return await query.order_by("-start_time").limit(limit).all()
 
     @classmethod
-    async def list_by_flow_id(
+    async def list_by_flow_id_desc(
         cls,
         flow_id: str,
         from_time: datetime | None = None,
         to_time: datetime | None = None,
         limit: int = 100,
     ) -> list[Span]:
+        """Спаны flow ORDER BY start_time DESC, не больше limit. from_time и to_time включительно; None не фильтрует."""
         clauses = ["attributes->>$1 = $2"]
         params: list[_SearchParam] = [trace_attr.ATTR_FLOW_ID, flow_id]
         if from_time is not None:
@@ -489,7 +474,7 @@ class Span(PlatformModel):
         )
 
     @classmethod
-    async def search_traces(
+    async def trace_group_page_and_span_count(
         cls,
         user_id: str | None = None,
         session_id: str | None = None,
@@ -500,6 +485,7 @@ class Span(PlatformModel):
         limit: int = 100,
         offset: int = 0,
     ) -> tuple[list[TraceSearchResult], int]:
+        """Страница спанов ORDER BY start_time DESC, сгруппированная по trace_id, и COUNT(*) спанов фильтра, не трейсов. None в фильтрах не сужает. Пустой count — RuntimeError."""
         clauses = ["TRUE"]
         params: list[_SearchParam] = []
         if user_id is not None:
@@ -555,7 +541,7 @@ class Span(PlatformModel):
         ], total_cell
 
     @classmethod
-    async def admin_search_spans(
+    async def admin_span_page_and_cursor(
         cls,
         *,
         service_name: str | None = None,
@@ -573,6 +559,7 @@ class Span(PlatformModel):
         limit: int = 50,
         cursor: str | None = None,
     ) -> tuple[list[Span], str | None]:
+        """Страница спанов ORDER BY start_time DESC, span_id DESC и курсор следующей страницы. Короче limit — курсор None. limit вне 1..100 — ValueError. Битый курсор — ValueError. Пустая подстрока не фильтрует. Точное service_name или namespace важнее своей подстроки."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if limit > ADMIN_SPANS_MAX_LIMIT:
@@ -616,7 +603,7 @@ class Span(PlatformModel):
         return rows, _next_cursor(rows, limit)
 
     @classmethod
-    async def list_spans_pending_billing_settlement(
+    async def list_pending_billing_settlement(
         cls,
         *,
         from_time: datetime,
@@ -624,10 +611,7 @@ class Span(PlatformModel):
         limit: int,
         company_id: str | None = None,
     ) -> list[Span]:
-        """
-        Spans с platform.billing.resource_name и platform.billing.pending_settlement=true
-        за полуинтервал [from_time, to_time), по возрастанию start_time.
-        """
+        """Спаны с непустым platform.billing.resource_name и pending_settlement за [from_time, to_time), ORDER BY start_time ASC, span_id ASC, не больше limit. company_id None не фильтрует. limit < 1 и время без таймзоны — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if from_time.tzinfo is None or to_time.tzinfo is None:

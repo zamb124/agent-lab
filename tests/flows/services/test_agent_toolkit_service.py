@@ -97,7 +97,7 @@ async def test_list_agent_toolkits_sorted_by_position(di, unique_id: str) -> Non
 
 
 @pytest.mark.asyncio
-async def test_set_flow_toolkit_membership_add_remove(di, unique_id: str) -> None:
+async def test_replace_flow_toolkit_membership_add_remove(di, unique_id: str) -> None:
     flow_id = f"flow_mem_{unique_id}"
     toolkit_a = f"tk_a_{unique_id}"
     toolkit_b = f"tk_b_{unique_id}"
@@ -112,32 +112,32 @@ async def test_set_flow_toolkit_membership_add_remove(di, unique_id: str) -> Non
                 )
             )
         try:
-            await AgentToolkit.set_flow_toolkit_membership(
+            await AgentToolkit.replace_flow_toolkit_membership(
                 flow_id=flow_id,
                 toolkit_ids=[toolkit_a],
             )
-            assert await AgentToolkit.get_toolkit_ids_for_flow(flow_id) == [
+            assert await AgentToolkit.toolkit_ids_for_flow(flow_id) == [
                 toolkit_a
             ]
-            await AgentToolkit.set_flow_toolkit_membership(
+            await AgentToolkit.replace_flow_toolkit_membership(
                 flow_id=flow_id,
                 toolkit_ids=[toolkit_a, toolkit_b],
             )
             assert set(
-                await AgentToolkit.get_toolkit_ids_for_flow(flow_id)
+                await AgentToolkit.toolkit_ids_for_flow(flow_id)
             ) == {toolkit_a, toolkit_b}
-            await AgentToolkit.set_flow_toolkit_membership(
+            await AgentToolkit.replace_flow_toolkit_membership(
                 flow_id=flow_id,
                 toolkit_ids=[],
             )
-            assert await AgentToolkit.get_toolkit_ids_for_flow(flow_id) == []
+            assert await AgentToolkit.toolkit_ids_for_flow(flow_id) == []
         finally:
             await AgentToolkit.delete_by_toolkit_id(toolkit_a)
             await AgentToolkit.delete_by_toolkit_id(toolkit_b)
 
 
 @pytest.mark.asyncio
-async def test_set_tool_toolkit_membership(di, unique_id: str) -> None:
+async def test_replace_tool_toolkit_membership(di, unique_id: str) -> None:
     tool_id = f"tool_mem_{unique_id}"
     toolkit_id = f"tk_tool_{unique_id}"
     async with _repository_context(di, unique_id):
@@ -150,7 +150,7 @@ async def test_set_tool_toolkit_membership(di, unique_id: str) -> None:
             )
         )
         try:
-            await AgentToolkit.set_tool_toolkit_membership(
+            await AgentToolkit.replace_tool_toolkit_membership(
                 tool_id=tool_id,
                 toolkit_ids=[toolkit_id],
             )

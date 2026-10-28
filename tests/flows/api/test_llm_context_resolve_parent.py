@@ -85,7 +85,7 @@ async def test_resolve_parent_applies_shared_resource(client, unique_id, di):
         assert resolved["retrieval"]["mode"] == "off"
         assert resolved["retrieval"]["top_k"] == 3
     finally:
-        await ResourceDefinition.delete_by_id(ResourceDefinition.row_id(resource_id))
+        await ResourceDefinition.delete_by_id(ResourceDefinition.resource_row_id_for_active_company(resource_id))
 
 
 @pytest.mark.asyncio

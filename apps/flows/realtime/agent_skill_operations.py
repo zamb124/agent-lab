@@ -71,7 +71,7 @@ async def op_flows_agent_skills_create(
 ) -> AgentSkill:
     _ = user
     _ = await require_company_member(di)
-    existing = await AgentSkill.get(AgentSkill.row_id(payload.agent_skill_id))
+    existing = await AgentSkill.get(AgentSkill.skill_row_id_for_active_company(payload.agent_skill_id))
     if existing is not None:
         raise_conflict(ValueError(f"AgentSkill already exists: {payload.agent_skill_id}"))
     try:
@@ -121,7 +121,7 @@ async def op_flows_agent_skills_import(
     _ = await require_company_member(di)
     if payload.persist:
         parsed = parse_skill_md(payload.markdown, agent_skill_id=payload.agent_skill_id)
-        existing = await AgentSkill.get(AgentSkill.row_id(parsed.agent_skill_id))
+        existing = await AgentSkill.get(AgentSkill.skill_row_id_for_active_company(parsed.agent_skill_id))
         if existing is not None:
             raise_conflict(
                 ValueError(f"AgentSkill already exists: {parsed.agent_skill_id}")

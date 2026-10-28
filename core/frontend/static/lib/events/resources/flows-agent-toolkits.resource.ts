@@ -15,3 +15,9 @@ export const agentToolkitsListOp = createAsyncOp({
     commandType: 'flows/agent_toolkits/list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/agent/toolkits/manage' },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'flows/agent_toolkits': typeof agentToolkitsListOp;
+    }
+}

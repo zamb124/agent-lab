@@ -47,7 +47,7 @@ async def test_billing_settlement_lag_emitted_for_pending_span(
     sid = f"span-lag-{unique_id}"
     ended_at = datetime.now(timezone.utc) - timedelta(minutes=2)
     started_at = ended_at - timedelta(seconds=1)
-    await Span.insert_once(
+    await Span.insert_span_once(
         Span(
             span_id=sid,
             trace_id=f"trace-lag-{unique_id}",

@@ -10,6 +10,7 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent } from '../contract.js';
+import { recordField, payloadFields } from '../payload.js';
 
 export interface ModalStackItem {
     id: string;
@@ -54,7 +55,10 @@ function _markClosingByKind(state: ModalsState, kind: string, ts: number): Modal
     let changed = false;
     const stack = state.stack.slice();
     for (let i = stack.length - 1; i >= 0; i -= 1) {
-        const item = stack[i]!;
+        const item = stack[i];
+        if (item === undefined) {
+            throw new Error('modal stack item missing');
+        }
         if (item.kind !== kind || item.closing === true) continue;
         stack[i] = _withClosing(item, ts);
         changed = true;
@@ -66,7 +70,10 @@ function _markClosingByKind(state: ModalsState, kind: string, ts: number): Modal
 function _markTopClosing(state: ModalsState, ts: number): ModalsState {
     const stack = state.stack.slice();
     for (let i = stack.length - 1; i >= 0; i -= 1) {
-        const item = stack[i]!;
+        const item = stack[i];
+        if (item === undefined) {
+            throw new Error('modal stack item missing');
+        }
         if (item.closing === true) continue;
         stack[i] = _withClosing(item, ts);
         return { ...state, stack };
@@ -84,7 +91,10 @@ function _removeByKind(state: ModalsState, kind: string): ModalsState {
     let removed = false;
     const next: ModalStackItem[] = [];
     for (let i = state.stack.length - 1; i >= 0; i -= 1) {
-        const item = state.stack[i]!;
+        const item = state.stack[i];
+        if (item === undefined) {
+            throw new Error('modal stack item missing');
+        }
         if (!removed && item.kind === kind) {
             removed = true;
             continue;
@@ -102,13 +112,13 @@ interface ModalOpenPayload {
 export function modalsReducer(state: ModalsState = initialModalsState, event: PlatformEvent): ModalsState {
     switch (event.type) {
         case CoreEvents.UI_MODAL_OPEN: {
-            const p = (event.payload || {}) as ModalOpenPayload;
+            const p = payloadFields(event);
             const kind = p.kind;
             if (typeof kind !== 'string' || kind.length === 0) return state;
             const modal: ModalStackItem = {
                 id: typeof p.id === 'string' && p.id ? p.id : _nextModalId(),
                 kind,
-                props: (p.props || {}),
+                props: recordField(p.props, 'UI_MODAL_OPEN.props'),
                 openedAt: event.meta.ts,
             };
             // replaceKinds — мгновенная замена без exit/enter motion (mail↔calendar).
@@ -125,7 +135,7 @@ export function modalsReducer(state: ModalsState = initialModalsState, event: Pl
             return { ...state, stack: [...state.stack, modal] };
         }
         case CoreEvents.UI_MODAL_CLOSE: {
-            const p = (event.payload || {}) as { id?: unknown; kind?: unknown };
+            const p = payloadFields(event);
             const id = typeof p.id === 'string' && p.id.length > 0 ? p.id : null;
             const kind = typeof p.kind === 'string' && p.kind.length > 0 ? p.kind : null;
             if (id !== null) {
@@ -138,7 +148,7 @@ export function modalsReducer(state: ModalsState = initialModalsState, event: Pl
             return _markTopClosing(state, event.meta.ts);
         }
         case CoreEvents.UI_MODAL_CLOSED: {
-            const p = (event.payload || {}) as { id?: unknown; kind?: unknown };
+            const p = payloadFields(event);
             const id = typeof p.id === 'string' && p.id.length > 0 ? p.id : null;
             const kind = typeof p.kind === 'string' && p.kind.length > 0 ? p.kind : null;
             if (id !== null) return _removeById(state, id);

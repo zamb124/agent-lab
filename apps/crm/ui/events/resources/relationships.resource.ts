@@ -48,3 +48,10 @@ export const relationshipsListResource = createCursorList({
     },
     errorToastKey: 'crm:toast.relationships_list.failed',
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/relationships': typeof relationshipsResource;
+        'crm/relationships_list': typeof relationshipsListResource;
+    }
+}

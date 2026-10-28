@@ -18,6 +18,17 @@ const LEVEL_COLORS = Object.freeze({
     debug: 'var(--text-tertiary)',
 });
 
+function levelColor(level: string): string | undefined {
+    switch (level) {
+        case 'error': return LEVEL_COLORS.error;
+        case 'warning': return LEVEL_COLORS.warning;
+        case 'warn': return LEVEL_COLORS.warn;
+        case 'info': return LEVEL_COLORS.info;
+        case 'debug': return LEVEL_COLORS.debug;
+        default: return undefined;
+    }
+}
+
 interface LogEntry {
     timestamp?: string;
     message?: string;
@@ -176,10 +187,8 @@ export class PlatformLogViewer extends PlatformElement {
 
     _levelColor(level: unknown): string {
         const key = typeof level === 'string' ? level.toLowerCase() : '';
-        const c = (LEVEL_COLORS as Record<string, string | undefined>)[key];
-        if (typeof c === 'string' && c.length > 0) {
-            return c;
-        }
+        const color = levelColor(key);
+        if (color !== undefined) return color;
         return 'var(--text-primary)';
     }
 
@@ -187,12 +196,11 @@ export class PlatformLogViewer extends PlatformElement {
         if (typeof ts !== 'string' || ts.length === 0) {
             return '';
         }
-        try {
-            const d = new Date(ts);
-            return d.toISOString().replace('T', ' ').replace('Z', '').slice(0, 23);
-        } catch {
+        const d = new Date(ts);
+        if (Number.isNaN(d.getTime())) {
             return ts;
         }
+        return d.toISOString().replace('T', ' ').replace('Z', '').slice(0, 23);
     }
 
     _messageLine(entry: LogEntry): string {

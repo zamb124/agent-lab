@@ -9,6 +9,7 @@
 import { html, css, nothing } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
 import './platform-echarts-host.js';
 import './platform-mermaid-host.js';
 
@@ -33,32 +34,37 @@ interface VizEngineHost extends Element {
     exportSvgMarkup?: () => string;
 }
 
-function vizPayloadFromOpenConfig(openConfig: VizOpenConfig | null | undefined): { document?: Record<string, unknown> } | null {
-    if (!openConfig || typeof openConfig !== 'object') {
-        return null;
-    }
-    if (openConfig.handler !== 'viz') {
+function isVizDocument(value: unknown): value is VizDocument {
+    return isPlainRecord(value);
+}
+
+function vizPayloadFromOpenConfig(openConfig: VizOpenConfig | null | undefined): Record<string, unknown> | null {
+    if (!isPlainRecord(openConfig) || openConfig.handler !== 'viz') {
         return null;
     }
     const payload = openConfig.viz;
-    if (!payload || typeof payload !== 'object') {
+    if (!isPlainRecord(payload)) {
         return null;
     }
-    return payload as { document?: Record<string, unknown> };
+    return payload;
 }
 
 function resolveDocument(
     openConfig: VizOpenConfig | null,
     documentProp: VizDocument | null,
 ): VizDocument | null {
-    if (documentProp && typeof documentProp === 'object') {
+    if (isVizDocument(documentProp)) {
         return documentProp;
     }
     const payload = vizPayloadFromOpenConfig(openConfig);
-    if (payload?.document && typeof payload.document === 'object') {
-        return payload.document as VizDocument;
+    if (payload === null) {
+        return null;
     }
-    return null;
+    const document = payload.document;
+    if (!isVizDocument(document)) {
+        return null;
+    }
+    return document;
 }
 
 export class PlatformVizHost extends PlatformElement {
@@ -164,7 +170,8 @@ export class PlatformVizHost extends PlatformElement {
     }
 
     _onEngineError(event: CustomEvent<unknown>): void {
-        this.emit('editor-error', event.detail || {});
+        const detail = event.detail;
+        this.emit('editor-error', detail === undefined || detail === null || detail === false || detail === 0 || detail === '' ? {} : detail);
     }
 
     _openFullscreen(): void {

@@ -201,7 +201,7 @@ class ToolRegistry:
             return self._registered_builtin_tool(tid)
 
         if tid and not has_inline_code and not tid.startswith("mcp:"):
-            stored = await ToolReference.get(ToolReference.row_id(tid))
+            stored = await ToolReference.get(ToolReference.row_id_for_active_company(tid))
             if stored is None:
                 raise ValueError(
                     f"Tool '{tid}': no inline code in config and no template in tool_repository"
@@ -309,7 +309,7 @@ class ToolRegistry:
         tool_id = config.tool_id
         mcp_contract = config.require_mcp_contract()
 
-        server_config = await MCPServerConfig.get(MCPServerConfig.row_id(mcp_contract.server_id))
+        server_config = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(mcp_contract.server_id))
 
         if not server_config:
             raise ValueError(f"MCP server '{mcp_contract.server_id}' not found")

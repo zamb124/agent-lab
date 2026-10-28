@@ -102,7 +102,7 @@ async def execute_scheduled_task(
     if company_id is None:
         raise ValueError("company_id is required for scheduled task")
 
-    scheduler_task = await PlatformScheduledTask.find_in_company(
+    scheduler_task = await PlatformScheduledTask.by_schedule_task_id(
         company_id=company_id, schedule_task_id=schedule_task_id
     )
 
@@ -122,7 +122,7 @@ async def execute_scheduled_task(
     )
     initiator_context.flow_id = effective_flow_id
 
-    flow_config = await FlowConfig.get_latest(effective_flow_id)
+    flow_config = await FlowConfig.current_for_flow(effective_flow_id)
     if flow_config is None:
         raise ValueError(f"scheduled task: flow {effective_flow_id} not found")
     execution = await resolve_execution_context(
@@ -159,7 +159,7 @@ async def execute_scheduled_task(
         scheduler_status = ScheduledTaskStatus.PENDING
         if scheduler_task and scheduler_task.schedule_type == PlatformScheduleType.ONE_TIME:
             scheduler_status = ScheduledTaskStatus.EXECUTED
-        _ = await PlatformScheduledTask.update_status(
+        _ = await PlatformScheduledTask.update_status_schedule_runs_and_error(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=scheduler_status,
@@ -170,7 +170,7 @@ async def execute_scheduled_task(
 
     except Exception as e:
         logger.error("flows.scheduled.task.failed.schedule_task_id.error", schedule_task_id=schedule_task_id, error=e)
-        _ = await PlatformScheduledTask.update_status(
+        _ = await PlatformScheduledTask.update_status_schedule_runs_and_error(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.FAILED,

@@ -18,6 +18,30 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController, ResourceController} from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function failureMessage(payload: unknown, fallback: string): string {
+    if (!isPlainRecord(payload) || typeof payload.message !== 'string' || payload.message === '') {
+        return fallback;
+    }
+    return payload.message;
+}
+
+function inputChecked(event: Event): boolean {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('create-embed-modal: checkbox required');
+    }
+    return target.checked;
+}
+
+function inputValue(event: Event): string {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('create-embed-modal: text field required');
+    }
+    return target.value;
+}
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
 const POSITIONS = Object.freeze([
@@ -242,10 +266,10 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         if (listed == null) {
             return [];
         }
-        if (!Array.isArray((listed as Record<string, any>).items)) {
+        if (!isPlainRecord(listed) || !Array.isArray(listed.items)) {
             throw new Error('create-embed-modal: flows/flows_list items[] required');
         }
-        return (listed as Record<string, any>).items;
+        return listed.items;
     }
 
     _selectedFlow() {
@@ -265,8 +289,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                 const mapped = raw.map(([id, v]) => ({
                     id,
                     name:
-                        v && typeof v === 'object' && typeof (v as Record<string, any>).name === 'string' && (v as Record<string, any>).name !== ''
-                            ? (v as Record<string, any>).name
+                        isPlainRecord(v) && typeof v.name === 'string' && v.name !== ''
+                            ? v.name
                             : id,
                 }));
                 mapped.sort((a, b) => {
@@ -289,7 +313,11 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         if (!entries || entries.length === 0) return 'default';
         const ids = entries.map((e) => e.id);
         if (ids.includes('default')) return 'default';
-        return entries[0]!.id;
+        const first = entries[0];
+        if (first === undefined) {
+            throw new Error('create-embed-modal: branch missing');
+        }
+        return first.id;
     }
 
     _branchSelectorEnabled() {
@@ -337,11 +365,15 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
      * Ожидает завершения create/update коллекции по causation_id (без закрытия модалки при ошибке).
      * @returns {Promise<{ ok: true } | { ok: false, message: string }>}
      */
-    _awaitEmbedWrite(isEdit: boolean, payload: Record<string, any>) {
+    _awaitEmbedWrite(isEdit: boolean, payload: Record<string, any>): Promise<{ ok: boolean; message?: string }> {
         const ev = this._configs.resource.events;
         const bus = this.bus;
         if (isEdit) {
-            const requested = this._configs.update((this.embedConfig as Record<string, any>).embed_id as string, payload) as unknown as { id?: unknown } | null;
+            const embedConfig = this.embedConfig;
+            if (embedConfig === null || typeof embedConfig !== 'object' || typeof embedConfig.embed_id !== 'string') {
+                throw new Error('embed update: embed_id required');
+            }
+            const requested = this._configs.update(embedConfig.embed_id, payload);
             if (!requested || typeof requested.id !== 'string') {
                 return Promise.resolve({ ok: false, message: this.t('embed_create_modal.err_save_dispatch') });
             }
@@ -349,7 +381,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             return new Promise((resolve) => {
                 let offOk: (() => void) | null = null;
                 let offFail: (() => void) | null = null;
-                const done = (out: Record<string, any>) => {
+                const done = (out: { ok: boolean; message?: string }) => {
                     if (typeof offOk === 'function') offOk();
                     if (typeof offFail === 'function') offFail();
                     resolve(out);
@@ -360,14 +392,12 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                 });
                 offFail = bus.subscribeType(ev.UPDATE_FAILED, (e) => {
                     if (!e.meta || e.meta.causation_id !== rid) return;
-                    const msg = e.payload && typeof (e.payload as Record<string, any>).message === 'string' && (e.payload as Record<string, any>).message !== ''
-                        ? (e.payload as Record<string, any>).message
-                        : this.t('embed_create_modal.err_save_generic');
+                    const msg = failureMessage(e.payload, this.t('embed_create_modal.err_save_generic'));
                     done({ ok: false, message: msg });
                 });
             });
         }
-        const requested = this._configs.create(payload) as unknown as { id?: unknown } | null;
+        const requested = this._configs.create(payload);
         if (!requested || typeof requested.id !== 'string') {
             return Promise.resolve({ ok: false, message: this.t('embed_create_modal.err_save_concurrent') });
         }
@@ -375,7 +405,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         return new Promise((resolve) => {
             let offOk: (() => void) | null = null;
             let offFail: (() => void) | null = null;
-            const done = (out: Record<string, any>) => {
+            const done = (out: { ok: boolean; message?: string }) => {
                 if (typeof offOk === 'function') offOk();
                 if (typeof offFail === 'function') offFail();
                 resolve(out);
@@ -386,9 +416,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             });
             offFail = bus.subscribeType(ev.CREATE_FAILED, (e) => {
                 if (!e.meta || e.meta.causation_id !== rid) return;
-                const msg = e.payload && typeof (e.payload as Record<string, any>).message === 'string' && (e.payload as Record<string, any>).message !== ''
-                    ? (e.payload as Record<string, any>).message
-                    : this.t('embed_create_modal.err_save_generic');
+                const msg = failureMessage(e.payload, this.t('embed_create_modal.err_save_generic'));
                 done({ ok: false, message: msg });
             });
         });
@@ -418,7 +446,10 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             show_launcher: this._presentation === 'page' ? false : this._showLauncher,
             branding: this._branding,
             primary_color: this._primaryColor,
-            assistant_title: this._assistantTitle.trim() || null,
+            assistant_title: (() => {
+                const title = this._assistantTitle.trim();
+                return title.length === 0 ? null : title;
+            })(),
             interface_locale: this._interfaceLocale,
             placeholder: this._placeholder.trim(),
             landing_visible: landingOn,
@@ -429,12 +460,12 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             voice_default_on: this._voiceEnabled && this._voiceDefaultOn,
             session_share_enabled: this._sessionShareEnabled,
         };
-        const result = await this._awaitEmbedWrite(isEdit, payload) as { ok: boolean; message?: string };
+        const result = await this._awaitEmbedWrite(isEdit, payload);
         if (!result.ok) {
-            this.formErrors = { submit: result.message || '' };
+            this.formErrors = { submit: typeof result.message === 'string' ? result.message : '' };
             this.toast('embed_create_modal.toast_save_failed', {
                 type: 'error',
-                vars: { detail: result.message || '' },
+                vars: { detail: typeof result.message === 'string' ? result.message : '' },
             });
             return;
         }
@@ -547,7 +578,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                           type="checkbox"
                                           .checked=${this._landingVisible}
                                           @change=${(e: CustomEvent) => {
-                                              this._landingVisible = (e.target as Record<string, any>).checked;
+                                              this._landingVisible = inputChecked(e);
                                               this.isDirty = true;
                                           }}
                                       />
@@ -658,7 +689,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                 type="checkbox"
                                 .checked=${this._voiceEnabled}
                                 @change=${(e: Event) => {
-                                    this._voiceEnabled = (e.target as Record<string, any>).checked;
+                                    this._voiceEnabled = inputChecked(e);
                                     if (!this._voiceEnabled) {
                                         this._voiceDefaultOn = false;
                                     }
@@ -676,7 +707,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                 type="checkbox"
                                 ?disabled=${!this._voiceEnabled}
                                 .checked=${this._voiceDefaultOn}
-                                @change=${(e: Event) => { this._voiceDefaultOn = (e.target as Record<string, any>).checked; this.isDirty = true; }}
+                                @change=${(e: Event) => { this._voiceDefaultOn = inputChecked(e); this.isDirty = true; }}
                             />
                             <span>${this.t('embed_create_modal.label_voice_default_on')}</span>
                         </label>
@@ -688,7 +719,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             <input
                                 type="checkbox"
                                 .checked=${this._sessionShareEnabled}
-                                @change=${(e: CustomEvent) => { this._sessionShareEnabled = (e.target as Record<string, any>).checked; this.isDirty = true; }}
+                                @change=${(e: CustomEvent) => { this._sessionShareEnabled = inputChecked(e); this.isDirty = true; }}
                             />
                             <span>${this.t('embed_create_modal.label_session_share_enabled')}</span>
                         </label>
@@ -725,7 +756,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                         <input
                             type="color"
                             .value=${this._primaryColor}
-                            @input=${(e: Event) => { this._primaryColor = (e.target as Record<string, any>).value; this.isDirty = true; }}
+                            @input=${(e: Event) => { this._primaryColor = inputValue(e); this.isDirty = true; }}
                         />
                     </div>
 
@@ -735,7 +766,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             <input
                                 type="checkbox"
                                 .checked=${this._showLauncher}
-                                @change=${(e: Event) => { this._showLauncher = (e.target as Record<string, any>).checked; this.isDirty = true; }}
+                                @change=${(e: Event) => { this._showLauncher = inputChecked(e); this.isDirty = true; }}
                             />
                             <span>${this.t('embed_create_modal.label_show_launcher')}</span>
                         </label>

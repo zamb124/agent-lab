@@ -54,13 +54,14 @@ class ApiKeyRecord(PlatformModel):
         return company_id
 
     @classmethod
-    async def list_by_company(
+    async def list_active_by_created_at_desc(
         cls,
         company_id: str,
         *,
         limit: int = 200,
         offset: int = 0,
     ) -> list[Self]:
+        """Окно не отозванных ключей компании, ORDER BY created_at DESC. limit по умолчанию 200, offset по умолчанию 0. company_id не активной компании — ValueError."""
         scoped_company_id = cls._require_company(company_id)
         return await (
             cls.objects.filter(company_id=scoped_company_id, revoked=False)
@@ -83,7 +84,8 @@ class ApiKeyRecord(PlatformModel):
             raise ValueError(f"API key {key_id} not found")
 
     @classmethod
-    async def update_name(cls, key_id: str, company_id: str, name: str) -> bool:
+    async def update_name_by_key_id(cls, key_id: str, company_id: str, name: str) -> bool:
+        """Пишет name ключа активной компании. Нет строки — False. company_id не активной компании — ValueError."""
         scoped_company_id = cls._require_company(company_id)
         affected = await cls.objects.filter(
             key_id=key_id,

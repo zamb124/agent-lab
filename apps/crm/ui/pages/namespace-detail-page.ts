@@ -61,13 +61,14 @@ import {
     normalizeSchemaRows,
     buildSchemaFromRows,
 } from '../components/schema-field-builder.js';
-import type { SchemaFieldRow } from '../components/schema-field-builder.js';
+import { isSchemaFieldRow, type SchemaFieldRow } from '../components/schema-field-builder.js';
 import { entityTypeNoteSubtreeLocked } from '../_helpers/entity-type-note-subtree-lock.js';
 import {
     CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN,
     CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED,
 } from '../_helpers/entity-type-create-events.js';
 import { buildEntityTypeDraftFromTemplateTypeItem } from '../_helpers/entity-type-draft-from-preset.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
     CSSResultGroup,
     PropertyDeclarations,
@@ -96,6 +97,17 @@ const DEFAULT_TYPE_DRAFT = Object.freeze({
     weight_coefficient: '1.0',
 });
 
+function displayText(value: unknown): string {
+    if (value === undefined || value === null || value === false || value === 0 || value === '') return '';
+    if (typeof value === 'number' && !Number.isFinite(value)) return '';
+    return String(value);
+}
+
+function blankToNull(value: string): string | null {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed;
+}
+
 interface CrmTypeDraft {
     type_id: string;
     name: string;
@@ -113,13 +125,42 @@ interface CrmTypeDraft {
     weight_coefficient: string;
 }
 
-function makeTypeDraft(overrides: Partial<CrmTypeDraft> = {}): CrmTypeDraft {
-    return {
+function anyRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
+
+function schemaRows(value: unknown): SchemaFieldRow[] {
+    if (!Array.isArray(value)) return [];
+    if (!value.every(isSchemaFieldRow)) {
+        throw new Error('entity type draft: schema rows are invalid');
+    }
+    return value;
+}
+
+function makeTypeDraft(overrides: Record<string, unknown> = {}): CrmTypeDraft {
+    const draft: CrmTypeDraft = {
         ...DEFAULT_TYPE_DRAFT,
         required_fields_rows: [],
         optional_fields_rows: [],
-        ...overrides,
     };
+    if (typeof overrides.type_id === 'string') draft.type_id = overrides.type_id;
+    if (typeof overrides.name === 'string') draft.name = overrides.name;
+    if (typeof overrides.description === 'string') draft.description = overrides.description;
+    if (typeof overrides.prompt === 'string') draft.prompt = overrides.prompt;
+    if (typeof overrides.parent_type_id === 'string') draft.parent_type_id = overrides.parent_type_id;
+    if (typeof overrides.icon === 'string') draft.icon = overrides.icon;
+    if (typeof overrides.color === 'string') draft.color = overrides.color;
+    if (typeof overrides.is_event === 'boolean') draft.is_event = overrides.is_event;
+    if (typeof overrides.check_duplicates === 'boolean') draft.check_duplicates = overrides.check_duplicates;
+    if (typeof overrides.is_context_anchor === 'boolean') draft.is_context_anchor = overrides.is_context_anchor;
+    if (typeof overrides.is_voice_target === 'boolean') draft.is_voice_target = overrides.is_voice_target;
+    if (typeof overrides.weight_coefficient === 'string') draft.weight_coefficient = overrides.weight_coefficient;
+    draft.required_fields_rows = schemaRows(overrides.required_fields_rows);
+    draft.optional_fields_rows = schemaRows(overrides.optional_fields_rows);
+    return draft;
 }
 
 export class CRMNamespaceDetailPage extends PlatformPage {
@@ -613,17 +654,17 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             if (!p || typeof p !== 'object') {
                 throw new Error('CRMNamespaceDetailPage: preset_picker_applied payload required');
             }
-            const snap = p.type_snapshot;
-            if (!snap || typeof snap !== 'object' || typeof snap.type_id !== 'string') {
+            const snap = anyRecord(p.type_snapshot);
+            if (snap === null || typeof snap.type_id !== 'string') {
                 throw new Error('CRMNamespaceDetailPage: preset_picker_applied type_snapshot required');
             }
             this._editingTypeId = '';
             this._typeDraft = buildEntityTypeDraftFromTemplateTypeItem(
-                snap as Record<string, any>,
+                snap,
                 this._namespaceEntityTypeCatalogRows(),
-                (overrides?: Record<string, unknown>) => makeTypeDraft(overrides as Partial<CrmTypeDraft>) as unknown as Record<string, unknown>,
+                makeTypeDraft,
                 { namespaceIds: false },
-            ) as unknown as CrmTypeDraft;
+            );
             this._typeFormOpen = true;
         });
     }
@@ -656,8 +697,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     }
 
     _namespace(): Record<string, any> | null {
-        const item = this._namespaces.byId[this.itemId];
-        return item === undefined ? null : (item as Record<string, any>);
+        return anyRecord(this._namespaces.byId[this.itemId]);
     }
 
     _hydrateFromNamespace(item: Record<string, any>): void {
@@ -678,12 +718,12 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     }
 
     _onDescriptionChange(e: CustomEvent) {
-        const v = (e as CustomEvent).detail.value;
+        const v = e.detail.value;
         this._description = typeof v === 'string' ? v : '';
     }
 
     _onNoteDefaultVoiceFromChild(e: CustomEvent) {
-        const d = (e as CustomEvent).detail;
+        const d = e.detail;
         if (d === undefined || d === null || typeof d !== 'object' || typeof d.value !== 'string') {
             return;
         }
@@ -694,7 +734,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     }
 
     _onNoteVoiceShowUiFromChild(e: CustomEvent) {
-        const d = (e as CustomEvent).detail;
+        const d = e.detail;
         if (d === undefined || d === null || typeof d !== 'object' || typeof d.value !== 'boolean') {
             return;
         }
@@ -747,7 +787,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     }
 
     _onSuggestsSwitch(e: CustomEvent) {
-        const d = e && (e as CustomEvent).detail;
+        const d = isPlainRecord(e.detail) ? e.detail : null;
         if (!d || typeof d.value !== 'boolean') {
             throw new Error('suggests switch: expected detail.value (boolean)');
         }
@@ -755,7 +795,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     }
 
     _onSuggestsCronInput(e: CustomEvent) {
-        const d = e && (e as CustomEvent).detail;
+        const d = isPlainRecord(e.detail) ? e.detail : null;
         if (!d || typeof d.value !== 'string') {
             throw new Error('suggests cron: expected detail.value (string)');
         }
@@ -841,14 +881,14 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         );
         this._typeDraft = {
             type_id: item.type_id,
-            name: item.name || '',
-            description: item.description || '',
-            prompt: item.prompt || '',
+            name: displayText(item.name),
+            description: displayText(item.description),
+            prompt: displayText(item.prompt),
             required_fields_rows: normalizeSchemaRows(item.required_fields && typeof item.required_fields === 'object' ? item.required_fields : {}),
             optional_fields_rows: normalizeSchemaRows(item.optional_fields && typeof item.optional_fields === 'object' ? item.optional_fields : {}),
             parent_type_id: parentId,
-            icon: item.icon || '',
-            color: item.color || '',
+            icon: displayText(item.icon),
+            color: displayText(item.color),
             is_event: item.is_event === true,
             check_duplicates: item.check_duplicates !== false,
             is_context_anchor: noteLocked ? false : item.is_context_anchor === true,
@@ -864,15 +904,21 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     }
 
     _onTypeDraftChanged(event: CustomEvent) {
-        const next = event && (event as CustomEvent).detail && (event as CustomEvent<{ typeDraft?: CrmTypeDraft }>).detail!.typeDraft;
+        const detail = event.detail;
+        const next = detail !== null && typeof detail === 'object' && 'typeDraft' in detail
+            ? detail.typeDraft
+            : undefined;
         if (!next) return;
         this._typeDraft = next;
     }
 
     _onSchemaRowsChanged(event: CustomEvent) {
-        const detail = event && (event as CustomEvent<{ section?: string; rows?: SchemaFieldRow[] }>).detail;
-        if (!detail || (detail.section !== 'required_fields_rows' && detail.section !== 'optional_fields_rows')) return;
-        this._typeDraft = { ...this._typeDraft, [detail.section]: detail.rows };
+        const detail = isPlainRecord(event.detail) ? event.detail : null;
+        if (detail === null) return;
+        const section = detail.section;
+        if (section !== 'required_fields_rows' && section !== 'optional_fields_rows') return;
+        if (!Array.isArray(detail.rows)) return;
+        this._typeDraft = { ...this._typeDraft, [section]: schemaRows(detail.rows) };
     }
 
     _onSubmitType() {
@@ -905,14 +951,14 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         }
         const noteLocked = entityTypeNoteSubtreeLocked(this._typeDraft, this._namespaceEntityTypeCatalogRows());
         const body = {
-            parent_type_id: this._typeDraft.parent_type_id.trim() || null,
+            parent_type_id: blankToNull(this._typeDraft.parent_type_id),
             name,
-            description: this._typeDraft.description.trim() || null,
-            prompt: this._typeDraft.prompt.trim() || null,
+            description: blankToNull(this._typeDraft.description),
+            prompt: blankToNull(this._typeDraft.prompt),
             required_fields: requiredFields,
             optional_fields: optionalFields,
-            icon: this._typeDraft.icon.trim() || null,
-            color: this._typeDraft.color.trim() || null,
+            icon: blankToNull(this._typeDraft.icon),
+            color: blankToNull(this._typeDraft.color),
             is_event: this._typeDraft.is_event === true,
             check_duplicates: this._typeDraft.check_duplicates !== false,
             is_context_anchor: noteLocked ? false : this._typeDraft.is_context_anchor === true,
@@ -941,13 +987,13 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     }
 
     _typeIsLocked(typeId: string): boolean {
-        const result = this._editabilityOp.lastResult as Record<string, any> | null;
+        const result = anyRecord(this._editabilityOp.lastResult);
         if (!result || !Array.isArray(result.locked_type_ids)) return false;
         return result.locked_type_ids.includes(typeId);
     }
 
     _typeIsAllNamespaces(typeId: string): boolean {
-        const result = this._editabilityOp.lastResult as Record<string, any> | null;
+        const result = anyRecord(this._editabilityOp.lastResult);
         if (!result || !Array.isArray(result.all_namespaces_type_ids)) return false;
         return result.all_namespaces_type_ids.includes(typeId);
     }
@@ -1002,7 +1048,8 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     }
 
     _renderLeftPanel(ns: Record<string, any>): TemplateResult {
-        const editability = (this._editabilityOp.lastResult ?? null) as Record<string, any> | null;
+        const editabilityResult = this._editabilityOp.lastResult;
+        const editability = anyRecord(editabilityResult);
         return html`
             <div class="panel">
                 <div class="panel-header">

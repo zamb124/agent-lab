@@ -14,6 +14,12 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 export class WikiMovePageModal extends PlatformModal {
     static modalKind = 'wiki.move_page';
     static i18nNamespace = 'wiki';
@@ -61,13 +67,13 @@ export class WikiMovePageModal extends PlatformModal {
         super.connectedCallback();
         const page = this._pages.byId[this.pageId];
         if (page) {
-            this._namespace = String(page.namespace ?? '');
-            this._parentPageId = page.parent_page_id === null ? '' : String(page.parent_page_id ?? '');
+            this._namespace = missingAsEmpty(page.namespace);
+            this._parentPageId = page.parent_page_id === null ? '' : missingAsEmpty(page.parent_page_id);
         }
     }
 
     private _namespaceConfig(): { values: { value: string; label: string }[] } {
-        return { values: this._namespaces.items.map((item: ResourceItem) => ({ value: String(item.name ?? ''), label: String(item.name ?? '') })) };
+        return { values: this._namespaces.items.map((item: ResourceItem) => ({ value: missingAsEmpty(item.name), label: missingAsEmpty(item.name) })) };
     }
 
     /** Родителем не может быть ни сама страница, ни её потомок. */
@@ -75,7 +81,7 @@ export class WikiMovePageModal extends PlatformModal {
         const values: { value: string; label: unknown }[] = [{ value: '', label: this.t('move.parent_root') }];
         const forbidden = this._descendantIds();
         for (const page of this._pages.items) {
-            const id = String(page.wiki_page_id ?? '');
+            const id = missingAsEmpty(page.wiki_page_id);
             if (forbidden.has(id)) {
                 continue;
             }
@@ -93,8 +99,8 @@ export class WikiMovePageModal extends PlatformModal {
         while (grew) {
             grew = false;
             for (const page of this._pages.items) {
-                const id = String(page.wiki_page_id ?? '');
-                const parent = String(page.parent_page_id ?? '');
+                const id = missingAsEmpty(page.wiki_page_id);
+                const parent = missingAsEmpty(page.parent_page_id);
                 if (page.parent_page_id !== null
                     && blocked.has(parent)
                     && !blocked.has(id)) {
@@ -139,7 +145,7 @@ export class WikiMovePageModal extends PlatformModal {
                     label=${this.t('move.namespace_label')}
                     .value=${this._namespace}
                     .config=${this._namespaceConfig()}
-                    @change=${(event: CustomEvent<{ value?: unknown }>) => { this._namespace = String(event.detail.value ?? ''); }}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => { this._namespace = missingAsEmpty(event.detail.value); }}
                 ></platform-field>
                 <platform-field
                     type="enum"
@@ -147,7 +153,7 @@ export class WikiMovePageModal extends PlatformModal {
                     label=${this.t('move.parent_label')}
                     .value=${this._parentPageId}
                     .config=${this._parentConfig()}
-                    @change=${(event: CustomEvent<{ value?: unknown }>) => { this._parentPageId = String(event.detail.value ?? ''); }}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => { this._parentPageId = missingAsEmpty(event.detail.value); }}
                 ></platform-field>
             </div>
         `;

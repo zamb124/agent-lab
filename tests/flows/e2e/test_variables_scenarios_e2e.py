@@ -124,7 +124,7 @@ async def test_shared_secret_in_flow_variables(di, app) -> None:
 async def test_branch_variables_replace_mode(di, app) -> None:
     set_context(_system_context())
     try:
-        flow_config = await FlowConfig.get_latest("example_react")
+        flow_config = await FlowConfig.current_for_flow("example_react")
         assert flow_config is not None
         effective = di.flow_factory.apply_branch(flow_config, "variables_replace")
         assert effective["variables"]["max_response_length"] == "100"

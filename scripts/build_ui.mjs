@@ -2,7 +2,7 @@
 /**
  * build_ui.mjs — сборка UI-бандлов платформы.
  *
- * Каждый сервис с `apps/<svc>/ui/index.ts|index.js` получает бандл в
+ * Каждый сервис с `apps/<svc>/ui/` получает бандл из `ui/index.ts` в
  * `apps/<svc>/ui-dist/`: entry `index.js` (стабильное имя — его грузит
  * index.html), shared/lazy код — в `chunks/[name]-[hash].js`, минификация
  * вне --dev, sourcemap всегда (`linked` вне --dev, `inline` в --dev).
@@ -19,14 +19,13 @@
  * Embed-виджеты (внешние сайты, стабильные URL `/static/core/lib/embed-…`)
  * собираются в self-contained бандлы `core/frontend/embed-dist/`: внешний сайт
  * не имеет import-map, поэтому lit и весь граф инлайнятся в один файл. Отдаёт
- * их `core/app/spa.py::register_embed_bundle_routes` по тем же URL.
+ * их `core/app/spa.py::mount_core_frontend` по тем же URL.
  *
  * Использование:
  *   node scripts/build_ui.mjs [--dev] [--watch] [--apps=flows,crm]
  */
 import * as esbuild from 'esbuild';
-import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,6 +49,17 @@ const EMBED_ENTRYPOINTS = [
     'flow-ui/shell/embed-autoload.ts',
     'embed-chat/humanitec-embed-autoload.ts',
 ];
+
+/**
+ * Модули для HTML-страниц, которые собирает backend (страница embed, shared session, UI Kit preview):
+ * загружаются как `/static/core/lib/<путь>.js`. Общий граф (lit, core) выносится в общие чанки.
+ */
+const PAGE_ENTRYPOINTS = [
+    'flow-ui/shell/page-host.ts',
+    'flow-ui/components/platform-flow-ui.ts',
+];
+const DESIGN_SYSTEM_MANIFESTS_DIR = path.join(ROOT, 'tests', 'ui', 'design-system', 'components');
+const DESIGN_SYSTEM_IMPORT_PREFIX = '@platform/lib/';
 
 /** Единый lit/@capacitor/vendored-resolver: предотвращает дубли модулей в бандле. */
 const vendoredDedupPlugin = {
@@ -89,21 +99,16 @@ function discoverApps() {
     const apps = [];
     for (const svc of readdirSync(APPS_DIR)) {
         const uiDir = path.join(APPS_DIR, svc, 'ui');
-        if (!statSyncSafe(uiDir)?.isDirectory()) continue;
-        const entry = ['index.ts', 'index.js'].map((f) => path.join(uiDir, f)).find(existsSync);
-        if (entry && (!APPS_FILTER || APPS_FILTER.has(svc))) {
+        if (!existsSync(uiDir) || !statSync(uiDir).isDirectory()) continue;
+        const entry = path.join(uiDir, 'index.ts');
+        if (!existsSync(entry)) {
+            throw new Error(`[build-ui] ${svc}: нет точки входа ${path.relative(ROOT, entry)}`);
+        }
+        if (!APPS_FILTER || APPS_FILTER.has(svc)) {
             apps.push({ svc, uiDir, entry, outDir: path.join(APPS_DIR, svc, 'ui-dist') });
         }
     }
     return apps;
-}
-
-function statSyncSafe(p) {
-    try {
-        return statSync(p);
-    } catch {
-        return null;
-    }
 }
 
 /**
@@ -111,7 +116,7 @@ function statSyncSafe(p) {
  * bundledInputs=null (watch-режим): копируются только не-исходники и vendor/.
  */
 /** Файлы/каталоги ui/, которые никогда не попадают в ui-dist (мусор dev-окружения). */
-const COPY_EXCLUDE_NAMES = new Set(['node_modules', 'package.json', 'package-lock.json', 'tsconfig.json']);
+const COPY_EXCLUDE_NAMES = new Set(['node_modules', 'package.json', 'package-lock.json', 'tsconfig.json', '.gitkeep']);
 
 function copyUnbundledAssets(uiDir, outDir, bundledInputs) {
     let copied = 0;
@@ -137,14 +142,6 @@ function copyUnbundledAssets(uiDir, outDir, bundledInputs) {
     };
     walk(uiDir);
     return copied;
-}
-
-function gitSha() {
-    try {
-        return execSync('git rev-parse --short HEAD', { cwd: ROOT, encoding: 'utf-8' }).trim();
-    } catch {
-        return 'unknown';
-    }
 }
 
 function buildOptions({ uiDir, entry, outDir }) {
@@ -178,20 +175,6 @@ async function buildApp({ svc, uiDir, entry, outDir }) {
     const outputs = Object.keys(result.metafile.outputs)
         .map((p) => path.relative(outDir, path.resolve(ROOT, p)))
         .filter((p) => p.endsWith('.js'));
-    writeFileSync(
-        path.join(outDir, 'ui-manifest.json'),
-        JSON.stringify(
-            {
-                service: svc,
-                entry: 'index.js',
-                builtAt: new Date().toISOString(),
-                sha: gitSha(),
-                js: outputs,
-            },
-            null,
-            2,
-        ),
-    );
     const bytes = Object.values(result.metafile.outputs).reduce((sum, o) => sum + o.bytes, 0);
     console.log(`[build-ui] ${svc}: ${outputs.length} js files, ${(bytes / 1024).toFixed(0)} KiB, ${copied} assets copied`);
     return result;
@@ -200,17 +183,19 @@ async function buildApp({ svc, uiDir, entry, outDir }) {
 /**
  * Embed-бандлы: один файл на entrypoint, весь граф (включая lit) инлайнится —
  * внешний сайт грузит их без import-map. Выход зеркалит исходный относительный
- * путь в lib/, чтобы spa.py мог отдать бандл по стабильному URL.
+ * путь в lib/: granian (`--static-path-route /static/core/lib`) и spa.py отдают
+ * embed-dist по стабильным URL `/static/core/lib/...`.
  */
 async function buildEmbed() {
-    const entries = EMBED_ENTRYPOINTS
-        .map((rel) => {
-            const abs = path.join(LIB_DIR, rel);
-            return existsSync(abs) ? abs : path.join(LIB_DIR, rel.replace(/\.ts$/, '.js'));
-        })
-        .filter(existsSync);
-    if (!entries.length) return;
-    rmSync(EMBED_DIST, { recursive: true, force: true });
+    const entries = EMBED_ENTRYPOINTS.map((rel) => {
+        const abs = path.join(LIB_DIR, rel);
+        if (!existsSync(abs)) {
+            throw new Error(`[build-ui] embed: нет точки входа ${path.relative(ROOT, abs)}`);
+        }
+        return abs;
+    });
+    // В watch-режиме каталог не удаляется: сервисы make app уже стартуют на нём и падают без бандлов.
+    if (!WATCH) rmSync(EMBED_DIST, { recursive: true, force: true });
     for (const entry of entries) {
         const rel = path.relative(LIB_DIR, entry).replace(/\.ts$/, '.js');
         await esbuild.build({
@@ -231,18 +216,77 @@ async function buildEmbed() {
         });
         console.log(`[build-ui] embed: ${rel}`);
     }
+    // /static/core/lib целиком отдаётся из embed-dist: туда же ложатся не-TS ассеты lib/ (css, AudioWorklet).
+    const assets = copyUnbundledAssets(LIB_DIR, EMBED_DIST, new Set());
+    console.log(`[build-ui] embed: ${assets} assets`);
+}
+
+/** Модули компонентов UI Kit: путь из `import:` каждого manifest.yaml карточки. */
+function designSystemEntries() {
+    const entries = [];
+    for (const name of readdirSync(DESIGN_SYSTEM_MANIFESTS_DIR)) {
+        const manifest = path.join(DESIGN_SYSTEM_MANIFESTS_DIR, name, 'manifest.yaml');
+        if (!existsSync(manifest)) continue;
+        const match = /^import:\s*"([^"]+)"\s*$/m.exec(readFileSync(manifest, 'utf8'));
+        if (!match || !match[1].startsWith(DESIGN_SYSTEM_IMPORT_PREFIX)) {
+            throw new Error(`[build-ui] ${path.relative(ROOT, manifest)}: import должен начинаться с ${DESIGN_SYSTEM_IMPORT_PREFIX}`);
+        }
+        const rel = match[1].slice(DESIGN_SYSTEM_IMPORT_PREFIX.length).replace(/\.js$/, '.ts');
+        const abs = path.join(LIB_DIR, rel);
+        if (!existsSync(abs)) {
+            throw new Error(`[build-ui] ${path.relative(ROOT, manifest)}: нет модуля ${path.relative(ROOT, abs)}`);
+        }
+        entries.push(abs);
+    }
+    if (entries.length === 0) {
+        throw new Error('[build-ui] design-system: manifest.yaml компонентов не найдены');
+    }
+    return entries;
+}
+
+async function buildPageModules() {
+    const entries = [
+        ...PAGE_ENTRYPOINTS.map((rel) => {
+            const abs = path.join(LIB_DIR, rel);
+            if (!existsSync(abs)) {
+                throw new Error(`[build-ui] page: нет точки входа ${path.relative(ROOT, abs)}`);
+            }
+            return abs;
+        }),
+        ...designSystemEntries(),
+    ];
+    await esbuild.build({
+        entryPoints: entries,
+        outbase: LIB_DIR,
+        outdir: EMBED_DIST,
+        bundle: true,
+        splitting: true,
+        format: 'esm',
+        platform: 'browser',
+        target: 'es2022',
+        chunkNames: '_chunks/[name]-[hash]',
+        minify: !DEV,
+        sourcemap: DEV ? 'inline' : 'linked',
+        logLevel: 'warning',
+        alias: {
+            '@platform/lib': LIB_DIR,
+        },
+        plugins: [vendoredDedupPlugin],
+    });
+    console.log(`[build-ui] page modules: ${entries.length}`);
 }
 
 async function main() {
     await buildEmbed();
+    await buildPageModules();
     const apps = discoverApps();
     if (!apps.length) {
-        console.error('[build-ui] entries not found (apps/*/ui/index.ts|index.js)');
+        console.error('[build-ui] entries not found (apps/*/ui/index.ts)');
         process.exit(1);
     }
     if (WATCH) {
+        // ui-dist не удаляется: esbuild перезаписывает файлы на месте, а сервисы make app раздают их без перерыва.
         for (const app of apps) {
-            rmSync(app.outDir, { recursive: true, force: true });
             const ctx = await esbuild.context({
                 ...buildOptions(app),
                 minify: false,

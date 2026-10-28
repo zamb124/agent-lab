@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { isPlainRecord } from '../events/payload.js';
 
 const ECHARTS_URL = '/static/core/assets/js/echarts/echarts.min.js';
 
@@ -18,22 +19,36 @@ interface EchartsApi {
     init(el: HTMLElement, theme?: unknown, opts?: { renderer?: string }): EchartsInstance;
 }
 
-type EchartsWindow = Window & { echarts?: EchartsApi };
-
 let _echartsPromise: Promise<EchartsApi> | null = null;
 
+function isEchartsApi(value: unknown): value is EchartsApi {
+    return isPlainRecord(value) && typeof value.init === 'function';
+}
+
+function windowEcharts(): EchartsApi | null {
+    const host: unknown = window;
+    if (!isPlainRecord(host)) return null;
+    const api = host.echarts;
+    if (api === undefined) return null;
+    if (!isEchartsApi(api)) {
+        throw new Error('echarts global is not an API');
+    }
+    return api;
+}
+
 function loadEcharts(): Promise<EchartsApi> {
-    const w = window as EchartsWindow;
-    if (typeof window !== 'undefined' && w.echarts) {
-        return Promise.resolve(w.echarts);
+    const ready = windowEcharts();
+    if (ready !== null) {
+        return Promise.resolve(ready);
     }
     if (_echartsPromise) {
         return _echartsPromise;
     }
     _echartsPromise = new Promise<EchartsApi>((resolve, reject) => {
         const existing = document.querySelector(`script[data-platform-echarts="1"]`);
-        if (existing && w.echarts) {
-            resolve(w.echarts);
+        const already = windowEcharts();
+        if (existing && already !== null) {
+            resolve(already);
             return;
         }
         const script = document.createElement('script');
@@ -41,11 +56,12 @@ function loadEcharts(): Promise<EchartsApi> {
         script.async = true;
         script.dataset.platformEcharts = '1';
         script.onload = () => {
-            if (!w.echarts) {
+            const loaded = windowEcharts();
+            if (loaded === null) {
                 reject(new Error('echarts global missing after load'));
                 return;
             }
-            resolve(w.echarts);
+            resolve(loaded);
         };
         script.onerror = () => reject(new Error(`echarts load failed: ${ECHARTS_URL}`));
         document.head.appendChild(script);
@@ -199,8 +215,8 @@ export class PlatformEchartsHost extends PlatformElement {
             return;
         }
         const root = this.renderRoot?.querySelector('.chart');
-        if (!root) {
-            return;
+        if (!(root instanceof HTMLElement)) {
+            throw new Error('platform-echarts-host: chart root must be an element');
         }
         try {
             const echarts = await loadEcharts();
@@ -208,7 +224,7 @@ export class PlatformEchartsHost extends PlatformElement {
                 return;
             }
             if (!this._chart) {
-                this._chart = echarts.init(root as HTMLElement, undefined, { renderer: 'canvas' });
+                this._chart = echarts.init(root, undefined, { renderer: 'canvas' });
                 this._resizeObserver = new ResizeObserver(() => {
                     if (this._chart && !this.suspended) {
                         this._chart.resize();

@@ -31,18 +31,13 @@
  *     шапки чата снимает minimized.
  */
 
-import type {
-    SyncCallPrefsController,
-    SyncCallPrefsSlice,
-    SyncCallUiController,
-    SyncCallUiSlice,
-    SyncMessagesStoreController,
-    SyncMessagesStoreSlice,
-} from '../events/sync.types.js';
+import type { SyncCallPrefsSlice, SyncCallUiSlice, SyncMessagesStoreSlice } from '../events/sync.types.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { LkTrack, Room as LkRoom } from '@livekit/client';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css, nothing } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
@@ -84,9 +79,50 @@ interface DocumentPipApi {
     requestWindow(options?: Record<string, unknown>): Promise<Window>;
 }
 
+function isDocumentPipApi(value: unknown): value is DocumentPipApi {
+    return isPlainRecord(value) && typeof value.requestWindow === 'function';
+}
+
 function _documentPipApi(): DocumentPipApi | undefined {
-    if (typeof window === 'undefined') return undefined;
-    return (window as Window & { documentPictureInPicture?: DocumentPipApi }).documentPictureInPicture;
+    if (typeof window === 'undefined' || !('documentPictureInPicture' in window)) return undefined;
+    const pip = window.documentPictureInPicture;
+    return isDocumentPipApi(pip) ? pip : undefined;
+}
+
+function isSyncCallUiState(value: unknown): value is SyncCallUiSlice {
+    return isPlainRecord(value)
+        && typeof value.overlayMinimized === 'boolean'
+        && typeof value.overlayChatOpen === 'boolean'
+        && typeof value.recordingStatus === 'string'
+        && isPlainRecord(value.activeCallChannels);
+}
+
+function isSyncCallPrefsState(value: unknown): value is SyncCallPrefsSlice {
+    return isPlainRecord(value)
+        && typeof value.cameraEnabled === 'boolean'
+        && typeof value.hydrated === 'boolean'
+        && isPlainRecord(value.deviceIds);
+}
+
+function isSyncMessagesState(value: unknown): value is SyncMessagesStoreSlice {
+    return isPlainRecord(value) && isPlainRecord(value.byChannelId);
+}
+
+function errorMessage(err: unknown): string | null {
+    if (!isPlainRecord(err) || typeof err.message !== 'string') return null;
+    return err.message;
+}
+
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+    return isPlainRecord(value) ? value : null;
+}
+
+function isLkVideo(value: Element | null): value is LkVideoEl {
+    return value instanceof HTMLVideoElement;
+}
+
+function isPictureInPictureAction(action: string): action is MediaSessionAction {
+    return action === 'enterpictureinpicture';
 }
 
 const SCROLL_TOP_THRESHOLD = 60;
@@ -837,13 +873,13 @@ export class SyncCallOverlayModal extends PlatformModal {
     private _linkCreateOp: OpController;
     private _sendMessageOp: OpController;
     private _loadOlderOp: OpController;
-    private _callUi: SyncCallUiController;
-    private _callPrefs: SyncCallPrefsController;
-    private _messagesStore: SyncMessagesStoreController;
+    private _callUi: ControllerFor<'sync/call_ui'>;
+    private _callPrefs: ControllerFor<'sync/call_prefs'>;
+    private _messagesStore: ControllerFor<'sync/messages_store'>;
     private _callUiSel: SelectController<SyncCallUiSlice | undefined>;
     private _prefsSel: SelectController<SyncCallPrefsSlice | undefined>;
     private _messagesSel: SelectController<SyncMessagesStoreSlice | undefined>;
-    private _authUserSel: SelectController<Record<string, any> | null>;
+    private _authUserSel: SelectController<AuthUser | null>;
     private _authStatusSel: SelectController<string>;
     private _pipDocWindowRef: Window | null;
     private _pipDocVideoEl: LkVideoEl | null;
@@ -919,21 +955,15 @@ export class SyncCallOverlayModal extends PlatformModal {
         this._sendMessageOp = this.useOp('sync/messages_send');
         this._loadOlderOp = this.useOp('sync/messages_load_older');
 
-        this._callUi = this.useSlice('sync/call_ui') as SyncCallUiController;
-        this._callPrefs = this.useSlice('sync/call_prefs') as SyncCallPrefsController;
-        this._messagesStore = this.useSlice('sync/messages_store') as SyncMessagesStoreController;
+        this._callUi = this.useSlice('sync/call_ui');
+        this._callPrefs = this.useSlice('sync/call_prefs');
+        this._messagesStore = this.useSlice('sync/messages_store');
 
-        this._callUiSel = this.select((s) => s.syncCallUi as SyncCallUiSlice | undefined);
-        this._prefsSel = this.select((s) => s.syncCallPrefs as SyncCallPrefsSlice | undefined);
-        this._messagesSel = this.select((s) => s.syncMessagesStore as SyncMessagesStoreSlice | undefined);
-        this._authUserSel = this.select((s) => {
-            const auth = s.auth as { user?: Record<string, any> | null } | undefined;
-            return auth ? auth.user ?? null : null;
-        });
-        this._authStatusSel = this.select((s) => {
-            const auth = s.auth as { status?: unknown } | undefined;
-            return auth && typeof auth.status === 'string' ? auth.status : 'unknown';
-        });
+        this._callUiSel = this.select((s) => isSyncCallUiState(s.syncCallUi) ? s.syncCallUi : undefined);
+        this._prefsSel = this.select((s) => isSyncCallPrefsState(s.syncCallPrefs) ? s.syncCallPrefs : undefined);
+        this._messagesSel = this.select((s) => isSyncMessagesState(s.syncMessagesStore) ? s.syncMessagesStore : undefined);
+        this._authUserSel = this.select((s) => s.auth.user);
+        this._authStatusSel = this.select((s) => s.auth.status);
 
         this.useEvent(SYNC_CALL_ENDED, (event) => this._onCallEnded(event));
         this.useEvent(SYNC_CALL_RECORDING_STARTED, (event) => this._onRecordingPush(event, 'recording'));
@@ -1074,13 +1104,11 @@ export class SyncCallOverlayModal extends PlatformModal {
                 } catch (err) {
                     if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
                     this._status = 'error';
-                    this._error = err && typeof (err as { message?: unknown }).message === 'string'
-                        ? (err as { message: string }).message
-                        : this.t('call_overlay.err_token_failed');
+                    this._error = errorMessage(err) ?? this.t('call_overlay.err_token_failed');
                     this._connecting = false;
                     return;
                 }
-                tokenResult = this._tokenOp.lastResult as Record<string, unknown> | null;
+                tokenResult = recordOrNull(this._tokenOp.lastResult);
             }
             if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             if (!tokenResult || typeof tokenResult.token !== 'string' || typeof tokenResult.livekit_url !== 'string') {
@@ -1097,7 +1125,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 adaptiveStream: true,
                 dynacast: true,
                 publishDefaults: lk.ScreenSharePresets
-                    ? { screenShareEncoding: (lk.ScreenSharePresets.h1080fps30 as { encoding: unknown }).encoding }
+                    ? { screenShareEncoding: isPlainRecord(lk.ScreenSharePresets.h1080fps30) ? lk.ScreenSharePresets.h1080fps30.encoding : undefined }
                     : undefined,
             });
             this._room = room;
@@ -1141,9 +1169,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         } catch (err) {
             if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             this._status = 'error';
-            this._error = err && typeof (err as { message?: unknown }).message === 'string'
-                ? (err as { message: string }).message
-                : this.t('call_overlay.err_connect_failed');
+            this._error = errorMessage(err) ?? this.t('call_overlay.err_connect_failed');
             this._connecting = false;
             this._disconnectRoom();
         }
@@ -1182,7 +1208,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         const lists: DeviceLists = { audioinput: [], videoinput: [], audiooutput: [] };
         for (const d of all) {
             if (d.kind === 'audioinput' || d.kind === 'videoinput' || d.kind === 'audiooutput') {
-                lists[d.kind].push({ deviceId: d.deviceId, label: d.label || '' });
+                lists[d.kind].push({ deviceId: d.deviceId, label: d.label });
             }
         }
         this._deviceLists = lists;
@@ -1215,7 +1241,8 @@ export class SyncCallOverlayModal extends PlatformModal {
             if (screen) {
                 tiles.push({ key: `r-${remote.identity}-screen`, participantIdentity: remote.identity, isLocal: false, track: screen.track, isScreen: true });
             } else {
-                const cam = pubs[0] || null;
+                const firstPublication = pubs[0];
+                const cam = firstPublication === undefined ? null : firstPublication;
                 tiles.push({
                     key: cam ? `r-${remote.identity}-cam` : `r-${remote.identity}-ph`,
                     participantIdentity: remote.identity,
@@ -1248,7 +1275,9 @@ export class SyncCallOverlayModal extends PlatformModal {
         this._tiles.forEach((tile, i) => {
             const el = tileEls[i];
             if (!el) return;
-            const videoEl = el.querySelector('video') as LkVideoEl | null;
+            const found = el.querySelector('video');
+            if (!isLkVideo(found)) return;
+            const videoEl = found;
             if (!videoEl) return;
             if (!tile.track) {
                 if (videoEl._lkTrack) {
@@ -1306,8 +1335,7 @@ export class SyncCallOverlayModal extends PlatformModal {
     }
 
     _onFullscreenChange() {
-        const doc = document as Document & { webkitFullscreenElement?: Element | null };
-        if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+        if (!document.fullscreenElement && !('webkitFullscreenElement' in document && document.webkitFullscreenElement instanceof Element)) {
             this._fullscreenTileKey = null;
         }
     }
@@ -1320,15 +1348,19 @@ export class SyncCallOverlayModal extends PlatformModal {
         const el = tileEls[idx];
         if (!el) return;
         if (this._fullscreenTileKey === tileKey) {
-            const doc = document as Document & { webkitExitFullscreen?: () => void };
-            if (doc.exitFullscreen) doc.exitFullscreen();
-            else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+            if (typeof document.exitFullscreen === 'function') {
+                void document.exitFullscreen();
+            } else if ('webkitExitFullscreen' in document && typeof document.webkitExitFullscreen === 'function') {
+                document.webkitExitFullscreen.call(document);
+            }
             this._fullscreenTileKey = null;
             return;
         }
-        const tileEl = el as Element & { webkitRequestFullscreen?: () => void };
-        if (tileEl.requestFullscreen) tileEl.requestFullscreen();
-        else if (tileEl.webkitRequestFullscreen) tileEl.webkitRequestFullscreen();
+        if (typeof el.requestFullscreen === 'function') {
+            void el.requestFullscreen();
+        } else if ('webkitRequestFullscreen' in el && typeof el.webkitRequestFullscreen === 'function') {
+            el.webkitRequestFullscreen.call(el);
+        }
         this._fullscreenTileKey = tileKey;
     }
 
@@ -1459,7 +1491,11 @@ export class SyncCallOverlayModal extends PlatformModal {
             }
         }
         try {
-            navigator.mediaSession.setActionHandler('enterpictureinpicture' as MediaSessionAction, this._onMediaSessionEnterPip);
+            const action = 'enterpictureinpicture';
+            if (!isPictureInPictureAction(action)) {
+                throw new Error('sync-call-overlay: enterpictureinpicture is not a media session action');
+            }
+            navigator.mediaSession.setActionHandler(action, this._onMediaSessionEnterPip);
         } catch (_e) {
             /* enterpictureinpicture не во всех сборках */
         }
@@ -1470,7 +1506,11 @@ export class SyncCallOverlayModal extends PlatformModal {
             return;
         }
         try {
-            navigator.mediaSession.setActionHandler('enterpictureinpicture' as MediaSessionAction, null);
+            const action = 'enterpictureinpicture';
+            if (!isPictureInPictureAction(action)) {
+                throw new Error('sync-call-overlay: enterpictureinpicture is not a media session action');
+            }
+            navigator.mediaSession.setActionHandler(action, null);
         } catch (_e) {
             /* noop */
         }
@@ -1498,7 +1538,9 @@ export class SyncCallOverlayModal extends PlatformModal {
         }
         let pipWin = null;
         try {
-            pipWin = await pipApi?.requestWindow(this._sharePipRequestOptions()) ?? null;
+            pipWin = pipApi === undefined || pipApi === null
+                ? null
+                : await pipApi.requestWindow(this._sharePipRequestOptions());
         } catch (_e) {
             return;
         }
@@ -1516,9 +1558,16 @@ export class SyncCallOverlayModal extends PlatformModal {
         }
         const existing = document.getElementById('sync-call-media-pip-video');
         if (existing) {
-            return existing as LkVideoEl;
+            if (!isLkVideo(existing)) {
+                throw new Error('sync-call-overlay: pip fallback is not a video element');
+            }
+            return existing;
         }
-        const v: LkVideoEl = document.createElement('video');
+        const created = document.createElement('video');
+        if (!isLkVideo(created)) {
+            throw new Error('sync-call-overlay: pip fallback is not a video element');
+        }
+        const v = created;
         v.id = 'sync-call-media-pip-video';
         v.setAttribute('playsinline', '');
         v.setAttribute('autopictureinpicture', '');
@@ -1530,7 +1579,8 @@ export class SyncCallOverlayModal extends PlatformModal {
     }
 
     _removePipFallbackVideo() {
-        const v = typeof document !== 'undefined' ? document.getElementById('sync-call-media-pip-video') as LkVideoEl | null : null;
+        const found = typeof document !== 'undefined' ? document.getElementById('sync-call-media-pip-video') : null;
+        const v = isLkVideo(found) ? found : null;
         if (v !== null && v.parentNode) {
             v.srcObject = null;
             v.parentNode.removeChild(v);
@@ -1567,7 +1617,9 @@ export class SyncCallOverlayModal extends PlatformModal {
                     }
                     let pipWin: Window | null = null;
                     try {
-                        pipWin = await pipApi?.requestWindow(this._sharePipRequestOptions()) ?? null;
+                        pipWin = pipApi === undefined || pipApi === null
+                            ? null
+                            : await pipApi.requestWindow(this._sharePipRequestOptions());
                     } catch (_e) {
                         pipWin = null;
                     }
@@ -1587,7 +1639,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 }
             }
         } catch (err) {
-            const name = err && (err as { name?: unknown }).name;
+            const name = isPlainRecord(err) ? err.name : undefined;
             if (name === 'NotAllowedError' || name === 'AbortError') return;
             this.toast('call_overlay.toast_screen_failed', { type: 'error' });
         }
@@ -1613,7 +1665,8 @@ export class SyncCallOverlayModal extends PlatformModal {
             const pipPromise = pipApi?.requestWindow(this._sharePipRequestOptions());
             let pipWin: Window | null = null;
             try {
-                pipWin = await pipPromise ?? null;
+                const openedWindow = await pipPromise;
+                pipWin = openedWindow === undefined ? null : openedWindow;
             } catch (_e) {
                 pipWin = null;
             }
@@ -1655,7 +1708,8 @@ export class SyncCallOverlayModal extends PlatformModal {
                 }
             }
         }
-        const pipVideo = this._pipDocVideoEl || this.renderRoot.querySelector('.local-share-pip video') as LkVideoEl | null;
+        const shareVideo = this.renderRoot.querySelector('.local-share-pip video');
+        const pipVideo = this._pipDocVideoEl !== null ? this._pipDocVideoEl : (isLkVideo(shareVideo) ? shareVideo : null);
         if (!pipVideo) {
             return;
         }
@@ -1795,7 +1849,7 @@ export class SyncCallOverlayModal extends PlatformModal {
      */
     _activeCallFromState() {
         const slice = this._callUiSel.value;
-        const status = this._statusOp.lastResult as Record<string, unknown> | null;
+        const status = recordOrNull(this._statusOp.lastResult);
         const sliceCall =
             slice && slice.activeCall && slice.activeCall.call_id === this.callId
                 ? slice.activeCall
@@ -1845,9 +1899,10 @@ export class SyncCallOverlayModal extends PlatformModal {
         if (pref !== null && pref.participant_names && typeof pref.participant_names === 'object') {
             return pref.participant_names;
         }
-        const tr = this._tokenOp.lastResult as Record<string, unknown> | null;
-        if (tr && tr.participant_names && typeof tr.participant_names === 'object') {
-            return tr.participant_names as Record<string, unknown>;
+        const tr = recordOrNull(this._tokenOp.lastResult);
+        const names = tr === null ? null : tr.participant_names;
+        if (isPlainRecord(names)) {
+            return names;
         }
         return null;
     }
@@ -1890,20 +1945,20 @@ export class SyncCallOverlayModal extends PlatformModal {
             try {
                 await this._recordingStopOp.run({ call_id: this.callId });
             } catch (err) {
-                this._callUi.setRecordingStatus({ status: 'recording', error: String(err && (err as { message?: unknown }).message ? (err as { message: unknown }).message : err) });
+                this._callUi.setRecordingStatus({ status: 'recording', error: String(errorMessage(err) ?? err) });
             }
         } else {
             this._callUi.setRecordingStatus({ status: 'starting', error: null });
             try {
                 await this._recordingStartOp.run({ call_id: this.callId });
             } catch (err) {
-                this._callUi.setRecordingStatus({ status: 'idle', error: String(err && (err as { message?: unknown }).message ? (err as { message: unknown }).message : err) });
+                this._callUi.setRecordingStatus({ status: 'idle', error: String(errorMessage(err) ?? err) });
             }
         }
     }
 
     _onRecordingPush(event: PlatformEvent, status: string) {
-        const p = event && event.payload as Record<string, unknown> | undefined;
+        const p = isPlainRecord(event.payload) ? event.payload : null;
         if (!p || p.call_id !== this.callId) return;
         const error = status === 'failed' && typeof p.error === 'string' ? p.error : null;
         this._callUi.setRecordingStatus({ status: status === 'failed' ? 'idle' : status, error });
@@ -1954,7 +2009,7 @@ export class SyncCallOverlayModal extends PlatformModal {
     }
 
     _onCallEnded(event: PlatformEvent) {
-        const p = event && event.payload as Record<string, unknown> | undefined;
+        const p = isPlainRecord(event.payload) ? event.payload : null;
         if (!p || p.call_id !== this.callId) return;
         this._disconnectRoom();
         this._callUi.closeOverlay(null);
@@ -1973,7 +2028,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             this.toast('call_overlay.toast_copy_link_failed', { type: 'error' });
             return;
         }
-        const link = this._linkCreateOp.lastResult as Record<string, unknown> | null;
+        const link = recordOrNull(this._linkCreateOp.lastResult);
         const url = link && typeof link.join_url === 'string' ? link.join_url : '';
         if (url === '') {
             this.toast('call_overlay.toast_copy_link_failed', { type: 'error' });
@@ -2008,7 +2063,8 @@ export class SyncCallOverlayModal extends PlatformModal {
 
     async _onChatScroll(e: Event) {
         if (!this.channelId) return;
-        const target = e.target as HTMLElement;
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
         if (target.scrollTop > SCROLL_TOP_THRESHOLD) return;
         const slice = this._messagesSel.value;
         const channelData = slice && slice.byChannelId && slice.byChannelId[this.channelId];
@@ -2024,9 +2080,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 before: oldest,
                 direction: 'older',
             });
-            const result = this._loadOlderOp.lastResult as {
-                items?: unknown; has_older?: unknown; prev_cursor?: unknown; oldest_cursor?: unknown;
-            } | null;
+            const result = recordOrNull(this._loadOlderOp.lastResult);
             if (!result || !Array.isArray(result.items)) return;
             const hasOlder = typeof result.has_older === 'boolean'
                 ? result.has_older
@@ -2074,7 +2128,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             this._messagesStore.failOptimistic({
                 channelId: this.channelId,
                 localId,
-                message: err && typeof (err as { message?: unknown }).message === 'string' ? (err as { message: string }).message : 'failed',
+                message: errorMessage(err) ?? 'failed',
             });
         }
         this._chatSending = false;
@@ -2405,12 +2459,16 @@ export class SyncCallOverlayModal extends PlatformModal {
                     ${items.length === 0 ? html`
                         <div class="chat-empty">${this.t('call_overlay.no_messages_yet')}</div>
                     ` : items.map((m: Record<string, any>) => {
-                        const sender = m.sender || {};
+                        const sender = m.sender !== null && typeof m.sender === 'object' ? m.sender : {};
                         const senderName = typeof sender.display_name === 'string' && sender.display_name !== ''
                             ? sender.display_name
                             : (typeof sender.user_id === 'string' ? sender.user_id : this.t('call_overlay.participant_fallback'));
                         const isOwn = typeof sender.user_id === 'string' && sender.user_id === me;
-                        const text = (m.contents || [])
+                        const rawContents = m.contents;
+                        if (rawContents !== undefined && rawContents !== null && !Array.isArray(rawContents)) {
+                            throw new Error('sync call: message contents must be an array');
+                        }
+                        const text = (Array.isArray(rawContents) ? rawContents : [])
                             .filter((c: Record<string, any>) => c.type === 'text/plain' && c.data && typeof c.data.body === 'string')
                             .map((c: Record<string, any>) => c.data.body)
                             .join('\n');
@@ -2434,7 +2492,11 @@ export class SyncCallOverlayModal extends PlatformModal {
                         class="chat-input"
                         data-canon="composer"
                         .value=${this._chatInput}
-                        @input=${(e: Event) => { this._chatInput = (e.target as HTMLTextAreaElement).value; }}
+                        @input=${(e: Event) => {
+                            const target = e.target;
+                            if (!(target instanceof HTMLTextAreaElement)) return;
+                            this._chatInput = target.value;
+                        }}
                         @keydown=${this._onChatKeydown}
                         placeholder=${this.t('call_overlay.message_placeholder')}
                         rows="1"
@@ -2518,7 +2580,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 <div class="center-state">
                     <platform-icon name="alert-circle" size="48"></platform-icon>
                     <div style="font-weight:600;color:#fca5a5;">${this.t('call_overlay.call_error_title')}</div>
-                    <div style="opacity:0.65;max-width:380px;text-align:center;">${this._error || ''}</div>
+                    <div style="opacity:0.65;max-width:380px;text-align:center;">${this._error === null ? '' : this._error}</div>
                     <button class="ctrl hangup" @click=${this._onHangup} style="margin-top:var(--space-3);">
                         <platform-icon name="close" size="20"></platform-icon>
                     </button>

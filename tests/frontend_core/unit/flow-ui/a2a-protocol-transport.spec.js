@@ -36,6 +36,7 @@ function jsonResponse(body, { status = 200, contentType = 'application/json' } =
         status,
         headers: { get: (name) => (name.toLowerCase() === 'content-type' ? contentType : null) },
         json: async () => body,
+        text: async () => JSON.stringify(body),
     };
 }
 
@@ -57,7 +58,7 @@ function sseResponse(chunks, { contentType = 'text/event-stream', status = 200 }
             ok: status >= 200 && status < 300,
             status,
             headers: { get: (name) => (name.toLowerCase() === 'content-type' ? contentType : null) },
-            json: async () => ({ detail: 'stream failed' }),
+            text: async () => JSON.stringify({ detail: 'stream failed' }),
             body: { getReader: () => reader },
         },
         wasCancelled: () => cancelled,
@@ -84,7 +85,7 @@ describe('sendA2ARequest', () => {
         vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ detail: 'Forbidden here' }, { status: 403 })));
         await expect(sendA2ARequest({ url: '/u', body: {} })).rejects.toMatchObject({ message: 'Forbidden here', status: 403 });
 
-        vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('bad'); } })));
+        vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, text: async () => '<html>bad gateway</html>' })));
         await expect(sendA2ARequest({ url: '/u', body: {} })).rejects.toMatchObject({ message: 'HTTP 502', status: 502, payload: null });
 
         vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: { code: -32001, message: 'Task not found' } })));

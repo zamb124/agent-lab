@@ -29,65 +29,65 @@ alwaysApply: false
 
 ### Модалки
 
-- База — `PlatformModal` (`core/frontend/static/lib/components/glass-modal.js`) или `PlatformFormModal` (`core/frontend/static/lib/components/glass-form-modal.js`); `static modalKind = '<scope>.<entity>'` (`[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*`) и рядом `registerModalKind(kind, tag)` (`core/frontend/static/lib/utils/modal-registry.js`); дубль kind — `throw`.
+- База — `PlatformModal` (`core/frontend/static/lib/components/glass-modal.ts`) или `PlatformFormModal` (`core/frontend/static/lib/components/glass-form-modal.ts`); `static modalKind = '<scope>.<entity>'` (`[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*`) и рядом `registerModalKind(kind, tag)` (`core/frontend/static/lib/utils/modal-registry.ts`); дубль kind — `throw`.
 - Открытие — `this.openModal(kindOrClass, props?, { replaceKinds?, skipEnterMotion? })`: `replaceKinds` мгновенно снимает указанные kinds (mail ↔ calendar), `skipEnterMotion` гасит вход. Закрытие — `this.close()` внутри, `this.closeModal(kind | { id })` снаружи; форма — `PlatformFormModal.closeAfterSave()` (сброс `isDirty` → `UI_MODAL_CLOSE`).
-- Стек — `state.modals.stack` (`core/frontend/static/lib/events/reducers/modals.js`); рендер — один `<platform-modal-stack>` в `PlatformApp.render()`.
-- Слой — `nextModalLayerZIndex()` (`core/frontend/static/lib/utils/modal-z-stack.js`) → `--platform-modal-layer-z` поверх фиксированных `--z-*` из `tokens.css`; ширина — `--modal-width` на `:host` наследника; стабильная высота тела при async-контенте — `--modal-body-min-block-size`.
+- Стек — `state.modals.stack` (`core/frontend/static/lib/events/reducers/modals.ts`); рендер — один `<platform-modal-stack>` в `PlatformApp.render()`.
+- Слой — `nextModalLayerZIndex()` (`core/frontend/static/lib/utils/modal-z-stack.ts`) → `--platform-modal-layer-z` поверх фиксированных `--z-*` из `tokens.css`; ширина — `--modal-width` на `:host` наследника; стабильная высота тела при async-контенте — `--modal-body-min-block-size`.
 - Запрещены `document.createElement('*-modal')`, `document.body.appendChild(modal)`, `.open = true|false`, `super.showModal()`, слушатели `CustomEvent('open-modal' | 'close')`, наследование модалки от `LitElement` или `PlatformElement`.
 
 ### Bottom sheets
 
-- База — `PlatformBottomSheet` (`core/frontend/static/lib/components/layout/platform-bottom-sheet.js`), `static bottomSheetKind = '<scope>.<entity>'` и `registerBottomSheetKind(kind, tag)` (`core/frontend/static/lib/utils/bottom-sheet-registry.js`); неверный kind — `throw`.
-- Открытие и закрытие — `this.openBottomSheet(kind, props?)` / `this.closeBottomSheet(target?)`; стек — `state.bottomSheets.stack` (`core/frontend/static/lib/events/reducers/bottom_sheets.js`); рендер — один `<platform-bottom-sheet-stack>` (`core/frontend/static/lib/components/platform-bottom-sheet-stack.js`) из `PlatformApp.render()`.
+- База — `PlatformBottomSheet` (`core/frontend/static/lib/components/layout/platform-bottom-sheet.ts`), `static bottomSheetKind = '<scope>.<entity>'` и `registerBottomSheetKind(kind, tag)` (`core/frontend/static/lib/utils/bottom-sheet-registry.ts`); неверный kind — `throw`.
+- Открытие и закрытие — `this.openBottomSheet(kind, props?)` / `this.closeBottomSheet(target?)`; стек — `state.bottomSheets.stack` (`core/frontend/static/lib/events/reducers/bottom_sheets.ts`); рендер — один `<platform-bottom-sheet-stack>` (`core/frontend/static/lib/components/platform-bottom-sheet-stack.ts`) из `PlatformApp.render()`.
 - `snap` (`half` | `full`), `dismissible`, `heading` — свойства sheet; `open` ведёт только стек.
 - Запрещены `document.createElement('*-sheet')`, `appendChild`, `this.open = true` вне стека и локальные нижние модалки через `position: fixed; bottom: 0`; детектор — п.9 (`.open`), остальное `[без гейта]`.
 
 ### Mobile shell
 
-- На `≤767px` навигация — `<platform-bottom-nav>` (`core/frontend/static/lib/components/layout/platform-bottom-nav.js`, капсула на 4–5 табов), sheets и опциональный `<platform-top-bar>` (`core/frontend/static/lib/components/layout/platform-top-bar.js`); десктопный sidebar (`≥768px`) на мобиле скрыт. Все три рендерит только `PlatformApp.render()`.
+- На `≤767px` навигация — `<platform-bottom-nav>` (`core/frontend/static/lib/components/layout/platform-bottom-nav.ts`, капсула на 4–5 табов), sheets и опциональный `<platform-top-bar>` (`core/frontend/static/lib/components/layout/platform-top-bar.ts`); десктопный sidebar (`≥768px`) на мобиле скрыт. Все три рендерит только `PlatformApp.render()`.
 - Конфигурация — статические поля наследника `PlatformApp`: `bottomNavItems` (элемент — `key`, `icon`, `labelKey: 'bottom_nav.<key>'`, ровно одно из `routeKey` и `sheet`, `badge?`), `bottomNavHideOnRoutes`, `topBarEnabled` (по умолчанию `false`), `topBarHideOnRoutes`.
 - Активный таб — первый ключ цепочки «маршрут → `parent`», совпавший с `routeKey` таба; таб только с `sheet` по маршруту не активен. Top-bar: back при `parent` у маршрута, заголовок — `routes.<routeKey>`, edge-swipe назад.
-- Профиль и меню — sheet `platform.service_switcher` (`core/frontend/static/lib/components/sheets/platform-service-switcher-sheet.js`): пользователь и смена компании, launcher сервисов, консольные ссылки, уведомления, тема, logout; открывается табом `{ sheet: 'platform.service_switcher' }`.
-- Размеры, радиусы и z-index — токены `--platform-bottom-nav-*`, `--platform-top-bar-*`, `--platform-bottom-sheet-*`; tap target ≥ `--platform-bottom-nav-tap-target`. Safe area — `viewport-fit=cover` (`PLATFORM_MOBILE_VIEWPORT_CONTENT`, `core/frontend/static/lib/utils/platform-viewport-meta.js`) и токены `--platform-safe-*`; нижний отступ контента — `<platform-island safe-bottom>` или `var(--app-content-bottom-padding-mobile)`.
+- Профиль и меню — sheet `platform.service_switcher` (`core/frontend/static/lib/components/sheets/platform-service-switcher-sheet.ts`): пользователь и смена компании, launcher сервисов, консольные ссылки, уведомления, тема, logout; открывается табом `{ sheet: 'platform.service_switcher' }`.
+- Размеры, радиусы и z-index — токены `--platform-bottom-nav-*`, `--platform-top-bar-*`, `--platform-bottom-sheet-*`; tap target ≥ `--platform-bottom-nav-tap-target`. Safe area — `viewport-fit=cover` (`PLATFORM_MOBILE_VIEWPORT_CONTENT`, `core/frontend/static/lib/utils/platform-viewport-meta.ts`) и токены `--platform-safe-*`; нижний отступ контента — `<platform-island safe-bottom>` или `var(--app-content-bottom-padding-mobile)`.
 - Запрещены компоненты `*-mobile-app-header`, свой `<platform-bottom-nav>`, `<platform-top-bar>`, `<platform-bottom-sheet-stack>` в `apps/**` и `this.openSidebar()` вне sidebar-компонента.
 - Гамбургер в любой шапке и локальная навигация `position: fixed; bottom: 0` запрещены. `[без гейта]`
 
 ### Motion
 
-- Motion-слой — `core/frontend/static/lib/styles/shared/motion.styles.js` в `PlatformElement.styles`: интерактивный transition — `--motion-transition-interactive` или класс `.motion-*`; `transition: all` запрещён в `core/frontend/static/**` и `apps/*/ui/**`.
+- Motion-слой — `core/frontend/static/lib/styles/shared/motion.styles.ts` в `PlatformElement.styles`: интерактивный transition — `--motion-transition-interactive` или класс `.motion-*`; `transition: all` запрещён в `core/frontend/static/**` и `apps/*/ui/**`.
 - Анимируются `opacity`, `transform`, `background-color`, `border-color`, `color`, `box-shadow`; layout-свойство (`width`, `height`, `max-height`, `padding`, `top`) — только явный локальный override с причиной. `[без гейта]`
 - Модалка и sheet закрываются в два шага: `*_CLOSE(_REQUESTED)` → `closing` → CSS exit-motion → `*_CLOSED` → удаление DOM. Смена маршрута — View Transition API в `PlatformApp` (отключение — `static routeMotionEnabled = false`). JS-анимация по кадрам запрещена: только `requestPlatformClose()` и `waitForPlatformMotion()`. `[без гейта]`
 
 ### Пользователь
 
-- Пользователь по `user_id` в UI — только `<platform-user-chip user-id>` (`core/frontend/static/lib/components/platform-user-chip.js`) и модалка `platform.user_info` (`<platform-user-info-modal>`, `core/frontend/static/lib/components/platform-user-info-modal.js`); сырой `user_id` или его префикс в pages, modals, components, таблицах и title запрещён. `[без гейта]`
-- `platform.user_info` — единственная модалка профиля: открывается кликом по chip, пунктами «Профиль» и «Настройки» меню `platform-user` и только `this.openModal('platform.user_info', { userId })`; режим own — редактирование своего профиля (`auth/profile/update_requested`), other — карточка и роли для owner/admin (`frontend/team_members`). `[без гейта]`
+- Пользователь по `user_id` в UI — только `<platform-user-chip user-id>` (`core/frontend/static/lib/components/platform-user-chip.ts`) и модалка `platform.user_info` (`<platform-user-info-modal>`, `core/frontend/static/lib/components/platform-user-info-modal.ts`); сырой `user_id` или его префикс в pages, modals, components, таблицах и title запрещён. `[без гейта]`
+- `platform.user_info` — единственная модалка профиля: открывается кликом по chip, пунктами «Профиль» и «Настройки» меню `platform-user` и только `this.openModal('platform.user_info', { userId })`; режим own — редактирование своего профиля (`auth/profile/update_requested`), other — карточка и роли для owner/admin (`frontend/team`). `[без гейта]`
 - Данные — `state.team.members` (`createTeamEffect`, `GET <svc>/api/team/members`), `state.auth.user`, `state.companies.active`; загрузку участников запускают chip и модалка при монтировании, `TEAM_EVENTS.MEMBERS_LOAD_REQUESTED` из pages и modals запрещён. Не найденный участник — сокращённый id с `user_chip.unknown`, клик выключен. `[без гейта]`
-- Аватар без `avatar_url` — `resolveAvatarImageSrc`/`getPlaceholderAvatarUrl` (`core/frontend/static/lib/utils/placeholder-avatar.js`) с непустым `seed`, иначе `throw`.
+- Аватар без `avatar_url` — `resolveAvatarImageSrc`/`getPlaceholderAvatarUrl` (`core/frontend/static/lib/utils/placeholder-avatar.ts`) с непустым `seed`, иначе `throw`.
 - Список ролей — канонический `owner`, `admin`, `developer`, `viewer` в `platform.json`; дубли ролей в бандлах сервисов запрещены, своя роль сервиса — ключ своего namespace. `[без гейта]`
 - Запрещены `*-user-row`, `*-user-avatar`, `*-user-cell` для чужого пользователя, свой user-info модал, второй `modalKind === 'platform.user_info'`, переход «Профиль/Настройки» на `/<svc>/settings`. `[без гейта]`
 
 ### WorkItem в чужом UI
 
 - Задача вне `apps/worktracker/ui/**` — только core `<platform-work-item-badge|preview|row|board|detail>` → `worktracker.mdc`; `.item` без HTTP — форма `WorkItem`, иначе ленивая загрузка `worktracker/work_item_get`.
-- Ссылка на задачу — `buildWorkItemUrl` (`core/frontend/static/lib/utils/work-item-deeplink.js`) → `/worktracker/tasks/{work_item_id}`. Цвет статуса — только по `WorkItem.state` (`--work-item-state-*`); приоритет — вторичный `--work-item-priority-*`, в meta только для `high` и `urgent`. `[без гейта]`
+- Ссылка на задачу — `buildWorkItemUrl` (`core/frontend/static/lib/utils/work-item-deeplink.ts`) → `/worktracker/tasks/{work_item_id}`. Цвет статуса — только по `WorkItem.state` (`--work-item-state-*`); приоритет — вторичный `--work-item-priority-*`, в meta только для `high` и `urgent`. `[без гейта]`
 
 ### Sidebar, breadcrumbs, namespace
 
 - Межкомпонентные команды слева и сверху идут через bus; `window.dispatchEvent`/`window.addEventListener` для `platform-sidebar-open`, `platform-sidebar-mobile-change`, `office-documents-list-reload` и `new CustomEvent('navigate')` запрещены.
-- Оболочка сайдбара — одна `<platform-service-sidebar>` (`core/frontend/static/lib/components/layout/platform-service-sidebar.js`), иерархия пунктов — опционально `<platform-sidebar-nav-tree>`; состояние — `state.ui.sidebar`, его пишет `platform-sidebar`. Длинный список в default-слоте — flex-элемент со скроллом внутренней ленты; прозрачный sticky-хром поверх ленты запрещён. Колокольчик — `<platform-notification-manager slot="user-toolbar">` внутри `<platform-user>`.
-- Заголовок страницы — `<page-header>` (`core/frontend/static/lib/components/layout/page-header.js`): слоты `leading`, `actions`, `toolbar-search`, `mobileToolbarMode` `title` | `search`; липкая полоса на мобиле — токены `--platform-mobile-sticky-header-*` и `core/frontend/static/lib/styles/shared/mobile-sticky-header.styles.js`.
-- Breadcrumbs — `<platform-breadcrumbs>` (`core/frontend/static/lib/components/platform-breadcrumbs.js`) на каждой неглавной странице каждого сервиса, кроме `sync`. `[без гейта]`
+- Оболочка сайдбара — одна `<platform-service-sidebar>` (`core/frontend/static/lib/components/layout/platform-service-sidebar.ts`), иерархия пунктов — опционально `<platform-sidebar-nav-tree>`; состояние — `state.ui.sidebar`, его пишет `platform-sidebar`. Длинный список в default-слоте — flex-элемент со скроллом внутренней ленты; прозрачный sticky-хром поверх ленты запрещён. Колокольчик — `<platform-notification-manager slot="user-toolbar">` внутри `<platform-user>`.
+- Заголовок страницы — `<page-header>` (`core/frontend/static/lib/components/layout/page-header.ts`): слоты `leading`, `actions`, `toolbar-search`, `mobileToolbarMode` `title` | `search`; липкая полоса на мобиле — токены `--platform-mobile-sticky-header-*` и `core/frontend/static/lib/styles/shared/mobile-sticky-header.styles.ts`.
+- Breadcrumbs — `<platform-breadcrumbs>` (`core/frontend/static/lib/components/platform-breadcrumbs.ts`) на каждой неглавной странице каждого сервиса, кроме `sync`. `[без гейта]`
 - Источник крошек — только slice `state.router`: `routes` (`{ key, path, parent? }` из `ROUTER_ROUTES_REGISTERED`, `createRouterEffect`), `routeKey` и `params` (`ROUTER_ROUTE_CHANGED`); цепочка — подъём по `parent`, подпись — `routes.<routeKey>`, динамический хвост — `current-label`; prop `.items` и локальная сборка крошек запрещены. `[без гейта]`
 - Вложенность внутри одного маршрута (дерево wiki, папки) — prop `.trail` из `{ label, routeKey, params }` между маршрутами и текущей подписью; неполный элемент — `throw`.
 - Клик по неактивной крошке — `ROUTER_NAVIGATE_REQUESTED` с path-params текущего маршрута, пересечёнными с `:param` целевого; `{}` — только без пересечения.
-- Выбор пространства — `setPlatformNamespaceSelection(companyId, name)` → `UI_NAMESPACE_SELECT_REQUESTED`; `core/frontend/static/lib/events/effects/ui.effect.js` сохраняет выбор и шлёт `UI_NAMESPACE_CHANGED` и `UI_DOCUMENTS_RELOAD_REQUESTED`; подписка — `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)`.
-- Селектор пространства в шапке сайдбара (CRM, Documents) — только `<platform-sidebar-namespace-select>` (`core/frontend/static/lib/components/layout/platform-sidebar-namespace-select.js`) с одной pill-оболочкой `platform-field`; модалки и `setPlatformNamespaceSelection` остаются в сервисе. `[без гейта]`
+- Выбор пространства — `setPlatformNamespaceSelection(companyId, name)` → `UI_NAMESPACE_SELECT_REQUESTED`; `core/frontend/static/lib/events/effects/ui.effect.ts` сохраняет выбор и шлёт `UI_NAMESPACE_CHANGED` и `UI_DOCUMENTS_RELOAD_REQUESTED`; подписка — `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)`.
+- Селектор пространства в шапке сайдбара (CRM, Documents) — только `<platform-sidebar-namespace-select>` (`core/frontend/static/lib/components/layout/platform-sidebar-namespace-select.ts`) с одной pill-оболочкой `platform-field`; модалки и `setPlatformNamespaceSelection` остаются в сервисе. `[без гейта]`
 
 ### Плавающие слои
 
-- Единственный владелец плавающего слоя — `<platform-popover>` (`core/frontend/static/lib/components/platform-popover.js`): top layer через Popover API, слой остаётся в DOM владельца; поверх него — `<platform-menu>` и `<platform-hover-card>`.
-- Позиция — чистая функция `computeFloatingPosition` (`core/frontend/static/lib/utils/floating-position.js`): flip, clamp, `matchWidth`, `maxHeight`; якорь — живой элемент, прямоугольник или точка `{x, y}`.
+- Единственный владелец плавающего слоя — `<platform-popover>` (`core/frontend/static/lib/components/platform-popover.ts`): top layer через Popover API, слой остаётся в DOM владельца; поверх него — `<platform-menu>` и `<platform-hover-card>`.
+- Позиция — чистая функция `computeFloatingPosition` (`core/frontend/static/lib/utils/floating-position.ts`): flip, clamp, `matchWidth`, `maxHeight`; якорь — живой элемент, прямоугольник или точка `{x, y}`.
 - `reposition()` сбрасывает `top/left: 0`, замеряет origin и ставит координаты viewport минус origin: предок с `transform`, `filter` или `contain: layout` остаётся containing block для `position: fixed`.
 - Запрещены свой портал в `document.body`, `position: fixed` с ручным расчётом координат, локальный `z-index` для dropdown и второй hover-preview в `core/**` и `apps/**`. `[без гейта]`
 
@@ -95,31 +95,31 @@ alwaysApply: false
 
 | Задача | Только |
 |---|---|
-| дерево или timeline spans одного trace | `<platform-trace-viewer>` (`core/frontend/static/lib/components/platform-trace-viewer.js`) |
-| список записей лога | `<platform-log-viewer>` (`core/frontend/static/lib/components/platform-log-viewer.js`) |
+| дерево или timeline spans одного trace | `<platform-trace-viewer>` (`core/frontend/static/lib/components/platform-trace-viewer.ts`) |
+| список записей лога | `<platform-log-viewer>` (`core/frontend/static/lib/components/platform-log-viewer.ts`) |
 | длинный текст, markdown | `<platform-markdown-editor>` |
-| JSON Schema object (`parameters_schema`, `output_schema`) | `<platform-schema-editor>` (`core/frontend/static/lib/components/schema/platform-schema-editor.js`) |
+| JSON Schema object (`parameters_schema`, `output_schema`) | `<platform-schema-editor>` (`core/frontend/static/lib/components/schema/platform-schema-editor.ts`) |
 | тело письма | `<platform-mail-html-body>` → `mail.mdc` |
 | диктовка голосом | `<platform-voice-dictation>` → `voice.mdc` |
-| `@var:` и `@state:` в редакторе | `createVariableExtensions` (`core/frontend/static/lib/codemirror/variable-extensions.js`), однострочно — `<platform-variable-input>` |
+| `@var:` и `@state:` в редакторе | `createVariableExtensions` (`core/frontend/static/lib/codemirror/variable-extensions.ts`), однострочно — `<platform-variable-input>` |
 | блочный документ | `<platform-rich-editor>` → `wiki.mdc` |
-| подтверждение | `platformConfirm` (`core/frontend/static/lib/components/platform-confirm-modal.js`); `window.confirm` запрещён |
+| подтверждение | `platformConfirm` (`core/frontend/static/lib/components/platform-confirm-modal.ts`); `window.confirm` запрещён |
 | кнопка действия | `<platform-button>` или классы `buttonStyles` (`.btn`, `.btn-primary`, …) из `PlatformElement.styles`; во flows UI — только `<platform-button>` → `flows.mdc` |
 | дерево, палитра команд, эмодзи, разделитель панелей | `<platform-tree>`, `<platform-command-palette>`, `<platform-emoji-picker>`, `<platform-resizable-split>` |
 | витрина сервисов | `<platform-services-launcher>`, модалка `platform.services` |
 
 - Trace tree, span waterfall, таблица логов, markdown-, schema- и long-text-редактор в `apps/<svc>/ui/**` запрещены; расширение — только в core-компоненте. `[без гейта]`
-- Каталог сервисов витрины — только `core/frontend/static/lib/utils/platform-services-catalog.js` и `build-service-entry-url.js`; копия списка сервисов в `apps/**` и вызов фабрик консоли `frontend/*` из core запрещены. `[без гейта]`
+- Каталог сервисов витрины — только `core/frontend/static/lib/utils/platform-services-catalog.ts` и `build-service-entry-url.ts`; копия списка сервисов в `apps/**` и вызов фабрик консоли `frontend/*` из core запрещены. `[без гейта]`
 
 ### Иконки
 
-- Один тег `<platform-icon>`: UI-канон — `name` → `UI_ICON_MAP` (`core/frontend/static/lib/utils/file-icons.js`) → `core/frontend/static/assets/icons/<file>.svg` (Material Symbols, один `path`, без `fill`); файловый канон — атрибут `file-icon` → `resolveFileIconBasename`/`FILE_ICON_ALIASES` → `core/frontend/static/assets/icons/files_icons/`.
+- Один тег `<platform-icon>`: UI-канон — `name` → `UI_ICON_MAP` (`core/frontend/static/lib/utils/file-icons.ts`) → `core/frontend/static/assets/icons/<file>.svg` (Material Symbols, один `path`, без `fill`); файловый канон — атрибут `file-icon` → `resolveFileIconBasename`/`FILE_ICON_ALIASES` → `core/frontend/static/assets/icons/files_icons/`.
 - Бренд-лого — отдельный vendored SVG с атрибутом `colored`; hex — только внутри SVG-ассета; загрузка лого с внешнего сайта в runtime запрещена. Имя без ассета — ошибка теста, не пустое место.
 
 ### UI Kit Documentation System
 
 - Каждый `platform-*` с `customElements.define` в `core/frontend/static/lib/components/**` имеет `tests/ui/design-system/components/<tag>/` с `README.md`, `README.en.md`, `manifest.yaml`, `contract.spec.js` (WTR), `playwright.spec.py`; реестр — `tests/ui/design-system/catalog.yaml`.
-- Документация генерируется в `docs/scenarios/platform/ui-kit/<tag>/` (`scripts/generate_ui_kit_docs.py`, `make doc-ui-kit`); playground — `GET /frontend/design-system/preview?component=<tag>&variant=<id>` только для компонентов каталога.
+- Документация генерируется в `docs/scenarios/platform/ui-kit/<tag>/` (`scripts/generate_ui_kit_docs.py`, `make doc-ui-kit`); playground — `GET /frontend/design-system/preview?component=<tag>&variant=<id>` только для компонентов каталога; страница грузит модуль карточки (`import` манифеста) из `/static/core/lib/`, его собирает `scripts/build_ui.mjs` (`buildPageModules`).
 
 ## Исключения
 

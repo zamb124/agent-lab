@@ -14,7 +14,6 @@ from core.types import JsonObject, JsonValue, parse_json_object, require_json_ob
 
 logger = get_logger(__name__)
 
-_STATUS_KEYS = ("pending", "processing", "completed", "failed")
 
 def _in_clause(start: int, values: list[str]) -> tuple[str, list[str]]:
     if not values:
@@ -63,7 +62,7 @@ class DocumentProcessingStatus(PlatformModel):
     ttl_seconds: int = DbField(default=864000, db_default="864000")
 
     @classmethod
-    async def create_status(
+    async def upsert_pending(
         cls,
         document_id: str,
         task_id: str,
@@ -73,7 +72,7 @@ class DocumentProcessingStatus(PlatformModel):
         ttl_seconds: int = 864000,
         extra_metadata: JsonObject | None = None,
     ) -> DocumentProcessingStatus:
-        """Создаёт или сбрасывает строку статуса в pending."""
+        """Вставляет pending или сбрасывает существующую строку в pending: чистит ошибку, S3, chunks_count и completed_at, сливает extra_metadata. ttl_seconds < 0 — ValueError. После записи строки нет — RuntimeError."""
         if ttl_seconds < 0:
             raise ValueError("ttl_seconds cannot be negative")
         now = datetime.now(timezone.utc)
@@ -121,11 +120,12 @@ class DocumentProcessingStatus(PlatformModel):
         return loaded
 
     @classmethod
-    async def finalize_enqueued_indexing_task(
+    async def update_task_id(
         cls,
         document_id: str,
         task_id: str,
     ) -> DocumentProcessingStatus:
+        """Пишет task_id и updated_at. Пустой task_id — ValueError. Нет строки — RuntimeError."""
         if task_id == "":
             raise ValueError("task_id is required")
         now = datetime.now(timezone.utc)
@@ -142,7 +142,8 @@ class DocumentProcessingStatus(PlatformModel):
         return row
 
     @classmethod
-    async def try_mark_processing(cls, document_id: str) -> None:
+    async def mark_processing(cls, document_id: str) -> None:
+        """Переводит pending в processing. Нет строки или статус уже не pending — ничего не меняет."""
         now = datetime.now(timezone.utc)
         _ = await DocumentProcessingStatus.objects.filter(
             document_id=document_id,
@@ -150,13 +151,14 @@ class DocumentProcessingStatus(PlatformModel):
         ).update(returning=False, using="rag", status="processing", updated_at=now)
 
     @classmethod
-    async def record_indexing_done(
+    async def mark_indexing_completed(
         cls,
         document_id: str,
         chunks: int,
         *,
         indexing_runtime: JsonObject | None = None,
     ) -> DocumentProcessingStatus:
+        """Ставит completed, chunks_count и увеличивает indexing_run_count. Нет строки — RuntimeError. Уже failed — строка не меняется."""
         now = datetime.now(timezone.utc)
         async with atomic(using="rag"):
             row = await (
@@ -183,7 +185,8 @@ class DocumentProcessingStatus(PlatformModel):
         return row
 
     @classmethod
-    async def record_indexing_failed(cls, document_id: str, error: str) -> None:
+    async def mark_indexing_failed(cls, document_id: str, error: str) -> None:
+        """Ставит failed и error_message. Сообщение длиннее 5000 символов обрезается. Нет строки — ничего не меняет."""
         now = datetime.now(timezone.utc)
         message = error
         if len(message) > 5000:
@@ -204,45 +207,12 @@ class DocumentProcessingStatus(PlatformModel):
         return await cls.objects.filter(task_id=task_id).get_or_none()
 
     @classmethod
-    async def update_status(
-        cls,
-        document_id: str,
-        status: str,
-        error: str | None = None,
-        s3_key: str | None = None,
-        s3_bucket: str | None = None,
-        chunks_count: int | None = None,
-    ) -> DocumentProcessingStatus:
-        now = datetime.now(timezone.utc)
-        async with atomic(using="rag"):
-            row = await (
-                DocumentProcessingStatus.objects.filter(document_id=document_id).for_update().first()
-            )
-            if row is None:
-                raise RuntimeError(f"document status not found: {document_id}")
-            row.status = status
-            row.updated_at = now
-            if error is not None and error != "":
-                row.error_message = error
-            if s3_key is not None and s3_key != "":
-                row.s3_key = s3_key
-            if s3_bucket is not None and s3_bucket != "":
-                row.s3_bucket = s3_bucket
-            if chunks_count is not None:
-                row.chunks_count = chunks_count
-            if status == "completed":
-                row.completed_at = now
-            _ = await row.save()
-        logger.info("db.event", document_id=document_id, status=status)
-        return row
-
-    @classmethod
-    async def get_latest_by_namespace_and_document_ids(
+    async def by_namespace_and_document_ids(
         cls,
         namespace_id: str,
         document_ids: list[str],
     ) -> dict[str, DocumentProcessingStatus]:
-        """Строки статуса по паре (namespace_id, document_id)."""
+        """Найденные строки namespace по document_id. Пустой список — {}. Отсутствующие id не входят."""
         if not document_ids:
             return {}
         rows = await DocumentProcessingStatus.objects.filter(
@@ -252,79 +222,13 @@ class DocumentProcessingStatus(PlatformModel):
         return {row.document_id: row for row in rows}
 
     @classmethod
-    async def count_effective_document_status_by_namespace(
-        cls, namespace_id: str
-    ) -> dict[str, int]:
-        """Счётчики статусов одного namespace."""
-        counted = await cls.count_effective_document_status_for_namespaces([namespace_id])
-        return counted[namespace_id]
-
-    @classmethod
-    async def count_effective_document_status_for_namespaces(
-        cls, namespace_ids: list[str]
-    ) -> dict[str, dict[str, int]]:
-        """По каждому namespace_id — счётчики pending, processing, completed, failed."""
-        empty = {key: 0 for key in _STATUS_KEYS}
-        if not namespace_ids:
-            return {}
-        placeholders, values = _in_clause(1, namespace_ids)
-        second_start = len(values) + 1
-        second_placeholders, second_values = _in_clause(second_start, namespace_ids)
-        rows = await execute_raw(
-            f"""
-            WITH from_status AS (
-              SELECT namespace_id, document_id, status
-              FROM document_processing_status
-              WHERE namespace_id IN ({placeholders})
-            ),
-            from_vectors AS (
-              SELECT DISTINCT namespace_id, document_id
-              FROM vector_documents
-              WHERE namespace_id IN ({second_placeholders})
-            ),
-            merged AS (
-              SELECT namespace_id, document_id, status
-              FROM from_status
-              UNION ALL
-              SELECT from_vectors.namespace_id, from_vectors.document_id, 'completed'::text
-              FROM from_vectors
-              WHERE NOT EXISTS (
-                SELECT 1 FROM from_status
-                WHERE from_status.namespace_id = from_vectors.namespace_id
-                  AND from_status.document_id = from_vectors.document_id
-              )
-            )
-            SELECT namespace_id, status, COUNT(*)::int AS cnt
-            FROM merged
-            GROUP BY namespace_id, status
-            """,
-            [*values, *second_values],
-            using="rag",
-        )
-        out: dict[str, dict[str, int]] = {namespace_id: dict(empty) for namespace_id in namespace_ids}
-        for row in rows:
-            parsed = require_json_object(row, "document_status_count")
-            namespace_id = parsed["namespace_id"]
-            status = parsed["status"]
-            count = parsed["cnt"]
-            if not isinstance(namespace_id, str) or not isinstance(status, str):
-                raise TypeError("document status aggregation must return strings")
-            if isinstance(count, bool) or not isinstance(count, int):
-                raise TypeError("document status aggregation count must be an integer")
-            if namespace_id not in out:
-                continue
-            if status not in out[namespace_id]:
-                raise ValueError(f"Unexpected status in aggregation: {status!r}")
-            out[namespace_id][status] = count
-        return out
-
-    @classmethod
-    async def list_by_namespace(
+    async def list_by_namespace_and_status(
         cls,
         namespace_id: str,
         status: list[str] | None = None,
         limit: int = 100,
     ) -> list[DocumentProcessingStatus]:
+        """Строки namespace, ORDER BY updated_at DESC NULLS LAST, не больше limit. status None или [] не фильтрует."""
         params: list[str | int] = [namespace_id]
         status_sql = ""
         if status is not None and status != []:
@@ -346,45 +250,13 @@ class DocumentProcessingStatus(PlatformModel):
         return [_status_from_row(require_json_object(row, "document_status")) for row in rows]
 
     @classmethod
-    async def count_chunks_by_namespace_and_document_ids(
-        cls,
-        namespace_id: str,
-        document_ids: list[str],
-    ) -> dict[str, int]:
-        """Число чанков ``vector_documents`` на документ в namespace."""
-        if not document_ids:
-            return {}
-        placeholders, values = _in_clause(2, document_ids)
-        rows = await execute_raw(
-            f"""
-            SELECT document_id, COUNT(*)::int AS cnt
-            FROM vector_documents
-            WHERE namespace_id = $1 AND document_id IN ({placeholders})
-            GROUP BY document_id
-            """,
-            [namespace_id, *values],
-            using="rag",
-        )
-        counts: dict[str, int] = {}
-        for row in rows:
-            parsed = require_json_object(row, "chunk_count")
-            document_id = parsed["document_id"]
-            count = parsed["cnt"]
-            if not isinstance(document_id, str):
-                raise TypeError("vector_documents.document_id must be a string")
-            if isinstance(count, bool) or not isinstance(count, int):
-                raise TypeError("chunk count must be an integer")
-            counts[document_id] = count
-        return counts
-
-    @classmethod
-    async def list_expired_document_candidates(
+    async def list_expired_namespace_document_pairs(
         cls,
         *,
         utc_now: datetime,
         limit: int,
     ) -> list[tuple[str, str]]:
-        """Пары (namespace_id, document_id) с истёкшим TTL."""
+        """Пары (namespace_id, document_id) с истёкшим TTL. Сначала completed-статусы по completed_at, затем vector_documents без строки статуса. limit < 1 — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         status_rows = await execute_raw(

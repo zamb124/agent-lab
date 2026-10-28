@@ -17,6 +17,7 @@ import type {
     VariableSyntaxMode,
 } from '../codemirror/variable-extensions.js';
 import type { ResourceController } from '../base/use-resource.js';
+import { isPlainRecord } from '../events/payload.js';
 
 function _asString(value: unknown): string {
     if (typeof value === 'string') {
@@ -32,7 +33,38 @@ function _asArray(value: unknown): unknown[] {
     if (!Array.isArray(value)) {
         throw new TypeError('platform-variable-input: expected array');
     }
-    return value;
+    const items: unknown[] = [];
+    for (const item of value) items.push(item);
+    return items;
+}
+
+function isExpressionPayload(payload: unknown): boolean {
+    if (payload === undefined || payload === null) return false;
+    if (!isPlainRecord(payload)) {
+        throw new Error('platform-variable-input: variable payload must be an object');
+    }
+    const base = payload.base;
+    if (base === undefined || base === null) return false;
+    if (!isPlainRecord(base)) {
+        throw new Error('platform-variable-input: variable payload.base must be an object');
+    }
+    return base.value_kind === 'expression';
+}
+
+function companyCatalogEntry(rawItem: unknown): { name: string; type: string; source: string; hasValue: boolean } {
+    if (!isPlainRecord(rawItem)) {
+        throw new Error('platform-variable-input: catalog item must be an object');
+    }
+    const key = rawItem.variable_key;
+    if (typeof key !== 'string' || key.length === 0) {
+        throw new Error('platform-variable-input: variable_key must be a non-empty string');
+    }
+    return {
+        name: key,
+        type: isExpressionPayload(rawItem.payload) ? 'expression' : 'string',
+        source: 'company',
+        hasValue: true,
+    };
 }
 
 export class PlatformVariableInput extends PlatformElement {
@@ -197,7 +229,7 @@ export class PlatformVariableInput extends PlatformElement {
             const current = this._editorView.state.doc.toString();
             if (this.value !== current) {
                 this._editorView.dispatch({
-                    changes: { from: 0, to: current.length, insert: this.value || '' },
+                    changes: { from: 0, to: current.length, insert: this.value },
                 });
             }
         }
@@ -218,32 +250,16 @@ export class PlatformVariableInput extends PlatformElement {
 
     _fingerprint() {
         return [
-            JSON.stringify(this.previewValues || {}),
-            JSON.stringify(this.statePreview || {}),
-            JSON.stringify(this.variableCatalog || []),
-            JSON.stringify(this.statePaths || []),
+            JSON.stringify(this.previewValues),
+            JSON.stringify(this.statePreview),
+            JSON.stringify(this.variableCatalog),
+            JSON.stringify(this.statePaths),
             JSON.stringify(this._companyCatalogEntries().map((e) => e.name)),
         ].join('|');
     }
 
     _companyCatalogEntries(): Array<{ name: string; type: string; source: string; hasValue: boolean }> {
-        const companyItems = _asArray(this._variables.items).map((rawItem) => {
-            const item = rawItem as { variable_key?: unknown; payload?: unknown };
-            const payload = item.payload;
-            const base = payload && typeof payload === 'object'
-                ? (payload as Record<string, unknown>).base
-                : null;
-            const expression = Boolean(
-                base && typeof base === 'object'
-                && (base as Record<string, unknown>).value_kind === 'expression',
-            );
-            return {
-                name: String(item.variable_key),
-                type: expression ? 'expression' : 'string',
-                source: 'company',
-                hasValue: true,
-            };
-        });
+        const companyItems = _asArray(this._variables.items).map((rawItem) => companyCatalogEntry(rawItem));
         const systemItems = listSystemVariableKeys().map((key) => ({
             name: key,
             type: 'string',
@@ -333,7 +349,7 @@ export class PlatformVariableInput extends PlatformElement {
 
         this._editorView = new cm.EditorView({
             state: cm.EditorState.create({
-                doc: this.value || '',
+                doc: this.value,
                 extensions: [
                     cm.history(),
                     singleLineFilter,

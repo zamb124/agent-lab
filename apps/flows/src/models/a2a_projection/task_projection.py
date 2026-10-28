@@ -404,7 +404,8 @@ class A2ATaskProjection(PlatformModel):
         ]
 
     @classmethod
-    async def get_task(cls, *, company_id: str, task_id: str) -> Task | None:
+    async def any_task_in_company(cls, *, company_id: str, task_id: str) -> Task | None:
+        """Первый попавшийся Task компании. Порядка нет. Несколько строк — какая именно, не задано. Нет строки — None. Пустые идентификаторы не проверяются."""
         task_row = await A2ATaskProjection.objects.filter(
             company_id=company_id,
             task_id=task_id,
@@ -414,18 +415,8 @@ class A2ATaskProjection(PlatformModel):
         return task_from_row(task_row)
 
     @classmethod
-    async def get_latest_sequence(cls, *, company_id: str, task_id: str) -> int:
-        """Sequence of the last durable event of the task (0 — only the submitted snapshot)."""
-        _, latest = await cls.get_task_with_sequence(company_id=company_id, task_id=task_id)
-        return latest
-
-    @classmethod
-    async def get_task_with_sequence(cls, *, company_id: str, task_id: str) -> tuple[Task, int]:
-        """Projection Task together with the sequence it reflects — one row, one read.
-
-        A stream that starts with this snapshot continues with events whose sequence is
-        greater than the returned one: nothing is lost and nothing is applied twice.
-        """
+    async def require_any_task_with_sequence(cls, *, company_id: str, task_id: str) -> tuple[Task, int]:
+        """Первый попавшийся Task и его latest_sequence. Порядка нет. Поток продолжает события со sequence больше возвращённого: ничего не теряется и не применяется дважды. Нет строки — A2ATaskRepositoryError."""
         row = await A2ATaskProjection.objects.filter(
             company_id=company_id,
             task_id=task_id,
@@ -435,13 +426,14 @@ class A2ATaskProjection(PlatformModel):
         return task_from_row(row), row.latest_sequence
 
     @classmethod
-    async def get_task_for_owner(
+    async def any_task_for_owner(
         cls,
         *,
         company_id: str,
         owner_user_id: str,
         task_id: str,
     ) -> Task | None:
+        """Первый попавшийся Task владельца в компании. Порядка нет. Несколько строк — какая именно, не задано. Нет строки — None. Пустые идентификаторы не проверяются."""
         row = await A2ATaskProjection.objects.filter(
             company_id=company_id,
             owner_user_id=owner_user_id,
@@ -452,7 +444,7 @@ class A2ATaskProjection(PlatformModel):
         return task_from_row(row)
 
     @classmethod
-    async def get_task_for_context(
+    async def any_task_for_context(
         cls,
         *,
         company_id: str,
@@ -460,7 +452,7 @@ class A2ATaskProjection(PlatformModel):
         context_id: str,
         task_id: str,
     ) -> Task | None:
-        """Read a task after an external access service authorized its context."""
+        """Task после того, как внешний доступ уже разрешил контекст. Порядка нет. Несколько строк — какая именно, не задано. Нет строки — None. Пустые идентификаторы не проверяются."""
         row = await A2ATaskProjection.objects.filter(
             company_id=company_id,
             flow_id=flow_id,
@@ -472,7 +464,7 @@ class A2ATaskProjection(PlatformModel):
         return task_from_row(row)
 
     @classmethod
-    async def task_exists_in_scope(
+    async def any_task_id_matches_scope(
         cls,
         *,
         company_id: str,
@@ -482,6 +474,7 @@ class A2ATaskProjection(PlatformModel):
         context_id: str,
         owner_user_id: str,
     ) -> bool:
+        """Первый попавшийся ряд по task_id. Порядка нет. Нет строки — False. Чужой scope — A2ATaskRepositoryError. Совпал — True."""
         row = await A2ATaskProjection.objects.filter(task_id=task_id).first()
         if row is None:
             return False
@@ -495,7 +488,7 @@ class A2ATaskProjection(PlatformModel):
         return True
 
     @classmethod
-    async def get_latest_for_context(
+    async def latest_task_for_context(
         cls,
         *,
         company_id: str,

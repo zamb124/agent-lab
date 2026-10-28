@@ -13,7 +13,7 @@ Scope-строки: `apps` = apps/*/ui/**; `lib` = core/frontend/static/lib/**;
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -46,6 +46,9 @@ class UiCanonRule:
     # Сканировать код без // и /* */ комментариев (для правил про разметку,
     # где упоминание класса в комментарии — ложное срабатывание).
     strip_comments: bool = False
+    # Вырезать содержимое строковых литералов, сохраняя переводы строк.
+    # Пример кода внутри шаблонной строки — не вызов console.
+    strip_strings: bool = False
     # Искать по всему тексту файла (нужно для тегов, чьи атрибуты живут
     # на нескольких строках — lookahead до `>` не работает построчно).
     multiline: bool = False
@@ -57,7 +60,7 @@ RULES: tuple[UiCanonRule, ...] = (
         r"\A",
         ("apps", "lib", "tests"),
         "hard",
-        "Конвертировать в .ts (strict) — см. frontend-engineer § Рекурсивный цикл",
+        "Конвертировать в .ts (strict) — frontend-engineer, recipes.md § 16",
         kind="file",
         path_exclude=r"\.(ts|mjs)$",
     ),
@@ -204,6 +207,79 @@ RULES: tuple[UiCanonRule, ...] = (
         "soft",
         "useOp/createForm состояния — ручной _busy дублирует фабрику",
     ),
+    UiCanonRule(
+        "ts_controller_cast",
+        r"this\.use(?:Resource|Op|Form|CursorList|Facets|Slice)\([^)]*\)\s+as\s",
+        ("apps", "lib"),
+        "hard",
+        "тип контроллера выводится из имени фабрики (PlatformFactoryRegistry); поле — ControllerFor<'<svc>/<entity>'>",
+        path_include=r"\.ts$",
+    ),
+    UiCanonRule(
+        "ts_explicit_any",
+        r"(?::|\bas|<|,|\|)\s*any\b(?![\w$-])|\bany\[\]",
+        ("apps", "lib", "tests"),
+        "soft",
+        "доменный тип или generic фабрики/контроллера; unknown сужается только на typed boundary",
+        path_include=r"\.ts$",
+        strip_comments=True,
+    ),
+    UiCanonRule(
+        "ts_double_cast",
+        r"\bas\s+unknown\s+as\b",
+        ("apps", "lib", "tests"),
+        "soft",
+        "тип чинится в источнике потери (фабрика, контроллер, transport); двойной каст запрещён",
+        path_include=r"\.ts$",
+        strip_comments=True,
+    ),
+    UiCanonRule(
+        "ts_type_assertion",
+        r"^(?!\s*(?:import|export)\b).*\bas\s+(?!const\b)(?:unknown\b|[A-Z{(\[])",
+        ("apps", "lib", "tests"),
+        "soft",
+        "сужение guard-ом или generic контроллера; каст — только event.target DOM-события",
+        path_include=r"\.ts$",
+        strip_comments=True,
+    ),
+    UiCanonRule(
+        "ts_non_null_assertion",
+        r"[\w$)\]]!(?=[.\[)\];,])",
+        ("apps", "lib", "tests"),
+        "soft",
+        "тип без null в контракте или явный throw на отсутствии значения",
+        path_include=r"\.ts$",
+        strip_comments=True,
+    ),
+    UiCanonRule(
+        "ts_silent_catch",
+        r"\bcatch\s*\{",
+        ("apps", "lib", "tests"),
+        "soft",
+        "catch (err) конкретного класса → *_FAILED или throw; catch без привязки выбрасывает ошибку",
+        path_include=r"\.ts$",
+        strip_comments=True,
+    ),
+    UiCanonRule(
+        "ts_literal_fallback",
+        r"(?:\|\||\?\?)\s*(?:''|\"\"|``|\[\]|\{\}|null\b|undefined\b|0\b|false\b|'—')",
+        ("apps", "lib", "tests"),
+        "soft",
+        "дефолт — только initialSlice/extraInitial фабрики; отсутствие обязательного значения — throw",
+        path_include=r"\.ts$",
+        strip_comments=True,
+    ),
+    UiCanonRule(
+        "ts_console",
+        r"\bconsole\.(?:log|info|warn|error|debug)\(",
+        ("apps", "lib"),
+        "soft",
+        "ошибка — throw или *_FAILED фабрики; диагностика — ?platform_devtools=1",
+        path_exclude=r"/events/devtools\.ts$",
+        path_include=r"\.ts$",
+        strip_comments=True,
+        strip_strings=True,
+    ),
 )
 
 
@@ -249,9 +325,10 @@ def embed_closure() -> frozenset[str]:
     q: deque[Path] = deque()
     for ep in _EMBED_ENTRYPOINTS:
         p = (REPO_ROOT / ep).resolve()
-        if p.is_file():
-            visited.add(p)
-            q.append(p)
+        if not p.is_file():
+            raise FileNotFoundError(f"embed entrypoint not found: {ep}")
+        visited.add(p)
+        q.append(p)
     while q:
         cur = q.popleft()
         text = cur.read_text(encoding="utf-8")
@@ -275,6 +352,60 @@ def embed_closure() -> frozenset[str]:
         p.relative_to(REPO_ROOT).as_posix() for p in visited
     )
     return _embed_closure_cache
+
+
+def _blank_one_string(text: str, start: int) -> tuple[str, int]:
+    """Гасит одну строку с позиции открывающей кавычки. Возвращает текст и индекс после неё."""
+    quote = text[start]
+    out = [quote]
+    i = start + 1
+    length = len(text)
+    while i < length:
+        cur = text[i]
+        if cur == "\\":
+            out.append(" ")
+            i += 1
+            if i < length:
+                out.append("\n" if text[i] == "\n" else " ")
+                i += 1
+            continue
+        if quote == "`" and cur == "$" and i + 1 < length and text[i + 1] == "{":
+            out.append("${")
+            i += 2
+            depth = 1
+            while i < length and depth > 0:
+                if text[i] in "\"'`":
+                    nested, i = _blank_one_string(text, i)
+                    out.append(nested)
+                    continue
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                out.append(text[i])
+                i += 1
+            continue
+        if cur == quote:
+            out.append(cur)
+            return "".join(out), i + 1
+        out.append("\n" if cur == "\n" else " ")
+        i += 1
+    return "".join(out), i
+
+
+def blank_string_literals(text: str) -> str:
+    """Заменяет содержимое строк пробелами, переводы строк оставляет."""
+    out: list[str] = []
+    i = 0
+    length = len(text)
+    while i < length:
+        if text[i] in "\"'`":
+            blanked, i = _blank_one_string(text, i)
+            out.append(blanked)
+            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
 
 
 def iter_findings(rule: UiCanonRule) -> list[tuple[Path, str, int, str]]:
@@ -305,6 +436,8 @@ def iter_findings(rule: UiCanonRule) -> list[tuple[Path, str, int, str]]:
             # (легитимный кейс, задокументированный в коде).
             if re.search(rf"ui-canon:\s*allow\s+{re.escape(rule.rule_id)}\b", raw_text):
                 continue
+            if rule.strip_strings:
+                raw_text = blank_string_literals(raw_text)
             if rule.strip_comments:
                 raw_text = re.sub(r"//[^\n]*|/\*.*?\*/", "", raw_text, flags=re.S)
             if rule.multiline:

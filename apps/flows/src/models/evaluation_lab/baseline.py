@@ -45,7 +45,8 @@ class EvaluationBaseline(CompanyScopedModel):
         return await cls.objects.filter(suite_id=suite_id, branch_id=branch_id).get_or_none()
 
     @classmethod
-    async def list_for_suite(cls, suite_id: str) -> list[Self]:
+    async def list_by_branch_id(cls, suite_id: str) -> list[Self]:
+        """Базовые линии набора, ORDER BY branch_id. Предела нет. Пустой suite_id — ValueError."""
         if suite_id == "":
             raise ValueError("suite_id is required")
         return await cls.objects.filter(suite_id=suite_id).order_by("branch_id").all()

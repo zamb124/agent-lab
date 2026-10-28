@@ -4,6 +4,7 @@
  * такие Tasks клиент дочитывает через SubscribeToTask до terminal-состояния.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
 import { isInterruptedTaskState } from '../protocol/a2a-stream.js';
 import { textFromParts } from '../protocol/parts.js';
 
@@ -12,7 +13,8 @@ const CONTINUING_KINDS: ReadonlySet<string> = new Set(['operator_task', 'oauth_r
 type FlowUiRecord = Record<string, unknown>;
 
 function objectOrEmpty(value: unknown): FlowUiRecord {
-    return value && typeof value === 'object' && !Array.isArray(value) ? value as FlowUiRecord : {};
+    if (isPlainRecord(value)) return value;
+    return {};
 }
 
 /**
@@ -81,14 +83,25 @@ export function operatorHandoffFromTask(task: FlowUiRecord | null | undefined): 
     if (interrupt.handoffMode !== 'takeover' && interrupt.handoffMode !== 'single_reply') {
         throw new Error(`operatorHandoffFromTask: unsupported handoff_mode ${JSON.stringify(interrupt.handoffMode)}`);
     }
-    return { mode: interrupt.handoffMode, workItemId: interrupt.workItemId, taskId: String(task?.id || '') };
+    if (task === undefined || task === null) {
+        throw new Error('operatorHandoffFromTask: task required');
+    }
+    const rawId = task.id;
+    const taskId = rawId === undefined || rawId === null || rawId === '' || rawId === false || rawId === 0
+        ? ''
+        : String(rawId);
+    return { mode: interrupt.handoffMode, workItemId: interrupt.workItemId, taskId };
 }
 
 export function operatorHandoffFromTasks(tasksById: unknown, taskOrder: unknown): OperatorHandoff | null {
     const order: unknown[] = Array.isArray(taskOrder) ? taskOrder : [];
     const byId = objectOrEmpty(tasksById);
     for (let index = order.length - 1; index >= 0; index -= 1) {
-        const handoff = operatorHandoffFromTask(byId[String(order[index])] as FlowUiRecord | undefined);
+        const raw = byId[String(order[index])];
+        if (raw !== undefined && raw !== null && !isPlainRecord(raw)) {
+            throw new Error('operatorHandoffFromTasks: task must be an object');
+        }
+        const handoff = operatorHandoffFromTask(raw);
         if (handoff) return handoff;
     }
     return null;

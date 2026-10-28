@@ -66,7 +66,7 @@ export class PlatformDocumentImageViewer extends PlatformElement {
         return html`
             <img
                 src=${streamUrl}
-                alt=${this.originalName || ''}
+                alt=${this.originalName}
                 @error=${this._onError}
             />
         `;

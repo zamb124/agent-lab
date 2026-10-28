@@ -487,7 +487,7 @@ async def process_new_files_for_egress_row(
     livekit_entries = _file_entries_from_egress_info(egress_info) if egress_info is not None else []
     if len(livekit_entries) > 0:
         while budget > 0:
-            fresh = await SyncCallSpeechEgressTrack.get_for_track(call_id, row.track_sid)
+            fresh = await SyncCallSpeechEgressTrack.by_call_and_track(call_id, row.track_sid)
             if fresh is None:
                 return
             if fresh.segments_posted >= len(livekit_entries):
@@ -517,7 +517,7 @@ async def process_new_files_for_egress_row(
     prefix = _speech_egress_s3_prefix(row)
     page_size = get_settings().calls.speech_to_chat.s3_segment_list_page_size
     while budget > 0:
-        fresh = await SyncCallSpeechEgressTrack.get_for_track(call_id, row.track_sid)
+        fresh = await SyncCallSpeechEgressTrack.by_call_and_track(call_id, row.track_sid)
         if fresh is None:
             return
         page = await _audio_segment_entries_from_s3_prefix(
@@ -728,7 +728,7 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str,
                         track_sid = read_livekit_track_sid(track)
                         if track_sid is None:
                             continue
-                        existing = await SyncCallSpeechEgressTrack.get_for_track(
+                        existing = await SyncCallSpeechEgressTrack.by_call_and_track(
                             call_id, track_sid
                         )
                         if existing is not None:
@@ -780,7 +780,7 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str,
                             egress_id=egress_id,
                         )
 
-                rows = await SyncCallSpeechEgressTrack.list_for_call(call_id, company_id)
+                rows = await SyncCallSpeechEgressTrack.list_by_created_at_asc_for_call(call_id, company_id)
                 for row in rows:
                     await process_new_files_for_egress_row(
                         row=row,
@@ -805,7 +805,7 @@ async def stop_speech_egresses_for_call_room(
     files_service: FilesService,
     message_service: SyncMessageService,
 ) -> None:
-    rows = await SyncCallSpeechEgressTrack.list_for_call(call_id, company_id)
+    rows = await SyncCallSpeechEgressTrack.list_by_created_at_asc_for_call(call_id, company_id)
     if len(rows) == 0:
         return
     if actor_user_id.strip() == "":

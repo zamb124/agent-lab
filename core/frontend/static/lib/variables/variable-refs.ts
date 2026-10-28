@@ -70,13 +70,35 @@ export function lookupPath(root: unknown, path: string): { found: boolean; value
             return { found: false, value: undefined };
         }
 
-        const record = current as Record<string, unknown>;
-        if (isPlainObject(record[part]) && Object.hasOwn(record[part], 'value')) {
-            current = (record[part] as Record<string, unknown>).value;
+        if (Array.isArray(current)) {
+            if (!(part in current)) {
+                return { found: false, value: undefined };
+            }
+            const items: unknown[] = [];
+            for (const item of current) items.push(item);
+            const index = Number(part);
+            if (!Number.isInteger(index) || String(index) !== part || index < 0) {
+                current = part === 'length' ? current.length : undefined;
+                continue;
+            }
+            const child = items[index];
+            if (isPlainObject(child) && Object.hasOwn(child, 'value')) {
+                current = child.value;
+                continue;
+            }
+            current = child;
             continue;
         }
-        if (Object.hasOwn(record, part) || part in record) {
-            current = record[part];
+        if (!isPlainObject(current)) {
+            return { found: false, value: undefined };
+        }
+        const child = current[part];
+        if (isPlainObject(child) && Object.hasOwn(child, 'value')) {
+            current = child.value;
+            continue;
+        }
+        if (Object.hasOwn(current, part) || part in current) {
+            current = child;
             continue;
         }
         return { found: false, value: undefined };
@@ -89,6 +111,18 @@ export function pathExistsInValues(path: string, values: unknown): boolean {
     return lookupPath(values, path).found;
 }
 
+function catalogEntry(value: unknown): VariableCatalogEntry | null {
+    if (!isPlainObject(value)) return null;
+    const name = value.name;
+    if (typeof name !== 'string' || name.length === 0) return null;
+    const entry: VariableCatalogEntry = { name };
+    if (typeof value.type === 'string') entry.type = value.type;
+    if (typeof value.source === 'string') entry.source = value.source;
+    if (typeof value.hasValue === 'boolean') entry.hasValue = value.hasValue;
+    if (value.kind === 'var' || value.kind === 'state') entry.kind = value.kind;
+    return entry;
+}
+
 export function findCatalogEntry(path: string, catalog: unknown): VariableCatalogEntry | null {
     if (!Array.isArray(catalog) || typeof path !== 'string' || path.length === 0) {
         return null;
@@ -97,10 +131,9 @@ export function findCatalogEntry(path: string, catalog: unknown): VariableCatalo
     let rootMatch: VariableCatalogEntry | null = null;
     let childOfRootMatch: VariableCatalogEntry | null = null;
     for (const rawEntry of catalog) {
-        if (!rawEntry || typeof rawEntry !== 'object') continue;
-        const entry = rawEntry as VariableCatalogEntry;
+        const entry = catalogEntry(rawEntry);
+        if (entry === null) continue;
         const name = entry.name;
-        if (typeof name !== 'string' || name.length === 0) continue;
         if (name === path) {
             return entry;
         }

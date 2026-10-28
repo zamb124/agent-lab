@@ -122,7 +122,7 @@ def _string_list(raw: JsonValue | None) -> list[str]:
 
 
 async def _get_flow_config(flow_id: str) -> FlowConfig | None:
-    return await FlowConfig.get_latest(flow_id)
+    return await FlowConfig.current_for_flow(flow_id)
 
 
 def _get_user_groups_from_token(token: str | None) -> list[str]:

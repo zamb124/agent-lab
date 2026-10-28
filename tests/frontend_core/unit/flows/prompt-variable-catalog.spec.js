@@ -17,6 +17,10 @@ describe('prompt variable catalog', () => {
         });
     });
 
+    it('unknown timezone throws', () => {
+        expect(() => buildRuntimeDatetimePreview(new Date('2026-07-15T23:07:05Z'), 'Not/AZone')).toThrow(/unknown timeZone/);
+    });
+
     it('uses the runtime state timezone, including calendar-day rollover', () => {
         const values = buildRuntimeDatetimePreview(
             new Date('2026-07-15T23:07:05Z'),

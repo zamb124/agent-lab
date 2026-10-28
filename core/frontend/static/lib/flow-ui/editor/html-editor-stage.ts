@@ -109,10 +109,21 @@ function renderStageToolbar({ viewport, theme, t, onViewport, onTheme, onReload,
     </div>`;
 }
 
+function previewWidth(viewport: string): number {
+    switch (viewport) {
+        case 'tablet':
+            return HTML_EDITOR_VIEWPORTS.tablet;
+        case 'mobile':
+            return HTML_EDITOR_VIEWPORTS.mobile;
+        default:
+            return HTML_EDITOR_VIEWPORTS.desktop;
+    }
+}
+
 export function renderHtmlEditorStage({
     viewport, theme, empty, error, t, onSnippet, canvas, onViewport, onTheme, onReload, onCollapse, collapseDisabled,
 }: HtmlEditorStageRenderArgs) {
-    const width = (HTML_EDITOR_VIEWPORTS as Record<string, number>)[viewport] ?? HTML_EDITOR_VIEWPORTS.desktop;
+    const width = previewWidth(viewport);
     return html`<div class="preview-pane">
         ${renderStageToolbar({ viewport, theme, t, onViewport, onTheme, onReload, onCollapse, collapseDisabled })}
         <div class="stage" data-theme=${theme} style=${`--preview-width:${width}px`} aria-label=${t('interface_editor.html_preview')}>

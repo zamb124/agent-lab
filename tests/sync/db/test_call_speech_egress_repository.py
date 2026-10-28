@@ -57,7 +57,7 @@ async def test_speech_egress_crud_and_list(
     )
     assert await SyncCallSpeechEgressTrack.set(row)
 
-    got = await SyncCallSpeechEgressTrack.get_for_track(call.call_id, row.track_sid)
+    got = await SyncCallSpeechEgressTrack.by_call_and_track(call.call_id, row.track_sid)
     assert got is not None
     assert got.row_id == row.row_id
 
@@ -67,11 +67,11 @@ async def test_speech_egress_crud_and_list(
     assert by_eg is not None
     assert by_eg.track_sid == row.track_sid
 
-    listed = await SyncCallSpeechEgressTrack.list_for_call(call.call_id, company_id)
+    listed = await SyncCallSpeechEgressTrack.list_by_created_at_asc_for_call(call.call_id, company_id)
     assert len(listed) == 1
 
     await SyncCallSpeechEgressTrack.mark_speech_egress_segments(row.row_id, 2, None)
-    fresh = await SyncCallSpeechEgressTrack.get_for_track(call.call_id, row.track_sid)
+    fresh = await SyncCallSpeechEgressTrack.by_call_and_track(call.call_id, row.track_sid)
     assert fresh is not None
     assert fresh.segments_posted == 2
     assert fresh.last_segment_s3_key is None
@@ -81,12 +81,12 @@ async def test_speech_egress_crud_and_list(
         3,
         "sync-speech/c/call/u/TR/k1.aac",
     )
-    fresh2 = await SyncCallSpeechEgressTrack.get_for_track(call.call_id, row.track_sid)
+    fresh2 = await SyncCallSpeechEgressTrack.by_call_and_track(call.call_id, row.track_sid)
     assert fresh2 is not None
     assert fresh2.segments_posted == 3
     assert fresh2.last_segment_s3_key == "sync-speech/c/call/u/TR/k1.aac"
 
     await SyncCallSpeechEgressTrack.delete_for_call(call.call_id, company_id)
-    assert await SyncCallSpeechEgressTrack.get_for_track(
+    assert await SyncCallSpeechEgressTrack.by_call_and_track(
         call.call_id, row.track_sid
     ) is None

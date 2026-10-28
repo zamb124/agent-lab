@@ -15,7 +15,8 @@
  */
 
 import { html, nothing } from '../../lit-shim.js';
-import { isVisible } from '../runtime/templating.js';
+import { isPlainRecord } from '../../events/payload.js';
+import { isVisible, type VisibleWhen } from '../runtime/templating.js';
 import type { FlowUiBlock, FlowUiBlockRenderer, FlowUiRenderContext } from '../runtime/flow-ui-store.js';
 import { flowUIText } from '../utils/text.js';
 import { ACTION_BLOCKS } from './actions.js';
@@ -39,13 +40,21 @@ export const FLOW_UI_BLOCK_RENDERERS: Readonly<Record<string, FlowUiBlockRendere
     ...HTML_BLOCKS,
 });
 
+function visibleWhenOf(value: unknown): VisibleWhen | null | undefined {
+    if (value === null || value === undefined) return value;
+    if (!isPlainRecord(value)) {
+        throw new Error('flow-ui: visible_when requires path');
+    }
+    return { path: value.path, equals: value.equals };
+}
+
 export function renderBlock(block: FlowUiBlock, ctx: FlowUiRenderContext) {
     if (!block || typeof block !== 'object' || typeof block.type !== 'string') {
         throw new Error('flow-ui: block requires type');
     }
     const renderer = FLOW_UI_BLOCK_RENDERERS[block.type];
     if (!renderer) throw new Error(`flow-ui: unknown block type ${JSON.stringify(block.type)}`);
-    if (!ctx.editing && !isVisible(block.visible_when as { path?: unknown; equals?: unknown } | null | undefined, ctx.state)) return nothing;
+    if (!ctx.editing && !isVisible(visibleWhenOf(block.visible_when), ctx.state)) return nothing;
     let content;
     let renderError = null;
     try {

@@ -11,15 +11,12 @@
 
 import type { EffectCtx } from '../contract.js';
 import type { PlatformFactory } from '../factory-registry.js';
+import { isPlainRecord } from '../payload.js';
 
 interface CollectionStateLike extends Record<string, unknown> {
     items: readonly (Record<string, unknown> | null)[];
     byId: Readonly<Record<string, Record<string, unknown> | null>>;
     lastListQuery?: { payload?: unknown } | null;
-}
-
-interface OpSliceLike extends Record<string, unknown> {
-    lastRequest?: { payload?: unknown } | null;
 }
 
 interface AsyncOpFactoryLike extends PlatformFactory {
@@ -34,6 +31,50 @@ interface ResourceCollectionFactoryLike extends PlatformFactory {
     events: { LIST_REQUESTED: string };
 }
 
+function isRebuiltState<S extends CollectionStateLike>(value: Record<string, unknown>, state: S): value is S {
+    if (!Array.isArray(value.items) || !isPlainRecord(value.byId)) return false;
+    for (const key of Object.keys(state)) {
+        if (!Object.prototype.hasOwnProperty.call(value, key)) return false;
+    }
+    return true;
+}
+
+function replaceCollection<S extends CollectionStateLike>(
+    state: S,
+    items: CollectionStateLike['items'],
+    byId: CollectionStateLike['byId'],
+): S {
+    const next: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(state)) next[key] = value;
+    next.items = items;
+    next.byId = byId;
+    if (!isRebuiltState(next, state)) {
+        throw new Error('merge: rebuilt collection state is incomplete');
+    }
+    return next;
+}
+
+function busSlice(state: unknown, sliceKey: string, label: string): Record<string, unknown> | null {
+    if (!isPlainRecord(state)) {
+        throw new Error(`${label}: bus state must be an object`);
+    }
+    const slice = state[sliceKey];
+    if (slice === undefined || slice === null) return null;
+    if (!isPlainRecord(slice)) {
+        throw new Error(`${label}: slice ${sliceKey} must be an object`);
+    }
+    return slice;
+}
+
+function storedPayload(slice: Record<string, unknown>, field: string, label: string): { present: true; payload: unknown } | { present: false } {
+    const request = slice[field];
+    if (request === undefined || request === null) return { present: false };
+    if (!isPlainRecord(request)) {
+        throw new Error(`${label}: ${field} must be an object`);
+    }
+    return { present: true, payload: request.payload };
+}
+
 export function upsertItem<S extends CollectionStateLike>(state: S, item: Record<string, unknown>, idField: string): S {
     const id = item[idField];
     if (id === undefined || id === null || id === '') {
@@ -43,7 +84,8 @@ export function upsertItem<S extends CollectionStateLike>(state: S, item: Record
     const items = idx === -1
         ? [...state.items, item]
         : state.items.map((existing, i) => (i === idx ? item : existing));
-    return { ...state, items, byId: { ...state.byId, [String(id)]: item } } as S;
+    const byId = { ...state.byId, [String(id)]: item };
+    return replaceCollection(state, items, byId);
 }
 
 export function removeItem<S extends CollectionStateLike>(state: S, id: unknown, idField: string): S {
@@ -52,21 +94,20 @@ export function removeItem<S extends CollectionStateLike>(state: S, id: unknown,
     }
     const byId = { ...state.byId };
     delete byId[String(id)];
-    return { ...state, items: state.items.filter((existing) => !existing || existing[idField] !== id), byId } as S;
+    const items = state.items.filter((existing) => !existing || existing[idField] !== id);
+    return replaceCollection(state, items, byId);
 }
 
 export function rerunLastRequest(ctx: EffectCtx, op: AsyncOpFactoryLike, { when }: { when?: (payload: unknown) => boolean } = {}): boolean {
     if (!op || op.kind !== 'async-op') {
         throw new Error('rerunLastRequest: async-op factory required');
     }
-    const slice = (ctx.getState() as Record<string, OpSliceLike | undefined>)[op.sliceKey];
-    if (!slice || !slice.lastRequest) {
-        return false;
-    }
-    if (typeof when === 'function' && when(slice.lastRequest.payload) !== true) {
-        return false;
-    }
-    ctx.dispatch(op.events.REQUESTED, slice.lastRequest.payload);
+    const slice = busSlice(ctx.getState(), op.sliceKey, 'rerunLastRequest');
+    if (slice === null) return false;
+    const stored = storedPayload(slice, 'lastRequest', 'rerunLastRequest');
+    if (!stored.present) return false;
+    if (typeof when === 'function' && when(stored.payload) !== true) return false;
+    ctx.dispatch(op.events.REQUESTED, stored.payload);
     return true;
 }
 
@@ -74,13 +115,11 @@ export function reloadLastList(ctx: EffectCtx, resource: ResourceCollectionFacto
     if (!resource || resource.kind !== 'resource-collection') {
         throw new Error('reloadLastList: resource-collection factory required');
     }
-    const slice = (ctx.getState() as Record<string, CollectionStateLike | undefined>)[resource.sliceKey];
-    if (!slice || !slice.lastListQuery) {
-        return false;
-    }
-    if (typeof when === 'function' && when(slice.lastListQuery.payload) !== true) {
-        return false;
-    }
-    ctx.dispatch(resource.events.LIST_REQUESTED, slice.lastListQuery.payload);
+    const slice = busSlice(ctx.getState(), resource.sliceKey, 'reloadLastList');
+    if (slice === null) return false;
+    const stored = storedPayload(slice, 'lastListQuery', 'reloadLastList');
+    if (!stored.present) return false;
+    if (typeof when === 'function' && when(stored.payload) !== true) return false;
+    ctx.dispatch(resource.events.LIST_REQUESTED, stored.payload);
     return true;
 }

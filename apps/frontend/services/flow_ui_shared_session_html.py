@@ -7,23 +7,13 @@ import json
 
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 
-# Same key as core/frontend/static/lib/events/effects/theme.effect.js
+# Same key as core/frontend/static/lib/events/effects/theme.effect.ts
 _PLATFORM_THEME_STORAGE_KEY = "platform:core:theme"
 
 
 def build_flow_ui_shared_session_html(*, grant_id: str) -> str:
     safe_grant = json.dumps(grant_id, ensure_ascii=False)
     safe_theme_key = json.dumps(_PLATFORM_THEME_STORAGE_KEY, ensure_ascii=False)
-    import_map = json.dumps(
-        {
-            "imports": {
-                "lit": "/static/core/assets/js/lit/lit.min.js",
-                "lit/": "/static/core/assets/js/lit/",
-                "@platform/lib/": "/static/core/lib/",
-            }
-        },
-        separators=(",", ":"),
-    )
     viewport = html.escape(PLATFORM_MOBILE_VIEWPORT_CONTENT, quote=True)
     return f"""<!doctype html>
 <html lang="ru" data-theme="light">
@@ -33,7 +23,6 @@ def build_flow_ui_shared_session_html(*, grant_id: str) -> str:
   <meta name="theme-color" content="#ffffff">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>Shared Flow UI · Linnex</title>
-  <script type="importmap">{import_map}</script>
   <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
   <style>
     * {{ box-sizing: border-box; }}

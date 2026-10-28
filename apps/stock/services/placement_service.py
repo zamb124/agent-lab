@@ -146,7 +146,7 @@ class PlacementService:
         ``reserved_quantity`` обещано накладными,
         ``available = quantity - reserved`` реально можно брать.
         """
-        rows = await StockQuant.list_for_company(
+        rows = await StockQuant.list_by_product_and_location(
             company_id,
             location_id=location_id,
             product_id=product_id,
@@ -154,7 +154,7 @@ class PlacementService:
             limit=limit,
             offset=offset,
         )
-        total = await StockQuant.count_for_company(
+        total = await StockQuant.count_by_location_product_and_owner(
             company_id,
             location_id=location_id,
             product_id=product_id,
@@ -249,7 +249,7 @@ class PlacementService:
         )
         if not ordered:
             return []
-        locations = await StockLocation.by_ids(company_id, ordered)
+        locations = await StockLocation.found_in_company_by_ids(company_id, ordered)
         bins = [
             loc
             for loc_id in ordered
@@ -257,7 +257,7 @@ class PlacementService:
             and loc.usage in _PUTAWAY_USAGES
         ]
         bin_ids = [loc.location_id for loc in bins]
-        storage_types = await StockStorageType.by_ids(
+        storage_types = await StockStorageType.found_in_company_by_ids(
             company_id,
             sorted(
                 {loc.storage_type_id for loc in bins if loc.storage_type_id}
@@ -271,7 +271,7 @@ class PlacementService:
 
         # Вес/объём содержимого ячеек — через карточки товаров, чтобы
         # проверка ёмкости видела уже стоящий груз, а не только приход.
-        product_by_id = await StockProduct.by_ids(
+        product_by_id = await StockProduct.found_in_company_by_ids(
             company_id,
             sorted(
                 {q.product_id for q in quants} | {move.product_id}

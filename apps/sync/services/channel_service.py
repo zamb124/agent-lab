@@ -112,7 +112,7 @@ async def _find_existing_direct_for_pair(
     channel_access: SyncChannelAccessService,
 ) -> SyncChannel | None:
     """Один личный чат с собеседником в рамках namespace (без дублей create)."""
-    candidates = await SyncChannel.list_channels_where_both_members(
+    candidates = await SyncChannel.list_for_both_members(
         user_a,
         user_b,
         company_id=company_id,
@@ -213,11 +213,11 @@ async def _create_channel_row(
     )
     _ = await SyncChannel.set(entity)
     member_ids = list(body.member_ids) if body.member_ids is not None else []
-    await SyncChannelMember.ensure_channel_member_row(
+    await SyncChannelMember.ensure_member(
         channel_id, actor_user_id, company_id=company_id
     )
     for member_id in member_ids:
-        await SyncChannelMember.ensure_channel_member_row(
+        await SyncChannelMember.ensure_member(
             channel_id, member_id, company_id=company_id
         )
     try:
@@ -308,7 +308,7 @@ class SyncChannelService:
         limit: int,
         offset: int,
     ) -> OffsetPage[ChannelRead]:
-        candidates = await SyncChannel.list_channels_for_user(
+        candidates = await SyncChannel.list_member_channels_by_type_and_name(
             user_id,
             namespace=namespace,
             limit=limit,
@@ -392,7 +392,7 @@ class SyncChannelService:
             )
         max_at = await SyncMessage.max_root_lane_sent_at(channel_id, company_id=company_id)
         read_at = max_at if max_at is not None else datetime.now(UTC)
-        await SyncChannelMember.set_channel_member_last_read_at(
+        await SyncChannelMember.update_last_read_at(
             channel_id, user_id, read_at, company_id=company_id
         )
         recipients = await self._channel_access.list_member_user_ids(channel_id)
@@ -478,7 +478,7 @@ class SyncChannelService:
             AuthzObject.sync_channel(channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to channel.", error_code="forbidden")
-        await SyncChannelMember.set_channel_member_notifications_muted(
+        await SyncChannelMember.update_notifications_muted(
             channel_id, user_id, notifications_muted, company_id=company_id
         )
         summaries = await SyncMessage.channel_lane_summaries(
@@ -515,7 +515,7 @@ class SyncChannelService:
                 "No permission to manage channel members.",
                 error_code="forbidden",
             )
-        await SyncChannelMember.ensure_channel_member_row(
+        await SyncChannelMember.ensure_member(
             channel_id, member_user_id, company_id=company_id
         )
         try:
@@ -523,7 +523,7 @@ class SyncChannelService:
                 channel_id, user_id=member_user_id, relation=role
             )
         except Exception:
-            _ = await SyncChannelMember.delete_channel_member(
+            _ = await SyncChannelMember.delete_by_user(
                 channel_id, member_user_id, company_id=company_id
             )
             raise
@@ -622,7 +622,7 @@ class SyncChannelService:
                 "not_found", "User is not in the company.", error_code="not_found"
             )
         if peer_user_id == user_id:
-            candidates = await SyncChannel.list_channels_for_user(
+            candidates = await SyncChannel.list_member_channels_by_type_and_name(
                 user_id,
                 namespace=None,
                 limit=limit,
@@ -631,7 +631,7 @@ class SyncChannelService:
             )
             channels = await self.filter_visible(candidates, user_id=user_id)
         else:
-            candidates = await SyncChannel.list_channels_where_both_members(
+            candidates = await SyncChannel.list_for_both_members(
                 user_id,
                 peer_user_id,
                 limit=limit,

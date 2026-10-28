@@ -47,10 +47,10 @@ async def op_variables_list(
 ) -> OffsetPage[PlatformVariable]:
     _ = user
     scope = await require_company_viewer(di.authz_service)
-    items = await SecretVariable.list_for_company(
+    items = await SecretVariable.masked_page_by_variable_key(
         scope.company_id, limit=payload.limit, offset=payload.offset
     )
-    total = await SecretVariable.count(scope.company_id)
+    total = await SecretVariable.count_for_company(scope.company_id)
     return OffsetPage[PlatformVariable](
         items=items, total=total, limit=payload.limit, offset=payload.offset
     )
@@ -110,7 +110,7 @@ async def op_variables_versions(
     current = await di.secrets_service.get(scope.company_id, payload.variable_key)
     if current is None:
         raise PlatformNotFoundError("Variable not found", error_code="variable_not_found")
-    items = await SecretVariableVersion.list_versions(
+    items = await SecretVariableVersion.list_masked_by_version_desc(
         scope.company_id, payload.variable_key, limit=payload.limit, offset=payload.offset
     )
     total = await SecretVariableVersion.count_versions(scope.company_id, payload.variable_key)

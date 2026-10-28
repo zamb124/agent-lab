@@ -48,7 +48,7 @@ export const callPrefsSlice = createSlice({
         setDeviceId: 'device_id_set',
         setHydrated: 'hydrated',
     },
-    extraReducer: (state, event) => {
+    extraReducer: (state: SyncCallPrefsSlice, event) => {
         const s = state as SyncCallPrefsSlice;
         switch (event.type) {
             case 'sync/call_prefs/camera_set': {
@@ -109,3 +109,9 @@ export const callPrefsSlice = createSlice({
         }
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'sync/call_prefs': typeof callPrefsSlice;
+    }
+}

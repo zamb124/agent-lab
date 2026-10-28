@@ -118,7 +118,8 @@ class CRMEntity(PlatformModel):
         return self.entity_type
 
     @classmethod
-    async def distinct_note_company_ids_since(cls, since_date: date) -> list[str]:
+    async def list_note_company_ids_since(cls, since_date: date) -> list[str]:
+        """company_id заметок с note_date не раньше since_date, по возрастанию company_id. Пустой company_id в строке — ValueError."""
         rows = await execute_raw(
             "SELECT DISTINCT company_id FROM crm_entities WHERE entity_type = 'note' AND note_date IS NOT NULL AND note_date >= $1 ORDER BY company_id",
             [since_date],
@@ -134,11 +135,12 @@ class CRMEntity(PlatformModel):
         return company_ids
 
     @classmethod
-    async def distinct_note_scopes_since(
+    async def list_note_company_namespace_dates_since(
         cls,
         since_date: date,
         company_id: str,
     ) -> list[tuple[str, str, date]]:
+        """Различные тройки (company_id, namespace, note_date) заметок компании с note_date не раньше since_date. Порядка нет."""
         rows = await execute_raw(
             "SELECT DISTINCT company_id, namespace, note_date FROM crm_entities WHERE entity_type = 'note' AND note_date IS NOT NULL AND note_date >= $1 AND company_id = $2",
             [since_date, company_id],
@@ -158,15 +160,17 @@ class CRMEntity(PlatformModel):
         return scopes
 
     @classmethod
-    async def all_ordered_by_created_at(cls) -> list[Self]:
+    async def ordered_by_created_at(cls) -> list[Self]:
+        """Все строки таблицы по возрастанию created_at, без limit и без фильтра компании."""
         return await cls.objects.order_by("created_at").all()
 
     @classmethod
-    async def find_in_company(
+    async def by_entity_id(
         cls,
         company_id: str,
         entity_id: str,
     ) -> Self | None:
+        """Строка компании по entity_id. Нет строки — None. Пустые company_id и entity_id — ValueError."""
         if company_id == "":
             raise ValueError("company_id cannot be empty.")
         if entity_id == "":
@@ -183,13 +187,15 @@ class CRMEntity(PlatformModel):
         return created
 
     @classmethod
-    async def save_loaded(cls, entity: Self) -> Self:
+    async def update_loaded(cls, entity: Self) -> Self:
+        """Сохраняет уже изменённую строку и пишет лог crm.entity.updated."""
         saved = await entity.save(using="crm")
         logger.info("crm.entity.updated", entity_id=saved.entity_id, entity_type=saved.full_type)
         return saved
 
     @classmethod
-    async def take_by_id(cls, entity_id: str) -> Self | None:
+    async def delete_returning(cls, entity_id: str) -> Self | None:
+        """Удаляет строку по entity_id и возвращает прочитанную. Нет строки или удаление задело 0 строк — None."""
         row = await cls.get(entity_id)
         if row is None:
             return None
@@ -250,13 +256,14 @@ class CRMEntity(PlatformModel):
         return row
 
     @classmethod
-    async def all_by_entity_type_and_attribute(
+    async def list_by_entity_type_and_attribute(
         cls,
         entity_type: str,
         attribute_key: str,
         attribute_value: str,
         company_id: str | None = None,
     ) -> list[CRMEntity]:
+        """Строки компании с этим entity_type и текстовым значением attributes. Порядка и limit нет. company_id None или пустая строка — активная компания."""
         table = cls.get_table_name()
         fetched = await execute_raw(
             f"SELECT row_to_json({table}) AS item FROM {table} WHERE company_id = $1 AND entity_type = $2 AND jsonb_extract_path_text(attributes, $3) = $4",
@@ -266,7 +273,7 @@ class CRMEntity(PlatformModel):
         return [crm_entity_from_row(row) for row in fetched]
 
     @classmethod
-    async def all_by_namespace_entity_type_and_external_ref(
+    async def list_by_namespace_entity_type_and_external_ref(
         cls,
         *,
         company_id: str,
@@ -275,6 +282,7 @@ class CRMEntity(PlatformModel):
         source_id: str,
         record_id: str,
     ) -> list[CRMEntity]:
+        """Строки namespace с этим entity_type и external_refs[source_id].record_id. Порядка и limit нет. Пустые source_id или record_id — []."""
         table = cls.get_table_name()
         rid = record_id.strip()
         sid = source_id.strip()
@@ -319,22 +327,24 @@ class CRMEntity(PlatformModel):
         return [by_id[entity_id] for entity_id in normalized if entity_id in by_id]
 
     @classmethod
-    async def list_by_ids(
+    async def list_across_companies_by_ids(
         cls,
         entity_ids: list[str],
     ) -> list[Self]:
+        """Строки любых компаний по entity_id. Пустые id отбрасываются. Пустой список — []. Порядка и limit нет."""
         normalized = [entity_id.strip() for entity_id in entity_ids if entity_id.strip() != ""]
         if len(normalized) == 0:
             return []
         return await cls.objects.filter(entity_id__in=normalized).all()
 
     @classmethod
-    async def rewrite_source_entity_id(
+    async def update_source_entity_id(
         cls,
         company_id: str,
         old_entity_id: str,
         new_entity_id: str,
     ) -> int:
+        """Пишет source_entity_id у строк компании, где он равен old_entity_id. Возвращает число строк. Одинаковые id — ValueError."""
         if old_entity_id == new_entity_id:
             raise ValueError("old_entity_id and new_entity_id must differ")
         updated = await cls.objects.filter(
@@ -455,13 +465,14 @@ class CRMEntity(PlatformModel):
         return [crm_entity_from_row(row) for row in fetched]
 
     @classmethod
-    async def created_at_bounds(
+    async def created_at_bounds_and_count(
         cls,
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
         company_id: str | None = None,
     ) -> tuple[datetime | None, datetime | None, int]:
+        """Минимум и максимум created_at и число строк фильтра. Нет строк — (None, None, 0). company_id None или пустая строка — активная компания."""
         sql = EntityFilterSql()
         where = entity_filter_where(
             sql,
@@ -507,12 +518,13 @@ class CRMEntity(PlatformModel):
 
 
     @classmethod
-    async def used_entity_types_for_namespace(
+    async def list_entity_type_ids_for_namespace(
         cls,
         namespace: str,
         company_id: str | None = None,
         exclude_entity_types: AbstractSet[str] | None = None,
     ) -> list[str]:
+        """Отсортированные entity_type namespace. Пустой namespace — ValueError. Пустые значения типа пропускаются. company_id None или пустая строка — активная компания."""
         if namespace == "":
             raise ValueError("Namespace is required")
         sql = EntityFilterSql()
@@ -538,7 +550,7 @@ class CRMEntity(PlatformModel):
         return sorted(type_ids)
 
     @classmethod
-    async def fts_ranked(
+    async def list_fts_ranked_pairs(
         cls,
         query: str,
         entity_type: str | None = None,
@@ -549,6 +561,7 @@ class CRMEntity(PlatformModel):
         limit: int = 30,
         company_id: str | None = None,
     ) -> list[tuple[CRMEntity, float]]:
+        """Пары (строка, ts_rank) по search_vector. Ранг по убыванию, не больше limit. company_id None или пустая строка — активная компания."""
         sql = EntityFilterSql()
         where = entity_filter_where(
             sql,
@@ -578,11 +591,12 @@ class CRMEntity(PlatformModel):
         return ranked
 
     @classmethod
-    async def facet_counts(
+    async def counts_by_type_status_and_month(
         cls,
         namespace: str | None = None,
         company_id: str | None = None,
     ) -> JsonObject:
+        """Счётчики by_type, by_status и by_month. namespace None или пустая строка не сужает namespace. company_id None или пустая строка — активная компания. Месяцы по возрастанию. Порядок type и status не задан."""
         table = cls.get_table_name()
         sql = EntityFilterSql()
         company = sql.add(resolve_crm_company_id(company_id))
@@ -613,7 +627,7 @@ class CRMEntity(PlatformModel):
 
 
     @classmethod
-    async def matching_by_ids(
+    async def list_by_ids_and_filters(
         cls,
         *,
         company_id: str,
@@ -624,6 +638,7 @@ class CRMEntity(PlatformModel):
         filters: JsonObject | None,
         filter_field_types: dict[str, str] | None,
     ) -> Sequence[CRMEntity]:
+        """Строки компании из entity_ids. Пустой список — []. Пустые entity_type, entity_subtype и namespace не фильтруют. filters is None — без фильтра attributes. Порядка и limit нет."""
         if len(entity_ids) == 0:
             return []
         if filters is None:

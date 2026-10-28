@@ -71,7 +71,7 @@ async def setup_example_com_crawl(
         )
     )
     if llm_enrichment_enabled:
-        await CrawlProfile.set_llm_enrichment(
+        await CrawlProfile.update_llm_enrichment_enabled_and_model(
             crawl_profile_id,
             llm_enrichment_enabled=True,
             enrichment_model="test-enrichment-model",

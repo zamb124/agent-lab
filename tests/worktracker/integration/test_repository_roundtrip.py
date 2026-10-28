@@ -81,7 +81,7 @@ async def test_find_by_completion_correlation(unique_id: str) -> None:
         state=WorkItemState.OPEN,
     )
     _ = await WorkItem.set(item)
-    found = await WorkItem.find_work_item_by_correlation(
+    found = await WorkItem.any_by_correlation_id(
         "system",
         correlation_id,
     )
@@ -89,7 +89,7 @@ async def test_find_by_completion_correlation(unique_id: str) -> None:
     assert found.work_item_id == item.work_item_id
 
 
-async def test_map_work_item_ids_by_crm_entities(unique_id: str) -> None:
+async def test_ids_by_crm_entity_id(unique_id: str) -> None:
     entity_id = f"ent_map_{unique_id}"
     now = datetime.now(timezone.utc)
     item = WorkItem(
@@ -104,7 +104,7 @@ async def test_map_work_item_ids_by_crm_entities(unique_id: str) -> None:
         state=WorkItemState.OPEN,
     )
     _ = await WorkItem.set(item)
-    mapping = await WorkItem.map_work_item_ids_by_crm_entities(
+    mapping = await WorkItem.ids_by_crm_entity_id(
         "system",
         [entity_id],
     )

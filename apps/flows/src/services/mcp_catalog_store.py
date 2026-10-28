@@ -98,7 +98,7 @@ async def install_catalog_entry_for_company(
         raise ValueError(f"Catalog entry {catalog_id!r} is not available in MCP Store")
 
     server_id = server_id_from_catalog_id(catalog_id)
-    existing = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+    existing = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
     if existing is not None:
         if (
             existing.source == MCPServerSource.CATALOG
@@ -131,7 +131,7 @@ async def uninstall_catalog_entry_from_company(
         raise ValueError(f"Catalog entry {catalog_id!r} not found")
 
     server_id = server_id_from_catalog_id(catalog_id)
-    server = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
+    server = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
     if server is None:
         raise ValueError(f"MCP server {server_id!r} is not installed")
     if server.source != MCPServerSource.CATALOG:
@@ -141,9 +141,9 @@ async def uninstall_catalog_entry_from_company(
 
     for tool_id in server.cached_tools:
         require_not_builtin_tool_id(tool_id, source="mcp cached_tools")
-        _ = await ToolReference.delete_by_id(ToolReference.row_id(tool_id))
+        _ = await ToolReference.delete_by_id(ToolReference.row_id_for_active_company(tool_id))
         await flow_access_service.sync_tool_deleted(
             tool_id, company_id=require_active_company().company_id
         )
-    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(server_id))
+    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.server_row_id_for_active_company(server_id))
     logger.info("flows.mcp.store.uninstall.catalog_id.server_id", catalog_id=catalog_id, server_id=server_id)

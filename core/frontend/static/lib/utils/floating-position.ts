@@ -9,6 +9,8 @@
  * результат подставляется в `position: fixed`.
  */
 
+import { isPlainRecord } from '../events/payload.js';
+
 /**
  * @typedef {'top'|'bottom'|'left'|'right'} FloatingSide
  * @typedef {'start'|'center'|'end'} FloatingAlign
@@ -38,6 +40,14 @@ export type FloatingPlacement = FloatingSide | `${FloatingSide}-${Exclude<Floati
 export interface RectLike { top: number; left: number; width: number; height: number }
 export interface SizeLike { width: number; height: number }
 
+function isFloatingSide(value: string): value is FloatingSide {
+    return value === 'top' || value === 'bottom' || value === 'left' || value === 'right';
+}
+
+function isFloatingAlign(value: string): value is FloatingAlign {
+    return value === 'start' || value === 'center' || value === 'end';
+}
+
 const OPPOSITE_SIDE: Record<FloatingSide, FloatingSide> = Object.freeze({
     top: 'bottom',
     bottom: 'top',
@@ -50,16 +60,16 @@ const OPPOSITE_SIDE: Record<FloatingSide, FloatingSide> = Object.freeze({
  * @returns {{ side: FloatingSide, align: FloatingAlign }}
  */
 export function parsePlacement(placement: string): { side: FloatingSide; align: FloatingAlign } {
-    const [sideRaw, alignRaw] = String(placement).split('-');
-    const side = sideRaw as FloatingSide;
-    const align = alignRaw as FloatingAlign | undefined;
-    if (side !== 'top' && side !== 'bottom' && side !== 'left' && side !== 'right') {
+    const parts = String(placement).split('-');
+    const sideRaw = parts[0];
+    const alignRaw = parts[1];
+    if (sideRaw === undefined || !isFloatingSide(sideRaw)) {
         throw new Error(`floating-position: неизвестная сторона "${placement}"`);
     }
-    if (align !== undefined && align !== 'start' && align !== 'center' && align !== 'end') {
+    if (alignRaw !== undefined && !isFloatingAlign(alignRaw)) {
         throw new Error(`floating-position: неизвестное выравнивание "${placement}"`);
     }
-    return { side, align: align === undefined ? 'center' : align };
+    return { side: sideRaw, align: alignRaw === undefined ? 'center' : alignRaw };
 }
 
 /**
@@ -282,12 +292,22 @@ export function resolveAnchorRect(anchor: Element | RectLike | { x: number; y: n
         const rect = anchor.getBoundingClientRect();
         return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
     }
-    const obj = anchor as RectLike & { x?: number; y?: number };
-    if (typeof obj.width === 'number' && typeof obj.height === 'number') {
-        return { top: obj.top, left: obj.left, width: obj.width, height: obj.height };
+    const record: unknown = anchor;
+    if (!isPlainRecord(record)) return null;
+    const top = record.top;
+    const left = record.left;
+    const width = record.width;
+    const height = record.height;
+    if (typeof width === 'number' && typeof height === 'number') {
+        if (typeof top !== 'number' || typeof left !== 'number') {
+            throw new Error('floating-position: rect anchor requires numeric top and left');
+        }
+        return { top, left, width, height };
     }
-    if (typeof obj.x === 'number' && typeof obj.y === 'number') {
-        return { top: obj.y, left: obj.x, width: 0, height: 0 };
+    const x = record.x;
+    const y = record.y;
+    if (typeof x === 'number' && typeof y === 'number') {
+        return { top: y, left: x, width: 0, height: 0 };
     }
     return null;
 }

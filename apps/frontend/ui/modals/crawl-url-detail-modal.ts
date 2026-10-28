@@ -9,6 +9,26 @@ import '../components/crawl-report/crawl-report-metadata-panels.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function detailRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
+
+function textOrDash(value: unknown): string {
+    if (typeof value === 'string' && value.length > 0) return value;
+    if (typeof value === 'number' && Number.isFinite(value) && value !== 0) return String(value);
+    return '—';
+}
+
+function presentValue(value: unknown): unknown {
+    if (value === undefined || value === null || value === false || value === 0 || value === '') return null;
+    if (typeof value === 'number' && !Number.isFinite(value)) return null;
+    return value;
+}
 
 const DETAIL_TABS = Object.freeze(['metadata', 'structural', 'enrichment', 'fetched', 'indexed']);
 
@@ -175,7 +195,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
                 </div>
                 <div class="meta-item">
                     <div class="meta-label">${this.t('crawl_report_page.url_detail_document_id')}</div>
-                    <div class="meta-value mono">${url.document_id || '—'}</div>
+                    <div class="meta-value mono">${textOrDash(url.document_id)}</div>
                 </div>
                 <div class="meta-item">
                     <div class="meta-label">${this.t('crawl_report_page.col_last_crawled')}</div>
@@ -183,7 +203,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
                 </div>
                 <div class="meta-item">
                     <div class="meta-label">${this.t('crawl_report_page.col_error')}</div>
-                    <div class="meta-value mono">${url.last_error || '—'}</div>
+                    <div class="meta-value mono">${textOrDash(url.last_error)}</div>
                 </div>
             </div>
         `;
@@ -222,12 +242,12 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         `;
     }
 
-    _detailForCurrentUrl() {
-        const { lastResult } = this._detailOp.state;
-        if (!lastResult || (lastResult as Record<string, any>).url?.crawl_url_id !== this.crawl_url_id) {
-            return null;
-        }
-        return lastResult;
+    _detailForCurrentUrl(): Record<string, any> | null {
+        const detail = detailRecord(this._detailOp.state.lastResult);
+        if (detail === null) return null;
+        const url = detailRecord(detail.url);
+        if (url === null || url.crawl_url_id !== this.crawl_url_id) return null;
+        return detail;
     }
 
     _renderBodyContent() {
@@ -260,29 +280,35 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
             ${this._activeTab === 'metadata' ? this._renderMetadata(detail) : nothing}
             ${this._activeTab === 'structural' ? html`
                 <crawl-report-structural-panel
-                    .signals=${(detail as Record<string, any>).url.structural_signals}
+                    .signals=${detail.url.structural_signals}
                     .locale=${this._localeSel.value}
                 ></crawl-report-structural-panel>
             ` : nothing}
             ${this._activeTab === 'enrichment' ? html`
                 <crawl-report-filter-metadata-panel
-                    .filterMetadata=${(detail as Record<string, any>).indexed_content?.filter_metadata || (detail as Record<string, any>).url.enrichment_snapshot?.filter_metadata || null}
-                    .enrichmentSnapshot=${(detail as Record<string, any>).url.enrichment_snapshot || ((detail as Record<string, any>).indexed_content?.filter_metadata ? {
-                        page_title: (detail as Record<string, any>).indexed_content.document_name,
-                        page_summary: (detail as Record<string, any>).indexed_content.page_summary,
-                        filter_metadata: (detail as Record<string, any>).indexed_content.filter_metadata,
+                    .filterMetadata=${(() => {
+                        const indexed = detail.indexed_content;
+                        const snapshot = detail.url.enrichment_snapshot;
+                        const fromIndex = presentValue(indexed && typeof indexed === 'object' ? indexed.filter_metadata : undefined);
+                        if (fromIndex !== null) return fromIndex;
+                        return presentValue(snapshot && typeof snapshot === 'object' ? snapshot.filter_metadata : undefined);
+                    })()}
+                    .enrichmentSnapshot=${detail.url.enrichment_snapshot || (detail.indexed_content?.filter_metadata ? {
+                        page_title: detail.indexed_content.document_name,
+                        page_summary: detail.indexed_content.page_summary,
+                        filter_metadata: detail.indexed_content.filter_metadata,
                     } : null)}
                     .locale=${this._localeSel.value}
                 ></crawl-report-filter-metadata-panel>
             ` : nothing}
             ${this._activeTab === 'fetched' ? html`
-                ${(detail as Record<string, any>).extract_title ? html`
+                ${detail.extract_title ? html`
                     <div class="meta-item" style="margin-bottom: var(--space-3);">
                         <div class="meta-label">${this.t('crawl_report_page.url_detail_extract_title')}</div>
-                        <div class="meta-value">${(detail as Record<string, any>).extract_title}</div>
+                        <div class="meta-value">${detail.extract_title}</div>
                     </div>
                 ` : nothing}
-                ${this._renderMarkdownTab((detail as Record<string, any>).extract_markdown, 'crawl_report_page.url_detail_fetched_empty')}
+                ${this._renderMarkdownTab(detail.extract_markdown, 'crawl_report_page.url_detail_fetched_empty')}
             ` : nothing}
             ${this._activeTab === 'indexed' ? this._renderIndexedTab(detail) : nothing}
         `;

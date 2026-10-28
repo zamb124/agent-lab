@@ -17,13 +17,9 @@
  * `flash` action slice'а.
  */
 
-import type {
-    SyncChannelsSlice,
-    SyncMessagesStoreController,
-    SyncMessagesStoreSlice,
-} from '../events/sync.types.js';
+import type { SyncChannelsSlice, SyncMessagesStoreSlice } from '../events/sync.types.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -146,7 +142,7 @@ export class SyncMessageList extends PlatformElement {
         .unread-jump:hover { background: var(--accent-hover, var(--accent)); transform: translateY(-1px); }
         .unread-jump:active { transform: translateY(0); }
     `;
-    private _store: SyncMessagesStoreController;
+    private _store: ControllerFor<'sync/messages_store'>;
     private _messagesStoreSel: SelectController<SyncMessagesStoreSlice | undefined>;
     private _channelsSel: SelectController<SyncChannelsSlice | undefined>;
     private _members: ResourceController;
@@ -166,7 +162,7 @@ export class SyncMessageList extends PlatformElement {
         this.myUserId = '';
         this.channelType = '';
         this._channelMembers = [];
-        this._store = this.useSlice('sync/messages_store') as SyncMessagesStoreController;
+        this._store = this.useSlice('sync/messages_store');
         this._messagesStoreSel = this.select((s) => s.syncMessagesStore as SyncMessagesStoreSlice | undefined);
         this._channelsSel = this.select((s) => s.syncChannels as SyncChannelsSlice | undefined);
         this._members = this.useResource('sync/company_members', { autoload: true });
@@ -348,7 +344,12 @@ export class SyncMessageList extends PlatformElement {
         const bound = this._ensureScrollBindings();
         const items = this._items();
         const lastId = items.length > 0
-            ? (items[items.length - 1].message_id || items[items.length - 1].local_id || '')
+            ? (() => {
+                const last = items[items.length - 1];
+                if (typeof last.message_id === 'string' && last.message_id.length > 0) return last.message_id;
+                if (typeof last.local_id === 'string' && last.local_id.length > 0) return last.local_id;
+                return '';
+            })()
             : '';
         const itemsChanged = items.length !== this._lastItemsLength || lastId !== this._lastItemId;
         if (bound && itemsChanged) {

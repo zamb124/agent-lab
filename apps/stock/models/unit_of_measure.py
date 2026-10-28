@@ -76,7 +76,8 @@ class UnitOfMeasure(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_company(cls, company_id: str) -> list[Self]:
+    async def list_by_category_and_name(cls, company_id: str) -> list[Self]:
+        """Все единицы компании, ORDER BY category, name. Предела нет."""
         return await cls.objects.filter(company_id=company_id).order_by(
             "category", "name"
         ).all()

@@ -120,15 +120,19 @@ function pointerSegments(pointer: string): string[] {
     return pointer.slice(1).split('/').map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
 }
 
-function cloneJson<T>(value: T): T {
-    return (value === undefined ? undefined : JSON.parse(JSON.stringify(value))) as T;
+function cloneJson(value: unknown): unknown {
+    if (value === undefined) return undefined;
+    const parsed: unknown = JSON.parse(JSON.stringify(value));
+    return parsed;
 }
 
 /** Применяет add/replace/remove к копии ``target``; чужой путь при remove — ошибка (как в Python). */
 export function applyJsonPatch(target: Record<string, unknown>, operations: unknown): Record<string, unknown> {
     if (!isObject(target)) throw new Error('flow-ui: json patch target must be an object');
     if (!Array.isArray(operations)) throw new Error('flow-ui: json patch operations must be an array');
-    let result = cloneJson(target);
+    const cloned = cloneJson(target);
+    if (!isObject(cloned)) throw new Error('flow-ui: json patch clone must be an object');
+    let result: Record<string, unknown> = cloned;
     for (const operation of operations) {
         if (!isObject(operation) || typeof operation.path !== 'string') {
             throw new Error('flow-ui: json patch operation requires path');
@@ -139,21 +143,27 @@ export function applyJsonPatch(target: Record<string, unknown>, operations: unkn
         const segments = pointerSegments(operation.path);
         if (segments.length === 0) {
             if (operation.op === 'remove') throw new Error('flow-ui: json patch cannot remove document root');
-            if (!isObject(operation.value)) throw new Error('flow-ui: json patch root value must be an object');
-            result = cloneJson(operation.value) as Record<string, unknown>;
+            const root = cloneJson(operation.value);
+            if (!isObject(root)) throw new Error('flow-ui: json patch root value must be an object');
+            result = root;
             continue;
         }
         let parent = result;
         for (const segment of segments.slice(0, -1)) {
-            if (!isObject(parent[segment as string])) {
+            const child = parent[segment];
+            if (!isObject(child)) {
                 if (operation.op === 'remove') {
                     throw new Error(`flow-ui: json patch path ${operation.path} does not exist`);
                 }
-                parent[segment as string] = {};
+                const created: Record<string, unknown> = {};
+                parent[segment] = created;
+                parent = created;
+                continue;
             }
-            parent = parent[segment as string] as Record<string, unknown>;
+            parent = child;
         }
-        const key = segments[segments.length - 1] as string;
+        const key = segments[segments.length - 1];
+        if (key === undefined) throw new Error(`flow-ui: json patch path ${operation.path} is empty`);
         if (operation.op === 'remove') {
             if (!Object.prototype.hasOwnProperty.call(parent, key)) {
                 throw new Error(`flow-ui: json patch path ${operation.path} does not exist`);

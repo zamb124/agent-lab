@@ -78,14 +78,14 @@ class ValuationService:
         оценка (приходы по счетам, списания по себестоимости, ручные
         переоценки).
         """
-        rows = await StockValueLayer.list_for_company(
+        rows = await StockValueLayer.list_by_entry_no(
             company_id,
             product_id=product_id,
             warehouse_id=warehouse_id,
             limit=limit,
             offset=offset,
         )
-        total = await StockValueLayer.count_for_company(
+        total = await StockValueLayer.count_by_product_and_warehouse(
             company_id, product_id=product_id, warehouse_id=warehouse_id
         )
         return OffsetPage(items=rows, total=total, limit=limit, offset=offset)
@@ -119,7 +119,7 @@ class ValuationService:
                 raise PlatformNotFoundError(
                     "Warehouse not found", error_code="warehouse_not_found"
                 )
-            quants = await StockQuant.list_for_warehouse(company_id, warehouse_id)
+            quants = await StockQuant.list_unordered_for_warehouse(company_id, warehouse_id)
             qty = sum(
                 (q.quantity for q in quants if q.product_id == product_id),
                 Decimal("0"),

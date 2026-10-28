@@ -8,6 +8,12 @@
  * organization_name, comment, created_at.
  */
 import { html, css } from 'lit';
+
+function textOrDash(value: unknown): string {
+    if (typeof value === 'string' && value.length > 0) return value;
+    if (typeof value === 'number' && Number.isFinite(value) && value !== 0) return String(value);
+    return '—';
+}
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
@@ -133,8 +139,8 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                                     ? html`<a href="tel:${l.phone}">${l.phone}</a>`
                                     : '—'}
                             </td>
-                            <td>${l.organization_name || '—'}</td>
-                            <td class="message">${l.comment || '—'}</td>
+                            <td>${textOrDash(l.organization_name)}</td>
+                            <td class="message">${textOrDash(l.comment)}</td>
                         </tr>
                     `)}
                 </tbody>
@@ -155,7 +161,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
     }
 
     override render(): TemplateResult {
-        const list = (this._list.items || []) as Array<Record<string, any>>;
+        const list = this._list.items as Array<Record<string, any>>;
         const loading = this._list.loading;
         const terminal = this._list.terminal;
         const error = this._list.error;

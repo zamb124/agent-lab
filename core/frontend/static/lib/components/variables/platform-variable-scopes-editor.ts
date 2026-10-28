@@ -26,6 +26,16 @@ interface VariableScope {
     match?: ScopeMatch[];
 }
 
+function scopeText(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+function scopeMatches(scope: VariableScope): ScopeMatch[] {
+    return Array.isArray(scope.match) ? scope.match : [];
+}
+
 function _emptyScope(): VariableScope {
     return {
         value_kind: 'static',
@@ -110,7 +120,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
         if (!scope) {
             throw new Error('platform-variable-scopes-editor: scope index out of range');
         }
-        const match = (scope.match || []).map((entry, entryIndex) => (
+        const match = scopeMatches(scope).map((entry, entryIndex) => (
             entryIndex === matchIndex ? { ...entry, ...patch } : entry
         ));
         this._updateScope(scopeIndex, { match });
@@ -148,7 +158,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                             type="string"
                             mode="edit"
                             .label=${this.t('editor.scope_override_value')}
-                            .value=${scope.value_kind === 'expression' ? scope.expression : String(scope.value ?? '')}
+                            .value=${scope.value_kind === 'expression' ? scope.expression : scopeText(scope.value)}
                             ?disabled=${this.readonly}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 const raw = typeof e.detail.value === 'string' ? e.detail.value : '';
@@ -160,7 +170,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                             }}
                         ></platform-field>
                     </div>
-                    ${(scope.match || []).map((entry: ScopeMatch, matchIndex: number) => html`
+                    ${scopeMatches(scope).map((entry: ScopeMatch, matchIndex: number) => html`
                         <div class="scope-grid">
                             <platform-field
                                 type="enum"
@@ -186,7 +196,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                                         type="string"
                                         mode="edit"
                                         .label=${this.t('editor.scope_match_ref_key')}
-                                        .value=${entry.ref_key ?? ''}
+                                        .value=${entry.ref_key === undefined || entry.ref_key === null ? '' : entry.ref_key}
                                         ?disabled=${this.readonly}
                                         @change=${(e: CustomEvent<{ value?: unknown }>) => this._updateMatch(scopeIndex, matchIndex, {
                                             ref_key: typeof e.detail.value === 'string' ? e.detail.value : '',

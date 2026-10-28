@@ -3,6 +3,12 @@
  * Тексты сниппетов — i18n ``interface_editor.html_snippet_*``; этот модуль знает только id и merge.
  */
 
+import { isPlainRecord } from '../../events/payload.js';
+
+function recordOrEmpty(value: unknown): Record<string, unknown> {
+    return isPlainRecord(value) ? value : {};
+}
+
 export const HTML_EDITOR_VIEWPORTS = Object.freeze({ desktop: 1180, tablet: 820, mobile: 390 });
 export const HTML_EDITOR_LIVE_MS = 300;
 
@@ -28,38 +34,56 @@ export const HTML_EDITOR_SNIPPETS = Object.freeze([
 
 export function parseTestState(text: string): { ok: boolean; error: string; value: Record<string, unknown> | null } {
     try {
-        const value = JSON.parse(text) as unknown;
-        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        const value: unknown = JSON.parse(text);
+        if (!isPlainRecord(value)) {
             return { ok: false, error: 'test state must be a JSON object', value: null };
         }
-        return { ok: true, error: '', value: value as Record<string, unknown> };
+        return { ok: true, error: '', value };
     } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error), value: null };
     }
 }
 
 export function mergeTestState(current: unknown, patch: unknown): Record<string, unknown> {
-    const base = current && typeof current === 'object' && !Array.isArray(current) ? current as Record<string, unknown> : {};
-    const extra = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch as Record<string, unknown> : {};
+    const base = recordOrEmpty(current);
+    const extra = recordOrEmpty(patch);
     return { ...base, ...extra };
 }
 
 export function setValueAtPath(target: unknown, path: unknown, value: unknown): Record<string, unknown> {
     if (typeof path !== 'string' || path === '') throw new Error('html editor: path is required');
-    const root = target && typeof target === 'object' && !Array.isArray(target) ? target as Record<string, unknown> : {};
+    const root = recordOrEmpty(target);
     const segments = path.split('.');
     let cursor = root;
     for (const segment of segments.slice(0, -1)) {
-        if (cursor[segment] === null || typeof cursor[segment] !== 'object') cursor[segment] = {};
-        cursor = cursor[segment] as Record<string, unknown>;
+        const current = cursor[segment];
+        if (current === undefined || current === null) {
+            const created: Record<string, unknown> = {};
+            cursor[segment] = created;
+            cursor = created;
+            continue;
+        }
+        if (!isPlainRecord(current)) {
+            throw new Error(`html editor: path segment ${segment} must be an object`);
+        }
+        cursor = current;
     }
-    cursor[segments[segments.length - 1] as string] = value;
+    const leaf = segments[segments.length - 1];
+    if (leaf === undefined || leaf.length === 0) {
+        throw new Error('html editor: path is required');
+    }
+    cursor[leaf] = value;
     return root;
 }
 
 export function valueAtSimplePath(state: unknown, path: unknown): unknown {
-    if (state === null || typeof state !== 'object') return undefined;
-    return String(path).split('.').reduce((acc: unknown, key: string) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[key] : undefined), state);
+    if (!isPlainRecord(state)) return undefined;
+    let cursor: unknown = state;
+    for (const key of String(path).split('.')) {
+        if (!isPlainRecord(cursor)) return undefined;
+        cursor = cursor[key];
+    }
+    return cursor;
 }
 
 export function fieldControlKind(value: unknown): 'boolean' | 'number' | 'json' | 'string' {

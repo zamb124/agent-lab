@@ -128,11 +128,12 @@ class IntegrationCredential(PlatformModel):
         ).order_by("created_at").all()
 
     @classmethod
-    async def list_by_user(
+    async def list_by_created_at_for_user(
         cls,
         company_id: str,
         user_id: str,
     ) -> list[Self]:
+        """Учётные данные пользователя компании, ORDER BY created_at. Предела нет. Пустые company_id и user_id — ValueError."""
         return await cls.objects.filter(
             company_id=_required_credential_field(company_id, "company_id"),
             user_id=_required_credential_field(user_id, "user_id"),
@@ -204,12 +205,13 @@ class IntegrationCredential(PlatformModel):
         return deleted > 0
 
     @classmethod
-    async def delete_by_mailbox_binding(
+    async def delete_count_by_mailbox_binding_and_service(
         cls,
         company_id: str,
         mailbox_binding_id: str,
         service: str,
     ) -> int:
+        """Число удалённых учётных данных компании по ящику и service. Пустые company_id, mailbox_binding_id и service — ValueError. Нет строк — 0."""
         return await cls.objects.filter(
             company_id=_required_credential_field(company_id, "company_id"),
             mailbox_binding_id=_required_credential_field(mailbox_binding_id, "mailbox_binding_id"),

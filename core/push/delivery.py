@@ -47,7 +47,7 @@ async def deliver_offline_push(
     ):
         return []
 
-    subscriptions = await PushSubscription.list_for_user(user_id)
+    subscriptions = await PushSubscription.list_by_last_used_at_desc(user_id)
     if not subscriptions:
         return []
 

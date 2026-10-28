@@ -36,7 +36,7 @@ function installWindowShim() {
     const fakeDocument = {
         addEventListener() {}, removeEventListener() {},
         querySelector: () => null,
-        documentElement: { style: {}, classList: { add() {}, remove() {} } },
+        documentElement: { style: {}, classList: { add() {}, remove() {} }, getAttribute: () => null, setAttribute() {} },
         body: { appendChild() {} },
         createElement: () => ({ addEventListener() {}, style: {} }),
     };

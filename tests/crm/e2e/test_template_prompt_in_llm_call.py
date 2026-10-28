@@ -409,7 +409,7 @@ class TestTemplatePromptReachesLLM:
         )
 
         company_id = require_active_company().company_id
-        all_types = await RelationshipType.in_company(
+        all_types = await RelationshipType.query_by_system_in_company(
             company_id, include_system=True
         ).all()
         mentions_row = next((row for row in all_types if row.type_id == "mentions"), None)
@@ -417,7 +417,7 @@ class TestTemplatePromptReachesLLM:
         original_prompt = mentions_row.prompt
         try:
             mentions_row.prompt = new_prompt
-            _ = await RelationshipType.update_by_company_and_type_id(mentions_row)
+            _ = await RelationshipType.update_loaded_by_company_and_type_id(mentions_row)
 
             note_title = f"Звонок probe {unique_id}"
             await mock_llm_redis(_analyze_mock_redis_queue(note_title))
@@ -459,7 +459,7 @@ class TestTemplatePromptReachesLLM:
             )
         finally:
             mentions_row.prompt = original_prompt
-            _ = await RelationshipType.update_by_company_and_type_id(mentions_row)
+            _ = await RelationshipType.update_loaded_by_company_and_type_id(mentions_row)
 
     @pytest.mark.asyncio
     async def test_seed_specific_type_prompt_visible_in_llm_for_that_namespace(

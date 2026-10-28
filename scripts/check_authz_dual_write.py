@@ -94,7 +94,7 @@ _MUTATORS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "add_member",
         "apps/sync/services/channel_service.py",
-        ("set_member", "delete_channel_member"),
+        ("set_member", "delete_by_user"),
     ),
     (
         "sync_catalog_created",
@@ -223,27 +223,27 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "create_entity",
         "apps/crm/services/entity_service.py",
-        ("except Exception", "take_by_id"),
+        ("except Exception", "delete_returning"),
     ),
     (
         "get_or_create_person_entity_id",
         "apps/crm/services/user_person_service.py",
-        ("except Exception", "take_by_id"),
+        ("except Exception", "delete_returning"),
     ),
     (
         "upsert_canonical_by_external_ref",
         "apps/crm/integrations/entity_upsert.py",
-        ("except Exception", "take_by_id"),
+        ("except Exception", "delete_returning"),
     ),
     (
         "_copy_shallow",
         "apps/crm/services/access_request_service.py",
-        ("except Exception", "take_by_id"),
+        ("except Exception", "delete_returning"),
     ),
     (
         "_ensure_company_entity",
         "apps/crm/services/company_init_service.py",
-        ("except Exception", "take_by_id"),
+        ("except Exception", "delete_returning"),
     ),
     (
         "persist_flow_with_authz",
@@ -293,7 +293,7 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "add_member",
         "apps/sync/services/channel_service.py",
-        ("except Exception", "delete_channel_member"),
+        ("except Exception", "delete_by_user"),
     ),
     (
         "create_queue",
@@ -303,7 +303,7 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "create_page",
         "apps/wiki/services/wiki_service.py",
-        ("except Exception", "delete_page_in_namespace"),
+        ("except Exception", "delete_in_namespace"),
     ),
     (
         "create_connection",

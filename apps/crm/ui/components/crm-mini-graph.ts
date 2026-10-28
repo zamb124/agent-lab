@@ -705,7 +705,8 @@ export class CRMMiniGraph extends PlatformElement {
         const weightByNode = aggregateIncidentWeightsByNode(sceneLinks);
         const maxW = maxIncidentWeightOrOne(weightByNode);
         const nodesWithSize = visibleNodes.map((n: Record<string, any>) => {
-            const total = weightByNode.get(n.id) || 0;
+            const storedWeight = weightByNode.get(n.id);
+            const total = storedWeight === undefined ? 0 : storedWeight;
             const rawLevel = typeof n.level === 'number' && Number.isFinite(n.level) ? n.level : 1;
             const sizingLevel = rawLevel === 0 ? 0 : 1;
             const size = computeGraphNodeDisplaySize(sizingLevel, total, maxW);
@@ -735,7 +736,10 @@ export class CRMMiniGraph extends PlatformElement {
         }
         const { nodes, links } = this._buildSceneData(depth);
         if (nodes.length === 1) {
-            const only = nodes[0]!;
+            const only = nodes[0];
+            if (only === undefined) {
+                throw new Error('crm-mini-graph: node missing');
+            }
             only.x = 0;
             only.y = 0;
             only.z = 0;

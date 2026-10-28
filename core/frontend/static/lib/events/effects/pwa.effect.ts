@@ -16,6 +16,7 @@
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent, EffectCtx } from '../contract.js';
 import { httpRequest } from '../http.js';
+import { isPlainRecord } from '../payload.js';
 import { platformStorageKey } from '../../utils/storage-keys.js';
 
 declare global {
@@ -30,6 +31,10 @@ declare global {
 interface BeforeInstallPromptEvent extends Event {
     prompt: () => Promise<void>;
     userChoice: Promise<{ outcome: string }>;
+}
+
+function isBeforeInstallPrompt(event: Event): event is BeforeInstallPromptEvent {
+    return 'prompt' in event && typeof event.prompt === 'function' && 'userChoice' in event;
 }
 
 const VERSION_POLL_MS = 60_000;
@@ -68,11 +73,44 @@ function _urlBase64ToUint8Array(base64String: string): Uint8Array {
     return output;
 }
 
+function vapidApplicationServerKey(publicKey: string): ArrayBuffer {
+    const bytes = _urlBase64ToUint8Array(publicKey);
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    return buffer;
+}
+
+function errorMessage(err: unknown): string {
+    if (err instanceof Error && err.message.length > 0) return err.message;
+    if (isPlainRecord(err) && typeof err.message === 'string' && err.message.length > 0) return err.message;
+    return String(err);
+}
+
+function isReloadCallback(fn: unknown): fn is () => void {
+    return typeof fn === 'function';
+}
+
+function nonEmptyString(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function pushKey(subscription: PushSubscription, name: PushEncryptionKeyName): ArrayBuffer {
+    const key = subscription.getKey(name);
+    if (key === null) {
+        throw new Error(`pwa: push key ${name} missing`);
+    }
+    return key;
+}
+
 function _arrayBufferToBase64(buffer: ArrayBuffer): string {
     const bytes = new Uint8Array(buffer);
     let binary = '';
     for (let i = 0; i < bytes.byteLength; i += 1) {
-        binary += String.fromCharCode(bytes[i]!);
+        const byte = bytes[i];
+        if (byte === undefined) {
+            throw new Error('pwa: byte missing');
+        }
+        binary += String.fromCharCode(byte);
     }
     return btoa(binary);
 }
@@ -119,17 +157,17 @@ async function _registerWebPush(base: string): Promise<{ transport: string; endp
     if (existing) {
         return { transport: 'web_vapid', endpoint: existing.endpoint };
     }
-    const vapid = await httpRequest({ method: 'GET', url: `${base}/api/push/vapid-public-key` }) as { publicKey?: string } | null;
-    const publicKey = vapid && vapid.publicKey;
-    if (!publicKey) {
+    const vapid = await httpRequest({ method: 'GET', url: `${base}/api/push/vapid-public-key` });
+    const publicKey = isPlainRecord(vapid) ? vapid.publicKey : undefined;
+    if (typeof publicKey !== 'string' || publicKey.length === 0) {
         throw new Error('VAPID public key недоступен');
     }
     const subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: _urlBase64ToUint8Array(publicKey!) as BufferSource,
+        applicationServerKey: vapidApplicationServerKey(publicKey),
     });
     const json = subscription.toJSON();
-    const keys = (json && json.keys) || {};
+    const keys = json.keys === undefined ? {} : json.keys;
     await httpRequest({
         method: 'POST',
         url: `${base}/api/push/subscribe`,
@@ -137,8 +175,8 @@ async function _registerWebPush(base: string): Promise<{ transport: string; endp
             transport: 'web_vapid',
             endpoint: subscription.endpoint,
             keys: {
-                p256dh: keys.p256dh || _arrayBufferToBase64(subscription.getKey('p256dh')!),
-                auth: keys.auth || _arrayBufferToBase64(subscription.getKey('auth')!),
+                p256dh: keys.p256dh || _arrayBufferToBase64(pushKey(subscription, 'p256dh')),
+                auth: keys.auth || _arrayBufferToBase64(pushKey(subscription, 'auth')),
             },
             platform: 'web',
         },
@@ -156,19 +194,11 @@ async function _deleteHumanitecCaches() {
 }
 
 function _browserStorage(): Storage | null {
-    try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-            return window.localStorage;
-        }
-    } catch (err) {
-        console.warn('[PWA] window.localStorage unavailable', err);
+    if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage;
     }
-    try {
-        if (typeof globalThis !== 'undefined' && globalThis.localStorage) {
-            return globalThis.localStorage;
-        }
-    } catch (err) {
-        console.warn('[PWA] globalThis.localStorage unavailable', err);
+    if (typeof globalThis !== 'undefined' && globalThis.localStorage) {
+        return globalThis.localStorage;
     }
     return null;
 }
@@ -178,13 +208,8 @@ function _readStoredDeploymentVersion(): string | null {
     if (!storage) {
         return null;
     }
-    try {
-        const value = storage.getItem(DEPLOYMENT_VERSION_STORAGE_KEY);
-        return typeof value === 'string' && value.length > 0 ? value : null;
-    } catch (err) {
-        console.warn('[PWA] deployment version read failed', err);
-        return null;
-    }
+    const value = storage.getItem(DEPLOYMENT_VERSION_STORAGE_KEY);
+    return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 function _writeStoredDeploymentVersion(version: unknown): void {
@@ -195,11 +220,7 @@ function _writeStoredDeploymentVersion(version: unknown): void {
     if (!storage) {
         return;
     }
-    try {
-        storage.setItem(DEPLOYMENT_VERSION_STORAGE_KEY, version);
-    } catch (err) {
-        console.warn('[PWA] deployment version persist failed', err);
-    }
+    storage.setItem(DEPLOYMENT_VERSION_STORAGE_KEY, version);
 }
 
 async function _fetchDeploymentVersion(base: string): Promise<string | null> {
@@ -217,32 +238,26 @@ async function _fetchDeploymentVersion(base: string): Promise<string | null> {
     if (!response.ok) {
         throw new Error(`deployment version check failed: HTTP ${response.status}`);
     }
-    const data = await response.json() as { deployment_version?: unknown; version?: unknown } | null;
-    const version = data && (data.deployment_version || data.version);
-    return typeof version === 'string' && version.length > 0 ? version : null;
+    const data: unknown = await response.json();
+    if (!isPlainRecord(data)) {
+        throw new Error('deployment version check failed: JSON object required');
+    }
+    return nonEmptyString(data.deployment_version) ?? nonEmptyString(data.version);
 }
 
 async function _reloadAfterDeployment(version: unknown): Promise<void> {
     _writeStoredDeploymentVersion(version);
-    try {
-        await _deleteHumanitecCaches();
-    } catch (err) {
-        console.warn('[PWA] cache purge failed', err);
-    }
+    await _deleteHumanitecCaches();
     const sw = typeof navigator !== 'undefined' && navigator.serviceWorker;
     if (sw && typeof sw.getRegistration === 'function') {
-        try {
-            const reg = await sw.getRegistration();
-            if (reg) {
-                if (typeof reg.update === 'function') {
-                    await reg.update();
-                }
-                if (reg.waiting && typeof reg.waiting.postMessage === 'function') {
-                    reg.waiting.postMessage({ type: 'skipWaiting' });
-                }
+        const reg = await sw.getRegistration();
+        if (reg) {
+            if (typeof reg.update === 'function') {
+                await reg.update();
             }
-        } catch (err) {
-            console.warn('[PWA] service worker update failed', err);
+            if (reg.waiting && typeof reg.waiting.postMessage === 'function') {
+                reg.waiting.postMessage({ type: 'skipWaiting' });
+            }
         }
     }
     _reloadPage();
@@ -259,12 +274,12 @@ function _reloadPage() {
 }
 
 export function _setPwaReloadForTests(fn: unknown): void {
-    reloadPageForTests = typeof fn === 'function' ? fn as () => void : null;
+    reloadPageForTests = isReloadCallback(fn) ? fn : null;
 }
 
 function _handleServiceWorkerMessage(event: MessageEvent): void {
-    const data = event && event.data as { type?: string; to?: string } | null;
-    if (!data || typeof data !== 'object') {
+    const data = event.data;
+    if (!isPlainRecord(data)) {
         return;
     }
     if (data.type === 'humanitec-deployment-updated') {
@@ -286,9 +301,7 @@ function _registerServiceWorker(): void {
     if (!sw || typeof sw.register !== 'function') {
         return;
     }
-    void sw.register('/sw.js', { scope: '/' }).catch((err) => {
-        console.error('[PWA] service worker register failed', err);
-    });
+    void sw.register('/sw.js', { scope: '/' });
 }
 
 export const PWA_EVENTS = Object.freeze({
@@ -304,7 +317,7 @@ export const PWA_EVENTS = Object.freeze({
 });
 
 export function createPwaEffect({ baseUrl, suppressHostIntegrations }: { baseUrl?: string; suppressHostIntegrations?: boolean } = {}): (event: PlatformEvent, ctx: EffectCtx<{ pwa?: { deploymentVersion?: string | null } }>) => Promise<void> {
-    const base = baseUrl || '';
+    const base = typeof baseUrl === 'string' ? baseUrl : '';
     const suppressHost = Boolean(suppressHostIntegrations);
     let attached = false;
     let versionTimer: ReturnType<typeof setInterval> | null = null;
@@ -330,7 +343,10 @@ export function createPwaEffect({ baseUrl, suppressHostIntegrations }: { baseUrl
                     }
                     window.addEventListener('beforeinstallprompt', (e) => {
                         e.preventDefault();
-                        window.__platformDeferredInstallPrompt__ = e as unknown as BeforeInstallPromptEvent;
+                        if (!isBeforeInstallPrompt(e)) {
+                            throw new Error('pwa: beforeinstallprompt is missing prompt()');
+                        }
+                        window.__platformDeferredInstallPrompt__ = e;
                         ctx.dispatch(CoreEvents.PWA_INSTALL_AVAILABLE, null, { source: 'system' });
                     });
                     window.addEventListener('appinstalled', () => {
@@ -407,7 +423,7 @@ export function createPwaEffect({ baseUrl, suppressHostIntegrations }: { baseUrl
                 } catch (err) {
                     ctx.dispatch(
                         PWA_EVENTS.PUSH_SUBSCRIBE_FAILED,
-                        { message: String(err && (err as Error).message ? (err as Error).message : err) },
+                        { message: errorMessage(err) },
                         { causation_id: event.id, source: 'system' },
                     );
                 }
@@ -448,7 +464,7 @@ export function createPwaEffect({ baseUrl, suppressHostIntegrations }: { baseUrl
                 } catch (err) {
                     ctx.dispatch(
                         PWA_EVENTS.DEPLOYMENT_VERSION_LOAD_FAILED,
-                        { message: String(err && (err as Error).message ? (err as Error).message : err) },
+                        { message: errorMessage(err) },
                         { causation_id: event.id, source: 'http' },
                     );
                 }

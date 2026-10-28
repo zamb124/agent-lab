@@ -187,7 +187,7 @@ class EmailTriggerHandler(BaseTriggerHandler):
         trigger_id: str,
         payload: JsonObject,
     ) -> JsonObject:
-        flow_config = await FlowConfig.get_latest(flow_id)
+        flow_config = await FlowConfig.current_for_flow(flow_id)
         if flow_config is None:
             raise TriggerValidationError(f"Flow not found: {flow_id}")
         trigger = flow_config.triggers.get(trigger_id)
@@ -290,7 +290,7 @@ async def dispatch_email_triggers_for_messages(
             if company_id != binding.company_id:
                 continue
 
-            flow_config = await FlowConfig.get_latest(flow_id)
+            flow_config = await FlowConfig.current_for_flow(flow_id)
             if flow_config is None:
                 logger.warning("flows.email.trigger.dispatch.flow.found", flow_id=flow_id)
                 continue

@@ -36,6 +36,7 @@ import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface TeamMemberLike {
     user_id?: unknown;
@@ -43,13 +44,18 @@ interface TeamMemberLike {
     [key: string]: unknown;
 }
 
-interface TeamSlice {
-    members?: TeamMemberLike[];
-    loading?: boolean;
-}
-
 interface WorkItemRecord extends WorkItemLike {
     work_item_id: string;
+}
+
+function workItemRecord(value: unknown): WorkItemRecord | null {
+    if (!isPlainRecord(value)) return null;
+    const workItemId = value.work_item_id;
+    if (typeof workItemId !== 'string' || workItemId.length === 0) return null;
+    const record: WorkItemRecord = { work_item_id: workItemId };
+    for (const [key, field] of Object.entries(value)) record[key] = field;
+    record.work_item_id = workItemId;
+    return record;
 }
 
 export class WorkItemDetailEditor extends PlatformElement {
@@ -249,16 +255,17 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._commentOp = this.useOp('worktracker/work_item_comment');
         this._moveOp = this.useOp('worktracker/work_item_move');
         this._assignOp = this.useOp('worktracker/work_item_assign');
-        this._localeSel = this.select((state) => (state.i18n as Record<string, unknown>).locale);
-        this._teamSel = this.select((s) => (s.team as TeamSlice).members);
-        this._teamLoadingSel = this.select((s) => (s.team as TeamSlice).loading);
+        this._localeSel = this.select((state) => state.i18n.locale);
+        this._teamSel = this.select((s) => s.team.members);
+        this._teamLoadingSel = this.select((s) => s.team.loading);
 
         const syncItem = (event: PlatformEvent) => {
             const item = workItemFromEventPayload(event.payload);
-            if (!item || typeof item.work_item_id !== 'string' || item.work_item_id !== this.workItemId) {
+            const record = workItemRecord(item);
+            if (record === null || record.work_item_id !== this.workItemId) {
                 return;
             }
-            this._applyItemDrafts(item as WorkItemRecord);
+            this._applyItemDrafts(record);
         };
 
         this.useEvent(this._workItems.resource.events.ITEM_LOADED, syncItem);
@@ -316,7 +323,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (changed.has('workItemId')) {
             const item = this._item();
             if (item) {
-                this._applyItemDrafts(item as WorkItemRecord);
+                this._applyItemDrafts(item);
             } else {
                 this._titleDraft = '';
                 this._descriptionDraft = '';
@@ -385,12 +392,10 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (!this.workItemId) {
             return null;
         }
-        const cached = this._workItems.byId[this.workItemId];
-        if (cached && typeof cached === 'object') {
-            return cached as WorkItemRecord;
-        }
-        const fromList = (this._workItems.items || []).find((row) => row && row.work_item_id === this.workItemId);
-        return (fromList as WorkItemRecord | undefined) || null;
+        const cached = workItemRecord(this._workItems.byId[this.workItemId]);
+        if (cached !== null) return cached;
+        const fromList = this._workItems.items.find((row) => isPlainRecord(row) && row.work_item_id === this.workItemId);
+        return fromList === undefined ? null : workItemRecord(fromList);
     }
 
     private _saveTitle() {
@@ -430,15 +435,14 @@ export class WorkItemDetailEditor extends PlatformElement {
 
     private _saveVariables(variables: unknown) {
         const item = this._item();
-        if (!item || !variables || typeof variables !== 'object' || Array.isArray(variables)) {
-            return;
-        }
-        const currentFingerprint = JSON.stringify(item.variables || {});
+        if (item === null || !isPlainRecord(variables)) return;
+        const currentVariables = item.variables;
+        const currentFingerprint = JSON.stringify(currentVariables === undefined || currentVariables === null ? {} : currentVariables);
         const nextFingerprint = JSON.stringify(variables);
         if (currentFingerprint === nextFingerprint) {
             return;
         }
-        this._workItems.update(item.work_item_id, { variables: variables as Record<string, unknown> });
+        this._workItems.update(item.work_item_id, { variables });
     }
 
     private _savePriority(value: unknown) {
@@ -558,7 +562,7 @@ export class WorkItemDetailEditor extends PlatformElement {
             const board = this._boards.byId[item.board_id];
             if (board && Array.isArray(board.columns) && board.columns.length > 0) {
                 return {
-                    values: (board.columns as { board_column_id?: unknown; label?: unknown }[]).map((col) => ({
+                    values: board.columns.map((col) => ({
                         value: col.board_column_id,
                         label: col.label,
                     })),
@@ -584,7 +588,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (typeof item.board_id === 'string' && item.board_id.length > 0 && typeof item.board_column_id === 'string') {
             const board = this._boards.byId[item.board_id];
             if (board && Array.isArray(board.columns)) {
-                const column = (board.columns as { board_column_id?: unknown; label?: unknown }[]).find((col) => col && col.board_column_id === item.board_column_id);
+                const column = board.columns.find((col) => isPlainRecord(col) && col.board_column_id === item.board_column_id);
                 if (column && typeof column.label === 'string') {
                     return column.label;
                 }
@@ -632,7 +636,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (typeof queueId !== 'string' || queueId.length === 0) {
             return '';
         }
-        const queue = (this._queues.items || []).find(
+        const queue = this._queues.items.find(
             (row) => row && row.work_queue_id === queueId,
         );
         if (queue && typeof queue.name === 'string') {
@@ -649,16 +653,16 @@ export class WorkItemDetailEditor extends PlatformElement {
     }
 
     private _resolutionText(item: WorkItemRecord) {
-        const resolution = item.resolution as { text?: unknown } | null | undefined;
-        if (!resolution || typeof resolution !== 'object') {
+        const resolution = item.resolution;
+        if (!isPlainRecord(resolution)) {
             return '';
         }
         return typeof resolution.text === 'string' ? resolution.text : '';
     }
 
     private _resolutionFiles(item: WorkItemRecord) {
-        const resolution = item.resolution as { files?: unknown } | null | undefined;
-        if (!resolution || typeof resolution !== 'object') {
+        const resolution = item.resolution;
+        if (!isPlainRecord(resolution)) {
             return [];
         }
         return this._cloneFileRefs(resolution.files);
@@ -712,8 +716,8 @@ export class WorkItemDetailEditor extends PlatformElement {
                         this._saveLabels(values);
                     }}
                     @wt-variables-change=${(e: CustomEvent<{ variables?: unknown }>) => {
-                        const variables = e.detail && e.detail.variables && typeof e.detail.variables === 'object' && !Array.isArray(e.detail.variables)
-                            ? e.detail.variables as Record<string, unknown>
+                        const variables = e.detail && isPlainRecord(e.detail.variables)
+                            ? e.detail.variables
                             : {};
                         this._variablesDraft = variables;
                         this._saveVariables(variables);
@@ -814,11 +818,16 @@ export class WorkItemDetailEditor extends PlatformElement {
         const handoffSubtitle = this._isHandoff(item)
             ? this.t('hitl_chat.activity_internal_hint')
             : '';
+        const rawComments = this._commentsOp.state.items;
+        if (rawComments !== undefined && rawComments !== null && !Array.isArray(rawComments)) {
+            throw new Error('worktracker: comments must be an array');
+        }
+        const comments = Array.isArray(rawComments) ? rawComments : [];
         return html`
             <worktracker-activity-thread
                 ?embedded=${this.layout === 'page'}
                 work-item-id=${this.workItemId}
-                .comments=${this._commentsOp.state.items || []}
+                .comments=${comments}
                 comment-draft=${this._commentDraft}
                 .commentFiles=${this._commentFilesDraft}
                 locale=${this._localeSel.value}

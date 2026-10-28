@@ -21,9 +21,9 @@
  * Удаление: chat_ui.deletingMessageIds.includes(message_id) → fade-out.
  */
 
-import type { SyncChatUiController, SyncMessagesStoreController, SyncChannelsSlice, SyncMessagesStoreSlice } from '../events/sync.types.js';
+import type { SyncChannelsSlice, SyncMessagesStoreSlice } from '../events/sync.types.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -672,13 +672,13 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .quick-reactions span:hover { transform: scale(1.25); background: var(--glass-tint-medium); }
     `;
-    private _store: SyncMessagesStoreController;
+    private _store: ControllerFor<'sync/messages_store'>;
     private _react: OpController;
     private _transcribeAudio: OpController;
     private _transcribeVideo: OpController;
     private _transcribeCall: OpController;
     private _callAccept: OpController;
-    private _chatUi: SyncChatUiController;
+    private _chatUi: ControllerFor<'sync/chat_ui'>;
     private _messagesStoreSel: SelectController<SyncMessagesStoreSlice | undefined>;
     private _channelsSel: SelectController<SyncChannelsSlice | undefined>;
     private _longPressTimer: number | null;
@@ -693,13 +693,13 @@ export class SyncMessageBubble extends PlatformElement {
         this.channelType = '';
         this.position = 'single';
         this.members = [];
-        this._store = this.useSlice('sync/messages_store') as SyncMessagesStoreController;
+        this._store = this.useSlice('sync/messages_store');
         this._react = this.useOp('sync/messages_react');
         this._transcribeAudio = this.useOp('sync/messages_transcribe_audio');
         this._transcribeVideo = this.useOp('sync/messages_transcribe_video');
         this._transcribeCall = this.useOp('sync/messages_transcribe_call');
         this._callAccept = this.useOp('sync/calls_accept');
-        this._chatUi = this.useSlice('sync/chat_ui') as SyncChatUiController;
+        this._chatUi = this.useSlice('sync/chat_ui');
         this._messagesStoreSel = this.select((s) => s.syncMessagesStore as SyncMessagesStoreSlice | undefined);
         this._channelsSel = this.select((s) => s.syncChannels as SyncChannelsSlice | undefined);
         this._longPressTimer = null;

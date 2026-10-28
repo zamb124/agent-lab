@@ -66,6 +66,12 @@ import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-tree.js';
 import '@platform/lib/components/platform-user.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 const RECENT_LIMIT = 5;
 const RECENT_STORAGE_KEY = platformStorageKey('wiki', 'sidebar.recent');
 
@@ -312,7 +318,7 @@ export class WikiSidebar extends PlatformElement {
         const byId = new Map(pages.map((page) => [page.wiki_page_id, page]));
         const keep = new Set<unknown>();
         for (const page of pages) {
-            if (!String(page.title ?? '').toLowerCase().includes(query)) {
+            if (!missingAsEmpty(page.title).toLowerCase().includes(query)) {
                 continue;
             }
             keep.add(page.wiki_page_id);
@@ -334,7 +340,7 @@ export class WikiSidebar extends PlatformElement {
 
     private _namespaceConfig(): { values: { value: string; label: string }[] } {
         const items = this._namespaces.items;
-        const values = items.map((namespace: ResourceItem) => ({ value: String(namespace.name ?? ''), label: String(namespace.name ?? '') }));
+        const values = items.map((namespace: ResourceItem) => ({ value: missingAsEmpty(namespace.name), label: missingAsEmpty(namespace.name) }));
         return { values };
     }
 
@@ -345,7 +351,7 @@ export class WikiSidebar extends PlatformElement {
             return selection;
         }
         const first = items[0];
-        return first ? String(first.name ?? '') : '';
+        return first ? missingAsEmpty(first.name) : '';
     }
 
     /**
@@ -374,7 +380,7 @@ export class WikiSidebar extends PlatformElement {
 
     private _onNamespaceChange(event: CustomEvent<{ value?: unknown }>) {
         const companyId = this._companyId();
-        const name = String(event.detail.value ?? '').trim();
+        const name = missingAsEmpty(event.detail.value).trim();
         if (companyId === '' || name === '') {
             return;
         }
@@ -420,7 +426,7 @@ export class WikiSidebar extends PlatformElement {
 
     private async _onTreeAction(event: CustomEvent<{ action?: string; id?: unknown }>): Promise<void> {
         const { action } = event.detail;
-        const id = String(event.detail.id ?? '');
+        const id = missingAsEmpty(event.detail.id);
         if (action === 'open') {
             this.navigate('wiki_page', { pageId: id });
             return;
@@ -545,7 +551,7 @@ export class WikiSidebar extends PlatformElement {
                                     class="recent-item"
                                     type="button"
                                     data-recent-page=${page.wiki_page_id}
-                                    @click=${() => this.navigate('wiki_page', { pageId: String(page.wiki_page_id ?? '') })}
+                                    @click=${() => this.navigate('wiki_page', { pageId: missingAsEmpty(page.wiki_page_id) })}
                                 >
                                     <platform-icon name="clock" size="13"></platform-icon>
                                     <span>${page.title === '' ? this.t('page.untitled') : page.title}</span>
@@ -570,7 +576,7 @@ export class WikiSidebar extends PlatformElement {
                               draggable-nodes
                               aria-label=${this.t('sidebar.pages')}
                               .menuItems=${this._treeMenuItems}
-                              @tree-select=${(event: CustomEvent<{ id?: unknown }>) => this.navigate('wiki_page', { pageId: String(event.detail.id ?? '') })}
+                              @tree-select=${(event: CustomEvent<{ id?: unknown }>) => this.navigate('wiki_page', { pageId: missingAsEmpty(event.detail.id) })}
                               @tree-action=${(event: CustomEvent<{ action?: string; id?: unknown }>) => this._onTreeAction(event)}
                               @tree-move=${(event: CustomEvent<{ id?: unknown; parent_id?: unknown; position?: string; target_id?: unknown }>) => this._onTreeMove(event)}
                           ></platform-tree>`}

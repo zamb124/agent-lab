@@ -1,8 +1,13 @@
 import { html, css, nothing } from '../../lit-shim.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
+import { isPlainRecord } from '../../events/payload.js';
 import '../platform-popover.js';
 import type { PlatformPopover } from '../platform-popover.js';
+
+function enumText(value: string | null | undefined): string {
+    return value === undefined || value === null ? '' : value;
+}
 
 /**
  * Перечисление — type `enum` у `platform-field`.
@@ -37,21 +42,21 @@ function normalizeOption(raw: unknown): EnumOption {
         }
         return { value: raw, label: raw };
     }
-    if (raw && typeof raw === 'object') {
-        const rec = raw as Record<string, unknown>;
-        if (!('value' in rec) || typeof rec.value !== 'string') {
+    if (isPlainRecord(raw)) {
+        const optValue = raw.value;
+        if (typeof optValue !== 'string') {
             throw new Error('platform-field-enum: option.value must be a string');
         }
-        const optValue = rec.value;
+        const labelRaw = raw.label;
         if (optValue === '') {
-            if (typeof rec.label !== 'string' || rec.label.length === 0) {
+            if (typeof labelRaw !== 'string' || labelRaw.length === 0) {
                 throw new Error(
                     'platform-field-enum: option with empty value requires non-empty option.label',
                 );
             }
-            return { value: '', label: rec.label };
+            return { value: '', label: labelRaw };
         }
-        const label = typeof rec.label === 'string' && rec.label.length > 0 ? rec.label : optValue;
+        const label = typeof labelRaw === 'string' && labelRaw.length > 0 ? labelRaw : optValue;
         return { value: optValue, label };
     }
     throw new Error(`platform-field-enum: option must be string or {value, label}; got ${typeof raw}`);
@@ -212,15 +217,17 @@ export class PlatformFieldEnum extends PlatformElement {
     }
 
     get _enumOptions(): EnumOption[] {
-        const c = this.config;
-        if (!c || typeof c !== 'object') {
+        const config = this.config;
+        if (!isPlainRecord(config)) {
             return [];
         }
-        const v = (c as Record<string, unknown>).values;
-        if (!Array.isArray(v)) {
+        const values = config.values;
+        if (!Array.isArray(values)) {
             return [];
         }
-        return v.map(normalizeOption);
+        const items: unknown[] = [];
+        for (const item of values) items.push(item);
+        return items.map(normalizeOption);
     }
 
     get _displayOptions(): EnumOption[] {
@@ -251,21 +258,17 @@ export class PlatformFieldEnum extends PlatformElement {
     }
 
     _labelForValue(value: string | null | undefined): string {
-        const normalized = value ?? '';
+        const normalized = enumText(value);
         for (const opt of this._displayOptions) {
             if (opt.value === normalized) {
                 return opt.label;
             }
         }
-        if (normalized === '') {
-            return '';
-        }
-        return typeof value === 'string' ? value : String(value ?? '');
+        return normalized;
     }
 
     _displayTextSyncedToValue(): string {
-        const v = this.value ?? '';
-        return this._labelForValue(typeof v === 'string' ? v : String(v));
+        return this._labelForValue(enumText(this.value));
     }
 
     _renderList(): TemplateResult {
@@ -275,9 +278,9 @@ export class PlatformFieldEnum extends PlatformElement {
             ? html`<li class="enum-empty" role="option" aria-disabled="true">${this.t('platform_field.enum_no_matches') ?? 'platform_field.enum_no_matches'}</li>`
             : list.map((opt) => html`
                   <li
-                      class=${`enum-option${(this.value ?? '') === opt.value ? ' enum-option--selected' : ''}`}
+                      class=${`enum-option${enumText(this.value) === opt.value ? ' enum-option--selected' : ''}`}
                       role="option"
-                      aria-selected=${(this.value ?? '') === opt.value ? 'true' : 'false'}
+                      aria-selected=${enumText(this.value) === opt.value ? 'true' : 'false'}
                       data-enum-value=${opt.value}
                       @mousedown=${this._onOptionMouseDown}
                       @click=${() => this._pickOption(opt)}
@@ -372,12 +375,18 @@ export class PlatformFieldEnum extends PlatformElement {
                         normalizedQuery(o.label) === q
                         || normalizedQuery(o.value) === q,
                 );
-                if (exact.length === 1 && exact[0]!.value !== (this.value ?? '')) {
-                    this.dispatchEvent(new CustomEvent('change', {
-                        detail: { value: exact[0]!.value },
-                        bubbles: true,
-                        composed: true,
-                    }));
+                const chosen = exact[0];
+                if (exact.length === 1) {
+                    if (chosen === undefined) {
+                        throw new Error('platform-field-enum: exact option missing');
+                    }
+                    if (chosen.value !== enumText(this.value)) {
+                        this.dispatchEvent(new CustomEvent('change', {
+                            detail: { value: chosen.value },
+                            bubbles: true,
+                            composed: true,
+                        }));
+                    }
                 }
             }
             this._filterQuery = this._displayTextSyncedToValue();
@@ -413,7 +422,11 @@ export class PlatformFieldEnum extends PlatformElement {
             }
             const visible = this._filteredDisplayOptions;
             if (visible.length === 1) {
-                this._pickOption(visible[0]!);
+                const only = visible[0];
+                if (only === undefined) {
+                    throw new Error('platform-field-enum: option missing');
+                }
+                this._pickOption(only);
             }
         }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

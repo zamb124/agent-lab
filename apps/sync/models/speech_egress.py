@@ -64,14 +64,15 @@ class SyncCallSpeechEgressTrack(PlatformModel):
             raise ValueError(f"Speech egress row {row_id} not found.")
 
     @classmethod
-    async def get_for_track(cls, call_id: str, track_sid: str) -> Self | None:
+    async def by_call_and_track(cls, call_id: str, track_sid: str) -> Self | None:
         return await cls.objects.filter(
             call_id=call_id,
             track_sid=track_sid,
         ).get_or_none()
 
     @classmethod
-    async def list_for_call(cls, call_id: str, company_id: str) -> list[Self]:
+    async def list_by_created_at_asc_for_call(cls, call_id: str, company_id: str) -> list[Self]:
+        """Сегменты речи звонка компании, ORDER BY created_at по возрастанию. Предела нет."""
         return await cls.objects.filter(
             call_id=call_id,
             company_id=company_id,

@@ -104,7 +104,8 @@ class MCPServerConfig(CompanyScopedModel):
         return MCPTransportType(value)
 
     @classmethod
-    def row_id(cls, server_id: str) -> str:
+    def server_row_id_for_active_company(cls, server_id: str) -> str:
+        """Ключ company_id:server_id из активной компании. Пустой server_id или компания — ValueError. Двоеточие — ValueError."""
         company_id = require_active_company().company_id
         if server_id == "" or company_id == "":
             raise ValueError("server_id is required")
@@ -121,7 +122,7 @@ class MCPServerConfig(CompanyScopedModel):
             self.company_id = company_id
         elif self.company_id != company_id:
             raise ValueError("company_id does not match the active company")
-        expected = type(self).row_id(self.server_id)
+        expected = type(self).server_row_id_for_active_company(self.server_id)
         if self.mcp_server_id == "":
             self.mcp_server_id = expected
         elif self.mcp_server_id != expected:
@@ -131,7 +132,7 @@ class MCPServerConfig(CompanyScopedModel):
     @override
     async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
         _ = is_create, update_fields
-        expected = type(self).row_id(self.server_id)
+        expected = type(self).server_row_id_for_active_company(self.server_id)
         if self.company_id == "" or self.mcp_server_id != expected:
             raise ValueError("mcp_server_id does not match the active company")
 

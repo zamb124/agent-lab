@@ -43,7 +43,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201, resp.text
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         assert agent is not None
         assert branch_id in agent.branches
         branch = agent.branches[branch_id]
@@ -88,7 +88,7 @@ class TestBranchValidationAndPersistence:
             },
         )
         assert resp.status_code == 201, resp.text
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         assert agent is not None
         assert branch_id in agent.branches
 
@@ -126,7 +126,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         assert branch.nodes["main"]["prompt"] == "Branch prompt"
         assert branch.nodes["main"]["llm"]["temperature"] == 0.1
@@ -175,7 +175,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         assert branch.entry == "branch_main"
         assert "branch_main" in branch.nodes
@@ -247,7 +247,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         assert len(branch.edges) == 4
         conditional_edges = [e for e in branch.edges if e.condition is not None]
@@ -306,7 +306,7 @@ class TestBranchValidationAndPersistence:
             f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data
         )
         assert update_resp.status_code == 200
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         assert branch.name == "Updated Branch"
         assert branch.variables["branch_var"].value == "updated"
@@ -361,7 +361,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         api_key = branch.variables["api_key"]
         assert api_key.value == "branch_secret_key"
@@ -429,7 +429,7 @@ class TestBranchValidationAndPersistence:
             f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data
         )
         assert update_resp.status_code == 200
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         assert branch.name == "Updated Branch"
         branch_var = branch.variables["branch_var"]
@@ -547,7 +547,7 @@ class TestBranchValidationAndPersistence:
         )
         assert update_resp.status_code == 400
         assert "branch validation failed" in update_resp.json()["detail"].lower()
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         assert branch.name == "Valid Branch"
         assert branch.entry == "branch_node"
@@ -581,7 +581,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         assert "code_node" in branch.nodes
         assert "state['result']" in branch.nodes["code_node"]["code"]
@@ -632,7 +632,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await FlowConfig.get_latest(flow_id)
+        agent = await FlowConfig.current_for_flow(flow_id)
         branch = agent.branches[branch_id]
         assert "react_main" in branch.nodes
         llm_node = branch.nodes["react_main"]

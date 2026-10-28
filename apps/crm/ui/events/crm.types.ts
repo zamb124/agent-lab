@@ -31,12 +31,6 @@ export interface CrmGraphUiSlice extends Record<string, unknown> {
     timelineSeeded: boolean;
 }
 
-export interface CrmGraphUiController extends SliceController {
-    readonly value: CrmGraphUiSlice | undefined;
-    setPanels: CrmAction;
-    hydratePanels: CrmAction;
-    markTimelineSeeded: CrmAction;
-}
 
 // ============================================================================
 // crm/graph_view (graph-view.resource.ts)
@@ -61,15 +55,6 @@ export interface CrmGraphViewSlice extends Record<string, unknown> {
     searchInput: CrmGraphViewSearchInput;
 }
 
-export interface CrmGraphViewController extends SliceController {
-    readonly value: CrmGraphViewSlice | undefined;
-    hydrate: CrmAction;
-    setViewMode: CrmAction;
-    setMaxDepth: CrmAction;
-    setDisplayDepth: CrmAction;
-    setSelection: CrmAction;
-    setSearchInput: CrmAction;
-}
 
 // ============================================================================
 // crm/daily_notes_ui (daily-notes-ui.resource.ts)
@@ -84,10 +69,6 @@ export interface CrmDailyNotesUiSlice extends Record<string, unknown> {
     range: CrmDateRange;
 }
 
-export interface CrmDailyNotesUiController extends SliceController {
-    readonly value: CrmDailyNotesUiSlice | undefined;
-    setRange: CrmAction;
-}
 
 // ============================================================================
 // crm/note_compose (note-compose.resource.ts)
@@ -97,15 +78,9 @@ export interface CrmNoteComposeSlice extends Record<string, unknown> {
     description: string;
 }
 
-export interface CrmNoteComposeController extends SliceController {
-    readonly value: CrmNoteComposeSlice | undefined;
-    setDescription: CrmAction;
-}
 
 // ============================================================================
 // Общие alias для `useOp`/`useResource` без специальных actions.
 // ============================================================================
 
-export type CrmOpController = OpController;
-export type CrmResourceController = ResourceController;
 export type CrmCollectionSlice = ResourceCollectionSlice;

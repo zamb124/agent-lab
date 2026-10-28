@@ -14,6 +14,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
     CSSResultGroup,
     PropertyDeclarations,
@@ -28,6 +29,32 @@ export interface SchemaFieldRow {
     enum_set_id: string;
     enum_values_text: string;
     extra: Record<string, unknown>;
+}
+
+export function isSchemaFieldRow(value: unknown): value is SchemaFieldRow {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    if (!('key' in value) || typeof value.key !== 'string') return false;
+    if (!('label' in value) || typeof value.label !== 'string') return false;
+    if (!('type' in value) || typeof value.type !== 'string') return false;
+    if (!('description' in value) || typeof value.description !== 'string') return false;
+    if (!('enum_set_id' in value) || typeof value.enum_set_id !== 'string') return false;
+    if (!('enum_values_text' in value) || typeof value.enum_values_text !== 'string') return false;
+    if (!('extra' in value) || value.extra === null || typeof value.extra !== 'object' || Array.isArray(value.extra)) return false;
+    return true;
+}
+
+function optionRecords(value: unknown): Record<string, any>[] {
+    if (!Array.isArray(value)) return [];
+    const rows: Record<string, any>[] = [];
+    for (const item of value) {
+        if (!isPlainRecord(item)) {
+            throw new Error('schema-field-builder: option must be an object');
+        }
+        const row: Record<string, any> = {};
+        for (const [key, field] of Object.entries(item)) row[key] = field;
+        rows.push(row);
+    }
+    return rows;
 }
 
 export function createEmptySchemaFieldRow(defaultType: unknown): SchemaFieldRow {
@@ -50,34 +77,33 @@ export function normalizeSchemaRows(schemaValue: unknown): SchemaFieldRow[] {
         return [];
     }
     return Object.entries(schemaValue).map(([fieldKey, rawValue]) => {
-        if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+        if (!isPlainRecord(rawValue)) {
             throw new Error(`Schema field "${fieldKey}" must be object`);
         }
-        const rv = rawValue as Record<string, any>;
-        const typeId = typeof rv.type === 'string' && rv.type.trim().length > 0
-            ? rv.type.trim()
+        const typeId = typeof rawValue.type === 'string' && rawValue.type.trim().length > 0
+            ? rawValue.type.trim()
             : 'string';
-        if (rv.values !== undefined && !Array.isArray(rv.values)) {
+        if (rawValue.values !== undefined && !Array.isArray(rawValue.values)) {
             throw new Error(`Schema field "${fieldKey}".values must be array`);
         }
-        const enumValues = Array.isArray(rv.values) ? rv.values : [];
+        const enumValues = Array.isArray(rawValue.values) ? rawValue.values : [];
         const normalizedValues = enumValues
             .map((item: unknown) => (typeof item === 'string' ? item.trim() : ''))
             .filter((item: string) => item.length > 0);
-        if (rv.enum_set_id !== undefined && typeof rv.enum_set_id !== 'string') {
+        if (rawValue.enum_set_id !== undefined && typeof rawValue.enum_set_id !== 'string') {
             throw new Error(`Schema field "${fieldKey}".enum_set_id must be string`);
         }
         const extra = Object.fromEntries(
-            Object.entries(rv).filter(
+            Object.entries(rawValue).filter(
                 ([key]) => !['type', 'label', 'description', 'values', 'enum_set_id'].includes(key),
             ),
         );
         return {
             key: fieldKey,
-            label: typeof rv.label === 'string' ? rv.label : '',
+            label: typeof rawValue.label === 'string' ? rawValue.label : '',
             type: typeId,
-            description: typeof rv.description === 'string' ? rv.description : '',
-            enum_set_id: typeof rv.enum_set_id === 'string' ? rv.enum_set_id : '',
+            description: typeof rawValue.description === 'string' ? rawValue.description : '',
+            enum_set_id: typeof rawValue.enum_set_id === 'string' ? rawValue.enum_set_id : '',
             enum_values_text: normalizedValues.join(', '),
             extra,
         };
@@ -93,8 +119,8 @@ export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaO
     }
     const schema: Record<string, Record<string, unknown>> = {};
     const seenKeys = new Set();
-    const optsFieldTypes = schemaOptions && Array.isArray(schemaOptions.field_types) ? schemaOptions.field_types as Record<string, any>[] : [];
-    const optsEnumSets = schemaOptions && Array.isArray(schemaOptions.enum_sets) ? schemaOptions.enum_sets as Record<string, any>[] : [];
+    const optsFieldTypes = optionRecords(schemaOptions == null ? undefined : schemaOptions.field_types);
+    const optsEnumSets = optionRecords(schemaOptions == null ? undefined : schemaOptions.enum_sets);
     const fieldTypes = new Set(optsFieldTypes.map((item: Record<string, any>) => item.type_id));
     const enumSetsMap = new Map<unknown, unknown>(
         optsEnumSets.map((item: Record<string, any>) => [item.enum_set_id, item.values]),
@@ -106,8 +132,11 @@ export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaO
     if (maxFieldsPerSection > 0 && rows.length > maxFieldsPerSection) {
         throw new Error(t('errors.field_limit', { section: sectionLabel, max: String(maxFieldsPerSection) }));
     }
-    for (const row of rows as SchemaFieldRow[]) {
-        const key = String((row && row.key) || '').trim();
+    for (const row of rows) {
+        if (!isSchemaFieldRow(row)) {
+            throw new Error(`${sectionLabel}: schema row required`);
+        }
+        const key = row.key.trim();
         if (key.length === 0) {
             continue;
         }
@@ -118,7 +147,7 @@ export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaO
             throw new Error(t('errors.dup_key', { section: sectionLabel, key }));
         }
         seenKeys.add(key);
-        const typeId = String((row && row.type) || '').trim();
+        const typeId = row.type.trim();
         if (fieldTypes.size > 0 && !fieldTypes.has(typeId)) {
             throw new Error(t('errors.unknown_type', { section: sectionLabel, type: typeId, key }));
         }
@@ -126,16 +155,16 @@ export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaO
             ...(row && row.extra && typeof row.extra === 'object' ? row.extra : {}),
             type: typeId,
         };
-        const label = String((row && row.label) || '').trim();
+        const label = row.label.trim();
         if (label.length > 0) {
             descriptor.label = label;
         }
-        const description = String((row && row.description) || '').trim();
+        const description = row.description.trim();
         if (description.length > 0) {
             descriptor.description = description;
         }
         if (typeId === 'enum') {
-            const enumSetId = String((row && row.enum_set_id) || '').trim();
+            const enumSetId = row.enum_set_id.trim();
             if (enumSetId.length > 0) {
                 if (enumSetsMap.size > 0 && !enumSetsMap.has(enumSetId)) {
                     throw new Error(t('errors.enum_set_missing', { section: sectionLabel, id: enumSetId }));
@@ -145,7 +174,7 @@ export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaO
                     descriptor.values = enumSetsMap.get(enumSetId);
                 }
             } else {
-                const values = String((row && row.enum_values_text) || '')
+                const values = row.enum_values_text
                     .split(/[\n,]/)
                     .map((v) => v.trim())
                     .filter((v) => v.length > 0);
@@ -155,7 +184,7 @@ export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaO
                 descriptor.values = values;
             }
         }
-        schema[key] = descriptor as Record<string, unknown>;
+        schema[key] = descriptor;
     }
     return schema;
 }
@@ -278,9 +307,10 @@ export class SchemaFieldBuilder extends PlatformElement {
     }
 
     _defaultFieldType() {
-        const types = this.schemaOptions && this.schemaOptions.field_types as unknown;
-        if (Array.isArray(types) && types.length > 0 && typeof (types[0] as Record<string, any>).type_id === 'string') {
-            return (types[0] as Record<string, any>).type_id;
+        const types = optionRecords(this.schemaOptions == null ? undefined : this.schemaOptions.field_types);
+        const first = types[0];
+        if (first !== undefined && typeof first.type_id === 'string') {
+            return first.type_id;
         }
         return 'string';
     }
@@ -328,8 +358,8 @@ export class SchemaFieldBuilder extends PlatformElement {
 
     override render(): TemplateResult {
         const rows = Array.isArray(this.rows) ? this.rows : [];
-        const fieldTypes = (this.schemaOptions && Array.isArray(this.schemaOptions.field_types) ? this.schemaOptions.field_types : []) as Record<string, any>[];
-        const enumSets = (this.schemaOptions && Array.isArray(this.schemaOptions.enum_sets) ? this.schemaOptions.enum_sets : []) as Record<string, any>[];
+        const fieldTypes = optionRecords(this.schemaOptions == null ? undefined : this.schemaOptions.field_types);
+        const enumSets = optionRecords(this.schemaOptions == null ? undefined : this.schemaOptions.enum_sets);
         return html`
             <div class="fields-list">
                 ${rows.length > 0 ? rows.map((row, index) => {

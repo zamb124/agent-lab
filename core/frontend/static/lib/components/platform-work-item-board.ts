@@ -9,11 +9,22 @@ import { PlatformElement } from '../platform-element/index.js';
 import type { OpController } from '../base/use-resource.js';
 import './platform-work-item-row.js';
 
-const COLUMNS = Object.freeze([
-    Object.freeze({ state: 'open', labelKey: 'work_item_badge.state.open' }),
-    Object.freeze({ state: 'in_progress', labelKey: 'work_item_badge.state.in_progress' }),
-    Object.freeze({ state: 'blocked', labelKey: 'work_item_badge.state.blocked' }),
-    Object.freeze({ state: 'done', labelKey: 'work_item_badge.state.done' }),
+type WorkItemState = 'open' | 'in_progress' | 'blocked' | 'done';
+
+interface BoardColumn {
+    readonly state: WorkItemState;
+    readonly labelKey: string;
+}
+
+function boardColumn(state: WorkItemState, labelKey: string): BoardColumn {
+    return Object.freeze({ state, labelKey });
+}
+
+const COLUMNS: readonly BoardColumn[] = Object.freeze([
+    boardColumn('open', 'work_item_badge.state.open'),
+    boardColumn('in_progress', 'work_item_badge.state.in_progress'),
+    boardColumn('blocked', 'work_item_badge.state.blocked'),
+    boardColumn('done', 'work_item_badge.state.done'),
 ]);
 
 interface WorkItemBoardItem {
@@ -21,8 +32,6 @@ interface WorkItemBoardItem {
     state: string;
     [key: string]: unknown;
 }
-
-type WorkItemState = 'open' | 'in_progress' | 'blocked' | 'done';
 
 const WORK_ITEM_MIME = 'application/x-platform-work-item-id';
 const COLUMN_STATES = Object.freeze(COLUMNS.map((col) => col.state));
@@ -265,7 +274,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
                             data-state=${col.state}
                             @dragover=${(e: DragEvent) => this._onDragOver(e, col.state)}
                             @dragleave=${(e: DragEvent) => this._onDragLeave(e, col.state)}
-                            @drop=${(e: DragEvent) => this._onDrop(e, col.state as WorkItemState)}
+                            @drop=${(e: DragEvent) => this._onDrop(e, col.state)}
                         >
                             <div class="column-title">
                                 <span>${this.t(col.labelKey)}</span>

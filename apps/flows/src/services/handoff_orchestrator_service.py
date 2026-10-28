@@ -91,11 +91,11 @@ class HandoffOrchestratorService:
         if body.target_kind == "external":
             if body.remote_flow_id is None:
                 raise ValueError("external handoff requires remote_flow_id")
-            remote_config = await FlowConfig.get_latest(body.remote_flow_id)
+            remote_config = await FlowConfig.current_for_flow(body.remote_flow_id)
             if remote_config is None:
                 raise ValueError(f"remote flow not found: {body.remote_flow_id}")
             return body.model_copy(update={"target_name": remote_config.name})
-        flow_config = await FlowConfig.get_latest(body.target_flow_id)
+        flow_config = await FlowConfig.current_for_flow(body.target_flow_id)
         if flow_config is None:
             raise ValueError(
                 f"target flow not found: {body.target_flow_id} "
@@ -420,12 +420,12 @@ class HandoffOrchestratorService:
 
         handoff_trace_id = child_state.handoff_trace_id or parent_state.handoff_trace_id
 
-        parent_flow_config = await FlowConfig.get_latest(parent_flow_id)
+        parent_flow_config = await FlowConfig.current_for_flow(parent_flow_id)
         parent_flow_name = parent_flow_id
         if parent_flow_config is not None:
             parent_flow_name = parent_flow_config.name
 
-        child_flow_config = await FlowConfig.get_latest(child_state.session_flow_id)
+        child_flow_config = await FlowConfig.current_for_flow(child_state.session_flow_id)
         child_flow_name = child_state.session_flow_id
         if child_flow_config is not None:
             child_flow_name = child_flow_config.name
@@ -536,7 +536,7 @@ class HandoffOrchestratorService:
     ) -> JsonObject:
         if not variables:
             return variables
-        flow_config = await FlowConfig.get_latest(child_state.session_flow_id)
+        flow_config = await FlowConfig.current_for_flow(child_state.session_flow_id)
         if flow_config is None:
             raise ValueError(
                 "child flow config not found for handback validation: "

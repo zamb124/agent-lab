@@ -65,7 +65,11 @@ export class PlatformFieldNumber extends PlatformElement {
     }
 
     _onInput(e: InputEvent): void {
-        const raw = (e.target as HTMLInputElement).value;
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('platform-field-number: input target must be an input');
+        }
+        const raw = target.value;
         if (raw === '') {
             this.dispatchEvent(new CustomEvent('change', {
                 detail: { value: null },

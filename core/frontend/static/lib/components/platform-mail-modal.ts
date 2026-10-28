@@ -20,19 +20,18 @@ import { sanitizeMarkdownEditorHtml } from './platform-markdown-editor.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import type { SelectController } from '../events/select-controller.js';
 import type { PlatformEvent } from '../events/contract.js';
+import { isPlainRecord } from '../events/payload.js';
 import type { MailMessageLike, MailThread } from '../utils/mail-threads.js';
 import {
-    initialMailState,
     type MailState,
     type MailBindingRecord,
     type MailMessageRecord,
     type MailFolderRecord,
     type MailAttachment,
 } from '../events/reducers/mail.js';
-import { initialCalendarState, type CalendarState } from '../events/reducers/calendar.js';
-import { initialAuthState, type AuthState } from '../events/reducers/auth.js';
-import { initialTeamState, type TeamState, type TeamMemberRecord } from '../events/reducers/team.js';
-import type { I18nState } from '../events/reducers/i18n.js';
+import type { CalendarState } from '../events/reducers/calendar.js';
+import type { AuthState } from '../events/reducers/auth.js';
+import type { TeamState, TeamMemberRecord } from '../events/reducers/team.js';
 import { platformConfirm } from './platform-confirm-modal.js';
 import { CoreEvents } from '../events/contract.js';
 import { MAIL_EVENTS } from '../events/reducers/mail.js';
@@ -52,6 +51,7 @@ import {
     findThreadByUid,
     findThreadMessageByMessageId,
     groupMailThreads,
+    mailMessagesFromRecords,
     mailReplyPreviewText,
     normalizeMailSubject,
 } from '../utils/mail-threads.js';
@@ -87,6 +87,14 @@ const FOLDER_ROLE_META = Object.freeze({
     archive: Object.freeze({ key: 'folder_archive', icon: 'folder' }),
 });
 
+function textOrEmpty(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function emptyToNull(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 function parseToList(value: unknown): string[] {
     if (typeof value !== 'string' || !value.trim()) {
         return [];
@@ -101,8 +109,8 @@ function parseMailAddress(raw: unknown): { readonly display: string; readonly em
     const trimmed = raw.trim();
     const angled = trimmed.match(/^(.*?)\s*<([^>]+)>\s*$/);
     if (angled) {
-        const name = (angled[1] || '').replace(/^["']|["']$/g, '').trim();
-        const email = (angled[2] || '').trim();
+        const name = textOrEmpty(angled[1]).replace(/^["']|["']$/g, '').trim();
+        const email = textOrEmpty(angled[2]).trim();
         const display = name.length > 0 ? name : email;
         return Object.freeze({ display, email, seed: display });
     }
@@ -179,6 +187,74 @@ interface MailAdminDraft {
     smtp_port?: unknown;
     use_ssl?: unknown;
     [key: string]: unknown;
+}
+
+function pointerListener(handler: (event: PointerEvent) => void): EventListener {
+    return (event: Event) => {
+        if (!(event instanceof PointerEvent)) {
+            throw new Error('platform-mail-modal: pointer event required');
+        }
+        handler(event);
+    };
+}
+
+function inputText(event: Event): string {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+        throw new Error('platform-mail-modal: text input required');
+    }
+    return target.value;
+}
+
+function customDetail(event: Event, label: string): Record<string, unknown> {
+    if (!(event instanceof CustomEvent) || !isPlainRecord(event.detail)) {
+        throw new Error(`platform-mail-modal: ${label} detail required`);
+    }
+    return event.detail;
+}
+
+function fieldChangeValue(event: CustomEvent<{ value?: unknown }>): unknown {
+    if (!isPlainRecord(event.detail) || !('value' in event.detail)) {
+        throw new Error('platform-mail-modal: field value required');
+    }
+    return event.detail.value;
+}
+
+function patchAdminDraft(draft: MailAdminDraft | null, field: string, value: unknown): MailAdminDraft {
+    if (draft === null) {
+        throw new Error('platform-mail-modal: admin draft required');
+    }
+    const next: MailAdminDraft = {
+        mail_domain: draft.mail_domain,
+        provider: draft.provider,
+    };
+    for (const [key, current] of Object.entries(draft)) {
+        next[key] = current;
+    }
+    next[field] = value;
+    return next;
+}
+
+function healthFlags(payload: unknown): { imap_ok?: unknown; smtp_ok?: unknown } | null {
+    if (!isPlainRecord(payload) || !isPlainRecord(payload.health)) {
+        return null;
+    }
+    return payload.health;
+}
+
+function payloadBinding(payload: unknown): MailBindingRecord | null {
+    if (!isPlainRecord(payload) || !isPlainRecord(payload.binding)) {
+        return null;
+    }
+    const source = payload.binding;
+    if (source.mailbox_binding_id !== undefined && typeof source.mailbox_binding_id !== 'string') {
+        throw new Error('platform-mail-modal: mailbox_binding_id must be a string');
+    }
+    const binding: MailBindingRecord = {};
+    for (const [key, value] of Object.entries(source)) {
+        binding[key] = value;
+    }
+    return binding;
 }
 
 interface ComposeRect {
@@ -1733,11 +1809,11 @@ export class PlatformMailModal extends PlatformModal {
         this.size = 'full';
         this._isFullscreen = true;
         this.openSettings = false;
-        this._mailSelect = this.select((s) => (s.mail || initialMailState) as MailState);
-        this._calendarSelect = this.select((s) => (s.calendar || initialCalendarState) as CalendarState);
-        this._authSelect = this.select((s) => (s.auth || initialAuthState) as AuthState);
-        this._localeSelect = this.select((s) => ((s.i18n || {}) as I18nState).locale || 'en');
-        this._teamSelect = this.select((s) => (s.team || initialTeamState) as TeamState);
+        this._mailSelect = this.select((s) => s.mail);
+        this._calendarSelect = this.select((s) => s.calendar);
+        this._authSelect = this.select((s) => s.auth);
+        this._localeSelect = this.select((s) => s.i18n.locale);
+        this._teamSelect = this.select((s) => s.team);
         this._adminDraft = null;
         this._createLocalPart = '';
         this._createUserId = '';
@@ -1776,8 +1852,8 @@ export class PlatformMailModal extends PlatformModal {
         this._searchDebounceTimer = null;
         this._draftSaveTimer = null;
         this._onMailKeydown = (event: KeyboardEvent) => this._handleMailKeydown(event);
-        this._boundComposePointerMove = ((event: PointerEvent) => this._onComposePointerMove(event)) as EventListener;
-        this._boundComposePointerUp = ((event: PointerEvent) => this._onComposePointerUp(event)) as EventListener;
+        this._boundComposePointerMove = pointerListener((event) => this._onComposePointerMove(event));
+        this._boundComposePointerUp = pointerListener((event) => this._onComposePointerUp(event));
     }
 
     override connectedCallback(): void {
@@ -1808,7 +1884,7 @@ export class PlatformMailModal extends PlatformModal {
             this._resetPersonalDraft();
         });
         this.useEvent(MAIL_EVENTS.PERSONAL_HEALTHCHECK_COMPLETED, (e) => {
-            const health = (e.payload as { health?: { imap_ok?: boolean; smtp_ok?: boolean } } | null)?.health;
+            const health = healthFlags(e.payload);
             if (health && health.imap_ok === true && health.smtp_ok === true) {
                 this.toast('toast_personal_health_ok', { type: 'success' });
                 return;
@@ -1816,7 +1892,7 @@ export class PlatformMailModal extends PlatformModal {
             this.toast('toast_personal_health_failed', { type: 'warning' });
         });
         this.useEvent(MAIL_EVENTS.BINDING_HEALTHCHECK_COMPLETED, (e) => {
-            const health = (e.payload as { health?: { imap_ok?: boolean; smtp_ok?: boolean } } | null)?.health;
+            const health = healthFlags(e.payload);
             if (health && health.imap_ok === true && health.smtp_ok === true) {
                 this.toast('toast_binding_health_ok', { type: 'success' });
                 return;
@@ -1824,7 +1900,7 @@ export class PlatformMailModal extends PlatformModal {
             this.toast('toast_binding_health_failed', { type: 'warning' });
         });
         this.useEvent(MAIL_EVENTS.BINDING_PATCHED, (e) => {
-            const binding = (e.payload as { binding?: MailBindingRecord } | null)?.binding;
+            const binding = payloadBinding(e.payload);
             if (
                 binding
                 && this._editingMailboxBindingId === binding.mailbox_binding_id
@@ -1834,8 +1910,8 @@ export class PlatformMailModal extends PlatformModal {
             }
         });
         this.useEvent(MAIL_EVENTS.COMPANY_BINDINGS_LOADED, () => {
-            const mail = this._mailSelect.value || initialMailState;
-            for (const binding of mail?.companyBindings || []) {
+            const mail = this._mailSelect.value;
+            for (const binding of mail.companyBindings) {
                 if (binding.kind === 'role') {
                     this._ensureRoleMembersLoaded(binding.mailbox_binding_id as string);
                 }
@@ -1863,7 +1939,7 @@ export class PlatformMailModal extends PlatformModal {
     override willUpdate(changed: PropertyValues<this>): void {
         super.willUpdate(changed);
         this.title = this.t('title');
-        const threadId = this._mailSelect.value?.selectedThreadId || null;
+        const threadId = emptyToNull(this._mailSelect.value.selectedThreadId);
         if (this._cidThreadId !== threadId) {
             this._cidThreadId = threadId;
             this._cidMaps = {};
@@ -1888,9 +1964,8 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _toastErr(event: PlatformEvent): void {
-        const payload = event.payload as { message?: unknown } | null;
-        const message = payload && typeof payload.message === 'string'
-            ? payload.message
+        const message = isPlainRecord(event.payload) && typeof event.payload.message === 'string'
+            ? event.payload.message
             : '';
         this.toast('err_generic', { type: 'error', vars: { message } });
     }
@@ -1918,8 +1993,9 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _activeBinding(): MailBindingRecord | null {
-        const mail = this._mailSelect.value || initialMailState;
-        return mail.bindings.find((b) => b.mailbox_binding_id === mail.activeMailboxBindingId) || null;
+        const mail = this._mailSelect.value;
+        const binding = mail.bindings.find((b) => b.mailbox_binding_id === mail.activeMailboxBindingId);
+        return binding === undefined ? null : binding;
     }
 
     _localeTag() {
@@ -2165,7 +2241,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _reorderSelectableFolders(fromIndex: number, insertIndex: number): void {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId) {
             throw new Error('platform-mail-modal: activeMailboxBindingId required for folder reorder');
         }
@@ -2252,7 +2328,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _ensureStandardFolders(): void {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId) return;
         this.dispatch(MAIL_EVENTS.FOLDERS_ENSURE_REQUESTED, {
             mailbox_binding_id: mail.activeMailboxBindingId,
@@ -2260,7 +2336,10 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _ownEmails(): Set<string> {
-        return new Set((this._mailSelect.value || initialMailState).bindings.map((b) => String(b.email_address || '').toLowerCase()));
+        return new Set(this._mailSelect.value.bindings.flatMap((b) => {
+            const email = b.email_address;
+            return typeof email === 'string' && email.length > 0 ? [email.toLowerCase()] : [];
+        }));
     }
 
     _startCompose() {
@@ -2350,7 +2429,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _openReply() {
-        const message = this._replyTargetMessage(this._mailSelect.value || initialMailState);
+        const message = this._replyTargetMessage(this._mailSelect.value);
         if (!message) {
             this._startCompose();
             return;
@@ -2392,7 +2471,7 @@ export class PlatformMailModal extends PlatformModal {
             this._openReply();
             return;
         }
-        const message = this._replyTargetMessage(this._mailSelect.value || initialMailState);
+        const message = this._replyTargetMessage(this._mailSelect.value);
         if (!message) {
             this._startCompose();
             return;
@@ -2410,7 +2489,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _openReplyAll() {
-        const message = this._replyTargetMessage(this._mailSelect.value || initialMailState);
+        const message = this._replyTargetMessage(this._mailSelect.value);
         if (!message) {
             this._startCompose();
             return;
@@ -2457,7 +2536,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _openForward() {
-        const message = this._replyTargetMessage(this._mailSelect.value || initialMailState);
+        const message = this._replyTargetMessage(this._mailSelect.value);
         if (!message) {
             this._startCompose();
             return;
@@ -2501,7 +2580,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _filteredThreads(mail: MailState): MailThread[] {
-        return groupMailThreads(this._filteredMessages(mail) as unknown as MailMessageLike[]);
+        return groupMailThreads(mailMessagesFromRecords(this._filteredMessages(mail)));
     }
 
     _onListSearchInput(event: Event): void {
@@ -2520,7 +2599,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _runServerSearch() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId || !mail.folder) return;
         const q = this._listQuery.trim();
         if (!q) {
@@ -2538,7 +2617,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _loadMoreMessages() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId || !mail.folder || !mail.messagesNextCursor) return;
         this.dispatch(MAIL_EVENTS.MESSAGES_LOAD_MORE_REQUESTED, {
             mailbox_binding_id: mail.activeMailboxBindingId,
@@ -2548,7 +2627,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _selectedActionPayload() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         const uid = mail.selectedUid;
         if (typeof uid !== 'string' || uid.length === 0) return null;
         if (!mail.activeMailboxBindingId) return null;
@@ -2663,7 +2742,7 @@ export class PlatformMailModal extends PlatformModal {
      * @param {string | null | undefined} folder
      */
     _requestRagIndex(uid: unknown, folder: unknown): void {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail || typeof mail.activeMailboxBindingId !== 'string' || !mail.activeMailboxBindingId) {
             return;
         }
@@ -2684,7 +2763,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _toggleStarSelected() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         const payload = this._selectedActionPayload();
         if (!payload) return;
         const current = mail.selectedMessage && mail.selectedMessage.flagged === true;
@@ -2694,7 +2773,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _scheduleDraftSave() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId || !this._composeOpen) return;
         if (this._draftSaveTimer != null) {
             clearTimeout(this._draftSaveTimer);
@@ -2706,7 +2785,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _saveDraftNow() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId) return;
         const toAddresses = parseToList(mail.compose.to);
         this.dispatch(MAIL_EVENTS.DRAFT_SAVE_REQUESTED, {
@@ -2730,8 +2809,8 @@ export class PlatformMailModal extends PlatformModal {
             subject: typeof message.subject === 'string' ? message.subject : '',
             body: typeof message.body_text === 'string' ? message.body_text : '',
             body_html: typeof message.body_html === 'string' ? message.body_html : '',
-            in_reply_to: message.in_reply_to || null,
-            references: message.references || null,
+            in_reply_to: emptyToNull(message.in_reply_to),
+            references: emptyToNull(message.references),
             attachments: [],
         });
         this._showComposePanel();
@@ -2763,7 +2842,7 @@ export class PlatformMailModal extends PlatformModal {
         }
         this._closeCompose();
         this._quickReplyText = '';
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         const folderMeta = mail.folders.find((folder) => folder.name === mail.folder);
         if (folderMeta && folderMeta.role === 'drafts') {
             this._openDraftFromMessage(thread.latest);
@@ -2782,10 +2861,10 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _selectAdjacentMessage(delta: number): void {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         const threads = this._filteredThreads(mail);
         if (threads.length === 0) return;
-        const current = findThreadByUid(threads, mail.selectedUid || '');
+        const current = findThreadByUid(threads, textOrEmpty(mail.selectedUid));
         const currentIdx = current
             ? threads.findIndex((thread) => thread.threadId === current.threadId)
             : -1;
@@ -2826,7 +2905,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _handleMailKeydown(event: KeyboardEvent): void {
-        if (!this.open || (this._mailSelect.value || initialMailState).adminMode) return;
+        if (!this.open || (this._mailSelect.value).adminMode) return;
         if (this._isTypingTarget(event)) return;
         const key = event.key;
         if (key === 'Escape') {
@@ -2888,7 +2967,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _refreshMessages() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId) return;
         this.dispatch(MAIL_EVENTS.SYNC_REQUESTED, {
             mailbox_binding_id: mail.activeMailboxBindingId,
@@ -2902,7 +2981,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _markSelectedUnseen() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         const uid = mail.selectedUid;
         if (typeof uid !== 'string' || uid.length === 0) return;
         if (!mail.activeMailboxBindingId) return;
@@ -2916,8 +2995,8 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _selectMessage(uid: string): void {
-        const mail = this._mailSelect.value || initialMailState;
-        const threads = groupMailThreads(mail.messages as unknown as MailMessageLike[]);
+        const mail = this._mailSelect.value;
+        const threads = groupMailThreads(mailMessagesFromRecords(mail.messages));
         const thread = findThreadByUid(threads, uid);
         if (thread) {
             this._selectThread(thread);
@@ -2929,7 +3008,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _openSettings() {
-        const connection = this._mailSelect.value?.connection || null;
+        const connection = this._mailSelect.value.connection;
         this._adminDraft = connection
             ? {
                 mail_domain: connection.mail_domain,
@@ -2950,7 +3029,7 @@ export class PlatformMailModal extends PlatformModal {
                 use_ssl: true,
             };
         this.dispatch(MAIL_EVENTS.ADMIN_MODE_SET, { open: true });
-        if ((this._mailSelect.value || initialMailState).canAdmin === true) {
+        if ((this._mailSelect.value).canAdmin === true) {
             this.dispatch(MAIL_EVENTS.COMPANY_BINDINGS_LOAD_REQUESTED, null);
             this.dispatch(MAIL_EVENTS.CONNECTION_LOAD_REQUESTED, null);
         }
@@ -3143,7 +3222,7 @@ export class PlatformMailModal extends PlatformModal {
         if (typeof binding.smtp_host !== 'string' || !binding.smtp_host.trim()) {
             throw new Error('platform-mail-modal: binding.smtp_host required');
         }
-        this._editingMailboxBindingId = binding.mailbox_binding_id || null;
+        this._editingMailboxBindingId = emptyToNull(binding.mailbox_binding_id);
         this._editDraft = {
             imap_host: binding.imap_host,
             imap_port: typeof binding.imap_port === 'number' ? binding.imap_port : 993,
@@ -3312,14 +3391,26 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _memberOptions() {
-        return (this._teamSelect.value?.members || []).map((m) => ({
-            value: m.user_id || '',
-            label: String(m.name || m.user_id || ''),
-        }));
+        return this._teamSelect.value.members.map((m) => {
+            const userId = textOrEmpty(m.user_id);
+            const name = textOrEmpty(m.name);
+            return {
+                value: userId,
+                label: name.length > 0 ? name : userId,
+            };
+        });
+    }
+
+    _bindingId(binding: MailBindingRecord): string {
+        const mailboxBindingId = binding.mailbox_binding_id;
+        if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
+            throw new Error('platform-mail-modal: mailbox_binding_id required');
+        }
+        return mailboxBindingId;
     }
 
     _assignDraftFor(binding: MailBindingRecord): string {
-        const draft = this._assignDrafts[binding.mailbox_binding_id || ''];
+        const draft = this._assignDrafts[this._bindingId(binding)];
         if (typeof draft === 'string' && draft.length > 0) return draft;
         if (typeof binding.user_id === 'string' && binding.user_id.length > 0) {
             return binding.user_id;
@@ -3388,7 +3479,7 @@ export class PlatformMailModal extends PlatformModal {
 
     async _confirmUnbind(binding: MailBindingRecord): Promise<void> {
         const ok = await platformConfirm(
-            this.t('unbind_confirm_message', { email: String(binding.email_address || '') }),
+            this.t('unbind_confirm_message', { email: textOrEmpty(binding.email_address) }),
             {
                 title: this.t('unbind_confirm_title'),
                 variant: 'danger',
@@ -3404,7 +3495,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _sendReply() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (!mail.activeMailboxBindingId) return;
         const toAddresses = parseToList(mail.compose.to);
         if (toAddresses.length === 0) return;
@@ -3431,10 +3522,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _onEditorChange(event: Event): void {
-        const detail = (event as CustomEvent<{ textValue?: unknown; htmlValue?: unknown }>).detail;
-        if (!detail || typeof detail !== 'object') {
-            throw new Error('platform-mail-modal: editor change detail required');
-        }
+        const detail = customDetail(event, 'editor change');
         this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, {
             body: typeof detail.textValue === 'string' ? detail.textValue : '',
             body_html: typeof detail.htmlValue === 'string' ? detail.htmlValue : '',
@@ -3443,8 +3531,8 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _onEditorAttachmentsChange(event: Event): void {
-        const detail = (event as CustomEvent<{ attachments?: unknown }>).detail;
-        if (!detail || !Array.isArray(detail.attachments)) {
+        const detail = customDetail(event, 'attachments-change');
+        if (!Array.isArray(detail.attachments)) {
             throw new Error('platform-mail-modal: attachments-change requires attachments[]');
         }
         this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, { attachments: detail.attachments });
@@ -3602,7 +3690,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _hydrateCidMaps() {
-        const messages = this._mailSelect.value?.selectedThreadMessages || [];
+        const messages = this._mailSelect.value.selectedThreadMessages;
         if (!Array.isArray(messages) || messages.length === 0) {
             return;
         }
@@ -3673,7 +3761,7 @@ export class PlatformMailModal extends PlatformModal {
 
     _upcomingEvents() {
         const now = Date.now();
-        const events = this._calendarSelect.value?.events || [];
+        const events = this._calendarSelect.value.events;
         return events
             .filter((ev) => {
                 if (!ev || typeof ev.start_at !== 'string') return false;
@@ -3726,7 +3814,13 @@ export class PlatformMailModal extends PlatformModal {
                                         draggable="true"
                                         title=${this.t('folder_reorder_hint')}
                                         aria-label=${`${this._folderLabel(folder)}. ${this.t('folder_reorder_hint')}`}
-                                        @click=${() => this._selectFolder(String(folder.name || ''))}
+                                        @click=${() => {
+                                            const folderName = folder.name;
+                                            if (typeof folderName !== 'string' || folderName.length === 0) {
+                                                throw new Error('platform-mail-modal: folder.name required');
+                                            }
+                                            this._selectFolder(folderName);
+                                        }}
                                         @dragstart=${(event: DragEvent) => this._onFolderDragStart(event, index)}
                                         @dragend=${() => this._onFolderDragEnd()}
                                         @dragover=${(event: DragEvent) => this._onFolderRowDragOver(event, index)}
@@ -4067,7 +4161,7 @@ export class PlatformMailModal extends PlatformModal {
         const threadMessages = Array.isArray(mail.selectedThreadMessages)
             ? mail.selectedThreadMessages
             : [];
-        const parent = findThreadMessageByMessageId(threadMessages as unknown as MailMessageLike[], inReplyTo);
+        const parent = findThreadMessageByMessageId(mailMessagesFromRecords(threadMessages), inReplyTo);
         let who = this.t('reply_quote.previous');
         let preview = '';
         let parentUid = '';
@@ -4131,7 +4225,7 @@ export class PlatformMailModal extends PlatformModal {
         const threadMessages = Array.isArray(mail.selectedThreadMessages)
             ? mail.selectedThreadMessages
             : [];
-        const parent = findThreadMessageByMessageId(threadMessages as unknown as MailMessageLike[], inReplyTo);
+        const parent = findThreadMessageByMessageId(mailMessagesFromRecords(threadMessages), inReplyTo);
         if (!parent) {
             return this.t('compose.reply_to', { author: this.t('reply_quote.previous') });
         }
@@ -4356,7 +4450,7 @@ export class PlatformMailModal extends PlatformModal {
                                     type="email"
                                     data-canon="composer"
                                     .value=${mail.compose.to}
-                                    @input=${(e: Event) => this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, { to: (e.target as HTMLInputElement).value })}
+                                    @input=${(e: Event) => this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, { to: inputText(e) })}
                                 />
                             </label>
                             <label class="compose-row">
@@ -4366,7 +4460,7 @@ export class PlatformMailModal extends PlatformModal {
                                     type="text"
                                     data-canon="composer"
                                     .value=${mail.compose.subject}
-                                    @input=${(e: Event) => this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, { subject: (e.target as HTMLInputElement).value })}
+                                    @input=${(e: Event) => this.dispatch(MAIL_EVENTS.COMPOSE_DRAFT_SET, { subject: inputText(e) })}
                                 />
                             </label>
                         </div>
@@ -4375,7 +4469,7 @@ export class PlatformMailModal extends PlatformModal {
                             view-mode="wysiwyg"
                             .htmlValue=${typeof mail.compose.body_html === 'string' && mail.compose.body_html.length > 0
                                 ? mail.compose.body_html
-                                : (mail.compose.body || '')}
+                                : mail.compose.body}
                             .attachments=${Array.isArray(mail.compose.attachments) ? mail.compose.attachments : []}
                             .placeholder=${this.t('compose_placeholder')}
                             .primaryLabel=${this.t('send')}
@@ -4427,7 +4521,7 @@ export class PlatformMailModal extends PlatformModal {
                     <div class="binding-color">
                         <platform-palette-color-picker
                             .value=${binding.calendar_color || 'default'}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchBindingColor(String(binding.mailbox_binding_id || ''), e.detail?.value)}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchBindingColor(this._bindingId(binding), e.detail?.value)}
                         ></platform-palette-color-picker>
                     </div>
                     <div class="binding-actions">
@@ -4510,7 +4604,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _ensureRoleMembersLoaded(mailboxBindingId: string): void {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         if (mail.bindingMembers && Array.isArray(mail.bindingMembers[mailboxBindingId])) {
             return;
         }
@@ -4520,15 +4614,15 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     _renderRoleMembers(binding: MailBindingRecord, memberOptions: { value: string; label: string }[]): ReturnType<typeof html> | typeof nothing {
-        const mail = this._mailSelect.value || initialMailState;
-        const membersForBinding = mail.bindingMembers?.[binding.mailbox_binding_id || ''];
+        const mail = this._mailSelect.value;
+        const membersForBinding = mail.bindingMembers[this._bindingId(binding)];
         const members = Array.isArray(membersForBinding) ? membersForBinding : [];
         return html`
             <div class="settings-members">
                 <div class="settings-hint">${this.t('role_members_hint')}</div>
                 ${members.map((member) => html`
                     <div class="settings-member-row">
-                        <platform-user-chip user-id=${String(member.user_id || '')} size="sm"></platform-user-chip>
+                        <platform-user-chip user-id=${textOrEmpty(member.user_id)} size="sm"></platform-user-chip>
                         <platform-button
                             variant="ghost"
                             @click=${() => this.dispatch(MAIL_EVENTS.BINDING_MEMBER_REMOVE_REQUESTED, {
@@ -4592,7 +4686,7 @@ export class PlatformMailModal extends PlatformModal {
                     <div class="binding-color">
                         <platform-palette-color-picker
                             .value=${binding.calendar_color || 'default'}
-                            @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchBindingColor(String(binding.mailbox_binding_id || ''), e.detail?.value)}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => this._patchBindingColor(this._bindingId(binding), e.detail?.value)}
                         ></platform-palette-color-picker>
                     </div>
                     <div class="binding-actions">
@@ -4620,7 +4714,7 @@ export class PlatformMailModal extends PlatformModal {
                                 .value=${this._assignDraftFor(binding)}
                                 .config=${{ values: memberOptions }}
                                 mode="edit"
-                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._setAssignDraft(String(binding.mailbox_binding_id || ''), e.detail?.value as string)}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._setAssignDraft(this._bindingId(binding), e.detail?.value as string)}
                             ></platform-field>
                             <platform-button
                                 variant="secondary"
@@ -4709,21 +4803,21 @@ export class PlatformMailModal extends PlatformModal {
                                     ? html`<div class="empty">${this.t('connection_missing')}</div>`
                                     : nothing}
                                 <platform-field type="string" .label=${this.t('connection_domain')} .value=${this._adminDraft.mail_domain}
-                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = { ...this._adminDraft, mail_domain: e.detail?.value } as MailAdminDraft; }}></platform-field>
+                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = patchAdminDraft(this._adminDraft, 'mail_domain', fieldChangeValue(e)); }}></platform-field>
                                 <platform-field type="enum" .label=${this.t('connection_provider')} .value=${this._adminDraft.provider}
                                     .config=${{ values: [
                                         { value: 'ispmanager', label: this.t('provider_ispmanager') },
                                         { value: 'generic_imap_smtp', label: this.t('provider_generic') },
                                     ] }}
-                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = { ...this._adminDraft, provider: e.detail?.value } as MailAdminDraft; }}></platform-field>
+                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = patchAdminDraft(this._adminDraft, 'provider', fieldChangeValue(e)); }}></platform-field>
                                 <platform-field type="string" .label=${this.t('connection_imap')} .value=${this._adminDraft.imap_host}
-                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = { ...this._adminDraft, imap_host: e.detail?.value } as MailAdminDraft; }}></platform-field>
+                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = patchAdminDraft(this._adminDraft, 'imap_host', fieldChangeValue(e)); }}></platform-field>
                                 <platform-field type="integer" .label=${this.t('connection_imap_port')} .value=${this._adminDraft.imap_port}
-                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = { ...this._adminDraft, imap_port: e.detail?.value } as MailAdminDraft; }}></platform-field>
+                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = patchAdminDraft(this._adminDraft, 'imap_port', fieldChangeValue(e)); }}></platform-field>
                                 <platform-field type="string" .label=${this.t('connection_smtp')} .value=${this._adminDraft.smtp_host}
-                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = { ...this._adminDraft, smtp_host: e.detail?.value } as MailAdminDraft; }}></platform-field>
+                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = patchAdminDraft(this._adminDraft, 'smtp_host', fieldChangeValue(e)); }}></platform-field>
                                 <platform-field type="integer" .label=${this.t('connection_smtp_port')} .value=${this._adminDraft.smtp_port}
-                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = { ...this._adminDraft, smtp_port: e.detail?.value } as MailAdminDraft; }}></platform-field>
+                                    mode="edit" @change=${(e: CustomEvent<{ value?: unknown }>) => { this._adminDraft = patchAdminDraft(this._adminDraft, 'smtp_port', fieldChangeValue(e)); }}></platform-field>
                                 <div class="header-actions">
                                     <platform-button variant="primary" @click=${() => this._saveConnection()}>${this.t('connection_save')}</platform-button>
                                     <platform-button variant="secondary" @click=${() => this.dispatch(MAIL_EVENTS.HEALTHCHECK_REQUESTED, null)}>${this.t('healthcheck')}</platform-button>
@@ -4737,7 +4831,7 @@ export class PlatformMailModal extends PlatformModal {
     }
 
     override renderBody() {
-        const mail = this._mailSelect.value || initialMailState;
+        const mail = this._mailSelect.value;
         const active = this._activeBinding();
         return html`
             <div class="mail-shell-wrap">

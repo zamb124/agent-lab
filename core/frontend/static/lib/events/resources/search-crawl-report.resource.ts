@@ -9,17 +9,25 @@
 import { createAsyncOp, createResourceCollection } from '../index.js';
 import { CoreEvents } from '../contract.js';
 import type { EffectCtx } from '../contract.js';
+import { isPlainRecord } from '../payload.js';
 
 type QueryObject = Record<string, unknown>;
 
 const WS_TIMEOUT_MS = 8_000;
 
+function requestProfile(payload: unknown): { id: string; payload: Record<string, unknown> } | null {
+    if (!isPlainRecord(payload)) return null;
+    const crawlProfileId = payload.crawl_profile_id;
+    if (typeof crawlProfileId !== 'string' || crawlProfileId.length === 0) return null;
+    return { id: crawlProfileId, payload };
+}
+
 function _requireProfileId(payload: unknown, op: string): string {
-    const crawlProfileId = (payload as { crawl_profile_id?: unknown } | null)?.crawl_profile_id;
-    if (typeof crawlProfileId !== 'string' || crawlProfileId.length === 0) {
+    const request = requestProfile(payload);
+    if (request === null) {
         throw new Error(`${op}: crawl_profile_id required`);
     }
-    return crawlProfileId;
+    return request.id;
 }
 
 function _toast(ctx: EffectCtx, key: string): void {
@@ -117,11 +125,11 @@ export const crawlQueueTickOp = createAsyncOp({
     commandType: 'search/crawl_jobs/queue_requested',
     restMirror: { method: 'POST', path: '/search/api/v1/crawl/jobs' },
     onSuccess(ctx, _result, event) {
-        const requestPayload = event?.payload as { crawl_profile_id?: string } | null;
         _toast(ctx, 'frontend:crawl_report_page.toast_queued');
-        if (requestPayload && requestPayload.crawl_profile_id) {
-            _reloadSummary(ctx, requestPayload.crawl_profile_id);
-            ctx.dispatch(crawlJobsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
+        const request = requestProfile(event.payload);
+        if (request !== null) {
+            _reloadSummary(ctx, request.id);
+            ctx.dispatch(crawlJobsResource.events.LIST_REQUESTED, request.payload, { source: 'local' });
         }
     },
 });
@@ -134,14 +142,14 @@ export const crawlDomainRunOp = createAsyncOp({
     commandType: 'search/crawl_domains/run_requested',
     restMirror: { method: 'POST', path: '/search/api/v1/crawl/domains/:crawl_domain_id/run' },
     onSuccess(ctx, _result, event) {
-        const requestPayload = event?.payload as { crawl_profile_id?: string } | null;
         _toast(ctx, 'frontend:crawl_report_page.toast_domain_queued');
-        if (!requestPayload || !requestPayload.crawl_profile_id) {
+        const request = requestProfile(event.payload);
+        if (request === null) {
             return;
         }
-        _reloadSummary(ctx, requestPayload.crawl_profile_id);
-        ctx.dispatch(crawlJobsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
-        ctx.dispatch(crawlDomainsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
+        _reloadSummary(ctx, request.id);
+        ctx.dispatch(crawlJobsResource.events.LIST_REQUESTED, request.payload, { source: 'local' });
+        ctx.dispatch(crawlDomainsResource.events.LIST_REQUESTED, request.payload, { source: 'local' });
     },
 });
 
@@ -153,11 +161,11 @@ export const crawlProfilePatchOp = createAsyncOp({
     commandType: 'search/crawl_profiles/update_requested',
     restMirror: { method: 'PATCH', path: '/search/api/v1/crawl/profiles/:crawl_profile_id' },
     onSuccess(ctx, _result, event) {
-        const requestPayload = event?.payload as { crawl_profile_id?: string } | null;
         _toast(ctx, 'frontend:crawl_report_page.toast_profile_saved');
         ctx.dispatch(crawlProfilesLoadOp.events.REQUESTED, {}, { source: 'local' });
-        if (requestPayload && requestPayload.crawl_profile_id) {
-            _reloadSummary(ctx, requestPayload.crawl_profile_id);
+        const request = requestProfile(event.payload);
+        if (request !== null) {
+            _reloadSummary(ctx, request.id);
         }
     },
 });
@@ -170,11 +178,11 @@ export const crawlDomainCreateOp = createAsyncOp({
     commandType: 'search/crawl_domains/create_requested',
     restMirror: { method: 'POST', path: '/search/api/v1/crawl/profiles/:crawl_profile_id/domains' },
     onSuccess(ctx, _result, event) {
-        const requestPayload = event?.payload as { crawl_profile_id?: string } | null;
         _toast(ctx, 'frontend:crawl_report_page.toast_domain_added');
-        if (requestPayload && requestPayload.crawl_profile_id) {
-            const listPayload = { crawl_profile_id: requestPayload.crawl_profile_id };
-            _reloadSummary(ctx, requestPayload.crawl_profile_id);
+        const request = requestProfile(event.payload);
+        if (request !== null) {
+            const listPayload = { crawl_profile_id: request.id };
+            _reloadSummary(ctx, request.id);
             ctx.dispatch(crawlDomainsResource.events.LIST_REQUESTED, listPayload, { source: 'local' });
         }
     },
@@ -188,11 +196,11 @@ export const crawlDomainPatchOp = createAsyncOp({
     commandType: 'search/crawl_domains/update_requested',
     restMirror: { method: 'PATCH', path: '/search/api/v1/crawl/domains/:crawl_domain_id' },
     onSuccess(ctx, _result, event) {
-        const requestPayload = event?.payload as { crawl_profile_id?: string } | null;
         _toast(ctx, 'frontend:crawl_report_page.toast_domain_saved');
-        if (requestPayload && requestPayload.crawl_profile_id) {
-            const listPayload = { crawl_profile_id: requestPayload.crawl_profile_id };
-            _reloadSummary(ctx, requestPayload.crawl_profile_id);
+        const request = requestProfile(event.payload);
+        if (request !== null) {
+            const listPayload = { crawl_profile_id: request.id };
+            _reloadSummary(ctx, request.id);
             ctx.dispatch(crawlDomainsResource.events.LIST_REQUESTED, listPayload, { source: 'local' });
         }
     },
@@ -206,11 +214,11 @@ export const crawlDomainDeleteOp = createAsyncOp({
     commandType: 'search/crawl_domains/remove_requested',
     restMirror: { method: 'DELETE', path: '/search/api/v1/crawl/domains/:crawl_domain_id' },
     onSuccess(ctx, _result, event) {
-        const requestPayload = event?.payload as { crawl_profile_id?: string } | null;
         _toast(ctx, 'frontend:crawl_report_page.toast_domain_deleted');
-        if (requestPayload && requestPayload.crawl_profile_id) {
-            const listPayload = { crawl_profile_id: requestPayload.crawl_profile_id };
-            _reloadSummary(ctx, requestPayload.crawl_profile_id);
+        const request = requestProfile(event.payload);
+        if (request !== null) {
+            const listPayload = { crawl_profile_id: request.id };
+            _reloadSummary(ctx, request.id);
             ctx.dispatch(crawlDomainsResource.events.LIST_REQUESTED, listPayload, { source: 'local' });
         }
     },
@@ -224,11 +232,11 @@ export const crawlUrlAddOp = createAsyncOp({
     commandType: 'search/crawl_domains/urls_add_requested',
     restMirror: { method: 'POST', path: '/search/api/v1/crawl/domains/:crawl_domain_id/urls' },
     onSuccess(ctx, _result, event) {
-        const requestPayload = event?.payload as { crawl_profile_id?: string } | null;
         _toast(ctx, 'frontend:crawl_report_page.toast_urls_added');
-        if (requestPayload && requestPayload.crawl_profile_id) {
-            const listPayload = { crawl_profile_id: requestPayload.crawl_profile_id };
-            _reloadSummary(ctx, requestPayload.crawl_profile_id);
+        const request = requestProfile(event.payload);
+        if (request !== null) {
+            const listPayload = { crawl_profile_id: request.id };
+            _reloadSummary(ctx, request.id);
             ctx.dispatch(crawlUrlsResource.events.LIST_REQUESTED, listPayload, { source: 'local' });
         }
     },
@@ -242,12 +250,31 @@ export const crawlUrlRecrawlOp = createAsyncOp({
     commandType: 'search/crawl_urls/recrawl_requested',
     restMirror: { method: 'POST', path: '/search/api/v1/crawl/urls/:crawl_url_id/recrawl' },
     onSuccess(ctx, _result, event) {
-        const requestPayload = event?.payload as { crawl_profile_id?: string } | null;
         _toast(ctx, 'frontend:crawl_report_page.toast_url_recrawl');
-        if (requestPayload && requestPayload.crawl_profile_id) {
-            const listPayload = { crawl_profile_id: requestPayload.crawl_profile_id };
-            _reloadSummary(ctx, requestPayload.crawl_profile_id);
+        const request = requestProfile(event.payload);
+        if (request !== null) {
+            const listPayload = { crawl_profile_id: request.id };
+            _reloadSummary(ctx, request.id);
             ctx.dispatch(crawlUrlsResource.events.LIST_REQUESTED, listPayload, { source: 'local' });
         }
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'search/crawl_profiles_load': typeof crawlProfilesLoadOp;
+        'search/crawl_summary_load': typeof crawlSummaryLoadOp;
+        'search/crawl_domains': typeof crawlDomainsResource;
+        'search/crawl_urls': typeof crawlUrlsResource;
+        'search/crawl_jobs': typeof crawlJobsResource;
+        'search/crawl_url_detail': typeof crawlUrlDetailOp;
+        'search/crawl_queue_tick': typeof crawlQueueTickOp;
+        'search/crawl_domain_run': typeof crawlDomainRunOp;
+        'search/crawl_profile_patch': typeof crawlProfilePatchOp;
+        'search/crawl_domain_create': typeof crawlDomainCreateOp;
+        'search/crawl_domain_patch': typeof crawlDomainPatchOp;
+        'search/crawl_domain_delete': typeof crawlDomainDeleteOp;
+        'search/crawl_url_add': typeof crawlUrlAddOp;
+        'search/crawl_url_recrawl': typeof crawlUrlRecrawlOp;
+    }
+}

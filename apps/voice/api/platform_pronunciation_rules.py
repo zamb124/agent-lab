@@ -73,7 +73,7 @@ async def list_platform_pronunciation_rules(
 ) -> PlatformPronunciationRulesListResponse:
     """Список платформенных правил произношения TTS."""
     _ = await _require_superadmin(di)
-    rows = await PronunciationRule.all_for_company_scope(company_id=None)
+    rows = await PronunciationRule.list_for_company_scope(company_id=None)
     return PlatformPronunciationRulesListResponse(items=rows)
 
 

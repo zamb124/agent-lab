@@ -2,8 +2,8 @@
 description: "Инвайты в компанию по ссылке — одноразовый invite JWT, короткие ссылки platform_short_links, preview и accept до сессии компании. Читать при правке инвайтов и short links"
 globs:
   - "apps/frontend/api/invites.py"
-  - "apps/frontend/ui/pages/join-page.js"
-  - "apps/frontend/ui/events/resources/invites.resource.js"
+  - "apps/frontend/ui/pages/join-page.ts"
+  - "apps/frontend/ui/events/resources/invites.resource.ts"
   - "core/utils/invite_tokens.py"
   - "core/short_links/**"
 alwaysApply: false
@@ -34,9 +34,9 @@ alwaysApply: false
 
 ## Контракты
 
-- Команда `frontend/invites/generate_requested` (`FRONTEND_OPERATIONS`, `apps/frontend/realtime/command_router.py`), REST `POST /frontend/api/invites/generate`; фабрика `frontend/team_invite` (`inviteGenerateOp`, `apps/frontend/ui/events/resources/team.resource.js`).
-- Протокольные хендлеры до сессии из `PROTOCOL_HANDLERS` (`scripts/check_rest_handlers_call_ops.py`): `accept_invite`, `preview_invite` (`apps/frontend/api/invites.py`); HTTP-фабрики из `COMMAND_WS_HTTP_ALLOWLIST` (`scripts/check_command_rest_mirror.py`): `frontend/invite_preview`, `frontend/invite_accept` (`apps/frontend/ui/events/resources/invites.resource.js`).
-- Маршрут `/l/{code}` — `apps/frontend/main.py`; страница `/join?c=…` — `apps/frontend/ui/pages/join-page.js`.
+- Команда `frontend/invites/generate_requested` (`FRONTEND_OPERATIONS`, `apps/frontend/realtime/command_router.py`), REST `POST /frontend/api/invites/generate`; фабрика `frontend/team_invite` (`inviteGenerateOp`, `apps/frontend/ui/events/resources/team.resource.ts`).
+- Протокольные хендлеры до сессии из `PROTOCOL_HANDLERS` (`scripts/check_rest_handlers_call_ops.py`): `accept_invite`, `preview_invite` (`apps/frontend/api/invites.py`); HTTP-фабрики из `COMMAND_WS_HTTP_ALLOWLIST` (`scripts/check_command_rest_mirror.py`): `frontend/invite_preview`, `frontend/invite_accept` (`apps/frontend/ui/events/resources/invites.resource.ts`).
+- Маршрут `/l/{code}` — `apps/frontend/main.py`; страница `/join?c=…` — `apps/frontend/ui/pages/join-page.ts`.
 - Route config (`core/middleware/auth/route_config.py`): `/join`, `/l/*`, `/api/invites/preview`, `/frontend/api/invites/preview` — anonymous; `/api/invites/accept`, `/frontend/api/invites/accept` — auth; все они в `NO_SUBDOMAIN_ALLOWED_PATHS`, `/l/` — в `SPA_FALLBACK_EXCLUDED_PREFIXES`. `CompanyResolver` (`core/middleware/auth/company_resolver.py`) не требует членства в компании субдомена только для `POST` accept.
 
 ## Запреты

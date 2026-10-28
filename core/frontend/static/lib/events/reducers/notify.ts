@@ -7,6 +7,7 @@
 
 import { CoreEvents } from '../contract.js';
 import type { PlatformEvent } from '../contract.js';
+import { isPlainRecord, payloadFields } from '../payload.js';
 
 export interface NotifyToast {
     id: string;
@@ -35,26 +36,27 @@ function _nextToastId() {
 export function notifyReducer(state: NotifyState = initialNotifyState, event: PlatformEvent): NotifyState {
     switch (event.type) {
         case CoreEvents.UI_TOAST_SHOW: {
-            const p = (event.payload || {}) as {
-                id?: unknown; type?: unknown; message?: unknown;
-                i18n_key?: unknown; i18n_vars?: unknown; duration?: unknown;
-            };
+            const p = payloadFields(event);
             const hasMessage = typeof p.message === 'string' && p.message.length > 0;
             const hasI18nKey = typeof p.i18n_key === 'string' && p.i18n_key.length > 0;
             if (!hasMessage && !hasI18nKey) return state;
+            const vars = p.i18n_vars;
+            if (vars != null && !isPlainRecord(vars)) {
+                throw new Error(`${event.type}: i18n_vars must be an object`);
+            }
             const toast = {
                 id: typeof p.id === 'string' && p.id ? p.id : _nextToastId(),
                 type: typeof p.type === 'string' && p.type ? p.type : 'info',
                 message: hasMessage ? (p.message as string) : '',
                 i18n_key: hasI18nKey ? (p.i18n_key as string) : null,
-                i18n_vars: p.i18n_vars == null ? null : (p.i18n_vars as Record<string, unknown>),
+                i18n_vars: vars == null ? null : vars,
                 duration: typeof p.duration === 'number' ? p.duration : 3000,
                 ts: event.meta.ts,
             };
             return { ...state, toasts: [...state.toasts, toast] };
         }
         case CoreEvents.UI_TOAST_DISMISS: {
-            const p = (event.payload || {}) as { id?: unknown };
+            const p = payloadFields(event);
             const id = p.id;
             if (typeof id !== 'string' || !id) return state;
             const next = state.toasts.filter((t) => t.id !== id);

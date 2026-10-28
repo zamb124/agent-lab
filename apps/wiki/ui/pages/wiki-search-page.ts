@@ -20,6 +20,12 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
 
+function missingAsEmpty(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value);
+}
+
+
 const MODE_LEXICAL = 'lexical';
 const MODE_SEMANTIC = 'semantic';
 const SEARCH_DEBOUNCE_MS = 250;
@@ -157,7 +163,7 @@ export class WikiSearchPage extends PlatformPage {
     }
 
     private _onModeChange(event: CustomEvent<{ value?: unknown }>) {
-        this._mode = String(event.detail.value ?? '');
+        this._mode = missingAsEmpty(event.detail.value);
         this._schedule();
     }
 
@@ -248,7 +254,7 @@ export class WikiSearchPage extends PlatformPage {
                     class="hit"
                     type="button"
                     data-wiki-hit=${hit.wiki_page_id}
-                    @click=${() => this.navigate('wiki_page', { pageId: String(hit.wiki_page_id ?? '') })}
+                    @click=${() => this.navigate('wiki_page', { pageId: missingAsEmpty(hit.wiki_page_id) })}
                 >
                     <div class="hit-title">${hit.title === '' ? this.t('page.untitled') : hit.title}</div>
                     ${hit.snippet === '' ? '' : html`<div class="hit-snippet">${hit.snippet}</div>`}

@@ -246,7 +246,7 @@ class GraphService:
                 logger.warning("crm.influence.graph.expansion.stopped.visited", visited=len(visited), cap=INFLUENCE_GRAPH_MAX_NODES)
                 break
 
-            batch_edges = await Relationship.neighbors_for_entities(
+            batch_edges = await Relationship.incident_edges_by_entity_id(
                 current_wave,
                 cross_company=True,
                 relationship_namespace=rel_namespace,
@@ -277,7 +277,7 @@ class GraphService:
             if not candidate_ids:
                 break
 
-            loaded_entities = await CRMEntity.list_by_ids(list(candidate_ids))
+            loaded_entities = await CRMEntity.list_across_companies_by_ids(list(candidate_ids))
             entities_by_id = {e.entity_id: e for e in loaded_entities}
 
             next_wave: list[str] = []
@@ -352,7 +352,7 @@ class GraphService:
         entities_dict: dict[str, CRMEntity] = {}
         edges_dict: dict[str, Relationship] = {}
 
-        seed_entities = await CRMEntity.list_by_ids(entity_ids)
+        seed_entities = await CRMEntity.list_across_companies_by_ids(entity_ids)
         readable_seeds = await self._entity_access.batch_filter_readable(
             seed_entities,
             user_id,
@@ -387,7 +387,7 @@ class GraphService:
                 logger.warning("crm.overview.graph.expansion.stopped.visited", visited=len(visited), cap=INFLUENCE_GRAPH_MAX_NODES)
                 break
 
-            batch_edges = await Relationship.neighbors_for_entities(
+            batch_edges = await Relationship.incident_edges_by_entity_id(
                 current_wave,
                 cross_company=True,
                 relationship_namespace=rel_namespace,
@@ -415,7 +415,7 @@ class GraphService:
             if not candidate_ids:
                 break
 
-            loaded_entities = await CRMEntity.list_by_ids(list(candidate_ids))
+            loaded_entities = await CRMEntity.list_across_companies_by_ids(list(candidate_ids))
             entities_by_id = {e.entity_id: e for e in loaded_entities}
 
             next_wave: list[str] = []
@@ -628,7 +628,7 @@ class GraphService:
 
         all_neighbor_ids = incoming_ids | outgoing_ids | undirected_ids
 
-        loaded_entities = await CRMEntity.list_by_ids(list(all_neighbor_ids))
+        loaded_entities = await CRMEntity.list_across_companies_by_ids(list(all_neighbor_ids))
         neighbors_dict: dict[str, CRMEntity] = {}
         for neighbor in loaded_entities:
             if self._is_entity_in_time_window(neighbor, timeline_from, timeline_to):
@@ -667,7 +667,7 @@ class GraphService:
 
     async def _build_direction_map(self) -> _RelationshipDirectionMap:
         """Строит карту направленности для быстрого доступа."""
-        relationship_types = await RelationshipType.in_company(
+        relationship_types = await RelationshipType.query_by_system_in_company(
             require_active_company().company_id,
             include_system=True,
         ).order_by("type_id").all()
@@ -890,7 +890,7 @@ class GraphService:
                         prefetch_ids.add(nid)
                         if len(prefetch_ids) >= DIJKSTRA_PREFETCH_BATCH:
                             break
-                batch = await Relationship.neighbors_for_entities(
+                batch = await Relationship.incident_edges_by_entity_id(
                     list(prefetch_ids),
                     cross_company=True,
                     relationship_namespace=relationship_namespace,
@@ -914,7 +914,7 @@ class GraphService:
                     unknown_neighbors.add(neighbor_id)
 
             if unknown_neighbors:
-                loaded = await CRMEntity.list_by_ids(list(unknown_neighbors))
+                loaded = await CRMEntity.list_across_companies_by_ids(list(unknown_neighbors))
                 for e in loaded:
                     entities_cache[e.entity_id] = e
                 for nid in unknown_neighbors:

@@ -167,7 +167,7 @@ async def _wipe_local_binding_state(
         _ = await StoredMailMessage.delete_folder(
             mailbox_binding_id, folder=folder_name
         )
-        _ = await MailboxSyncCursor.delete_by_mailbox_binding(
+        _ = await MailboxSyncCursor.delete_by_mailbox_binding_and_folder(
             mailbox_binding_id, folder=folder_name
         )
     _ = await StoredMailboxFolder.replace_for_binding(

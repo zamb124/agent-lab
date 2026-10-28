@@ -53,7 +53,7 @@ class SecretVariableVersion(PlatformModel):
     value_encrypted: str | None = DbField(default=None, db_type="TEXT")
 
     @classmethod
-    async def list_versions(
+    async def list_masked_by_version_desc(
         cls,
         company_id: str,
         variable_key: str,
@@ -61,6 +61,7 @@ class SecretVariableVersion(PlatformModel):
         limit: int = 50,
         offset: int = 0,
     ) -> list[PlatformVariable]:
+        """Окно версий, ORDER BY version DESC. Секреты замаскированы. Пустые ключи не проверяются."""
         rows = await (
             cls.objects.filter(
                 company_id=company_id,

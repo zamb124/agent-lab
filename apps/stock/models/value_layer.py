@@ -161,7 +161,7 @@ class StockValueLayer(PlatformModel):
         ).order_by("entry_no").limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_for_company(
+    async def list_by_entry_no(
         cls,
         company_id: str,
         *,
@@ -170,6 +170,7 @@ class StockValueLayer(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Окно слоёв компании, ORDER BY entry_no, limit и offset. product_id и warehouse_id равные None не фильтруют."""
         query = cls.objects.filter(company_id=company_id)
         if product_id is not None:
             query = query.filter(product_id=product_id)
@@ -178,9 +179,10 @@ class StockValueLayer(PlatformModel):
         return await query.order_by("entry_no").limit(limit).offset(offset).all()
 
     @classmethod
-    async def count_for_company(
+    async def count_by_product_and_warehouse(
         cls, company_id: str, *, product_id: str | None, warehouse_id: str | None
     ) -> int:
+        """Счёт слоёв компании. product_id и warehouse_id равные None не фильтруют."""
         query = cls.objects.filter(company_id=company_id)
         if product_id is not None:
             query = query.filter(product_id=product_id)

@@ -77,3 +77,14 @@ export const namespaceIntegrationCustomFieldsSyncOp = createAsyncOp({
         path: '/crm/api/v1/namespaces/:namespace_name/integrations/:provider/custom_fields/sync',
     },
 });
+
+declare module '@platform/lib/events/factory-registry.js' {
+    interface PlatformFactoryRegistry {
+        'crm/namespace_integrations_list': typeof namespaceIntegrationsListOp;
+        'crm/namespace_integration_authorize': typeof namespaceIntegrationAuthorizeOp;
+        'crm/namespace_integration_entities_sync': typeof namespaceIntegrationEntitiesSyncOp;
+        'crm/namespace_integration_auto_sync': typeof namespaceIntegrationAutoSyncOp;
+        'crm/namespace_integration_auto_note_ai': typeof namespaceIntegrationAutoNoteAiOp;
+        'crm/namespace_integration_custom_fields_sync': typeof namespaceIntegrationCustomFieldsSyncOp;
+    }
+}

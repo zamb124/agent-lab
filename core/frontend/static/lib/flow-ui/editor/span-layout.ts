@@ -30,7 +30,7 @@ export function spanFromPointer(startSpan: unknown, startX: number, clientX: num
 
 export function spanContainerWidth(blockEl: { parentElement?: Element | null; closest?: (selector: string) => Element | null } | null | undefined): number {
     if (!blockEl || typeof blockEl !== 'object') return 0;
-    const parent = blockEl.parentElement ?? null;
+    const parent = blockEl.parentElement === undefined ? null : blockEl.parentElement;
     if (parent && typeof parent.hasAttribute === 'function' && parent.hasAttribute('data-container-key')) {
         return parent.getBoundingClientRect().width;
     }
@@ -45,8 +45,13 @@ export function startSpanResize({ event, startSpan, containerWidth, onSpan }: {
     containerWidth: number;
     onSpan: (span: number) => void;
 }): void {
-    const handle = event.currentTarget as HTMLElement | null;
-    if (!handle || typeof onSpan !== 'function') return;
+    const handle = event.currentTarget;
+    if (!(handle instanceof HTMLElement)) {
+        throw new Error('flow-ui: span resize target must be an element');
+    }
+    if (typeof onSpan !== 'function') {
+        throw new Error('flow-ui: span resize requires onSpan');
+    }
     const pointerId = event.pointerId;
     const originSpan = clampSpan(startSpan);
     const startX = event.clientX;

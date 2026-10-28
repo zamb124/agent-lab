@@ -1,0 +1,653 @@
+/**
+ * flows-node-types-sidebar — палитра типов нод и ресурсов для drag-into-canvas.
+ *
+ * Источники:
+ *   - useOp('flows/node_types').lastResult.items — runtime-ноды с category
+ *     (`core` | `tools` | `sources` | `integrations` | `channels`).
+ *   - useOp('flows/resource_types').lastResult.items — ресурсные типы (раздел «Ресурсы»).
+ *   - useOp('flows/triggers_list').run({ flow_id }) — триггеры flow для
+ *     отдельной секции в шапке сайдбара.
+ * Кнопка «Лимиты и речь» над секцией триггеров — показ/скрытие панели
+ * `flows-flow-property-panel` в правом столбе (событие `toggle-flow-settings`).
+ *
+ * Поиск фильтрует все категории + ресурсы (по name / description / type),
+ * категории без совпадений скрываются.
+ *
+ * Перетаскивание: dataTransfer `application/x-flow-node-type` для нод,
+ * `application/x-flow-connector-id` для datasource, и
+ * `application/x-flow-resource-type` для ресурсов.
+ *
+ * Тип ноды `resource` в палитре не показываем: нода-ресурс на канве создаётся
+ * только перетаскиванием записи из секции «Ресурсы» (конкретный resource type),
+ * иначе дублирует смысл и путает.
+ *
+ * UI-действия: «+» — новый триггер; карандаш/мусор в строке — редактирование / удаление.
+ */
+
+import type { OpController } from '@platform/lib/base/use-resource.js';
+import { html, css, nothing } from 'lit';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-modal-search-field.js';
+import '@platform/lib/components/glass-spinner.js';
+import { getNodeTypeMeta, getCategoryToken } from '../../_helpers/node-icons.js';
+import { getTriggerTypeRowVisual } from '../../_helpers/trigger-types.js';
+import { asArray, asString } from '../../_helpers/flows-resolvers.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
+
+const NODE_CATEGORY_ORDER = Object.freeze(['core', 'tools', 'sources', 'integrations', 'channels']);
+
+const CATEGORY_TO_TOKEN_KEY = Object.freeze({
+    core: 'core',
+    tools: 'core',
+    sources: 'sources',
+    integrations: 'integrations',
+    channels: 'flow',
+    resources: 'flow',
+});
+
+export class FlowsNodeTypesSidebar extends PlatformElement {
+    static i18nNamespace = 'flows';
+
+    static override properties: PropertyDeclarations = {
+        flowId: { type: String, attribute: 'flow-id' },
+        flowSettingsActive: { type: Boolean, attribute: 'flow-settings-active' },
+        _query: { state: true },
+    }
+    declare flowId: string;
+    declare flowSettingsActive: boolean;
+    declare _query: string;
+;
+
+    static override styles: CSSResultGroup = [
+        PlatformElement.styles,
+        glassStyles,
+        css`
+            :host {
+                display: flex;
+                flex-direction: column;
+                width: 240px;
+                flex-shrink: 0;
+                padding: var(--space-3) var(--space-2);
+                gap: var(--space-3);
+                border-right: 1px solid var(--border-subtle);
+                background: var(--glass-tint-subtle);
+                overflow-y: auto;
+            }
+
+            /* Триггеры */
+            .triggers-section {
+                display: flex; flex-direction: column; gap: var(--space-2);
+                padding: 0 var(--space-2);
+            }
+            .triggers-header {
+                display: flex; align-items: center; justify-content: space-between;
+            }
+            .triggers-title {
+                font-size: var(--text-xs);
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                color: var(--text-tertiary);
+                font-weight: var(--font-semibold);
+            }
+            .triggers-title-wrap {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .triggers-empty {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                padding: var(--space-2);
+                text-align: center;
+                border-radius: var(--radius-lg);
+            }
+            .trigger-row {
+                display: flex; align-items: center; justify-content: space-between;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-2);
+                border-radius: var(--radius-lg);
+                font-size: var(--text-sm);
+                line-height: 1.25;
+                color: var(--text-primary);
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .trigger-row-main {
+                display: flex; align-items: center; gap: var(--space-2);
+                min-width: 0;
+                flex: 1;
+            }
+            .trigger-type-icon-wrap {
+                width: 22px;
+                height: 22px;
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                box-sizing: border-box;
+            }
+            .trigger-row-label {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                line-height: 1.25;
+            }
+            .trigger-row-actions {
+                display: inline-flex;
+                align-items: center;
+                flex-shrink: 0;
+                gap: var(--space-1);
+            }
+
+            article.trigger-row {
+                appearance: none;
+                margin: 0;
+                font: inherit;
+                color: inherit;
+                width: 100%;
+                text-align: left;
+                cursor: pointer;
+            }
+            article.trigger-row.is-active {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
+            }
+            .trigger-row-help {
+                display: inline-flex;
+                align-items: center;
+                flex-shrink: 0;
+            }
+
+            .search-wrap {
+                padding: 0 var(--space-2);
+            }
+            .search-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .search-row platform-modal-search-field {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            .search-row platform-help-hint {
+                flex-shrink: 0;
+            }
+
+            /* Категории */
+            .category {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+            }
+            .category-header {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                font-size: var(--text-xs);
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                color: var(--text-tertiary);
+                font-weight: var(--font-semibold);
+                padding: 0 var(--space-2);
+                margin-bottom: 2px;
+            }
+            .category-title {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .category-divider {
+                height: 1px;
+                background: var(--border-subtle);
+                margin: var(--space-2) var(--space-2);
+            }
+            .category-items {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            /* Карточка типа ноды */
+            .node-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-height: var(--flows-sidebar-row-min-height);
+                padding: 6px 8px;
+                border-radius: var(--radius-sm);
+                border: 1px solid transparent;
+                background: transparent;
+                box-sizing: border-box;
+                cursor: grab;
+                transition: var(--motion-transition-interactive);
+            }
+            .node-item:hover {
+                background: color-mix(in oklab, var(--glass-solid-medium) 86%, var(--accent) 8%);
+                border-color: var(--border-subtle);
+                box-shadow: var(--glass-shadow-medium);
+                transform: translateY(-1px);
+            }
+            .node-item:active { cursor: grabbing; }
+            .node-icon {
+                width: 30px;
+                height: 30px;
+                flex-shrink: 0;
+                border-radius: var(--radius-sm);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: var(--glass-shadow-subtle);
+            }
+            .node-name {
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                font-weight: var(--font-medium);
+                min-width: 0;
+                line-height: 1.2;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .empty-row {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                padding: var(--space-2);
+                text-align: center;
+            }
+        `,
+    ];
+    private _nodeTypesOp: OpController;
+    private _resourceTypesOp: OpController;
+    private _triggersOp: OpController;
+    private _removeTriggerOp: OpController;
+
+    constructor() {
+        super();
+        this.flowId = '';
+        this.flowSettingsActive = false;
+        this._query = '';
+        this._nodeTypesOp = this.useOp('flows/node_types');
+        this._resourceTypesOp = this.useOp('flows/resource_types');
+        this._triggersOp = this.useOp('flows/triggers_list');
+        this._removeTriggerOp = this.useOp('flows/trigger_remove');
+    }
+
+    override connectedCallback(): void {
+        super.connectedCallback();
+        void this._nodeTypesOp.run({});
+        void this._resourceTypesOp.run({});
+        if (this.flowId) void this._triggersOp.run({ flow_id: this.flowId });
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated && super.updated(changed);
+        if (changed.has('flowId') && this.flowId) {
+            void this._triggersOp.run({ flow_id: this.flowId });
+        }
+    }
+
+    _matchQuery(text: any) {
+        if ((this._query.length as any) === 0) return true;
+        return asString(text).toLowerCase().includes((this._query.toLowerCase() as any));
+    }
+
+    _filterItems(items: Record<string, any>[]) {
+        if ((this._query.length as any) === 0) return items;
+        return items.filter(
+            (it: any) => this._matchQuery(this._paletteName(it))
+                || this._matchQuery(it.description)
+                || this._matchQuery(it.type)
+                || this._matchQuery(it.connector_id),
+        );
+    }
+
+    _paletteName(it: any) {
+        if (it.type === 'code_agent') {
+            return this.t('node_types.code_agent');
+        }
+        if (typeof it.name === 'string' && it.name.length > 0) {
+            return it.name;
+        }
+        return it.type;
+    }
+
+    _onDragNodeType(e: Event, item: any) {
+        if (item === null || typeof item !== 'object') {
+            throw new Error('FlowsNodeTypesSidebar._onDragNodeType: item object required');
+        }
+        const type = asString(item.type);
+        if (type.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar._onDragNodeType: item.type required');
+        }
+        (e as Record<string, any>).dataTransfer.setData('application/x-flow-node-type', type);
+        if (type === 'datasource') {
+            const connectorId = asString(item.connector_id);
+            if (connectorId.length === 0) {
+                throw new Error('FlowsNodeTypesSidebar._onDragNodeType: connector_id required for datasource');
+            }
+            (e as Record<string, any>).dataTransfer.setData('application/x-flow-connector-id', connectorId);
+        }
+        (e as Record<string, any>).dataTransfer.effectAllowed = 'copy';
+    }
+
+    _onDragResourceType(e: Event, item: any) {
+        if (item === null || typeof item !== 'object') {
+            throw new Error('FlowsNodeTypesSidebar._onDragResourceType: item object required');
+        }
+        const type = asString(item.type);
+        if (type.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar._onDragResourceType: item.type required');
+        }
+        (e as Record<string, any>).dataTransfer.setData('application/x-flow-resource-type', type);
+        (e as Record<string, any>).dataTransfer.effectAllowed = 'copy';
+    }
+
+    _addTrigger() {
+        if (!this.flowId) return;
+        this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger: null });
+    }
+
+    _editTrigger(tr: any) {
+        if (!this.flowId) return;
+        if (!tr || typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar._editTrigger: trigger with trigger_id required');
+        }
+        this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger: tr });
+    }
+
+    async _deleteTrigger(tr: any) {
+        if (!this.flowId) return;
+        if (!tr || typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar._deleteTrigger: trigger with trigger_id required');
+        }
+        const ok = await platformConfirm(
+            this.t('triggers_modal.delete_message', { id: tr.trigger_id }),
+            {
+                title: this.t('triggers_modal.delete_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.t('triggers_modal.action_delete'),
+                cancelText: this.t('common.action_cancel'),
+            },
+        );
+        if (!ok) return;
+        await this._removeTriggerOp.run({ flow_id: this.flowId, trigger_id: tr.trigger_id });
+        void this._triggersOp.run({ flow_id: this.flowId });
+    }
+
+    _toggleFlowSettingsPanel() {
+        if (!this.flowId) return;
+        this.emit('toggle-flow-settings', {});
+    }
+
+    _onFlowSettingsKeydown(event: KeyboardEvent) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        event.preventDefault();
+        this._toggleFlowSettingsPanel();
+    }
+
+    _renderFlowSettingsPanelToggle() {
+        if (!this.flowId) return '';
+        const flowTok = getCategoryToken('flow');
+        const wrapBg = `color-mix(in oklab, ${flowTok} 14%, transparent)`;
+        return html`
+            <div class="triggers-section">
+                <article
+                    tabindex="0"
+                    role="button"
+                    class="trigger-row glass-subtle ${this.flowSettingsActive ? 'is-active' : ''}"
+                    aria-pressed=${this.flowSettingsActive ? 'true' : 'false'}
+                    title=${this.t('node_types_sidebar.flow_settings_toggle_hint')}
+                    @click=${this._toggleFlowSettingsPanel}
+                    @keydown=${this._onFlowSettingsKeydown}
+                >
+                    <div class="trigger-row-main">
+                        <div
+                            class="trigger-type-icon-wrap"
+                            style="background:${wrapBg};color:${flowTok};"
+                            aria-hidden="true"
+                        >
+                            <platform-icon name="adjustment" size="12"></platform-icon>
+                        </div>
+                        <span class="trigger-row-label">${this.t('flow_property_panel.card_title')}</span>
+                        <span
+                            class="trigger-row-help"
+                            @click=${(e: Event) => e.stopPropagation()}
+                            @keydown=${(e: Event) => e.stopPropagation()}
+                        >
+                            <platform-help-hint
+                                .label=${this.t('node_types_sidebar.flow_settings_help_label')}
+                                .summary=${this.t('node_types_sidebar.flow_settings_help_summary')}
+                                .details=${this.t('node_types_sidebar.flow_settings_help_details')}
+                                .docHref=${'/documentation/scenarios/flows/operate-published-flow/'}
+                                .docLabel=${this.t('help_hints.open_scenario')}
+                            ></platform-help-hint>
+                        </span>
+                    </div>
+                </article>
+            </div>
+        `;
+    }
+
+    _renderTriggers() {
+        const result = this._triggersOp.lastResult;
+        let triggerItems = [];
+        if (result !== null && result !== undefined) {
+            if (typeof result !== 'object' || !Array.isArray((result as Record<string, any>).items)) {
+                throw new Error('flows/triggers_list: lastResult.items must be an array');
+            }
+            triggerItems = (result as Record<string, any>).items;
+        }
+        return html`
+            <div class="triggers-section">
+                <div class="triggers-header">
+                    <span class="triggers-title-wrap">
+                        <span class="triggers-title">${this.t('node_types_sidebar.triggers')}</span>
+                        <platform-help-hint
+                            .label=${this.t('node_types_sidebar.triggers_help_label')}
+                            .summary=${this.t('node_types_sidebar.triggers_help_summary')}
+                            .details=${this.t('node_types_sidebar.triggers_help_details')}
+                            .docHref=${'/documentation/scenarios/flows/operate-published-flow/'}
+                            .docLabel=${this.t('help_hints.open_scenario')}
+                        ></platform-help-hint>
+                    </span>
+                    <platform-button
+                        variant="primary"
+                        icon-only
+                        density="dense"
+                        aria-label=${this.t('node_types_sidebar.add_trigger')}
+                        @click=${this._addTrigger}
+                    >
+                        <platform-icon name="plus" size="12"></platform-icon>
+                    </platform-button>
+                </div>
+                ${triggerItems.length === 0
+                    ? html`<div class="triggers-empty glass-subtle">${this.t('node_types_sidebar.no_triggers')}</div>`
+                    : triggerItems.map((tr: any) => {
+                        const tv = getTriggerTypeRowVisual(tr.type);
+                        return html`
+                        <div class="trigger-row glass-subtle">
+                            <div class="trigger-row-main">
+                                <div
+                                    class="trigger-type-icon-wrap"
+                                    style="background:${tv.wrapBg};color:${tv.wrapFg};"
+                                    aria-hidden="true"
+                                >
+                                    <platform-icon name=${tv.icon} size="12"></platform-icon>
+                                </div>
+                                <span class="trigger-row-label">${tr.name || tr.trigger_id}</span>
+                            </div>
+                            <div class="trigger-row-actions" @click=${(e: Event) => e.stopPropagation()}>
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="dense"
+                                    aria-label=${this.t('triggers_modal.action_edit')}
+                                    @click=${() => this._editTrigger(tr)}
+                                >
+                                    <platform-icon name="edit" size="12"></platform-icon>
+                                </platform-button>
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="dense"
+                                    aria-label=${this.t('triggers_modal.action_delete')}
+                                    @click=${() => this._deleteTrigger(tr)}
+                                >
+                                    <platform-icon name="trash" size="12"></platform-icon>
+                                </platform-button>
+                            </div>
+                        </div>
+                    `;
+                    })}
+            </div>
+        `;
+    }
+
+    _onSearchChange(e: CustomEvent) {
+        const rawValue = e.detail?.value;
+        if (typeof rawValue !== 'string') {
+            throw new TypeError('FlowsNodeTypesSidebar._onSearchChange: string detail.value required');
+        }
+        this._query = rawValue;
+    }
+
+    _renderSearch() {
+        return html`
+            <div class="search-wrap">
+                <div class="search-row">
+                    <platform-modal-search-field
+                        layout="fill"
+                        .value=${this._query}
+                        placeholder=${this.t('node_types_sidebar.search_placeholder')}
+                        @change=${this._onSearchChange}
+                    ></platform-modal-search-field>
+                    <platform-help-hint
+                        .label=${this.t('node_types_sidebar.palette_help_label')}
+                        .summary=${this.t('node_types_sidebar.palette_help_summary')}
+                        .details=${this.t('node_types_sidebar.palette_help_details')}
+                        .docHref=${'/documentation/scenarios/flows/add-llm-node/'}
+                        .docLabel=${this.t('help_hints.open_scenario')}
+                    ></platform-help-hint>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderCategory(titleKey: any, items: Record<string, any>[], dragHandler: any, categoryKey: any) {
+        if (items.length === 0) return '';
+        const tokenKey = (CATEGORY_TO_TOKEN_KEY as any)[categoryKey];
+        const categoryToken = getCategoryToken(typeof tokenKey === 'string' && tokenKey.length > 0 ? tokenKey : 'core');
+        return html`
+            <div class="category">
+                <div class="category-header">
+                    <span class="category-title">${this.t(titleKey)}</span>
+                    <platform-help-hint
+                        .label=${this.t('node_types_sidebar.category_help_label')}
+                        .summary=${this.t(titleKey)}
+                        .details=${this.t(`node_types_sidebar.category_${categoryKey}_help`)}
+                        .docHref=${categoryKey === 'resources'
+                            ? '/documentation/scenarios/flows/edit-llm-flow/'
+                            : '/documentation/scenarios/flows/add-llm-node/'}
+                        .docLabel=${this.t('help_hints.open_scenario')}
+                    ></platform-help-hint>
+                </div>
+                <div class="category-items">
+                    ${items.map((it: any) => {
+                        const meta = getNodeTypeMeta(it.type);
+                        const isDatasource = it.type === 'datasource';
+                        let iconName;
+                        if (isDatasource) {
+                            if (typeof it.icon !== 'string' || it.icon.length === 0) {
+                                throw new Error('FlowsNodeTypesSidebar: datasource palette icon required');
+                            }
+                            iconName = it.icon;
+                        } else {
+                            iconName = meta.icon !== 'box' ? meta.icon : (typeof it.icon === 'string' && it.icon.length > 0 ? it.icon : 'box');
+                        }
+                        const brandIcon = isDatasource && iconName !== 'database';
+                        const tokenColor = getCategoryToken(meta.category) !== getCategoryToken('core') || categoryKey === 'core'
+                            ? getCategoryToken(meta.category)
+                            : categoryToken;
+                        const style = `background: color-mix(in oklab, ${tokenColor} 14%, transparent); color: ${tokenColor};`;
+                        const paletteName = this._paletteName(it);
+                        return html`
+                            <div
+                                class="node-item"
+                                data-node-type=${it.type}
+                                data-node-category=${categoryKey}
+                                draggable="true"
+                                title=${it.description || paletteName}
+                                aria-label=${paletteName}
+                                @dragstart=${(e: Event) => dragHandler.call(this, e, it)}
+                            >
+                                <div class="node-icon" style=${style}>
+                                    <platform-icon name=${iconName} size="16" ?colored=${brandIcon}></platform-icon>
+                                </div>
+                                <div class="node-name">${paletteName}</div>
+                            </div>
+                        `;
+                    })}
+                </div>
+            </div>
+        `;
+    }
+
+    _categoryTitleKey(category: string) {
+        return `node_types_sidebar.category_${category}`;
+    }
+
+    _paletteCards(raw: any, factoryName: any) {
+        if (raw === null) {
+            return [];
+        }
+        if (typeof raw !== 'object' || !Array.isArray(raw.items)) {
+            throw new Error(`${factoryName}: lastResult.items must be an array`);
+        }
+        return raw.items;
+    }
+
+    override render(): TemplateResult {
+        const nodeTypes = this._paletteCards(this._nodeTypesOp.lastResult, 'flows/node_types');
+        const resourceTypes = this._paletteCards(this._resourceTypesOp.lastResult, 'flows/resource_types');
+        const paletteNodeTypes = nodeTypes.filter((it: any) => it && it.type !== 'resource');
+        const filteredNodes = this._filterItems(paletteNodeTypes);
+        const filteredResources = this._filterItems(resourceTypes);
+
+        const grouped = new Map();
+        for (const item of filteredNodes) {
+            const cat = typeof item.category === 'string' && item.category !== '' ? item.category : 'core';
+            if (!grouped.has(cat)) grouped.set(cat, []);
+            grouped.get(cat).push(item);
+        }
+
+        return html`
+            ${this._renderFlowSettingsPanelToggle()}
+            ${this._renderTriggers()}
+            ${this._renderSearch()}
+            ${NODE_CATEGORY_ORDER.map((cat) => this._renderCategory(this._categoryTitleKey(cat), asArray(grouped.get(cat)), this._onDragNodeType, cat))}
+            ${filteredResources.length > 0 ? html`<div class="category-divider"></div>` : ''}
+            ${this._renderCategory('node_types_sidebar.category_resources', filteredResources, this._onDragResourceType, 'resources')}
+            ${this._nodeTypesOp.busy && nodeTypes.length === 0
+                ? html`<div class="empty-row"><glass-spinner></glass-spinner></div>`
+                : ''}
+            ${(filteredNodes.length === 0 && filteredResources.length === 0 && nodeTypes.length > 0)
+                ? html`<div class="empty-row">${this.t('node_types_sidebar.empty_search')}</div>`
+                : ''}
+        `;
+    }
+}
+
+customElements.define('flows-node-types-sidebar', FlowsNodeTypesSidebar);

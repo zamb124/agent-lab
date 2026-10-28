@@ -57,11 +57,35 @@ import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
 import { createSyncCallPrefsEffect } from '../events/sync-call-prefs.effect.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import type { CompanyListEntry } from '@platform/lib/utils/company-host-guard.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
     SyncCallUiSlice,
     SyncChannelsSlice,
     SyncThreadsSlice,
 } from '../events/sync.types.js';
+
+function isSyncChannelsSlice(value: unknown): value is SyncChannelsSlice {
+    return isPlainRecord(value);
+}
+
+function isSyncThreadsSlice(value: unknown): value is SyncThreadsSlice {
+    return isPlainRecord(value);
+}
+
+function isSyncCallUiSlice(value: unknown): value is SyncCallUiSlice {
+    return isPlainRecord(value);
+}
+
+function eventRecord(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
+
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        throw new Error(`sync-app: ${label} required`);
+    }
+    return value;
+}
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { TEAM_EVENTS } from '@platform/lib/events/reducers/team.js';
 import { buildSyncAssistantContext } from '../_helpers/platform-assistant-context.js';
@@ -90,6 +114,21 @@ const SYNC_BOTTOM_NAV_ITEMS = [
 /** Канал (чат встречи / переписка): фокус на контенте, как на десктопе без второй строки вкладок. */
 const SYNC_BOTTOM_NAV_HIDE_ON_ROUTES = ['call_join', 'channel'];
 
+function companyListEntries(list: ReadonlyArray<{ company_id?: unknown; subdomain?: unknown }>): CompanyListEntry[] {
+    return list.map((company) => {
+        if (typeof company.company_id !== 'string' || company.company_id.length === 0) {
+            throw new Error('sync: company list entry requires company_id');
+        }
+        if (company.subdomain !== undefined && typeof company.subdomain !== 'string') {
+            throw new Error('sync: company subdomain must be a string');
+        }
+        if (typeof company.subdomain === 'string') {
+            return { company_id: company.company_id, subdomain: company.subdomain };
+        }
+        return { company_id: company.company_id };
+    });
+}
+
 export class SyncApp extends PlatformApp {
     static defaultI18nNamespace = 'sync';
     static bottomNavItems = SYNC_BOTTOM_NAV_ITEMS;
@@ -103,8 +142,8 @@ export class SyncApp extends PlatformApp {
     private _channelsSliceSel: SelectController<SyncChannelsSlice | undefined>;
     private _threadsSliceSel: SelectController<SyncThreadsSlice | undefined>;
     private _callUiSel: SelectController<SyncCallUiSlice | undefined>;
-    private _companiesListSel: SelectController<readonly CompanyListEntry[] | undefined>;
-    private _companiesLoadingSel: SelectController<boolean | undefined>;
+    private _companiesListSel: SelectController<CompanyListEntry[]>;
+    private _companiesLoadingSel: SelectController<boolean>;
     private _teamSel: SelectController<{ loading?: boolean; members?: unknown[] } | undefined>;
     private _incomingCallDispatched: Set<string>;
     private _wsEverConnected: boolean;
@@ -115,16 +154,13 @@ export class SyncApp extends PlatformApp {
         this._incomingCallDispatched = new Set<string>();
         this._wsEverConnected = false;
         this._typingPruneTimer = null;
-        this._authUserSel = this.select((s) => {
-            const auth = s.auth as { user?: Record<string, any> | null } | undefined;
-            return auth && auth.user ? auth.user : null;
-        });
-        this._channelsSliceSel = this.select((s) => s.syncChannels as SyncChannelsSlice | undefined);
-        this._threadsSliceSel = this.select((s) => s.syncThreads as SyncThreadsSlice | undefined);
-        this._callUiSel = this.select((s) => s.syncCallUi as SyncCallUiSlice | undefined);
-        this._companiesListSel = this.select((s) => (s.companies as { list?: readonly CompanyListEntry[] } | undefined)?.list);
-        this._companiesLoadingSel = this.select((s) => (s.companies as { loading?: boolean } | undefined)?.loading);
-        this._teamSel = this.select((s) => s.team as { loading?: boolean; members?: unknown[] } | undefined);
+        this._authUserSel = this.select((s) => s.auth.user);
+        this._channelsSliceSel = this.select((s) => isSyncChannelsSlice(s.syncChannels) ? s.syncChannels : undefined);
+        this._threadsSliceSel = this.select((s) => isSyncThreadsSlice(s.syncThreads) ? s.syncThreads : undefined);
+        this._callUiSel = this.select((s) => isSyncCallUiSlice(s.syncCallUi) ? s.syncCallUi : undefined);
+        this._companiesListSel = this.select((s) => companyListEntries(s.companies.list));
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._teamSel = this.select((s) => s.team);
         this.useEvent(SYNC_CALL_INCOMING, (event) => this._onIncomingCall(event));
         this.useEvent(SYNC_CALL_ENDED, (event) => this._onCallEnded(event));
         this.useEvent(CoreEvents.WS_CONNECTED, () => this._onWsConnected());
@@ -160,7 +196,7 @@ export class SyncApp extends PlatformApp {
         const auth = this._authSelect.value;
         applyCompanyHostRedirectIfNeeded(
             auth,
-            this._companiesListSel.value ?? [],
+            this._companiesListSel.value,
             this._companiesLoadingSel.value === true,
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );
@@ -227,7 +263,7 @@ export class SyncApp extends PlatformApp {
     }
 
     _onIncomingCall(event: PlatformEvent) {
-        const p = event && event.payload as Record<string, unknown> | undefined;
+        const p = eventRecord(event.payload);
         if (!p || typeof p.call_id !== 'string') return;
         const myId = this._resolveMyUserId();
         if (typeof p.initiator_user_id === 'string' && p.initiator_user_id === myId) return;
@@ -251,7 +287,7 @@ export class SyncApp extends PlatformApp {
     }
 
     _onCallEnded(event: PlatformEvent) {
-        const p = event && event.payload as Record<string, unknown> | undefined;
+        const p = eventRecord(event.payload);
         if (p && typeof p.call_id === 'string') {
             this._incomingCallDispatched.delete(p.call_id);
         }
@@ -390,9 +426,9 @@ export class SyncApp extends PlatformApp {
         return buildSyncAssistantContext(
             routeKey,
             params,
-            this._channelsSliceSel.value as Record<string, unknown>,
-            this._threadsSliceSel.value as Record<string, unknown>,
-            this._callUiSel.value as Record<string, unknown>,
+            requireRecord(this._channelsSliceSel.value, 'channelsState'),
+            requireRecord(this._threadsSliceSel.value, 'threadsState'),
+            requireRecord(this._callUiSel.value, 'callUiState'),
         );
     }
 

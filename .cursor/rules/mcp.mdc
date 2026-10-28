@@ -6,7 +6,7 @@ globs:
   - "apps/flows/src/tasks/mcp_catalog_tasks.py"
   - "apps/flows/mcp_catalog_allowlist.yaml"
   - "apps/flows/mcp_branding/**"
-  - "apps/flows/ui/modals/flows-mcp-servers-modal.js"
+  - "apps/flows/ui/modals/flows-mcp-servers-modal.ts"
 alwaysApply: false
 ---
 
@@ -16,7 +16,7 @@ alwaysApply: false
 
 ## Модель
 
-- `MCPServerConfig` (`apps/flows/src/models/mcp.py`, таблица `mcp_servers`, PK `mcp_server_id` = `{company_id}:{server_id}`): `url`, `transport_type` (`MCPTransportType`), `headers` (поддерживают `@var:`), `is_active`, `source` (`platform`/`catalog`/`manual`), `catalog_id`, `catalog_snapshot_hash`, `catalog_auto_provisioned`, `override_locked*`, `cached_tools`, `last_sync_at`; `icon_url` вычисляется.
+- `MCPServerConfig` (`apps/flows/src/models/mcp.py`, таблица `mcp_servers`, PK `mcp_server_id` = `{company_id}:{server_id}`. `MCPServerConfig.server_row_id_for_active_company(server_id) -> str` — тот же ключ из активной компании. Пустой `server_id` или компания — `ValueError` с текстом `server_id is required`. `:` — `ValueError` с текстом `server_id and company_id must not contain ':'`.): `url`, `transport_type` (`MCPTransportType`), `headers` (поддерживают `@var:`), `is_active`, `source` (`platform`/`catalog`/`manual`), `catalog_id`, `catalog_snapshot_hash`, `catalog_auto_provisioned`, `override_locked*`, `cached_tools`, `last_sync_at`; `icon_url` вычисляется.
 - `MCPCatalogEntry` (`apps/flows/src/models/mcp_catalog.py`, таблица `mcp_catalog`, `__global_model__`, PK `catalog_id`) — снимок Official MCP Registry + curated seeds `apps/flows/mcp_catalog_allowlist.yaml` (`platform_approved`, `auth_template`).
 - `MCPServerBranding` (`apps/flows/src/models/mcp_branding.py`, таблица `mcp_server_branding`, PK `server_id`) — глобальная иконка по slug из публичного `FileRecord`.
 

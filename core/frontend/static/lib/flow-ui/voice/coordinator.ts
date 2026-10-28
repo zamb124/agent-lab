@@ -14,6 +14,7 @@ import {
 import { readTtsOutputEnabled } from '../../voice/tts-output-pref.js';
 import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '../../voice/voice-http-origin.js';
 import { fetchFlowVoiceSessionQueryDict } from '../../voice/fetch-flow-voice-session-query.js';
+import { isPlainRecord } from '../../events/payload.js';
 
 /** Поверхность ``<platform-flow-ui>``, нужная голосовому координатору. */
 export interface FlowUiVoiceHost {
@@ -59,19 +60,15 @@ function resolveHostVoiceBaseUrl(host: FlowUiVoiceHost): string {
     if (baseUrl === '') {
         return '';
     }
-    try {
-        if (baseUrl.startsWith('/')) {
-            if (typeof window === 'undefined' || !window.location) {
-                return '';
-            }
-            return resolveVoiceHttpOriginFromFlowsBaseUrl(
-                `${window.location.origin}${baseUrl}`,
-            );
+    if (baseUrl.startsWith('/')) {
+        if (typeof window === 'undefined' || !window.location) {
+            return '';
         }
-        return resolveVoiceHttpOriginFromFlowsBaseUrl(baseUrl);
-    } catch {
-        return '';
+        return resolveVoiceHttpOriginFromFlowsBaseUrl(
+            `${window.location.origin}${baseUrl}`,
+        );
     }
+    return resolveVoiceHttpOriginFromFlowsBaseUrl(baseUrl);
 }
 
 export async function startFlowUIVoiceSession(host: FlowUiVoiceHost): Promise<void> {
@@ -127,13 +124,11 @@ export async function startFlowUIVoiceSession(host: FlowUiVoiceHost): Promise<vo
         credentials,
         getContextId: () => (host.client ? host.client.contextId : null),
         onA2aStreamEvent: (frame: unknown) => {
-            if (frame && typeof frame === 'object') {
-                host.applyA2AFrame(frame);
-                const result = (frame as Record<string, unknown>).result;
-                if (result != null) {
-                    feedStreamTtsFromA2aResult(result);
-                }
-            }
+            if (!isPlainRecord(frame)) return;
+            host.applyA2AFrame(frame);
+            const result = frame.result;
+            if (typeof result !== 'object' || result === null) return;
+            feedStreamTtsFromA2aResult(result);
         },
     });
     host._voiceMedia = media;

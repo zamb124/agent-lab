@@ -10,6 +10,7 @@
  * - ``pageId`` — активная страница документа.
  */
 
+import { recordField } from '../../events/payload.js';
 import { isSettledTaskState } from '../protocol/a2a-stream.js';
 import { applyA2AFrame, createA2ATaskAccumulator } from '../protocol/a2a-task-accumulator.js';
 import { CONVERSATION_SLOT_ID, INPUT_BLOCK_TYPES, STATE_ARTIFACT_ID, UI_ARTIFACT_ID } from '../protocol/constants.js';
@@ -55,7 +56,7 @@ export interface CollectFieldsResult {
 }
 
 /** Хост ``<platform-flow-ui>``, видимый рендерерам блоков через ``ctx.host``. */
-export interface FlowUiHostLike extends FlowUiRecord {
+export interface FlowUiHostLike {
     voiceSessionActive: boolean;
     voiceSessionReady(): boolean;
     toggleVoiceSession(): void;
@@ -102,6 +103,14 @@ export interface ApplyFrameResult {
 
 function isObject(value: unknown): value is FlowUiRecord {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isBlock(value: unknown): value is FlowUiBlock {
+    return isObject(value) && typeof value.type === 'string';
+}
+
+function isUiEvent(value: Record<string, unknown>): value is FlowUiUiEvent {
+    return typeof value.kind === 'string';
 }
 
 /** ``html`` с ``field`` пишет поле через ``flowUi.setValue`` наравне с блоками ввода. */
@@ -185,7 +194,8 @@ export class FlowUIStore {
 
     page(pageId: string | null): FlowUiPage | null {
         if (!this.document) return null;
-        return this.document.pages.find((page) => page.page_id === pageId) || null;
+        const page = this.document.pages.find((item) => item.page_id === pageId);
+        return page === undefined ? null : page;
     }
 
     navigate(pageId: string): void {
@@ -199,7 +209,7 @@ export class FlowUIStore {
         if (!this.document) return settings;
         for (const page of this.document.pages) {
             for (const block of iterBlocks(page.blocks)) {
-                if (block.type === 'conversation') return isObject(block.settings) ? block.settings as FlowUiRecord : settings;
+                if (block.type === 'conversation') return isObject(block.settings) ? block.settings : settings;
             }
         }
         return settings;
@@ -238,8 +248,11 @@ export class FlowUIStore {
 
     /** Эфемерное состояние блока (активная вкладка), не входящее в state и ui-action. */
     localState(blockId: string): FlowUiRecord {
-        if (!this.blockLocal.has(blockId)) this.blockLocal.set(blockId, {});
-        return this.blockLocal.get(blockId) as FlowUiRecord;
+        const existing = this.blockLocal.get(blockId);
+        if (existing !== undefined) return existing;
+        const created: FlowUiRecord = {};
+        this.blockLocal.set(blockId, created);
+        return created;
     }
 
     /** Блоки активной страницы, пишущие поле state. */
@@ -256,7 +269,7 @@ export class FlowUIStore {
         const fields: Record<string, unknown> = {};
         const missing = new Set<string>();
         for (const block of this.inputBlocks()) {
-            const field = String(block.field ?? '');
+            const field = block.field === undefined || block.field === null ? '' : String(block.field);
             const value = this.fieldValue(field);
             const empty = isEmptyFieldValue(value);
             if (block.required === true && empty) missing.add(field);
@@ -315,7 +328,9 @@ export class FlowUIStore {
     }
 
     task(taskId: string | null): import('../protocol/a2a-task-accumulator.js').A2aAccumulatedTask | null {
-        return taskId ? this.tasks.tasksById[taskId] || null : null;
+        if (taskId === null || taskId.length === 0) return null;
+        const task = this.tasks.tasksById[taskId];
+        return task === undefined ? null : task;
     }
 
     /**
@@ -327,7 +342,7 @@ export class FlowUIStore {
         const task = this.task(this.activeTaskId);
         const status = task?.status;
         return task !== null && !isSettledTaskState(
-            status && typeof status === 'object' ? (status as FlowUiRecord).state : undefined,
+            isObject(status) ? status.state : undefined,
         );
     }
 
@@ -350,8 +365,9 @@ export class FlowUIStore {
         const applied = applyA2AFrame(this.tasks, frame);
         const uiEvents: FlowUiUiEvent[] = [];
         if (applied.frameKind === 'artifactUpdate') {
-            const artifactUpdate = (frame.result as FlowUiRecord | undefined)?.artifactUpdate as FlowUiRecord | undefined;
-            const artifact = (artifactUpdate?.artifact ?? {}) as FlowUiRecord;
+            const result = isObject(frame.result) ? frame.result : undefined;
+            const artifactUpdate = result !== undefined && isObject(result.artifactUpdate) ? result.artifactUpdate : undefined;
+            const artifact = recordField(artifactUpdate === undefined ? undefined : artifactUpdate.artifact, 'flow-ui artifact');
             const artifactId = artifact.artifactId;
             if (artifactId === STATE_ARTIFACT_ID) this._foldState();
             if (artifactId === UI_ARTIFACT_ID) {
@@ -359,9 +375,9 @@ export class FlowUIStore {
                 for (const part of parts) {
                     const decoded = decodePart(part);
                     if (decoded.kind !== 'ui') throw new Error('flow-ui: ui artifact part must be a ui event');
-                    const uiEvent = decoded.event as FlowUiUiEvent;
-                    this._applyUiEvent(uiEvent);
-                    uiEvents.push(uiEvent);
+                    if (!isUiEvent(decoded.event)) throw new Error('flow-ui: ui event kind required');
+                    this._applyUiEvent(decoded.event);
+                    uiEvents.push(decoded.event);
                 }
             }
         } else if (applied.frameKind === 'task') {
@@ -370,7 +386,7 @@ export class FlowUIStore {
         }
         if (applied.changedTaskId) {
             const task = this.tasks.tasksById[applied.changedTaskId];
-            if (task && this.contextId === null) this.contextId = task.contextId as string | null;
+            if (task && this.contextId === null) this.contextId = task.contextId;
             // Локальный ход живёт, пока сервер не отдал Task-снимок с history: status/artifact
             // кадры не несут сообщение пользователя, и лента потеряла бы его до конца стрима.
             if (this.pending !== null && applied.frameKind === 'task') this.pending = null;
@@ -407,7 +423,8 @@ export class FlowUIStore {
             for (const part of artifact.parts) {
                 const decoded = decodePart(part);
                 if (decoded.kind !== 'ui') throw new Error('flow-ui: ui artifact part must be a ui event');
-                this._applyUiEvent(decoded.event as FlowUiUiEvent);
+                if (!isUiEvent(decoded.event)) throw new Error('flow-ui: ui event kind required');
+                this._applyUiEvent(decoded.event);
             }
         }
     }
@@ -429,8 +446,8 @@ export class FlowUIStore {
 /** Обход блоков в глубину: section/columns/tabs содержат вложенные списки. */
 export function* iterBlocks(blocks: unknown): Generator<FlowUiBlock, void, void> {
     for (const raw of Array.isArray(blocks) ? blocks : []) {
-        if (!isObject(raw) || typeof raw.type !== 'string') continue;
-        const block = raw as FlowUiBlock;
+        if (!isBlock(raw)) continue;
+        const block = raw;
         yield block;
         if (block.type === 'section') yield* iterBlocks(block.blocks);
         if (block.type === 'columns') {
