@@ -14,7 +14,7 @@ services:
       - "54322:5432"
     shm_size: 1g
     volumes:
-      - postgres-test-data:/var/lib/postgresql/data
+      - postgres-test-data:/var/lib/postgresql
       - ./migrations/postgres/init.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
       - ./reports/postgres-test-logs:/var/log/postgresql
     command: >
