@@ -838,7 +838,7 @@ def _read_html_sync(
     try:
         extracted = trafilatura.extract(
             html,
-            output_format="markdown",
+            output_format="txt",
             include_links=True,
             include_tables=True,
             include_images=False,

@@ -10,6 +10,7 @@ from apps.search.errors import SearchIndexNotFoundError
 from core.crawl.models import CrawlProfile, CrawlProfileCreateRequest
 from core.di import open_di
 from core.di.kit import ProcessIdentity
+from core.errors.boundary import PlatformNotFoundError
 from core.files.urls import resolve_files_route_segment
 from core.search.index_models import SearchIndexDefinition
 
@@ -51,7 +52,7 @@ async def _seed_runet_platform_index(di) -> None:
             pass
     try:
         _ = await CrawlProfile.require_with_index("runet_platform")
-    except ValueError:
+    except PlatformNotFoundError:
         try:
             _ = await di.crawl_service.create_profile(
                 CrawlProfileCreateRequest(

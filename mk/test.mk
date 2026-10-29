@@ -56,10 +56,9 @@ test-up: runtime-bootstrap ui-build
 	@echo "Накат 0001_initial всех сервисных баз (+ CREATE DATABASE openfga)..."
 	@uv run python -m scripts.testing.migrate
 	@echo "Старт OpenFGA (после создания БД openfga)..."
-	@docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) rm -f -s openfga-migrate-test openfga-test >/dev/null 2>&1 || true
-	@docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --force-recreate --pull $(DOCKER_COMPOSE_PULL) openfga-migrate-test openfga-test
+	@docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --pull $(DOCKER_COMPOSE_PULL) openfga-migrate-test openfga-test
 	@echo "Bootstrap OpenFGA store + authorization model..."
-	@uv run python -m scripts.dev.openfga_env_bootstrap --api-url http://127.0.0.1:9093 --env-path reports/openfga-test.env
+	@uv run python -m scripts.dev.openfga_env_bootstrap --api-url http://127.0.0.1:9093 --env-path reports/openfga-test.env --timeout-sec 180
 	@echo "Старт стека сервисов (granian + TaskIQ) через test_stack..."
 	@WORKERS=$(WORKERS) uv run python -m scripts.testing.stack up
 

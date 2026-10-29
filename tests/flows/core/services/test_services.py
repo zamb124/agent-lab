@@ -542,7 +542,7 @@ class TestFlowDiscoveryService:
                 raise AssertionError("тестовые external flow не найдены")
             return [persisted_a, persisted_b]
 
-        monkeypatch.setattr(FlowConfig, "list_current", _list_only_test_flows)
+        monkeypatch.setattr(FlowConfig, "list_current_by_created_at_desc", _list_only_test_flows)
 
         results = await discovery_service.health_check_all()
 

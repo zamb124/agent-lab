@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -118,6 +119,11 @@ def _gh_ensure_read_packages_scope(gh_path: str) -> None:
     if _gh_has_read_packages_scope(gh_path):
         return
     print("[ensure] Токен gh без scope read:packages — нужен для pull образов из GHCR.")
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            "Токен gh без read:packages в неинтерактивном запуске. "
+            "Выполните: gh auth refresh -h github.com -s read:packages"
+        )
     refresh_result = subprocess.run(
         [gh_path, "auth", "refresh", "-s", "read:packages"],
         cwd=PROJECT_ROOT,
@@ -133,6 +139,11 @@ def _gh_ensure_read_packages_scope(gh_path: str) -> None:
 
 
 def _gh_auth_login_interactive(gh_path: str) -> None:
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            "gh не авторизован в неинтерактивном запуске. "
+            "Выполните: gh auth login -s read:packages"
+        )
     print("[ensure] Требуется вход в GitHub для pull образов из GHCR.")
     print("[ensure] Запуск gh auth login (scope read:packages)...")
     _ = subprocess.run(
@@ -161,6 +172,10 @@ def _docker_has_ghcr_credentials(registry_host: str) -> bool:
     entry_raw = auths.get(registry_host)
     if not isinstance(entry_raw, dict):
         return False
+    # credsStore/credential helpers держат секрет вне config.json (auths-запись пустая)
+    creds_store_raw = config_root.get("credsStore")
+    if isinstance(creds_store_raw, str) and bool(creds_store_raw.strip()):
+        return True
     auth_entry = cast(dict[str, object], entry_raw)
     auth_value_raw = auth_entry.get("auth")
     return isinstance(auth_value_raw, str) and bool(auth_value_raw.strip())

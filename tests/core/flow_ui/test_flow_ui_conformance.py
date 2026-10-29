@@ -35,7 +35,7 @@ from core.variables.template_scan import UnmatchedBracesError, unmatched_brace_m
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "flow_ui"
 HTML_SANDBOX_SOURCE = (
-    Path(__file__).resolve().parents[3] / "core/frontend/static/lib/flow-ui/runtime/html-sandbox.js"
+    Path(__file__).resolve().parents[3] / "core/frontend/static/lib/flow-ui/runtime/html-sandbox.ts"
 )
 
 

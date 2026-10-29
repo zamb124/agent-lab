@@ -121,7 +121,7 @@ class CRMEntity(PlatformModel):
     async def list_note_company_ids_since_by_company_id_asc(cls, since_date: date) -> list[str]:
         """company_id заметок с note_date не раньше since_date, по возрастанию company_id. Пустой company_id в строке — ValueError."""
         rows = await execute_raw(
-            "SELECT DISTINCT company_id FROM crm_entities WHERE entity_type = 'note' AND note_date IS NOT NULL AND note_date >= $1 ORDER BY company_id",
+            "SELECT DISTINCT company_id FROM crm_entities WHERE entity_type = 'note' AND note_date IS NOT NULL AND note_date >= $1::date ORDER BY company_id",
             [since_date],
             using="crm",
         )
@@ -142,7 +142,7 @@ class CRMEntity(PlatformModel):
     ) -> list[tuple[str, str, date]]:
         """Различные тройки (company_id, namespace, note_date) заметок компании с note_date не раньше since_date. Порядка нет."""
         rows = await execute_raw(
-            "SELECT DISTINCT company_id, namespace, note_date FROM crm_entities WHERE entity_type = 'note' AND note_date IS NOT NULL AND note_date >= $1 AND company_id = $2",
+            "SELECT DISTINCT company_id, namespace, note_date FROM crm_entities WHERE entity_type = 'note' AND note_date IS NOT NULL AND note_date >= $1::date AND company_id = $2",
             [since_date, company_id],
             using="crm",
         )

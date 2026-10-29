@@ -279,6 +279,9 @@ describe('node editors — top-level NodeConfig contract', () => {
                     budgets: ['medium'],
                 };
             }
+            if (opts.type === 'secrets/variables/list_requested') {
+                return { items: [], total: 0, limit: 200, offset: 0 };
+            }
             if (opts.type === 'worktracker/work_queues/list_requested') {
                 wsCalls.push(opts);
                 return {

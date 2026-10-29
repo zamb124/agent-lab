@@ -47,6 +47,7 @@ const HOME_WS_LISTS = new Set([
     'flows/tools/list_requested',
     'flows/flows/store_bundles_requested',
     'flows/integrations/credentials_list_requested',
+    'secrets/variables/list_requested',
 ]);
 
 describe('flows-home-page HITL / operator link to worktracker', () => {

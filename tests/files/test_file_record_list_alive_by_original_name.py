@@ -6,8 +6,21 @@ from datetime import UTC, datetime
 
 import pytest
 
+from core.documents.catalog import DocumentCatalog
+from core.files.create_spec import FileSourceKind
 from core.files.models import FileRecord, FileStatus
 from core.files.object_storage import PLATFORM_STORAGE_ID
+
+
+async def _catalog(company_id: str, unique_id: str, title: str) -> DocumentCatalog:
+    catalog, _created = await DocumentCatalog.ensure_child(
+        company_id=company_id,
+        namespace=f"ns_{unique_id}",
+        parent_catalog_id=None,
+        title=title,
+        owner_user_id=f"user_{unique_id}",
+    )
+    return catalog
 
 
 def _record(
@@ -30,6 +43,7 @@ def _record(
         status=FileStatus.READY,
         company_id=company_id,
         catalog_id=catalog_id,
+        source_kind=FileSourceKind.OFFICE_DOCUMENT if catalog_id else "",
         updated_at=updated_at,
         deleted_at=deleted_at,
     )
@@ -42,7 +56,9 @@ async def test_list_alive_by_original_name_orders_alive_catalog_rows(
 ) -> None:
     _ = frontend_di
     company_id = f"co_{unique_id}"
-    catalog_id = f"cat_{unique_id}"
+    catalog = await _catalog(company_id, unique_id, f"cat {unique_id}")
+    catalog_id = catalog.catalog_id
+    other_catalog = await _catalog(company_id, unique_id, f"other {unique_id}")
     token = f"tok{unique_id}"
     older = datetime(2026, 1, 1, tzinfo=UTC)
     newer = datetime(2026, 1, 2, tzinfo=UTC)
@@ -83,7 +99,7 @@ async def test_list_alive_by_original_name_orders_alive_catalog_rows(
         _record(
             file_id=other_catalog_id,
             company_id=company_id,
-            catalog_id=f"other_{unique_id}",
+            catalog_id=other_catalog.catalog_id,
             original_name=f"other-{token}.txt",
             updated_at=newer,
         )
@@ -112,7 +128,8 @@ async def test_list_with_catalog_by_original_name_skips_empty_catalog_and_trash(
 ) -> None:
     _ = frontend_di
     company_id = f"co_named_{unique_id}"
-    catalog_id = f"cat_named_{unique_id}"
+    catalog = await _catalog(company_id, unique_id, f"cat named {unique_id}")
+    catalog_id = catalog.catalog_id
     token = f"nm{unique_id}"
     moment = datetime(2026, 2, 1, tzinfo=UTC)
     alpha_id = f"file_alpha_{unique_id}"

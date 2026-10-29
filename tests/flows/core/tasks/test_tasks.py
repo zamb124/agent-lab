@@ -119,7 +119,7 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
             _ = kwargs
             return {"imported": 1, "exported": 0}
 
-        async def list_events(self, **kwargs):
+        async def list_events_by_start_at_asc(self, **kwargs):
             _ = kwargs
             self._list_calls += 1
             if self._list_calls == 1:
@@ -163,7 +163,7 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
     monkeypatch.setattr(
         IntegrationCredential,
-        "list_by_provider_service",
+        "list_by_provider_service_updated_at_asc",
         classmethod(_list_credentials),
     )
     monkeypatch.setattr(calendar_sync_tasks, "notify_user", _notify_user)

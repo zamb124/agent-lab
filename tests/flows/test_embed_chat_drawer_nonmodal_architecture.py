@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def test_flow_ui_drawer_nonmodal_without_outside_close() -> None:
-    drawer_path = Path("core/frontend/static/lib/flow-ui/shell/drawer.js")
+    drawer_path = Path("core/frontend/static/lib/flow-ui/shell/drawer.ts")
     source = drawer_path.read_text(encoding="utf-8")
 
     assert 'class="backdrop' not in source

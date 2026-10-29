@@ -51,11 +51,11 @@ async def test_e2e_llm_proxy_models_list_auto(
 async def test_e2e_llm_proxy_chat_completions(
     flows_client_http: AsyncClient,
     auth_token: str,
-    mock_llm_with_queue,
+    mock_llm_redis,
     flows_service: None,
 ) -> None:
     _ = flows_service
-    await mock_llm_with_queue([{"type": "text", "content": "Hello from MockLLM"}])
+    await mock_llm_redis([{"type": "text", "content": "Hello from MockLLM"}])
     bearer = office_editor_bearer(auth_token=auth_token)
     response = await flows_client_http.post(
         LLM_CHAT_COMPLETIONS_PATH,
@@ -86,11 +86,11 @@ async def test_e2e_llm_proxy_chat_completions(
 async def test_e2e_llm_proxy_chat_completions_stream(
     flows_client_http: AsyncClient,
     auth_token: str,
-    mock_llm_with_queue,
+    mock_llm_redis,
     flows_service: None,
 ) -> None:
     _ = flows_service
-    await mock_llm_with_queue([{"type": "text", "content": "Streamed hello"}])
+    await mock_llm_redis([{"type": "text", "content": "Streamed hello"}])
     bearer = office_editor_bearer(auth_token=auth_token)
     response = await flows_client_http.post(
         LLM_CHAT_COMPLETIONS_PATH,

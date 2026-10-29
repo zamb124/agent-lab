@@ -101,7 +101,7 @@ class RelationshipType(PlatformModel):
         rows = cls.query_by_system_in_company(company_id, include_system=include_system)
         total = await rows.count()
         types = await rows.order_by("type_id").limit(limit).offset(offset).all()
-        return OffsetPage[Self](items=types, total=total, limit=limit, offset=offset)
+        return OffsetPage[cls](items=types, total=total, limit=limit, offset=offset)
 
     @classmethod
     async def list_unordered_with_prompt(cls, company_id: str) -> list[Self]:

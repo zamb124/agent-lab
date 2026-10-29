@@ -29,6 +29,9 @@ PLATFORM_RUNTIME_DIR ?= $(HOME)/.cache/agent-lab/runtimes
 PLATFORM_RUNTIME_BIN := $(PLATFORM_RUNTIME_DIR)/bin
 export PLATFORM_RUNTIME_DIR
 export PATH := $(PLATFORM_RUNTIME_BIN):$(PATH)
+# localhost не должен уходить через HTTP(S)_PROXY окружения (httpx/urllib ходят в прокси даже на 127.0.0.1)
+export NO_PROXY := $(NO_PROXY),localhost,127.0.0.1,::1
+export no_proxy := $(NO_PROXY)
 ifneq ($(wildcard $(PLATFORM_RUNTIME_DIR)/cargo/bin/cargo),)
 export CARGO_HOME := $(PLATFORM_RUNTIME_DIR)/cargo
 export RUSTUP_HOME := $(PLATFORM_RUNTIME_DIR)/rustup

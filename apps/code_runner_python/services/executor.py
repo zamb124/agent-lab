@@ -28,7 +28,7 @@ from core.capabilities import (
     code_validation_failed_response,
     verify_execution_context,
 )
-from core.capabilities.runner_cache import code_runner_python_sandbox_site
+from core.capabilities.runner_cache import code_runner_python_sandbox_site, sandbox_cache_lock
 from core.capabilities.runner_pool import code_runner_pool_size
 from core.capabilities.sandbox_libraries import (
     PYTHON_ALLOWED_IMPORT_ROOTS,
@@ -54,31 +54,34 @@ def ensure_python_sandbox_site() -> Path:
     pandas_dir = cache_root / "pandas"
     if marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest and pandas_dir.is_dir():
         return cache_root
-    if cache_root.exists():
-        shutil.rmtree(cache_root)
-    cache_root.mkdir(parents=True, exist_ok=True)
-    uv_bin = shutil.which("uv")
-    if uv_bin is None:
-        raise RuntimeError("uv is required to install python sandbox site-packages")
-    completed = subprocess.run(
-        [
-            uv_bin,
-            "pip",
-            "install",
-            "--python",
-            sys.executable,
-            "--target",
-            str(cache_root),
-            "-r",
-            str(_SANDBOX_REQUIREMENTS),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(f"python sandbox site-packages install failed: {completed.stderr}")
-    _ = marker.write_text(digest, encoding="utf-8")
+    with sandbox_cache_lock(cache_root):
+        if marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest and pandas_dir.is_dir():
+            return cache_root
+        if cache_root.exists():
+            shutil.rmtree(cache_root)
+        cache_root.mkdir(parents=True, exist_ok=True)
+        uv_bin = shutil.which("uv")
+        if uv_bin is None:
+            raise RuntimeError("uv is required to install python sandbox site-packages")
+        completed = subprocess.run(
+            [
+                uv_bin,
+                "pip",
+                "install",
+                "--python",
+                sys.executable,
+                "--target",
+                str(cache_root),
+                "-r",
+                str(_SANDBOX_REQUIREMENTS),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(f"python sandbox site-packages install failed: {completed.stderr}")
+        _ = marker.write_text(digest, encoding="utf-8")
     return cache_root
 
 

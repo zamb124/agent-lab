@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
+from collections.abc import Generator
 from pathlib import Path
 
 from core.config import get_settings
+
+
+@contextlib.contextmanager
+def sandbox_cache_lock(cache_root: Path) -> Generator[None, None, None]:
+    """flock на соседнем lock-файле: один процесс пересобирает кэш, остальные ждут."""
+    lock_path = cache_root.parent / f"{cache_root.name}.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("w") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        yield
 
 
 def code_runner_repo_root() -> Path:
@@ -47,4 +60,5 @@ __all__ = [
     "code_runner_node_sandbox_modules",
     "code_runner_python_sandbox_site",
     "code_runner_repo_root",
+    "sandbox_cache_lock",
 ]

@@ -11,14 +11,26 @@ function cursorOrNull(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-function errorMessage(err: unknown): string {
-    if (err instanceof Error) {
-        return err.message;
+function mailFailurePayload(err: unknown): {
+    error_code: string;
+    error_params: Record<string, string | number | boolean> | null;
+} {
+    if (isPlainRecord(err)) {
+        const code = err.error_code !== undefined ? err.error_code : err.code;
+        if (typeof code === 'string' && code.length > 0) {
+            let params: Record<string, string | number | boolean> | null = null;
+            if (isPlainRecord(err.error_params)) {
+                params = {};
+                for (const [key, value] of Object.entries(err.error_params)) {
+                    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                        params[key] = value;
+                    }
+                }
+            }
+            return { error_code: code, error_params: params };
+        }
     }
-    if (isPlainRecord(err) && typeof err.message === 'string' && err.message.length > 0) {
-        return err.message;
-    }
-    return String(err);
+    return { error_code: 'unknown', error_params: null };
 }
 
 function httpStatus(err: unknown): number {
@@ -125,7 +137,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDINGS_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -148,7 +160,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.COMPANY_BINDINGS_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -177,7 +189,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                     }
                     ctx.dispatch(
                         MAIL_EVENTS.CONNECTION_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -198,7 +210,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.CONNECTION_SAVE_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -227,7 +239,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_CREATE_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -252,7 +264,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.PERSONAL_CONNECT_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -273,7 +285,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.PERSONAL_HEALTHCHECK_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -301,7 +313,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_PATCH_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -331,7 +343,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_PATCH_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -355,7 +367,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_HEALTHCHECK_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -385,7 +397,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_DELETE_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -411,7 +423,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.DEFAULT_SET_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -493,7 +505,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.FOLDERS_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -524,7 +536,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.SYNC_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -571,7 +583,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.FOLDERS_ENSURE_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -617,7 +629,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.FOLDERS_REORDER_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                     ctx.dispatch(
@@ -700,7 +712,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGES_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -740,7 +752,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGES_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -790,7 +802,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGES_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -846,7 +858,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.THREAD_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -877,7 +889,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -909,7 +921,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_MARK_UNSEEN_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -941,7 +953,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_SEND_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -963,7 +975,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_TRASH_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -985,7 +997,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_ARCHIVE_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -1007,7 +1019,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_DELETE_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -1029,7 +1041,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_STAR_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -1051,7 +1063,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.MESSAGE_RAG_INDEX_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -1072,7 +1084,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.DRAFT_SAVE_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -1097,7 +1109,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_MEMBERS_LOAD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -1124,7 +1136,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_MEMBER_ADD_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -1150,7 +1162,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.BINDING_MEMBER_REMOVE_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }
@@ -1170,7 +1182,7 @@ export function createMailEffect({ baseUrl }: { baseUrl?: string }): (event: Pla
                 } catch (err) {
                     ctx.dispatch(
                         MAIL_EVENTS.HEALTHCHECK_FAILED,
-                        { message: errorMessage(err) },
+                        mailFailurePayload(err),
                         { causation_id: event.id, source: 'http' },
                     );
                 }

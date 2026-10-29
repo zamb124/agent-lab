@@ -628,8 +628,8 @@ describe('mailEffect', () => {
             ev(MAIL_EVENTS.FOLDERS_ENSURE_REQUESTED, { mailbox_binding_id: 'b1' }),
             buildCtx(() => ({ mail: {} }), dispatched),
         );
-        expect(dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_ENSURE_FAILED).payload.message).toMatch(
-            /ensure failed/,
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.FOLDERS_ENSURE_FAILED).payload.error_code).toBe(
+            'unknown',
         );
     });
 
@@ -725,8 +725,8 @@ describe('mailEffect', () => {
             ev(MAIL_EVENTS.MESSAGES_LOAD_REQUESTED, { mailbox_binding_id: 'b1', folder: 'INBOX' }),
             buildCtx(() => ({ mail: {} }), dispatched),
         );
-        expect(dispatched.find((d) => d.type === MAIL_EVENTS.MESSAGES_LOAD_FAILED).payload.message).toMatch(
-            /list boom/,
+        expect(dispatched.find((d) => d.type === MAIL_EVENTS.MESSAGES_LOAD_FAILED).payload.error_code).toBe(
+            'unknown',
         );
     });
 

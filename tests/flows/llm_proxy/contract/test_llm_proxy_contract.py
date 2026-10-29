@@ -108,11 +108,11 @@ async def test_contract_models_openai_list_shape(
 async def test_contract_chat_completions_validates_chat_result(
     flows_client_http: AsyncClient,
     auth_token: str,
-    mock_llm_with_queue,
+    mock_llm_redis,
     flows_service: None,
 ) -> None:
     _ = flows_service
-    await mock_llm_with_queue([{"type": "text", "content": "Contract hello"}])
+    await mock_llm_redis([{"type": "text", "content": "Contract hello"}])
     bearer = office_editor_bearer(auth_token=auth_token)
     response = await flows_client_http.post(
         LLM_CHAT_COMPLETIONS_PATH,
@@ -142,11 +142,11 @@ async def test_contract_chat_completions_validates_chat_result(
 async def test_contract_chat_request_multimodal_and_tools_accepted(
     flows_client_http: AsyncClient,
     auth_token: str,
-    mock_llm_with_queue,
+    mock_llm_redis,
     flows_service: None,
 ) -> None:
     _ = flows_service
-    await mock_llm_with_queue([{"type": "text", "content": "tools ok"}])
+    await mock_llm_redis([{"type": "text", "content": "tools ok"}])
     bearer = office_editor_bearer(auth_token=auth_token)
     response = await flows_client_http.post(
         LLM_CHAT_COMPLETIONS_PATH,
@@ -190,11 +190,11 @@ async def test_contract_chat_request_multimodal_and_tools_accepted(
 async def test_contract_sse_chunks_validate_chat_stream_chunk(
     flows_client_http: AsyncClient,
     auth_token: str,
-    mock_llm_with_queue,
+    mock_llm_redis,
     flows_service: None,
 ) -> None:
     _ = flows_service
-    await mock_llm_with_queue([{"type": "text", "content": "Streamed contract"}])
+    await mock_llm_redis([{"type": "text", "content": "Streamed contract"}])
     bearer = office_editor_bearer(auth_token=auth_token)
     response = await flows_client_http.post(
         LLM_CHAT_COMPLETIONS_PATH,
@@ -323,11 +323,11 @@ async def test_contract_onlyoffice_proxy_unwrap_models(
 async def test_contract_office_jwt_chat_completions(
     flows_client_http: AsyncClient,
     auth_token: str,
-    mock_llm_with_queue,
+    mock_llm_redis,
     flows_service: None,
 ) -> None:
     _ = flows_service
-    await mock_llm_with_queue([{"type": "text", "content": "OO chat ok"}])
+    await mock_llm_redis([{"type": "text", "content": "OO chat ok"}])
     oo_bearer = office_editor_bearer(auth_token=auth_token)
     response = await flows_client_http.post(
         LLM_CHAT_COMPLETIONS_PATH,

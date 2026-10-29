@@ -70,7 +70,7 @@ async def test_company_host_mismatch_403_html(
         text = response.text
         assert "<!DOCTYPE html>" in text
         assert "HTTP 403" in text
-        assert "localStorage" in text and "platform_theme" in text
+        assert "localStorage" in text and "platform:core:theme" in text
     finally:
         await Company.delete_by_id(other_cid)
 
