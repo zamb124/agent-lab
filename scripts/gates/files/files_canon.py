@@ -152,8 +152,7 @@ def _check_a2a_stream_url_only() -> list[str]:
         / "frontend"
         / "static"
         / "lib"
-        / "flow-ui"
-        / "protocol"
+        / "a2a"
         / "a2a-codec.ts"
 )
     text = path.read_text(encoding="utf-8")
