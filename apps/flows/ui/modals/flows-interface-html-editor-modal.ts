@@ -33,8 +33,26 @@ import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
 const LAYOUT_KEY = platformStorageKey('flows', 'html_editor_layout');
 const PANELS_KEY = platformStorageKey('flows', 'html_editor_panels');
-const PANEL_NAMES = Object.freeze(['preview', 'source', 'inspector']);
-const DEFAULT_PANELS = Object.freeze({ preview: true, source: true, inspector: true });
+type PanelName = 'preview' | 'source' | 'inspector';
+const PANEL_NAMES: readonly PanelName[] = Object.freeze(['preview', 'source', 'inspector']);
+type HtmlPanels = Record<PanelName, boolean>;
+const DEFAULT_PANELS: HtmlPanels = Object.freeze({ preview: true, source: true, inspector: true });
+
+interface HtmlLogEntry {
+    kind: string;
+    text: string;
+}
+
+interface CompletionContext {
+    matchBefore(pattern: RegExp): { from: number; to: number; text: string } | null;
+    explicit: boolean;
+}
+
+interface CompletionEditor {
+    autocompletion(config: {
+        override: Array<(context: CompletionContext) => { from: number; options: unknown[] } | null>;
+    }): unknown;
+}
 
 function blockWriteField(block: unknown): string | null {
     if (!isPlainRecord(block) || block.field === null || block.field === undefined) {
@@ -67,10 +85,11 @@ function bridgeText(event: Record<string, unknown>): { kind: string; text: strin
 
 function readStoredPanels() {
     const raw = storageGetJson(PANELS_KEY);
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ...DEFAULT_PANELS };
-    const next = { ...DEFAULT_PANELS };
+    if (!isPlainRecord(raw)) return { ...DEFAULT_PANELS };
+    const next: HtmlPanels = { ...DEFAULT_PANELS };
     for (const name of PANEL_NAMES) {
-        if (typeof (raw as any)[name] === 'boolean') (next as any)[name] = (raw as any)[name];
+        const value = raw[name];
+        if (typeof value === 'boolean') next[name] = value;
     }
     if (!next.preview && !next.source && !next.inspector) return { ...DEFAULT_PANELS };
     return next;
@@ -101,15 +120,15 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         _panels: { attribute: false, state: true },
     }
     declare source: string;
-    declare block: any;
-    declare sampleState: any;
-    declare statePaths: any;
-    declare onApply: any;
+    declare block: Record<string, unknown> | null;
+    declare sampleState: unknown;
+    declare statePaths: readonly string[];
+    declare onApply: ((source: string) => void) | null;
     declare _draft: string;
     declare _liveSource: string;
     declare _stateText: string;
     declare _stateError: string;
-    declare _log: any[];
+    declare _log: HtmlLogEntry[];
     declare _viewport: string;
     declare _previewTheme: string;
     declare _tab: string;
@@ -117,7 +136,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
     declare _layout: string;
     declare _snippetsOpen: boolean;
     declare _replaceConfirm: boolean;
-    declare _panels: Record<string, any>;
+    declare _panels: HtmlPanels;
 ;
 
     static override styles: CSSResultGroup = [PlatformModal.styles, htmlEditorStageStyles, htmlEditorInspectorStyles, css`
@@ -167,9 +186,9 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         }
     `];
     private _lastGoodState: Record<string, unknown>;
-    private _cachedPreview: any;
+    private _cachedPreview: (Record<string, unknown> & { source?: unknown }) | null;
     private _liveTimer: number;
-    private _snippetsAnchor: any;
+    private _snippetsAnchor: EventTarget | null;
     private _hydrated: boolean;
     private _originalSource: string;
 
@@ -260,18 +279,25 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
     _readMeta() {
         try {
             const bound = htmlBoundPaths(this._draft);
-            const fields = Array.isArray((this.block as any).fields) ? (this.block as any).fields : [];
-            return { paths: [...fields.filter((path: string) => !bound.includes(path)), ...bound], error: '' };
+            const fieldsRaw = isPlainRecord(this.block) && Array.isArray(this.block.fields) ? this.block.fields : [];
+            const fields: string[] = [];
+            for (const path of fieldsRaw) {
+                if (typeof path !== 'string') throw new Error('html editor: field path must be a string');
+                fields.push(path);
+            }
+            return { paths: [...fields.filter((path) => !bound.includes(path)), ...bound], error: '' };
         } catch (error) {
-            return { paths: [], error: (error as any).message };
+            const message = error instanceof Error ? error.message : String(error);
+            return { paths: [], error: message };
         }
     }
 
-    _setDraft(value: unknown, immediate: any) {
-        this._draft = value as string;
+    _setDraft(value: unknown, immediate: boolean) {
+        if (typeof value !== 'string') throw new Error('html editor: draft must be a string');
+        this._draft = value;
         if (this._liveTimer) window.clearTimeout(this._liveTimer);
         if (immediate === true) {
-            this._liveSource = value as string;
+            this._liveSource = value;
             this._liveTimer = 0;
             return;
         }
@@ -281,7 +307,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         }, HTML_EDITOR_LIVE_MS);
     }
 
-    _setStateText(text: any) {
+    _setStateText(text: string) {
         this._stateText = text;
         const parsed = parseTestState(text);
         this._stateError = parsed.ok ? '' : parsed.error;
@@ -294,17 +320,18 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
     }
 
     _previewBlock() {
+        if (this.block === null) throw new Error('html editor: block required');
         this._cachedPreview = previewBlock(this.block, this._liveSource, this._cachedPreview);
         return this._cachedPreview;
     }
 
-    _extensions(cm: any) {
+    _extensions(cm: CompletionEditor) {
         const paths = this.statePaths;
-        const source = (context: any) => {
+        const source = (context: CompletionContext) => {
             const attribute = context.matchBefore(/data-(bind|show)="[A-Za-z0-9_.]*/);
             if (attribute !== null) {
                 const from = attribute.from + attribute.text.indexOf('"') + 1;
-                return { from, options: (paths as any).map((path: string) => ({ label: path, type: 'variable' })) };
+                return { from, options: paths.map((path) => ({ label: path, type: 'variable' })) };
             }
             const word = context.matchBefore(/[\w.]*/);
             if (word === null || (word.from === word.to && !context.explicit)) return null;
@@ -325,7 +352,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
             throw new Error('html editor: bridge event required');
         }
         const entry = bridgeText(event);
-        this._log = [...(this._log as any[]).slice(-49), entry];
+        this._log = [...this._log.slice(-49), entry];
     }
 
     _snippetSource(id: string) {
@@ -343,12 +370,9 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         return JSON.parse(raw);
     }
 
-    _insertAtSource(chunk: any) {
+    _insertAtSource(chunk: string) {
         const editor = this.renderRoot.querySelector('platform-code-editor[data-html-source]');
         if (editor instanceof PlatformCodeEditor) {
-            if (typeof chunk !== 'string') {
-                throw new Error('html editor: snippet chunk must be a string');
-            }
             editor.insertAtCursor(chunk);
             this._setDraft(editor.value, true);
             return;
@@ -375,28 +399,31 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         this._log = [];
     }
 
-    _onField(path: string, value: unknown, error: any) {
+    _onField(path: string, value: unknown, error: unknown) {
         if (error) return;
         const next = setValueAtPath(JSON.parse(JSON.stringify(this._lastGoodState)), path, value);
         this._setStateText(JSON.stringify(next, null, 2));
     }
 
-    _insertToken(token: any) {
+    _insertToken(token: string) {
         this._insertAtSource(`var(${token})`);
     }
 
-    _setLayout(layout: any) {
+    _setLayout(layout: unknown) {
+        if (layout !== 'preview' && layout !== 'split') {
+            throw new Error('html editor: layout must be preview or split');
+        }
         this._layout = layout;
         storageSet(LAYOUT_KEY, layout);
     }
 
     _visiblePanelCount() {
-        return PANEL_NAMES.filter((name) => (this._panels as any)[name]).length;
+        return PANEL_NAMES.filter((name) => this._panels[name] === true).length;
     }
 
-    _setPanel(name: string, visible: any) {
-        if (!PANEL_NAMES.includes(name)) return;
-        if (visible !== true && this._visiblePanelCount() <= 1 && (this._panels as any)[name]) return;
+    _setPanel(name: string, visible: boolean) {
+        if (name !== 'preview' && name !== 'source' && name !== 'inspector') return;
+        if (visible !== true && this._visiblePanelCount() <= 1 && this._panels[name] === true) return;
         const next = { ...this._panels, [name]: visible === true };
         this._panels = next;
         storageSetJson(PANELS_KEY, next);
@@ -406,7 +433,8 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
     }
 
     _togglePanel(name: string) {
-        this._setPanel(name, (this._panels as any)[name] !== true);
+        if (name !== 'preview' && name !== 'source' && name !== 'inspector') return;
+        this._setPanel(name, this._panels[name] !== true);
     }
 
     _htmlPreview(): FlowUIHtmlBlock | null {
@@ -428,11 +456,11 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         preview.reload();
     }
 
-    _renderPanelSwitch(t: any) {
+    _renderPanelSwitch(t: (key: string, vars?: Record<string, string | number> | null) => string) {
         const last = this._visiblePanelCount() <= 1;
         return html`<div class="panel-switch" role="group" aria-label=${t('interface_editor.html_panels')}>
             ${PANEL_NAMES.map((name) => {
-                const on = (this._panels as any)[name] === true;
+                const on = this._panels[name] === true;
                 const label = t(`interface_editor.html_panel_${name}`);
                 return html`<platform-button ghost density="compact"
                     class="panel-toggle ${on ? 'is-on' : ''}"
@@ -444,7 +472,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         </div>`;
     }
 
-    _renderSourceToolbar(t: any) {
+    _renderSourceToolbar(t: (key: string, vars?: Record<string, string | number> | null) => string) {
         return html`<div class="source-toolbar">
             <platform-button ghost density="compact" class="snippets-trigger" @click=${(event: CustomEvent) => {
                 this._snippetsAnchor = event.currentTarget;
@@ -464,12 +492,15 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
                     <platform-button ghost density="compact" data-replace-yes @click=${() => this._replaceSource()}>${t('interface_editor.html_replace_source')}</platform-button>
                     <platform-button ghost density="compact" data-replace-cancel @click=${() => { this._replaceConfirm = false; }}>${t('interface_editor.cancel')}</platform-button>`
                 : html`<platform-button ghost density="compact" data-replace @click=${() => this._replaceSource()}>${t('interface_editor.html_replace_source')}</platform-button>`}
-            ${(this._panels.preview as any) && (this._panels.source as any) ? html`<platform-segmented-control class="layout-control" density="compact" .value=${this._layout}
+            ${this._panels.preview === true && this._panels.source === true ? html`<platform-segmented-control class="layout-control" density="compact" .value=${this._layout}
                 .items=${[
                     { value: 'preview', label: t('interface_editor.html_layout_preview') },
                     { value: 'split', label: t('interface_editor.html_layout_split') },
                 ]}
-                @change=${(event: CustomEvent) => this._setLayout(event.detail.value)}></platform-segmented-control>` : nothing}
+                @change=${(event: CustomEvent) => {
+                    if (!isPlainRecord(event.detail)) throw new Error('html editor: layout change required');
+                    this._setLayout(event.detail.value);
+                }}></platform-segmented-control>` : nothing}
             <platform-button ghost density="compact" class="collapse" data-collapse="source"
                 ?disabled=${this._visiblePanelCount() <= 1}
                 title=${t('interface_editor.html_panel_hide', { name: t('interface_editor.html_panel_source') })}
@@ -490,32 +521,41 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         const previewState = parsed.ok ? parsed.value : this._lastGoodState;
         const meta = this._readMeta();
         const empty = this._liveSource.trim() === '';
-        const t = (key: string, vars?: any) => this.t(key, vars);
+        const t = (key: string, vars?: Record<string, string | number> | null) => this.t(key, vars);
         return html`<div class="workspace" data-layout=${this._layout}
-            data-preview=${(this._panels.preview as any) ? 'on' : 'off'}
-            data-source=${(this._panels.source as any) ? 'on' : 'off'}
-            data-inspector=${(this._panels.inspector as any) ? 'on' : 'off'}>
+            data-preview=${this._panels.preview === true ? 'on' : 'off'}
+            data-source=${this._panels.source === true ? 'on' : 'off'}
+            data-inspector=${this._panels.inspector === true ? 'on' : 'off'}>
             ${this._renderPanelSwitch(t)}
             <div class="panes">
                 ${renderHtmlEditorStage({
                     viewport: this._viewport, theme: this._previewTheme, empty, error: meta.error, t,
                     onSnippet: (id) => this._insertSnippet(id),
-                    onViewport: (value) => { this._viewport = value as string; },
-                    onTheme: (value) => { this._previewTheme = value as string; },
+                    onViewport: (value) => {
+                        if (typeof value !== 'string') throw new Error('html editor: viewport must be a string');
+                        this._viewport = value;
+                    },
+                    onTheme: (value) => {
+                        if (typeof value !== 'string') throw new Error('html editor: theme must be a string');
+                        this._previewTheme = value;
+                    },
                     onReload: () => this._reloadPreview(),
                     onCollapse: () => this._setPanel('preview', false),
                     collapseDisabled: this._visiblePanelCount() <= 1,
-                    canvas: (this._panels.preview as any)
+                    canvas: this._panels.preview === true
                         ? html`<flow-ui-html-block .block=${this._previewBlock()} .state=${previewState} .readonly=${true}
                             .onBridgeEvent=${(event: unknown) => this._onBridgeEvent(event)}></flow-ui-html-block>`
                         : nothing,
                 })}
                 <div class="pane">
-                    ${(this._panels.source as any) ? html`
+                    ${this._panels.source === true ? html`
                         ${this._renderSourceToolbar(t)}
                         <platform-code-editor data-html-source language="html" fill-parent line-wrapping .readonly=${false} .value=${this._draft}
-                            .extensionsFactory=${(cm: any) => this._extensions(cm)}
-                            @change=${(event: CustomEvent) => this._setDraft(event.detail.value, false)}></platform-code-editor>
+                            .extensionsFactory=${(cm: CompletionEditor) => this._extensions(cm)}
+                            @change=${(event: CustomEvent) => {
+                                if (!isPlainRecord(event.detail)) throw new Error('html editor: source change required');
+                                this._setDraft(event.detail.value, false);
+                            }}></platform-code-editor>
                         <div class="hint">${t('interface_editor.html_api_hint')}</div>
                     ` : nothing}
                 </div>
@@ -524,9 +564,18 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
                 tab: this._tab, stateMode: this._stateMode, paths: meta.paths, bindError: meta.error,
                 state: this._lastGoodState, stateText: this._stateText, stateError: this._stateError, log: this._log,
                 writes: blockWriteField(this.block), t,
-                onTab: (tab) => { this._tab = tab as string; },
-                onStateMode: (mode) => { this._stateMode = mode as string; },
-                onStateText: (text) => this._setStateText(text),
+                onTab: (tab) => {
+                    if (typeof tab !== 'string') throw new Error('html editor: inspector tab must be a string');
+                    this._tab = tab;
+                },
+                onStateMode: (mode) => {
+                    if (typeof mode !== 'string') throw new Error('html editor: state mode must be a string');
+                    this._stateMode = mode;
+                },
+                onStateText: (text) => {
+                    if (typeof text !== 'string') throw new Error('html editor: state text must be a string');
+                    this._setStateText(text);
+                },
                 onField: (path, value, error) => this._onField(path, value, error),
                 onClear: () => { this._log = []; },
                 onToken: (token) => this._insertToken(token),

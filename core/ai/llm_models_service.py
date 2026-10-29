@@ -182,7 +182,7 @@ class LLMModelsService:
             humanitec_models: list[str | JsonObject] = []
             humanitec_models.extend(options)
             return humanitec_models
-        models = await AIModelRecord.list_by_provider_capability(provider, capability)
+        models = await AIModelRecord.list_unordered_by_provider_and_capability(provider, capability)
         provider_models: list[str | JsonObject] = []
         provider_models.extend(m.model_id for m in models)
         return provider_models

@@ -76,8 +76,8 @@ class DatasourceConnection(PlatformModel):
         self.updated_at = datetime.now(timezone.utc)
 
     @classmethod
-    async def list_all_by_datasource_id(cls, *, limit: int | None) -> list[Self]:
-        """Все подключения, ORDER BY datasource_id. limit is None не ограничивает."""
+    async def list_all_by_datasource_id_asc(cls, *, limit: int | None) -> list[Self]:
+        """Все подключения, ORDER BY datasource_id ASC. limit is None не ограничивает."""
         ordered = cls.objects.order_by("datasource_id")
         if limit is None:
             return await ordered.all()
@@ -85,8 +85,8 @@ class DatasourceConnection(PlatformModel):
 
 
     @classmethod
-    async def list_by_name_and_datasource_id(cls, company_id: str) -> list[Self]:
-        """Все подключения компании, ORDER BY name, datasource_id. Предела нет. Пустой или пробельный company_id — ValueError."""
+    async def list_by_name_and_datasource_id_asc(cls, company_id: str) -> list[Self]:
+        """Все подключения компании, ORDER BY name, datasource_id ASC. Предела нет. Пустой или пробельный company_id — ValueError."""
         return await cls.objects.filter(
             company_id=datasource_required(company_id, "company_id"),
         ).order_by("name", "datasource_id").all()

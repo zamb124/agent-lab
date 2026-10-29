@@ -36,7 +36,8 @@ class ToolTagGroup(PlatformModel):
         self.updated_at = datetime.now(timezone.utc)
 
     @classmethod
-    async def list_groups(cls, *, limit: int = 200, offset: int = 0) -> list[Self]:
+    async def list_by_tag_asc(cls, *, limit: int = 200, offset: int = 0) -> list[Self]:
+        """Окно групп, после чтения сортировка по tag ASC. limit < 1 и offset < 0 — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if offset < 0:

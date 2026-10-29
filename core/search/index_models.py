@@ -164,7 +164,7 @@ class SearchIndexDefinition(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def page_by_search_index_id(
+    async def page_by_search_index_id_asc(
         cls,
         *,
         company_id: str,
@@ -172,7 +172,7 @@ class SearchIndexDefinition(PlatformModel):
         limit: int,
         offset: int,
     ) -> OffsetPage[SearchIndexDefinition]:
-        """Страница индексов компании, ORDER BY search_index_id. enabled равный None не фильтрует. total — COUNT этого фильтра. Пустой company_id ValueError не даёт."""
+        """Страница индексов компании, ORDER BY search_index_id ASC. enabled равный None не фильтрует. total — COUNT этого фильтра. Пустой company_id ValueError не даёт."""
         rows = cls.objects.filter(company_id=company_id)
         if enabled is not None:
             rows = rows.filter(enabled=enabled)
@@ -192,12 +192,13 @@ class SearchIndexDefinition(PlatformModel):
         return await cls.objects.create(instance=row)
 
     @classmethod
-    async def batch_get_for_company(
+    async def list_unordered_by_ids_for_company(
         cls,
         search_index_ids: list[str],
         *,
         company_id: str,
     ) -> list[Self]:
+        """Индексы компании по id. Порядка нет. Пустой список — []. Отсутствующие id не входят."""
         if len(search_index_ids) == 0:
             return []
         return await cls.objects.filter(

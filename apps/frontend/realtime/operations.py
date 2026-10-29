@@ -32,12 +32,12 @@ async def op_dashboard_stats(
 ) -> DashboardStats:
     _ = payload, user
     scope = require_company()
-    flow_index = await FlowConfig.list_current_flow_index()
+    flow_index = await FlowConfig.list_current_flow_index_by_created_at_desc()
     rag_namespaces = await get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID).list_namespaces()
     documents_total = await FileRecord.count_alive(scope.company_id)
     litserve_total: int | None = None
     if scope.company_id == SYSTEM_COMPANY_ID:
-        litserve_total = len(await AIModelRecord.list_by_provider(PROVIDER_LITSERVE))
+        litserve_total = len(await AIModelRecord.list_unordered_by_provider(PROVIDER_LITSERVE))
     return DashboardStats(
         flows_total=len(flow_index),
         namespaces_total=await di.namespace_service.count(),

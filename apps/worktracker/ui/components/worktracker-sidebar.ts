@@ -8,7 +8,7 @@ import type { SelectController } from '@platform/lib/events/select-controller.js
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
-import '@platform/lib/components/layout/platform-service-sidebar.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-deployment-version.js';
@@ -74,15 +74,18 @@ export class WorktrackerSidebar extends PlatformElement {
         this._countsOp = this.useOp('worktracker/work_item_counts');
     }
 
-    private _shell(): Element | null {
-        return this.renderRoot ? this.renderRoot.querySelector('platform-service-sidebar') : null;
+    private _shell(): PlatformServiceSidebar | null {
+        if (!this.renderRoot) return null;
+        const shell = this.renderRoot.querySelector('platform-service-sidebar');
+        if (shell === null) return null;
+        if (!(shell instanceof PlatformServiceSidebar)) {
+            throw new Error('worktracker-sidebar: service sidebar required');
+        }
+        return shell;
     }
 
     closeMobile() {
-        const shell = this._shell() as { closeMobile?: () => void } | null;
-        if (shell && typeof shell.closeMobile === 'function') {
-            shell.closeMobile();
-        }
+        this._shell()?.closeMobile();
     }
 
     private _navigate(routeKey: string, params?: Record<string, string>) {

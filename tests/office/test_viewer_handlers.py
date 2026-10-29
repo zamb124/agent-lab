@@ -16,8 +16,8 @@ from core.documents.viewer.resolver import (
 )
 from core.documents.viewer.text_presentation import resolve_text_presentation
 from core.errors.boundary import PlatformUnavailableError
-from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.models import FileRecord
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.types import FileCategory
 
 

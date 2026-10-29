@@ -6,8 +6,7 @@
  */
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
-
-type EventPayload = Record<string, unknown>;
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const stockProductsResource = createResourceCollection({
     name: 'stock/products',
@@ -29,8 +28,8 @@ export const stockLocationsResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     listQuery: () => ({}),
     extraReducer: (state, event) => {
-        if (event.type !== 'stock/container/moved' || !event.payload) return state;
-        const payload = event.payload as EventPayload;
+        if (event.type !== 'stock/container/moved' || !isPlainRecord(event.payload)) return state;
+        const payload = event.payload;
         const index = state.items.findIndex((row) => row && row.location_id === payload.container_id);
         if (index === -1) return state;
         const items = state.items.map((row, position) => (
@@ -60,8 +59,8 @@ export const stockTransfersResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     listQuery: () => ({}),
     extraReducer: (state, event) => {
-        const donePayload = event.payload as EventPayload | null;
-        if (event.type === 'stock/transfer/done' && donePayload && donePayload.transfer_id) {
+        if (event.type === 'stock/transfer/done' && isPlainRecord(event.payload) && event.payload.transfer_id) {
+            const donePayload = event.payload;
             const id = donePayload.transfer_id;
             const index = state.items.findIndex((row) => row && row.transfer_id === id);
             if (index === -1) return state;
@@ -83,8 +82,8 @@ export const stockQuantsResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     listQuery: () => ({}),
     extraReducer: (state, event) => {
-        if (event.type !== 'stock/quant/changed' || !event.payload) return state;
-        const payload = event.payload as EventPayload;
+        if (event.type !== 'stock/quant/changed' || !isPlainRecord(event.payload)) return state;
+        const payload = event.payload;
         const index = state.items.findIndex((row) => row && row.quant_id === payload.quant_id);
         if (index === -1) return state;
         const items = state.items.map((row, position) => (
@@ -108,8 +107,8 @@ export const stockQueueResource = createResourceCollection({
         list: { method: 'POST', path: '/stock/api/v1/move-lines/queue' },
     },
     extraReducer: (state, event) => {
-        const movePayload = event.payload as EventPayload | null;
-        if (!movePayload || !movePayload.move_line_id) return state;
+        if (!isPlainRecord(event.payload) || !event.payload.move_line_id) return state;
+        const movePayload = event.payload;
         if (event.type === 'stock/move_line/assigned') {
             const payload = movePayload;
             const index = state.items.findIndex((row) => row && row.move_line_id === payload.move_line_id);
@@ -144,8 +143,8 @@ export const stockWavesResource = createResourceCollection({
         list: { method: 'POST', path: '/stock/api/v1/waves/list' },
     },
     extraReducer: (state, event) => {
-        if (event.type !== 'stock/wave/released' || !event.payload) return state;
-        const payload = event.payload as EventPayload;
+        if (event.type !== 'stock/wave/released' || !isPlainRecord(event.payload)) return state;
+        const payload = event.payload;
         const index = state.items.findIndex((row) => row && row.wave_id === payload.wave_id);
         if (index === -1) return state;
         const items = state.items.map((row, position) => (

@@ -4,6 +4,7 @@
 
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { buildGraphWorkspaceSearch } from '../_helpers/graph-view-mode.js';
 
 export function createCrmGraphLegacyRoutesEffect() {
@@ -11,8 +12,8 @@ export function createCrmGraphLegacyRoutesEffect() {
         if (event.type !== CoreEvents.ROUTER_NOT_FOUND) {
             return;
         }
-        const p = event.payload as Record<string, unknown> | null;
-        if (!p || typeof p !== 'object') {
+        const p = event.payload;
+        if (!isPlainRecord(p)) {
             return;
         }
         const pathname = typeof p.pathname === 'string' ? p.pathname : '';

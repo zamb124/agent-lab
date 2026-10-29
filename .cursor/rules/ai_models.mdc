@@ -6,6 +6,8 @@ globs:
   - "core/clients/llm/**"
   - "core/clients/nano_banana.py"
   - "core/config/llm_openai_compat.py"
+  - "apps/flows/src/llm_proxy/**"
+  - "apps/flows/src/api/v1/llm_proxy.py"
 alwaysApply: false
 ---
 
@@ -16,8 +18,8 @@ alwaysApply: false
 ## Модель
 
 - Capabilities — `AICapability` (`core.ai.providers`); спецификации провайдеров — `core.ai.providers` (новый провайдер добавляется там один раз, нестандартный discovery — adapter `core.ai.adapters.*`).
-- Каталог — `AIModelRecord` (`core/ai/models/model_record.py`, таблица `ai_models` в `platform_shared`, PK `ai_model_id` = `{provider}:{model_id}`): modalities, pricing/`is_free`, typed AA indices, размерности embedding; score и editorial в каталоге нет. `by_provider_and_model_id` читает строку по этому ключу: нет строки — `None`. Повтор читает ту же.
-- Overlay оценок — `LLMModelScore` (`core/ai/models/model_score.py`, таблица `llm_model_scores`, только компания `system`: `enabled`, `editorial_prior`, `note`).
+- Каталог — `AIModelRecord` (`core/ai/models/model_record.py`, таблица `ai_models` в `platform_shared`, PK `ai_model_id` = `{provider}:{model_id}`): modalities, pricing/`is_free`, typed AA indices, размерности embedding; score и editorial в каталоге нет. `by_provider_and_model_id` читает строку по этому ключу: нет строки — `None`. Повтор читает ту же. `AIModelRecord.list_unordered_by_provider(provider) -> list[AIModelRecord]` — строки одного `provider`. Порядка и предела нет. `AIModelRecord.list_unordered_by_provider_and_capability(provider, capability) -> list[AIModelRecord]` — те же строки, у которых capability есть в `capabilities`. Порядок списка провайдера не меняется. Предела нет.
+- Overlay оценок — `LLMModelScore` (`core/ai/models/model_score.py`, таблица `llm_model_scores`, только компания `system`: `enabled`, `editorial_prior`, `note`). `LLMModelScore.list_by_capability_provider_and_model_id_asc() -> list[LLMModelScore]` — все оценки, `ORDER BY capability, provider, model_id ASC`. Предела нет. `LLMModelScore.list_unordered_for_capability(capability) -> list[LLMModelScore]` — оценки одной capability. Порядка и предела нет. `LLMModelScore.by_provider_model_id_and_capability(*, provider, model_id, capability) -> LLMModelScore | None` — уникальный ключ `provider`, `model_id`, `capability`. Нет строки — `None`. `LLMModelScore.delete_by_provider_model_id_and_capability(*, provider, model_id, capability) -> bool` — удаление по тому же ключу. Нет строки — `False`. `LLMModelScore.upsert_result_by_provider_model_id_and_capability(*, provider, model_id, capability, ...) -> LLMModelScoreUpsertResult` — слияние по тому же ключу. `created` только при вставке, `updated` всегда `True`.
 - Вызов — `LLMCallConfig` (`core/ai/llm_config.py`); выбор — `AIRequestRequirements`, `AISelection` (`core.ai.requirements`).
 - Модель — не строка: строка допустима только как выбор пользователя и сразу резолвится в typed record.
 
@@ -35,6 +37,7 @@ alwaysApply: false
 10. Image gen — `AICapability.IMAGE_GEN`; `NanoBananaClient` (`core/clients/nano_banana.py`) резолвит модель через `core.ai.resolver` и клиент через `core.ai.runtime`.
 11. Файлы из ответа LLM (изображения, аудио) — через `files_service`/`audio_processor` в S3, аудио — со STT.
 12. Биллинг вызова — `LLMClient.prepare_billing()` + `record_llm_client_response` → `billing.mdc`; LLM во flows — только `.stream()` → `a2a.mdc`.
+13. OpenAI-compatible LLM proxy — `apps/flows/src/llm_proxy/` и `POST/GET /flows/api/v1/llm/v1` (`models`, `chat/completions`, `images/generations`, OnlyOffice `/proxy`). Auth — execution token гостя или editor JWT с claim `platformAi` (`apps/flows/src/llm_proxy/auth.py`); компания только из токена. `auto` и `<provider>:<model>` идут в `LLMClient`, `lara:<branch_id>` — A2A bridge `lara_bridge.py`, `image-auto` — `NanoBananaClient`. Codec — `core/clients/llm/openai_api_codec.py`. Ошибки пути `/flows/api/v1/llm/` — OpenAI envelope. `llm_proxy_use_mock_auto` (`FlowSettings`) включает mock для `auto` только в тестовом стеке.
 
 ### Контекстный слой
 
@@ -76,6 +79,6 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_ai_model_files.py` (`make lint`) — `AIModelRecord` и `LLMModelScore` в разных модулях.
-- `scripts/check_company_ai_canon.py` (`make check-events-canon`) — `core.ai` как единственный AI-слой.
-- `tests/core/ai/test_platform_model_scoring_fixtures.py`; `scripts/generate_llm_scoring_fixtures.py --check` (сеть + ключи) — drift scoring.
+- `scripts/gates/backend/model_files.py` (`make lint`) — `AIModelRecord` и `LLMModelScore` в разных модулях.
+- `scripts/gates/ai/company_ai_canon.py` (`make check-events-canon`) — `core.ai` как единственный AI-слой.
+- `tests/core/ai/test_platform_model_scoring_fixtures.py`; `scripts/generate/llm_scoring_fixtures.py --check` (сеть + ключи) — drift scoring.

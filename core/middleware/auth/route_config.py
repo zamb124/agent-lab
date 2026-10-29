@@ -212,25 +212,6 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/api/public/startup-card", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/startup-card", auth_required=False, context_type="anonymous"),
 
-    # HumanitecAgent: скачивание, login, register (pairing code), tunnel WS
-    RouteRule("/agent", auth_required=False, context_type="anonymous"),
-    RouteRule("/agent/", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/agent", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/agent/", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/api/agent/login", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/api/agent/download/*", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/api/agent/releases/artifact/*", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/api/agent/releases/status", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/api/agent/discover", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/api/agent/register", auth_required=False, context_type="anonymous"),
-    RouteRule("/frontend/api/agent/register-with-auth", context_type="api", auth_required=True),
-    RouteRule("/frontend/api/agent/auth/device-token", context_type="api", auth_required=True),
-    RouteRule("/frontend/api/agent/pairing", context_type="api", auth_required=True),
-    RouteRule("/frontend/api/agent/devices", context_type="api", auth_required=True),
-    RouteRule("/frontend/api/agent/devices/*", context_type="api", auth_required=True),
-    RouteRule("/frontend/api/agent/audit", context_type="api", auth_required=True),
-    RouteRule("/frontend/api/agent/tunnel", auth_required=False, context_type="anonymous"),
-
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/health", auth_required=False, context_type="anonymous"),
     RouteRule("/sitemap.xml", auth_required=False, context_type="anonymous"),
@@ -466,8 +447,8 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/flows/api/v1/tool-runtime/call", context_type="anonymous", auth_required=False),
     RouteRule("/flows/api/v1/internal/*", context_type="anonymous", auth_required=False),
     RouteRule("/flows/api/v1/browser-preview/*", context_type="anonymous", auth_required=False),
-    # OpenAI LLM proxy: multi-auth device JWT | OnlyOffice editor JWT (см. apps/agent/llm_auth.py)
-    RouteRule("/flows/api/v1/agent/llm/*", auth_required=False, context_type="anonymous"),
+    # OpenAI LLM proxy: execution token | OnlyOffice editor JWT (apps/flows/src/llm_proxy/auth.py)
+    RouteRule("/flows/api/v1/llm/*", auth_required=False, context_type="anonymous"),
     RouteRule("/flows/api/v1/auth/me", context_type="api", auth_required=True),
     # code_node LSP JSON-RPC — auth внутри хендлера через get_user_from_websocket()
     RouteRule("/flows/api/v1/code/lsp/ws/*", auth_required=False, context_type="anonymous"),

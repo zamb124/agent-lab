@@ -12,6 +12,14 @@ import { html, css } from 'lit';
 import type { PropertyValues } from '@platform/lib/lit-shim.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { buttonStyles, iconButtonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
+import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/glass-spinner.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 interface RagDocument {
     name?: string;
@@ -20,13 +28,27 @@ interface RagDocument {
     pages?: unknown;
     [key: string]: unknown;
 }
-import { buttonStyles, iconButtonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
-import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-breadcrumbs.js';
-import '@platform/lib/components/glass-spinner.js';
-import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+
+function isRagDocument(value: unknown): value is RagDocument {
+    return isPlainRecord(value);
+}
+
+function documentList(value: unknown): RagDocument[] {
+    if (value === undefined || value === null) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        throw new Error('NamespacePage: documents must be an array');
+    }
+    const rows: RagDocument[] = [];
+    for (const item of value) {
+        if (!isRagDocument(item)) {
+            throw new Error('NamespacePage: document must be an object');
+        }
+        rows.push(item);
+    }
+    return rows;
+}
 
 const ACCEPT_TYPES = '.pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.pptx';
 
@@ -109,7 +131,7 @@ export class NamespacePage extends PlatformPage {
     override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         if (changed.has('namespaceId') && typeof this.namespaceId === 'string' && this.namespaceId.length > 0) {
-            if ((this._docs.state as Record<string, unknown>).loadedNamespaceId !== this.namespaceId) {
+            if (this._docs.state.loadedNamespaceId !== this.namespaceId) {
                 this._docs.run({ namespace_id: this.namespaceId });
             }
         }
@@ -117,13 +139,25 @@ export class NamespacePage extends PlatformPage {
 
     private _goBack() { this.navigate('namespaces'); }
 
+    private _fileInput(): HTMLInputElement {
+        const field = this.shadowRoot?.querySelector('input[type="file"]');
+        if (!(field instanceof HTMLInputElement)) {
+            throw new Error('NamespacePage: file input required');
+        }
+        return field;
+    }
+
     private _triggerFileInput() {
-        (this.shadowRoot?.querySelector('input[type="file"]') as HTMLInputElement | null)?.click();
+        this._fileInput().click();
     }
 
     private _handleFileSelect(e: Event) {
-        const file = (e.target as HTMLInputElement | null)?.files?.[0];
-        if (!file) return;
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('NamespacePage: file input required');
+        }
+        const file = target.files === null ? null : target.files.item(0);
+        if (file === null) return;
         this._uploadFile(file);
     }
 
@@ -148,9 +182,11 @@ export class NamespacePage extends PlatformPage {
         e.preventDefault();
         e.stopPropagation();
         this._dragOver = false;
-        const dt = (e as DragEvent).dataTransfer;
-        const files = dt && dt.files ? Array.from(dt.files) : [];
-        if (files.length > 0 && files[0]) this._uploadFile(files[0]);
+        if (!(e instanceof DragEvent) || e.dataTransfer === null) {
+            return;
+        }
+        const file = e.dataTransfer.files.item(0);
+        if (file !== null) this._uploadFile(file);
     }
 
     private _findNamespace(): Record<string, unknown> | null {
@@ -163,8 +199,7 @@ export class NamespacePage extends PlatformPage {
     override render() {
         const namespace = this._findNamespace();
         const uploading = this._upload.busy;
-        const rawDocuments = (this._docs.state as { items?: RagDocument[] }).items;
-        const documents = rawDocuments === undefined ? [] : rawDocuments;
+        const documents = documentList(this._docs.state.items);
         const loading = this._docs.busy;
 
         if (!namespace && !this._namespaces.loading) {

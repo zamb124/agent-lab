@@ -159,7 +159,7 @@ class SyncCallService:
             )
         except PermissionError as exc:
             raise WsCommandError("forbidden", str(exc), error_code="forbidden") from exc
-        member_rows = await self._channel_access.list_member_rows(out.channel_id)
+        member_rows = await self._channel_access.list_member_rows_by_user_id_asc(out.channel_id)
         member_ids = [uid for uid, _role in member_rows]
         started_read = await _post_call_boundary_message(
             channel_id=out.channel_id,

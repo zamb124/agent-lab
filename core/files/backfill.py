@@ -40,7 +40,7 @@ def _expires_at_from_ttl(created_at: datetime, ttl_seconds: int) -> datetime | N
 
 class FileRetentionBackfillService:
     async def backfill_batch(self, *, limit: int) -> RetentionBackfillBatchResult:
-        records = await FileRecord.list_missing_retention(limit=limit)
+        records = await FileRecord.list_unordered_missing_retention(limit=limit)
         updated = 0
         skipped = 0
         for record in records:

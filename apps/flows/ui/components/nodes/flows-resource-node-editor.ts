@@ -29,7 +29,7 @@ export class FlowsResourceNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -39,12 +39,12 @@ export class FlowsResourceNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
 ;
 
@@ -97,10 +97,10 @@ export class FlowsResourceNodeEditor extends PlatformElement {
     ];
     private _editor: ControllerFor<'flows/editor'>;
     private _resources: ResourceController;
-    private _branchResourcesSlice: SelectController<any>;
-    private _catalogPending: Map<any, any>;
-    private _branchPending: Map<any, any>;
-    private _timers: Map<any, any>;
+    private _branchResourcesSlice: SelectController<Record<string, unknown> | null>;
+    private _catalogPending: Map<string, Record<string, unknown>>;
+    private _branchPending: Map<string, Record<string, unknown>>;
+    private _timers: Map<string, ReturnType<typeof setTimeout>>;
 
     constructor() {
         super();
@@ -108,7 +108,7 @@ export class FlowsResourceNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'resource';
+        this.flowNodeType = 'resource';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -120,9 +120,13 @@ export class FlowsResourceNodeEditor extends PlatformElement {
         this._branchPending = new Map();
         this._timers = new Map();
         this._branchResourcesSlice = this.select((s) => {
-            const bd = (s.flowsEditor as Record<string, any>)?.branchData;
-            if (!bd || typeof bd.resources !== 'object') return null;
-            return bd.resources;
+            const editor = s.flowsEditor;
+            if (!isPlainObject(editor)) return null;
+            const bd = editor.branchData;
+            if (!isPlainObject(bd)) return null;
+            const resources = bd.resources;
+            if (!isPlainObject(resources)) return null;
+            return resources;
         });
     }
 
@@ -139,11 +143,12 @@ export class FlowsResourceNodeEditor extends PlatformElement {
         if (!isPlainObject(raw)) {
             return [];
         }
-        const out: any[] = [];
-        const seen = new Set();
-        for (const [k, ref] of Object.entries(raw as Record<string, any>)) {
+        const out: string[] = [];
+        const seen = new Set<string>();
+        for (const [key, ref] of Object.entries(raw)) {
             if (!isPlainObject(ref)) continue;
-            const rid = typeof (ref as any).resource_id === 'string' && (ref as any).resource_id.length > 0 ? (ref as any).resource_id : k;
+            const resourceId = ref.resource_id;
+            const rid = typeof resourceId === 'string' && resourceId.length > 0 ? resourceId : key;
             if (typeof rid !== 'string' || rid.length === 0) continue;
             if (seen.has(rid)) continue;
             seen.add(rid);
@@ -158,7 +163,7 @@ export class FlowsResourceNodeEditor extends PlatformElement {
         this._timers.delete(key);
     }
 
-    _scheduleCatalogSave(resourceId: string, body: any) {
+    _scheduleCatalogSave(resourceId: string, body: Record<string, unknown>) {
         const key = `catalog:${resourceId}`;
         this._catalogPending.set(resourceId, body);
         this._clearTimer(key);
@@ -188,7 +193,7 @@ export class FlowsResourceNodeEditor extends PlatformElement {
         return isPlainObject(ref) ? { ...ref } : null;
     }
 
-    _flushBranchResource(resourceId: string, nextRef: any) {
+    _flushBranchResource(resourceId: string, nextRef: Record<string, unknown>) {
         const state = this._editor.state;
         if (!isPlainObject(state) || !isPlainObject(state.branchData)) {
             throw new Error('flows-resource-node-editor: branchData missing for flush');
@@ -196,12 +201,12 @@ export class FlowsResourceNodeEditor extends PlatformElement {
         const data = state.branchData;
         const resources = { ...branchDataResources(data), [resourceId]: nextRef };
         const snapshot = { ...data, resources };
-        (this._editor.updateBranchData({ data: snapshot }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.pushHistory({ snapshot }) as any);
+        this._editor.updateBranchData({ data: snapshot });
+        this._editor.setDirty({ dirty: true });
+        this._editor.pushHistory({ snapshot });
     }
 
-    _scheduleBranchSave(resourceId: string, patch: any) {
+    _scheduleBranchSave(resourceId: string, patch: Record<string, unknown>) {
         const key = `branch:${resourceId}`;
         const existingTimer = this._timers.get(key);
         if (existingTimer) clearTimeout(existingTimer);
@@ -232,9 +237,11 @@ export class FlowsResourceNodeEditor extends PlatformElement {
             return;
         }
         const items = Array.isArray(this._resources.items) ? this._resources.items : [];
-        const catalogItem = items.find((r: any) => r && r.resource_id === resourceId);
+        const catalogItem = items.find((item): item is Record<string, unknown> => (
+            isPlainObject(item) && item.resource_id === resourceId
+        ));
         if (catalogItem) {
-            const body: any = { ...catalogItem };
+            const body: Record<string, unknown> = { ...catalogItem };
             for (const [k, v] of Object.entries(patch)) {
                 if (k === 'config' && isPlainObject(v)) {
                     const baseCfg = isPlainObject(catalogItem.config) ? catalogItem.config : {};
@@ -296,7 +303,7 @@ export class FlowsResourceNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'resource'}
+                .flowNodeType=${this.flowNodeType.length > 0 ? this.flowNodeType : 'resource'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

@@ -5,8 +5,8 @@ from __future__ import annotations
 from apps.browser.config import get_browser_settings
 from apps.browser.models.types import BrowserRuntimeSettingsView
 from apps.browser.services.runtime_facade import BrowserRuntimeFacade
-from core.clients.redis_client import RedisClient
 from core.authz.factory import build_authz_service
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.documents.tree_service import DocumentTreeService
 from core.files.service import FilesService

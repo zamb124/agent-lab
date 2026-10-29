@@ -165,7 +165,7 @@ class WorkflowInstance(PlatformModel):
         ).first()
 
     @classmethod
-    async def list_instances(
+    async def instances_and_total_by_updated_at_desc(
         cls,
         *,
         company_id: str,
@@ -177,6 +177,7 @@ class WorkflowInstance(PlatformModel):
         limit: int | None = 50,
         offset: int = 0,
     ) -> tuple[list[WorkflowInstance], int]:
+        """Окно голов компании и total того же фильтра, ORDER BY updated_at DESC. Пустая строка в flow_id, user_id или flow_branch_id не фильтрует. updated_from и updated_to равные None не фильтруют. limit is None не ограничивает, по умолчанию 50."""
         query = WorkflowInstance.objects.filter(company_id=company_id)
         if flow_id:
             query = query.filter(flow_id=flow_id)
@@ -195,7 +196,7 @@ class WorkflowInstance(PlatformModel):
         return await page.all(), total
 
     @classmethod
-    async def list_events(
+    async def event_records_and_total_by_sequence_asc(
         cls,
         *,
         company_id: str,
@@ -204,6 +205,7 @@ class WorkflowInstance(PlatformModel):
         limit: int = 200,
         offset: int = 0,
     ) -> tuple[list[WorkflowEventRecord], int]:
+        """Окно событий сессии и total того же фильтра, ORDER BY sequence ASC. execution_branch_id is None не фильтрует. limit по умолчанию 200."""
         query = WorkflowEvent.objects.filter(company_id=company_id, session_id=session_id)
         if execution_branch_id is not None:
             query = query.filter(execution_branch_id=execution_branch_id)
@@ -212,7 +214,7 @@ class WorkflowInstance(PlatformModel):
         return [cls._workflow_event_record(row) for row in rows], total
 
     @classmethod
-    async def event_by_type(
+    async def event_record_by_type_or_latest_sequence_desc(
         cls,
         *,
         company_id: str,
@@ -221,6 +223,7 @@ class WorkflowInstance(PlatformModel):
         event_type: WorkflowEventType,
         sequence: int | None = None,
     ) -> WorkflowEventRecord | None:
+        """Запись события ветки, не строка таблицы. Без sequence — ORDER BY sequence DESC. С sequence — событие этого номера. Нет строки — None."""
         query = WorkflowEvent.objects.filter(
             company_id=company_id,
             session_id=session_id,
@@ -237,12 +240,13 @@ class WorkflowInstance(PlatformModel):
         return cls._workflow_event_record(row)
 
     @classmethod
-    async def list_branches(
+    async def branch_records_by_created_at_asc(
         cls,
         *,
         company_id: str,
         session_id: str,
     ) -> list[WorkflowBranchRecord]:
+        """Записи веток сессии, ORDER BY created_at ASC. Предела нет. Нет головы сессии — is_active ложен у всех."""
         instance = await cls.any_by_company_and_session(company_id=company_id, session_id=session_id)
         active_branch_id = instance.active_execution_branch_id if instance is not None else None
         rows = await (
@@ -698,31 +702,23 @@ class WorkflowInstance(PlatformModel):
         sequence: int,
     ) -> ExecutionState | None:
         """Rehydrate state from latest snapshot plus events up to sequence."""
-        snapshot = await (
-            WorkflowSnapshot.objects.filter(
-                company_id=company_id,
-                session_id=session_id,
-                execution_branch_id=execution_branch_id,
-                sequence__lte=sequence,
-            )
-            .order_by("-sequence")
-            .first()
+        snapshot = await WorkflowSnapshot.latest_at_or_before_sequence_desc(
+            company_id=company_id,
+            session_id=session_id,
+            execution_branch_id=execution_branch_id,
+            sequence=sequence,
         )
         state: ExecutionState | None = None
         start_sequence = 0
         if snapshot is not None:
             state = ExecutionState.model_validate(snapshot.state_json)
             start_sequence = snapshot.sequence
-        events = await (
-            WorkflowEvent.objects.filter(
-                company_id=company_id,
-                session_id=session_id,
-                execution_branch_id=execution_branch_id,
-                sequence__gt=start_sequence,
-                sequence__lte=sequence,
-            )
-            .order_by("sequence")
-            .all()
+        events = await WorkflowEvent.list_after_through_sequence_asc(
+            company_id=company_id,
+            session_id=session_id,
+            execution_branch_id=execution_branch_id,
+            after_sequence=start_sequence,
+            through_sequence=sequence,
         )
         for event in events:
             delta = ExecutionStateDelta.model_validate(event.state_delta)
@@ -739,13 +735,14 @@ class WorkflowInstance(PlatformModel):
         return state
 
     @classmethod
-    async def resolve_session_id_by_flow_and_identifier(
+    async def latest_session_id_by_flow_identifier_and_updated_at_desc(
         cls,
         *,
         company_id: str,
         flow_id: str,
         lookup_id: str,
     ) -> str | None:
+        """session_id, не строка таблицы. Сначала прямая пара flow_id:lookup_id. Иначе последняя по updated_at DESC среди task_id или context_id. Нет строки — None."""
         direct_session_id = f"{flow_id}:{lookup_id}"
         direct = await cls.any_by_company_and_session(company_id=company_id, session_id=direct_session_id)
         if direct is not None:

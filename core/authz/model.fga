@@ -159,14 +159,6 @@ type flow_ui_share
     define can_view: viewer or editor or owner
     define can_edit: editor or owner
 
-type agent_device
-  relations
-    define company: [company]
-    define owner: [user]
-    define can_view: owner or admin from company
-    define can_edit: owner or admin from company
-    define can_admin: owner or admin from company
-
 type datasource
   relations
     define company: [company]

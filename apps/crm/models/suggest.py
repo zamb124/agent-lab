@@ -41,7 +41,8 @@ class CRMSuggest(PlatformModel):
         return await cls.objects.create(instance=row)
 
     @classmethod
-    def in_company_namespace(cls, company_id: str, namespace: str) -> Query[Self]:
+    def query_in_company_namespace(cls, company_id: str, namespace: str) -> Query[Self]:
+        """Подсказки компании в namespace. Порядка нет. Пустые поля не проверяются."""
         return cls.objects.filter(company_id=company_id, namespace=namespace)
 
     @classmethod

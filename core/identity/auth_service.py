@@ -297,7 +297,7 @@ class AuthService:
         if norm(email) != norm(demo.email):
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
-        matched = await User.list_by_email_ci(demo.email)
+        matched = await User.list_containing_email_ci_by_user_id_asc(demo.email)
         if len(matched) != 1:
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
@@ -413,7 +413,7 @@ class AuthService:
                 raise ValueError(
                     f"Provider {provider.value} did not return email; cannot register a new user"
                 )
-            existing_list = await User.list_by_email_ci(user_info.email)
+            existing_list = await User.list_containing_email_ci_by_user_id_asc(user_info.email)
             if len(existing_list) > 1:
                 raise ValueError(
                     f"Multiple users with email {user_info.email}: "

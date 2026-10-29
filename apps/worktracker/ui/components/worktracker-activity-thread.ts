@@ -127,7 +127,7 @@ export class WorktrackerActivityThread extends PlatformElement {
         }
         return html`
             <div class="wt-comment-list">
-                ${(rows as WorkItemComment[]).map((comment) => {
+                ${rows.map((comment) => {
                     const author = comment.author;
                     const userId = author && author.actor_kind === 'user' && typeof author.user_id === 'string'
                         ? author.user_id

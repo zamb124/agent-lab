@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from apps.crm_worker.tasks.task_names import (
+from apps.crm.tasks.task_names import (
     CRM_RECONCILE_DAILY_SUMMARY,
     CRM_REEMBED_STALE_DOCUMENTS,
 )
@@ -11,7 +11,7 @@ from apps.flows.src.tasks.task_names import (
     TASK_MCP_CATALOG_RESYNC_TOOLS,
     TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK,
 )
-from apps.idle_worker.tasks.task_names import (
+from apps.idle.tasks.task_names import (
     TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
     TASK_CALENDAR_SYNC_TICK,
     TASK_FILE_RETENTION_BACKFILL_TICK,
@@ -21,7 +21,7 @@ from apps.idle_worker.tasks.task_names import (
     TASK_REDIS_INVENTORY_TICK,
     TASK_SPAN_BILLING_SETTLEMENT_TICK,
 )
-from apps.rag_worker.tasks.task_names import (
+from apps.rag.tasks.task_names import (
     RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK,
     RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK,
     RAG_REEMBED_STALE_DOCUMENTS_TICK,
@@ -31,7 +31,7 @@ from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
 from apps.scheduler.crawl_schedule_bootstrap import ensure_search_crawl_schedules
 from apps.scheduler.di import SchedulerDi
 from apps.scheduler.realtime.command_router import SCHEDULER_OPERATIONS
-from apps.stock_worker.tasks.task_names import (
+from apps.stock.tasks.task_names import (
     STOCK_CLAIMS_GC_TICK,
     STOCK_CYCLE_COUNT_TICK,
     STOCK_LANE_GC_TICK,

@@ -107,7 +107,7 @@ async def test_persist_folder_cache_assigns_new_folder_after_max(
         ),
         company_id=company_id,
     )
-    existing = await StoredMailboxFolder.list_for_binding(binding.mailbox_binding_id)
+    existing = await StoredMailboxFolder.list_for_binding_by_sort_index_and_folder_name_asc(binding.mailbox_binding_id)
     assert existing
     now = datetime.now(timezone.utc)
     seeded = [
@@ -145,7 +145,7 @@ async def test_persist_folder_cache_assigns_new_folder_after_max(
             ],
         ),
     )
-    stored = await StoredMailboxFolder.list_for_binding(binding.mailbox_binding_id)
+    stored = await StoredMailboxFolder.list_for_binding_by_sort_index_and_folder_name_asc(binding.mailbox_binding_id)
     by_name = {item.folder_name: item.sort_index for item in stored}
     assert by_name["INBOX"] == 0
     assert by_name["Sent"] == 5

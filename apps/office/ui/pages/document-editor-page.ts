@@ -10,6 +10,7 @@ import { html, css, nothing } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-document-viewer-host.js';
 import '@platform/lib/components/platform-icon.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
@@ -303,11 +304,20 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         });
     }
 
+    private _openConfig(): Record<string, unknown> | null {
+        const result = this._editor.lastResult;
+        return isPlainRecord(result) ? result : null;
+    }
+
     private _textPresentation(openConfig: Record<string, unknown> | null) {
-        if (!openConfig || openConfig.handler !== 'text' || !openConfig.text || typeof openConfig.text !== 'object') {
+        if (!isPlainRecord(openConfig) || openConfig.handler !== 'text') {
             return '';
         }
-        const presentation = (openConfig.text as Record<string, unknown>).presentation;
+        const text = openConfig.text;
+        if (!isPlainRecord(text)) {
+            return '';
+        }
+        const presentation = text.presentation;
         if (presentation === 'html' || presentation === 'markdown') {
             return presentation;
         }
@@ -315,10 +325,14 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     }
 
     private _defaultViewMode(openConfig: Record<string, unknown> | null): 'preview' | 'source' {
-        if (!openConfig || !openConfig.text || typeof openConfig.text !== 'object') {
+        if (!isPlainRecord(openConfig)) {
             return 'source';
         }
-        const mode = (openConfig.text as Record<string, unknown>).default_view_mode;
+        const text = openConfig.text;
+        if (!isPlainRecord(text)) {
+            return 'source';
+        }
+        const mode = text.default_view_mode;
         if (mode === 'preview' || mode === 'source') {
             return mode;
         }
@@ -326,7 +340,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     }
 
     private _syncViewModeFromOpenConfig() {
-        const openConfig = this._editor.lastResult as Record<string, unknown> | null;
+        const openConfig = this._openConfig();
         const presentation = this._textPresentation(openConfig);
         const fileId = this.fileId.trim();
         if (!presentation) {
@@ -345,7 +359,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         if (mode !== 'preview' && mode !== 'source') {
             throw new Error(`office-document-editor-page: invalid viewMode ${mode}`);
         }
-        if (!this._textPresentation(this._editor.lastResult as Record<string, unknown> | null)) {
+        if (!this._textPresentation(this._openConfig())) {
             throw new Error('office-document-editor-page: viewMode unavailable for this file');
         }
         this._viewMode = mode;
@@ -388,7 +402,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     }
 
     private _docTitle() {
-        const openConfig = this._editor.lastResult as Record<string, unknown> | null;
+        const openConfig = this._openConfig();
         if (!openConfig || typeof openConfig.title !== 'string' || openConfig.title.length === 0) {
             return this.t('editor.stage.untitled');
         }
@@ -426,7 +440,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     }
 
     private _renderStageBar() {
-        const openConfig = this._editor.lastResult as Record<string, unknown> | null;
+        const openConfig = this._openConfig();
         return html`
             <div class="stage-bar">
                 <button
@@ -470,7 +484,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
                 <div class="error">${this._editorError}</div>
             `;
         }
-        const openConfig = this._editor.lastResult as Record<string, unknown> | null;
+        const openConfig = this._openConfig();
         const showLoading = this._editor.busy && !openConfig;
         const presentation = this._textPresentation(openConfig);
         const viewMode = presentation

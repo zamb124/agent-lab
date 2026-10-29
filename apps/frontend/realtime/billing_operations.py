@@ -102,7 +102,7 @@ async def op_billing_payment_history(
 ) -> ListResponse[TransactionResponse]:
     _ = payload, user
     scope = require_company()
-    transactions = await di.payment_service.get_company_transactions(company_id=scope.company_id)
+    transactions = await di.payment_service.get_company_transactions_by_created_at_desc(company_id=scope.company_id)
     return ListResponse[TransactionResponse](
         items=[
             TransactionResponse(

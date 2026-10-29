@@ -10,11 +10,14 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
-import { asObject } from '../../_helpers/flows-resolvers.js';
+import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
-/** @param {string} provider */
-function _needsSttTtsModel(provider: any) {
+type SpeechBlockName = 'stt' | 'tts' | 'vad';
+type SpeechScope = 'flow' | 'branch';
+type SpeechChange = (event: CustomEvent) => void;
+
+function _needsSttTtsModel(provider: unknown) {
     return (
         provider === 'litserve' ||
         provider === 'cloud_ru' ||
@@ -26,6 +29,62 @@ function _needsSttTtsModel(provider: any) {
 const VAD_THRESHOLD_OPTS = Object.freeze(
     Array.from({ length: 21 }, (_, i) => (i * 0.05).toFixed(2)),
 );
+
+function requireStringIds(value: unknown, label: string): string[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`flows-flow-property-panel: ${label} must be a list`);
+    }
+    const ids: string[] = [];
+    for (const item of value) {
+        if (typeof item !== 'string') {
+            throw new Error(`flows-flow-property-panel: ${label} id must be a string`);
+        }
+        ids.push(item);
+    }
+    return ids;
+}
+
+function optionalStringIds(value: unknown, label: string): string[] {
+    if (!Array.isArray(value)) return [];
+    return requireStringIds(value, label);
+}
+
+function requireNumberIds(value: unknown, label: string): number[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`flows-flow-property-panel: ${label} must be a list`);
+    }
+    const ids: number[] = [];
+    for (const item of value) {
+        if (typeof item !== 'number' || !Number.isFinite(item)) {
+            throw new Error(`flows-flow-property-panel: ${label} id must be a number`);
+        }
+        ids.push(item);
+    }
+    return ids;
+}
+
+function optionalNumberIds(value: unknown, label: string): number[] {
+    if (!Array.isArray(value)) return [];
+    return requireNumberIds(value, label);
+}
+
+function readFlowConfig(state: unknown): Record<string, unknown> | null {
+    if (!isPlainObject(state) || !isPlainObject(state.flowConfig)) return null;
+    return state.flowConfig;
+}
+
+function requireFlowConfig(state: unknown): Record<string, unknown> {
+    const flowConfig = readFlowConfig(state);
+    if (flowConfig === null) {
+        throw new Error('flows-flow-property-panel: flowConfig required');
+    }
+    return flowConfig;
+}
+
+function copyBranchMap(flowConfig: Record<string, unknown>): Record<string, unknown> {
+    if (!isPlainObject(flowConfig.branches)) return {};
+    return { ...flowConfig.branches };
+}
 
 export class FlowsFlowPropertyPanel extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -113,7 +172,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         super.connectedCallback();
         void this._voiceCatalog
             .run({})
-            .catch((err: any) => {
+            .catch((err: unknown) => {
                 const detail = err instanceof Error ? err.message : String(err);
                 this.toast('flows:property_panel.speech_catalog_error', {
                     type: 'error',
@@ -131,15 +190,10 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
      * @param {string} field
      * @param {unknown} value — null удаляет поле
      */
-    _mergeSpeechBlock(prevSpeech: any, block: any, field: string, value: unknown) {
-        const speech =
-            prevSpeech && typeof prevSpeech === 'object' && !Array.isArray(prevSpeech)
-                ? { ...prevSpeech }
-                : {};
-        const prevBlock =
-            speech[block] && typeof speech[block] === 'object' && !Array.isArray(speech[block])
-                ? { ...speech[block] }
-                : {};
+    _mergeSpeechBlock(prevSpeech: unknown, block: SpeechBlockName, field: string, value: unknown) {
+        const speech = isPlainObject(prevSpeech) ? { ...prevSpeech } : {};
+        const previous = speech[block];
+        const prevBlock = isPlainObject(previous) ? { ...previous } : {};
         const nextBlock = { ...prevBlock };
         if (value === null || value === undefined || value === '') {
             delete nextBlock[field];
@@ -161,132 +215,97 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
      * @param {unknown} flowConfig
      * @returns {Record<string, unknown>|null}
      */
-    _stripTtsVoiceFromAllBranches(flowConfig: any) {
-        const fc = asObject(flowConfig);
-        const branchesIn =
-            fc && (fc as Record<string, any>).branches && typeof (fc as Record<string, any>).branches === 'object' && !Array.isArray((fc as Record<string, any>).branches)
-                ? (fc as Record<string, any>).branches
-                : {};
-        const keys = Object.keys(branchesIn);
-        if (keys.length === 0) {
-            return null;
-        }
-        const branches = { ...branchesIn };
+    _stripTtsVoiceFromAllBranches(flowConfig: unknown): Record<string, unknown> | null {
+        if (!isPlainObject(flowConfig)) return null;
+        const branches = copyBranchMap(flowConfig);
+        const keys = Object.keys(branches);
+        if (keys.length === 0) return null;
         let changed = false;
-        for (const bk of keys) {
-            const rawBranch = branches[bk];
-            if (!rawBranch || typeof rawBranch !== 'object' || Array.isArray(rawBranch)) {
-                continue;
-            }
-            const speech = rawBranch.speech && typeof rawBranch.speech === 'object' ? rawBranch.speech : null;
-            const tts = speech && speech.tts && typeof speech.tts === 'object' ? speech.tts : null;
-            if (!tts || typeof tts.voice !== 'string' || tts.voice === '') {
-                continue;
-            }
+        for (const branchKey of keys) {
+            const rawBranch = branches[branchKey];
+            if (!isPlainObject(rawBranch)) continue;
+            const speech = isPlainObject(rawBranch.speech) ? rawBranch.speech : null;
+            const tts = speech !== null && isPlainObject(speech.tts) ? speech.tts : null;
+            if (tts === null || typeof tts.voice !== 'string' || tts.voice === '') continue;
             const nextSpeech = this._mergeSpeechBlock(speech, 'tts', 'voice', null);
-            const nextBranch: any = { ...rawBranch };
+            const nextBranch: Record<string, unknown> = { ...rawBranch };
             if (nextSpeech === null) {
                 delete nextBranch.speech;
             } else {
                 nextBranch.speech = nextSpeech;
             }
-            branches[bk] = nextBranch;
+            branches[branchKey] = nextBranch;
             changed = true;
         }
         return changed ? branches : null;
     }
 
-    _commitFlowSpeech(block: any, field: string, value: unknown) {
-        const fc = (asObject(this._editor.state) as any).flowConfig;
-        const prev = fc && fc.speech && typeof fc.speech === 'object' ? fc.speech : null;
+    _commitFlowSpeech(block: SpeechBlockName, field: string, value: unknown) {
+        const flowConfig = requireFlowConfig(this._editor.state);
+        const prev = isPlainObject(flowConfig.speech) ? flowConfig.speech : null;
         const next = this._mergeSpeechBlock(prev, block, field, value);
         const patch: Record<string, unknown> = { speech: next };
         if (block === 'tts' && field === 'voice') {
-            const branchesNext = this._stripTtsVoiceFromAllBranches(fc);
-            if (branchesNext !== null) {
-                patch.branches = branchesNext;
-            }
+            const branchesNext = this._stripTtsVoiceFromAllBranches(flowConfig);
+            if (branchesNext !== null) patch.branches = branchesNext;
         }
-        (this._editor.patchFlowConfig({ patch }) as any);
+        this._editor.patchFlowConfig({ patch });
     }
 
-    _commitBranchSpeech(branchKey: any, block: any, field: string, value: unknown) {
-        const fc = (asObject(this._editor.state) as any).flowConfig;
-        const branchesIn =
-            fc && fc.branches && typeof fc.branches === 'object' && !Array.isArray(fc.branches)
-                ? fc.branches
-                : {};
-        const branches = { ...branchesIn };
+    _commitBranchSpeech(branchKey: string, block: SpeechBlockName, field: string, value: unknown) {
+        const flowConfig = requireFlowConfig(this._editor.state);
+        const branches = copyBranchMap(flowConfig);
         const rawBranch = branches[branchKey];
-        if (!rawBranch || typeof rawBranch !== 'object' || Array.isArray(rawBranch)) {
+        if (!isPlainObject(rawBranch)) {
             throw new Error('flows-flow-property-panel: branch config missing for speech patch');
         }
-        const prevBranch = { ...rawBranch };
-        const prevSpeech =
-            prevBranch.speech && typeof prevBranch.speech === 'object' ? prevBranch.speech : null;
+        const prevBranch: Record<string, unknown> = { ...rawBranch };
+        const prevSpeech = isPlainObject(prevBranch.speech) ? prevBranch.speech : null;
         const nextSpeech = this._mergeSpeechBlock(prevSpeech, block, field, value);
-        const nextBranch: any = { ...prevBranch };
         if (nextSpeech === null) {
-            delete nextBranch.speech;
+            delete prevBranch.speech;
         } else {
-            nextBranch.speech = nextSpeech;
+            prevBranch.speech = nextSpeech;
         }
-        branches[branchKey] = nextBranch;
-        (this._editor.patchFlowConfig({ patch: { branches } }) as any);
+        branches[branchKey] = prevBranch;
+        this._editor.patchFlowConfig({ patch: { branches } });
     }
 
     _clearFlowSpeech() {
-        (this._editor.patchFlowConfig({ patch: { speech: null } }) as any);
+        this._editor.patchFlowConfig({ patch: { speech: null } });
     }
 
-    _clearBranchSpeech(branchKey: any) {
-        const fc = (asObject(this._editor.state) as any).flowConfig;
-        const branchesIn =
-            fc && fc.branches && typeof fc.branches === 'object' && !Array.isArray(fc.branches)
-                ? fc.branches
-                : {};
-        const branches = { ...branchesIn };
+    _clearBranchSpeech(branchKey: string) {
+        const flowConfig = requireFlowConfig(this._editor.state);
+        const branches = copyBranchMap(flowConfig);
         const rawBranch = branches[branchKey];
-        if (!rawBranch || typeof rawBranch !== 'object' || Array.isArray(rawBranch)) {
+        if (!isPlainObject(rawBranch)) {
             throw new Error('flows-flow-property-panel: branch config missing for speech clear');
         }
-        const prevBranch = { ...rawBranch };
+        const prevBranch: Record<string, unknown> = { ...rawBranch };
         delete prevBranch.speech;
         branches[branchKey] = prevBranch;
-        (this._editor.patchFlowConfig({ patch: { branches } }) as any);
+        this._editor.patchFlowConfig({ patch: { branches } });
     }
 
-    _modelOptions(kind: string, provider: any, catalog: any) {
-        if (!_needsSttTtsModel(provider)) {
-            return [];
-        }
-        if (!catalog || typeof catalog !== 'object') {
-            return [];
-        }
+    _modelOptions(kind: string, provider: unknown, catalog: unknown): string[] {
+        if (!_needsSttTtsModel(provider) || !isPlainObject(catalog)) return [];
         if (provider === 'litserve') {
-            if (kind === 'stt') {
-                return [...catalog.stt_litserve_models];
-            }
-            return [...catalog.tts_litserve_models];
+            if (kind === 'stt') return requireStringIds(catalog.stt_litserve_models, 'stt_litserve_models');
+            return requireStringIds(catalog.tts_litserve_models, 'tts_litserve_models');
         }
         if (provider === 'cloud_ru') {
-            if (kind === 'stt') {
-                return [...catalog.cloud_ru_stt_models];
-            }
-            return [...catalog.cloud_ru_tts_models];
+            if (kind === 'stt') return requireStringIds(catalog.cloud_ru_stt_models, 'cloud_ru_stt_models');
+            return requireStringIds(catalog.cloud_ru_tts_models, 'cloud_ru_tts_models');
         }
-        if (provider === 'yandex') {
-            return [...catalog.yandex_speech_models];
-        }
-        if (provider === 'sber') {
-            return [...catalog.sber_speech_models];
-        }
+        if (provider === 'yandex') return requireStringIds(catalog.yandex_speech_models, 'yandex_speech_models');
+        if (provider === 'sber') return requireStringIds(catalog.sber_speech_models, 'sber_speech_models');
         return [];
     }
 
-    _enumChangeString(e: CustomEvent, ctx: any) {
+    _enumChangeString(e: CustomEvent, ctx: string) {
         const d = e.detail;
-        if (d === null || typeof d !== 'object') {
+        if (!isPlainObject(d)) {
             throw new Error(`${ctx}: change detail object required`);
         }
         if (!('value' in d)) {
@@ -299,7 +318,15 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         return raw;
     }
 
-    _renderModelSelect(kind: string, provider: any, catalog: any, currentModel: any, onPick: any, emptyLabelKey: any, hintKey = '') {
+    _renderModelSelect(
+        kind: string,
+        provider: unknown,
+        catalog: unknown,
+        currentModel: unknown,
+        onPick: SpeechChange,
+        emptyLabelKey: string,
+        hintKey = '',
+    ) {
         const opts = this._modelOptions(kind, provider, catalog);
         if (opts.length === 0) {
             return '';
@@ -325,22 +352,18 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
     }
 
     /** @param {unknown} catalog */
-    _speechLanguageIds(catalog: any) {
-        if (!catalog || typeof catalog !== 'object' || !Array.isArray(catalog.speech_language_ids)) {
-            return [];
-        }
-        return [...catalog.speech_language_ids];
+    _speechLanguageIds(catalog: unknown) {
+        if (!isPlainObject(catalog)) return [];
+        return optionalStringIds(catalog.speech_language_ids, 'speech_language_ids');
     }
 
     /** @param {unknown} catalog */
-    _litserveTtsVoiceIdsUnion(catalog: any) {
-        if (!catalog || typeof catalog !== 'object') return [];
-        const hints = catalog.tts_litserve_voice_hints;
-        if (!Array.isArray(hints)) return [];
-        const seen = new Set();
-        for (const x of hints) {
-            if (!x || !Array.isArray(x.voice_ids)) continue;
-            for (const id of x.voice_ids) {
+    _litserveTtsVoiceIdsUnion(catalog: unknown) {
+        if (!isPlainObject(catalog) || !Array.isArray(catalog.tts_litserve_voice_hints)) return [];
+        const seen = new Set<string>();
+        for (const hint of catalog.tts_litserve_voice_hints) {
+            if (!isPlainObject(hint) || !Array.isArray(hint.voice_ids)) continue;
+            for (const id of hint.voice_ids) {
                 if (typeof id === 'string' && id !== '') seen.add(id);
             }
         }
@@ -352,63 +375,48 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
      * Пустой prov при непустом union — те же id (наследование провайдера с компании).
      */
     /** @param {unknown} catalog */
-    _ttsVoiceIds(ttsProv: any, ttsModel: any, catalog: any) {
-        if (!catalog || typeof catalog !== 'object') return [];
+    _ttsVoiceIds(ttsProv: unknown, ttsModel: unknown, catalog: unknown) {
+        if (!isPlainObject(catalog)) return [];
         const litserveUnion = this._litserveTtsVoiceIdsUnion(catalog);
         if (ttsProv === 'litserve') {
             if (typeof ttsModel === 'string' && ttsModel !== '') {
                 const hints = catalog.tts_litserve_voice_hints;
                 if (!Array.isArray(hints)) return [];
-                const h = hints.find((x) => x && x.api_model_id === ttsModel);
-                if (!h || !Array.isArray(h.voice_ids)) return [];
-                return [...h.voice_ids];
+                const hint = hints.find((item) => isPlainObject(item) && item.api_model_id === ttsModel);
+                if (!isPlainObject(hint) || !Array.isArray(hint.voice_ids)) return [];
+                return requireStringIds(hint.voice_ids, 'tts voice_ids');
             }
             return litserveUnion;
         }
-        if (ttsProv === '' && litserveUnion.length > 0) {
-            return litserveUnion;
-        }
-        if (ttsProv === 'cloud_ru' && Array.isArray(catalog.cloud_ru_tts_voice_ids)) {
-            return [...catalog.cloud_ru_tts_voice_ids];
-        }
-        if (ttsProv === 'yandex' && Array.isArray(catalog.yandex_tts_voice_ids)) {
-            return [...catalog.yandex_tts_voice_ids];
-        }
-        if (ttsProv === 'sber' && Array.isArray(catalog.sber_tts_voice_ids)) {
-            return [...catalog.sber_tts_voice_ids];
-        }
+        if (ttsProv === '' && litserveUnion.length > 0) return litserveUnion;
+        if (ttsProv === 'cloud_ru') return optionalStringIds(catalog.cloud_ru_tts_voice_ids, 'cloud_ru_tts_voice_ids');
+        if (ttsProv === 'yandex') return optionalStringIds(catalog.yandex_tts_voice_ids, 'yandex_tts_voice_ids');
+        if (ttsProv === 'sber') return optionalStringIds(catalog.sber_tts_voice_ids, 'sber_tts_voice_ids');
         return [];
     }
 
     /** @param {unknown} catalog */
-    _ttsSampleRateInts(ttsProv: any, catalog: any) {
-        if (!catalog || typeof catalog !== 'object') return [];
+    _ttsSampleRateInts(ttsProv: unknown, catalog: unknown) {
+        if (!isPlainObject(catalog)) return [];
         if (ttsProv === 'litserve' && Array.isArray(catalog.litserve_silero_tts_sample_rate_ids)) {
-            return [...catalog.litserve_silero_tts_sample_rate_ids];
+            return requireNumberIds(catalog.litserve_silero_tts_sample_rate_ids, 'litserve_silero_tts_sample_rate_ids');
         }
-        if (Array.isArray(catalog.tts_sample_rate_ids)) {
-            return [...catalog.tts_sample_rate_ids];
-        }
-        return [];
+        return optionalNumberIds(catalog.tts_sample_rate_ids, 'tts_sample_rate_ids');
     }
 
     /** @param {unknown} catalog */
-    _vadSampleRateInts(catalog: any) {
-        if (!catalog || typeof catalog !== 'object' || !Array.isArray(catalog.vad_sample_rate_ids)) {
-            return [];
-        }
-        return [...catalog.vad_sample_rate_ids];
+    _vadSampleRateInts(catalog: unknown) {
+        if (!isPlainObject(catalog)) return [];
+        return optionalNumberIds(catalog.vad_sample_rate_ids, 'vad_sample_rate_ids');
     }
 
     /** @param {unknown} catalog */
-    _vadProviderIds(catalog: any) {
-        if (!catalog || typeof catalog !== 'object' || !Array.isArray(catalog.vad_provider_ids)) {
-            return [];
-        }
-        return [...catalog.vad_provider_ids];
+    _vadProviderIds(catalog: unknown) {
+        if (!isPlainObject(catalog)) return [];
+        return optionalStringIds(catalog.vad_provider_ids, 'vad_provider_ids');
     }
 
-    _mergeStringOption(sortedBase: any, current: any) {
+    _mergeStringOption(sortedBase: readonly string[], current: unknown) {
         if (typeof current !== 'string' || current === '') return [...sortedBase];
         const base = [...sortedBase];
         if (base.includes(current)) return base.sort();
@@ -416,7 +424,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         return base.sort();
     }
 
-    _mergeIntOption(sortedBase: any, current: any) {
+    _mergeIntOption(sortedBase: readonly number[], current: unknown) {
         const base = [...sortedBase];
         if (typeof current !== 'number' || !Number.isFinite(current)) return base.sort((a, b) => a - b);
         if (base.includes(current)) return base.sort((a, b) => a - b);
@@ -424,7 +432,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         return base.sort((a, b) => a - b);
     }
 
-    _mergeThresholdOpts(currentNum: any) {
+    _mergeThresholdOpts(currentNum: unknown) {
         const cur =
             typeof currentNum === 'number' && Number.isFinite(currentNum)
                 ? currentNum.toFixed(2)
@@ -437,7 +445,14 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         return { opts, cur };
     }
 
-    _renderSpeechStringSelect(labelKey: string, sortedIds: any, currentStr: any, emptyLabelKey: any, onChange: any, hintKey = '') {
+    _renderSpeechStringSelect(
+        labelKey: string,
+        sortedIds: readonly string[],
+        currentStr: unknown,
+        emptyLabelKey: string,
+        onChange: SpeechChange,
+        hintKey = '',
+    ) {
         const cur = typeof currentStr === 'string' ? currentStr : '';
         const ids = this._mergeStringOption(sortedIds, cur);
         if (ids.length === 0) return '';
@@ -457,7 +472,14 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         `;
     }
 
-    _renderSpeechIntSelect(labelKey: string, sortedInts: any, currentNum: any, emptyLabelKey: any, onChange: any, hintKey = '') {
+    _renderSpeechIntSelect(
+        labelKey: string,
+        sortedInts: readonly number[],
+        currentNum: unknown,
+        emptyLabelKey: string,
+        onChange: SpeechChange,
+        hintKey = '',
+    ) {
         const ints = this._mergeIntOption(sortedInts, typeof currentNum === 'number' ? currentNum : NaN);
         if (ints.length === 0) return '';
         const curStr =
@@ -481,7 +503,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         `;
     }
 
-    _renderVadThresholdSelect(emptyLabelKey: any, currentNum: any, onChange: any, hintKey = '') {
+    _renderVadThresholdSelect(emptyLabelKey: string, currentNum: unknown, onChange: SpeechChange, hintKey = '') {
         const { opts, cur } = this._mergeThresholdOpts(
             typeof currentNum === 'number' ? currentNum : NaN,
         );
@@ -508,16 +530,18 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
      * @param {'flow'|'branch'} scope
      * @param {string} [branchKey]
      */
-    _speechHandlers(scope: any, branchKey?: any) {
+    _speechHandlers(scope: SpeechScope, branchKey?: string) {
         const commit =
             scope === 'flow'
-                ? (block: any, field: string, value: unknown) => this._commitFlowSpeech(block, field, value)
-                : (block: any, field: string, value: unknown) => {
-                    const bk = typeof branchKey === 'string' ? branchKey : '';
-                    this._commitBranchSpeech(bk, block, field, value);
+                ? (block: SpeechBlockName, field: string, value: unknown) => this._commitFlowSpeech(block, field, value)
+                : (block: SpeechBlockName, field: string, value: unknown) => {
+                    if (typeof branchKey !== 'string' || branchKey.length === 0) {
+                        throw new Error('flows-flow-property-panel: branch key required');
+                    }
+                    this._commitBranchSpeech(branchKey, block, field, value);
                 };
         return {
-            provider: (block: any) => (e: CustomEvent) => {
+            provider: (block: SpeechBlockName) => (e: CustomEvent) => {
                 const raw = this._enumChangeString(e, `speech provider (${block})`);
                 const trimmed = raw.trim();
                 commit(block, 'provider', trimmed === '' ? null : trimmed);
@@ -527,7 +551,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     commit(block, 'sample_rate', null);
                 }
             },
-            modelSelect: (block: any) => (e: CustomEvent) => {
+            modelSelect: (block: SpeechBlockName) => (e: CustomEvent) => {
                 const raw = this._enumChangeString(e, `speech model (${block})`);
                 const trimmed = raw.trim();
                 commit(block, 'model', trimmed === '' ? null : trimmed);
@@ -535,12 +559,12 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     commit(block, 'voice', null);
                 }
             },
-            enumSelect: (block: any, field: string) => (e: CustomEvent) => {
+            enumSelect: (block: SpeechBlockName, field: string) => (e: CustomEvent) => {
                 const raw = this._enumChangeString(e, `speech ${block}.${field}`);
                 const trimmed = raw.trim();
                 commit(block, field, trimmed === '' ? null : trimmed);
             },
-            intSelect: (block: any, field: string) => (e: CustomEvent) => {
+            intSelect: (block: SpeechBlockName, field: string) => (e: CustomEvent) => {
                 const raw = this._enumChangeString(e, `speech int ${block}.${field}`);
                 const trimmed = raw.trim();
                 if (trimmed === '') {
@@ -568,12 +592,12 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 }
                 commit('vad', 'threshold', n);
             },
-            responseFormat: (block: any) => (e: CustomEvent) => {
+            responseFormat: (block: SpeechBlockName) => (e: CustomEvent) => {
                 const raw = this._enumChangeString(e, `speech ${block}.response_format`);
                 const trimmed = raw.trim();
                 commit(block, 'response_format', trimmed === '' ? null : trimmed);
             },
-            vadProvider: (block: any) => (e: CustomEvent) => {
+            vadProvider: (block: SpeechBlockName) => (e: CustomEvent) => {
                 const raw = this._enumChangeString(e, `speech ${block}.provider`);
                 const trimmed = raw.trim();
                 commit(block, 'provider', trimmed === '' ? null : trimmed);
@@ -581,18 +605,18 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         };
     }
 
-    _renderFlowSpeechSettingsInner(catalog: any, speech: any) {
-        const stt = speech && typeof speech.stt === 'object' ? speech.stt : {};
-        const tts = speech && typeof speech.tts === 'object' ? speech.tts : {};
-        const vad = speech && typeof speech.vad === 'object' ? speech.vad : {};
-        const provOpts =
-            catalog && Array.isArray(catalog.stt_tts_provider_ids)
-                ? catalog.stt_tts_provider_ids
-                : [];
-        const rfOpts =
-            catalog && Array.isArray(catalog.response_format_ids)
-                ? catalog.response_format_ids
-                : [];
+    _renderFlowSpeechSettingsInner(catalog: unknown, speech: unknown) {
+        const speechRecord = isPlainObject(speech) ? speech : {};
+        const stt = isPlainObject(speechRecord.stt) ? speechRecord.stt : {};
+        const tts = isPlainObject(speechRecord.tts) ? speechRecord.tts : {};
+        const vad = isPlainObject(speechRecord.vad) ? speechRecord.vad : {};
+        const catalogRecord = isPlainObject(catalog) ? catalog : null;
+        const provOpts = catalogRecord === null
+            ? []
+            : optionalStringIds(catalogRecord.stt_tts_provider_ids, 'stt_tts_provider_ids');
+        const rfOpts = catalogRecord === null
+            ? []
+            : optionalStringIds(catalogRecord.response_format_ids, 'response_format_ids');
         const langOpts = this._speechLanguageIds(catalog);
         const sttProv = typeof stt.provider === 'string' ? stt.provider : '';
         const ttsProv = typeof tts.provider === 'string' ? tts.provider : '';
@@ -749,18 +773,18 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         `;
     }
 
-    _renderBranchSpeechSettingsInner(catalog: any, speech: any, branchKey: any) {
-        const stt = speech && typeof speech.stt === 'object' ? speech.stt : {};
-        const tts = speech && typeof speech.tts === 'object' ? speech.tts : {};
-        const vad = speech && typeof speech.vad === 'object' ? speech.vad : {};
-        const provOpts =
-            catalog && Array.isArray(catalog.stt_tts_provider_ids)
-                ? catalog.stt_tts_provider_ids
-                : [];
-        const rfOpts =
-            catalog && Array.isArray(catalog.response_format_ids)
-                ? catalog.response_format_ids
-                : [];
+    _renderBranchSpeechSettingsInner(catalog: unknown, speech: unknown, branchKey: string) {
+        const speechRecord = isPlainObject(speech) ? speech : {};
+        const stt = isPlainObject(speechRecord.stt) ? speechRecord.stt : {};
+        const tts = isPlainObject(speechRecord.tts) ? speechRecord.tts : {};
+        const vad = isPlainObject(speechRecord.vad) ? speechRecord.vad : {};
+        const catalogRecord = isPlainObject(catalog) ? catalog : null;
+        const provOpts = catalogRecord === null
+            ? []
+            : optionalStringIds(catalogRecord.stt_tts_provider_ids, 'stt_tts_provider_ids');
+        const rfOpts = catalogRecord === null
+            ? []
+            : optionalStringIds(catalogRecord.response_format_ids, 'response_format_ids');
         const langOpts = this._speechLanguageIds(catalog);
         const sttProv = typeof stt.provider === 'string' ? stt.provider : '';
         const ttsProv = typeof tts.provider === 'string' ? tts.provider : '';
@@ -925,20 +949,13 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
 
     _renderSpeechSettings() {
         const catalog = this._voiceCatalog.lastResult;
-        const state = asObject(this._editor.state);
-        const fc = (state as any).flowConfig;
-        const flowSpeech = fc && fc.speech && typeof fc.speech === 'object' ? fc.speech : {};
+        const fc = readFlowConfig(this._editor.state);
+        const flowSpeech = fc !== null && isPlainObject(fc.speech) ? fc.speech : {};
         const branchKey = typeof this.branchId === 'string' && this.branchId !== '' ? this.branchId : 'base';
-        let branchSpeech = {};
-        if (
-            branchKey !== 'base' &&
-            fc &&
-            fc.branches &&
-            typeof fc.branches === 'object' &&
-            fc.branches[branchKey] &&
-            typeof fc.branches[branchKey].speech === 'object'
-        ) {
-            branchSpeech = fc.branches[branchKey].speech;
+        let branchSpeech: Record<string, unknown> = {};
+        if (branchKey !== 'base' && fc !== null && isPlainObject(fc.branches)) {
+            const branch = fc.branches[branchKey];
+            if (isPlainObject(branch) && isPlainObject(branch.speech)) branchSpeech = branch.speech;
         }
         const catalogReady = catalog !== null && catalog !== undefined && typeof catalog === 'object';
         return html`
@@ -962,37 +979,31 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
     }
 
     _onFlowTimeout(e: CustomEvent) {
-        const d = e.detail;
-        if (d === null || typeof d !== 'object') {
-            throw new Error('flows-flow-property-panel: flow_timeout change detail');
-        }
-        if (!('value' in d)) {
+        const detail = e.detail;
+        if (!isPlainObject(detail) || !('value' in detail)) {
             throw new Error('flows-flow-property-panel: flow_timeout detail.value');
         }
-        const val = d.value;
+        const val = detail.value;
         if (val === null) {
-            (this._editor.patchFlowConfig({ patch: { timeout: null } }) as any);
+            this._editor.patchFlowConfig({ patch: { timeout: null } });
             return;
         }
         if (typeof val !== 'number' || !Number.isFinite(val)) {
             throw new Error('flows-flow-property-panel: flow_timeout detail.value number|null');
         }
         const n = Math.floor(val);
-        if (n < 1) {
-            return;
-        }
+        if (n < 1) return;
         const clamped = Math.min(n, 3600);
-        (this._editor.patchFlowConfig({ patch: { timeout: clamped } }) as any);
+        this._editor.patchFlowConfig({ patch: { timeout: clamped } });
     }
 
     override render(): TemplateResult {
         if (!this.flowId) {
             return html``;
         }
-        const state = asObject(this._editor.state);
-        const fc = (state as any).flowConfig;
+        const fc = readFlowConfig(this._editor.state);
         const timeoutVal =
-            fc && typeof fc === 'object' && typeof fc.timeout === 'number' && Number.isFinite(fc.timeout)
+            fc !== null && typeof fc.timeout === 'number' && Number.isFinite(fc.timeout)
                 ? fc.timeout
                 : null;
         return html`

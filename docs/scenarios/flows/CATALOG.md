@@ -37,7 +37,6 @@
 | Текущий slug | Tag | Действие | Итог |
 |---|---|---|---|
 | `flows-home-overview` | general | REWRITE | → `flows-home-tour` |
-| `flows-home-download-link` | agent-download | DELETE (снять маркер) | CTA скачивания входит в `flows-home-tour` |
 | `create-flow` | editor | REWRITE | → `create-first-agent` |
 | `add-llm-node` | editor | MERGE | → `configure-agent-answers` |
 | `edit-llm-flow` | editor | MERGE | → `configure-agent-answers` |
@@ -74,7 +73,7 @@
 | `evaluation` | Проверка качества | Quality evaluation | 8 |
 | `setup` | Подключения компании | Company connections | 9 |
 
-Изменения: тег `chat` схлопывается в `execution`; тег `agent-download` удаляется.
+Изменения: тег `chat` схлопывается в `execution`.
 
 Learning path **flows** (простое → сложное):
 `flows-home-tour` → `create-first-agent` → `agent-focus-vs-canvas` →
@@ -115,7 +114,7 @@ Skills остаются в тегах `nodes` и `execution` (отдельный
 - Результат: открыт «Помощник Зелёного сада» и понятно, куда нажимать дальше.
 - Шаги: 1) открыть Flows и осмотреть главную (счётчики, быстрые действия); 2) найти агента через поиск каталога; 3) раскрыть карточку агента и понять кнопки «Чат» и «Редактор»; 4) посмотреть недавние диалоги; 5) открыть чат агента как демонстрацию.
 - Демонстрация: открытый чат «Помощника Зелёного сада».
-- Фичи: метрики главной, поиск каталога, карточка flow, недавние сессии, CTA скачивания LinnexAgent.
+- Фичи: метрики главной, поиск каталога, карточка flow, недавние сессии.
 
 #### 1.2 `getting-started/create-first-agent`
 - Title: «Создаём первого агента из шаблона» / "Create your first agent from a template"

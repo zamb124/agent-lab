@@ -6,29 +6,30 @@
 
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { DocumentProblem, EditorHistory } from '../components/interface-editor/interface-editor-domain.js';
 
 export interface FlowEditorSlice extends AsyncOpSlice {
     flowId?: string | null;
-    flowConfig?: Record<string, any> | null;
-    branchData?: Record<string, any> | null;
+    flowConfig?: Record<string, unknown> | null;
+    branchData?: Record<string, unknown> | null;
     currentBranchId?: string | null;
     selectedNodeId?: string | null;
     selectedResourceId?: string | null;
     openNodePanelIds?: string[];
-    propertyPanelLayouts?: Record<string, any>;
+    propertyPanelLayouts?: Record<string, unknown>;
     panelOpen?: boolean;
     executionPanelOpen?: boolean;
     agentExecutionRunning?: boolean;
     activeTool?: string;
-    previewExecutionState?: Record<string, any> | null;
-    dataflow?: Record<string, any> | null;
-    dataflowObservations?: Record<string, any>;
+    previewExecutionState?: Record<string, unknown> | null;
+    dataflow?: Record<string, unknown> | null;
+    dataflowObservations?: Record<string, unknown>;
     workspace?: string;
     editorLayout?: string;
     isDirty?: boolean;
     isSaving?: boolean;
     publishedAt?: string | null;
-    historyStack?: any[];
+    historyStack?: unknown[];
     historyPosition?: number;
     canUndo?: boolean;
     canRedo?: boolean;
@@ -37,31 +38,31 @@ export interface FlowEditorSlice extends AsyncOpSlice {
     runningEdgeIndices?: number[];
     completedEdgeIndices?: number[];
     failedEdgeIndices?: number[];
-    erroredNodes?: Record<string, any>;
-    nodeRunResults?: Record<string, any[]>;
-    expandedNodeRunKeys?: Record<string, boolean>;
+    erroredNodes?: Record<string, unknown>;
+    nodeRunResults?: Record<string, readonly unknown[]>;
+    expandedNodeRunKeys?: readonly string[];
     breakpointNodeIds?: string[];
     breakpointHitNodeId?: string | null;
     showCanvasRunResults?: boolean;
-    runSession?: Record<string, any>;
-    runTrace?: Record<string, any>;
-    startWireRunState?: Record<string, any> | null;
-    endWireRunStateByNodeId?: Record<string, any>;
+    runSession?: Record<string, unknown>;
+    runTrace?: readonly unknown[];
+    startWireRunState?: string | null;
+    endWireRunStateByNodeId?: Record<string, unknown>;
     entryNodeId?: string | null;
     inheritedNodeIds?: string[];
     inheritedEdgeKeys?: string[];
     multiSelection?: string[];
-    viewBox?: Record<string, any>;
-    smartGuides?: any[];
+    viewBox?: Record<string, unknown>;
+    smartGuides?: unknown[];
     smartGuidesEnabled?: boolean;
     showDataWires?: boolean;
-    contextMenu?: Record<string, any> | null;
-    stickyNotes?: Record<string, any>[];
+    contextMenu?: Record<string, unknown> | null;
+    stickyNotes?: Record<string, unknown>[];
     pendingNodeToolId?: string | null;
     [key: string]: unknown;
 }
 
-export type FlowEditorAction = (payload?: any) => void;
+export type FlowEditorAction = (payload?: unknown) => void;
 
 /** Динамические actions `flows/editor` (см. `actions:` в editor.resource). */
 
@@ -69,19 +70,19 @@ import type { SliceController } from '@platform/lib/base/use-resource.js';
 
 export interface InterfaceEditorUiSlice extends Record<string, unknown> {
     documentKey?: string;
-    history?: any;
+    history?: EditorHistory | null;
     pageId?: string;
     selectedBlockId?: string;
     viewport?: string;
     preview?: boolean;
     sidebarTab?: string;
-    problems?: readonly any[];
+    problems?: readonly DocumentProblem[];
 }
 
 
 export interface ExecutionUiSlice extends Record<string, unknown> {
     persistContext?: boolean;
-    mockResponses?: any[];
+    mockResponses?: unknown[];
 }
 
 
@@ -100,7 +101,9 @@ export interface EvaluationUiSlice extends Record<string, unknown> {
 
 
 export interface RagNodeTestSlice extends Record<string, unknown> {
-    queryByNodeId?: Record<string, string>;
-    searchByNodeId?: Record<string, any>;
+    queryByNodeId: Record<string, string>;
+    resultByNodeId: Record<string, unknown>;
+    errorByNodeId: Record<string, string | null>;
+    lastNodeId: string | null;
 }
 

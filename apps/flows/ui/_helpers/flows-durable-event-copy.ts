@@ -3,7 +3,9 @@
  * Titles live in flows.durable_history_modal.events.<EventType>.
  */
 
-const EVENT_PHASE_BY_TYPE = Object.freeze({
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+const EVENT_PHASE_BY_TYPE: Record<string, string> = Object.freeze({
     RunStarted: 'run',
     UserInputApplied: 'run',
     VariablesResolved: 'run',
@@ -67,7 +69,7 @@ const SUBTITLE_PAYLOAD_KEYS = Object.freeze([
  * @param {string} eventType
  * @returns {string}
  */
-export function durableEventTitleKey(eventType: any) {
+export function durableEventTitleKey(eventType: unknown) {
     if (typeof eventType !== 'string' || eventType.length === 0) {
         throw new Error('flows-durable-event-copy: eventType string required');
     }
@@ -81,12 +83,12 @@ export function durableEventTitleKey(eventType: any) {
  * @param {string} eventType
  * @returns {'run'|'node'|'activity'|'child'|'interrupt'|'branch'|'terminal'|'fail'|'unknown'}
  */
-export function durableEventPhase(eventType: any) {
+export function durableEventPhase(eventType: unknown) {
     if (typeof eventType !== 'string' || eventType.length === 0) {
         throw new Error('flows-durable-event-copy: eventType string required');
     }
-    const phase = (EVENT_PHASE_BY_TYPE as any)[eventType];
-    if (typeof phase !== 'string') {
+    const phase = EVENT_PHASE_BY_TYPE[eventType];
+    if (phase === undefined) {
         return 'unknown';
     }
     return phase;
@@ -96,7 +98,7 @@ export function durableEventPhase(eventType: any) {
  * @param {string} reason
  * @returns {string}
  */
-export function durableBranchReasonKey(reason: any) {
+export function durableBranchReasonKey(reason: unknown) {
     if (typeof reason !== 'string' || reason.length === 0) {
         return 'durable_history_modal.branch_reason.unknown';
     }
@@ -110,7 +112,7 @@ export function durableBranchReasonKey(reason: any) {
  * @param {string} branchId
  * @returns {string}
  */
-export function formatDurableBranchLabel(branchId: any) {
+export function formatDurableBranchLabel(branchId: unknown) {
     if (typeof branchId !== 'string' || branchId.length === 0) {
         throw new Error('flows-durable-event-copy: branchId string required');
     }
@@ -124,8 +126,8 @@ export function formatDurableBranchLabel(branchId: any) {
  * @param {Record<string, unknown>} payload
  * @returns {string}
  */
-export function durableEventSubtitleFromPayload(payload: any) {
-    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+export function durableEventSubtitleFromPayload(payload: unknown) {
+    if (!isPlainRecord(payload)) {
         return '';
     }
     for (const key of SUBTITLE_PAYLOAD_KEYS) {
@@ -133,7 +135,7 @@ export function durableEventSubtitleFromPayload(payload: any) {
         if (typeof value === 'string' && value.length > 0) {
             return value;
         }
-        if (Number.isInteger(value)) {
+        if (typeof value === 'number' && Number.isInteger(value)) {
             return String(value);
         }
         if (Array.isArray(value) && value.length > 0) {
@@ -150,7 +152,7 @@ export function durableEventSubtitleFromPayload(payload: any) {
  * @param {string} eventType
  * @returns {boolean}
  */
-export function isDurableFailedEventType(eventType: any) {
+export function isDurableFailedEventType(eventType: unknown) {
     if (typeof eventType !== 'string') {
         return false;
     }
@@ -161,6 +163,6 @@ export function isDurableFailedEventType(eventType: any) {
  * @param {string} eventType
  * @returns {boolean}
  */
-export function isDurableTerminalEventType(eventType: any) {
+export function isDurableTerminalEventType(eventType: unknown) {
     return eventType === 'RunTerminal';
 }

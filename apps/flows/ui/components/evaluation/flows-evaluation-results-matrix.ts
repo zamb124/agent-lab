@@ -5,20 +5,31 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
-function asArray(value: unknown) {
-    return Array.isArray(value) ? value : [];
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function stringValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function asArray(value: unknown): unknown[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const items: unknown[] = [];
+    for (const item of value) {
+        items.push(item);
+    }
+    return items;
+}
+
+function stringValue(record: unknown, field: string): string {
+    if (!isRecord(record)) {
         return '';
     }
     const value = record[field];
     return typeof value === 'string' ? value : '';
 }
 
-function numberOrNull(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function numberOrNull(record: unknown, field: string): number | null {
+    if (!isRecord(record)) {
         return null;
     }
     const value = record[field];
@@ -32,7 +43,7 @@ function formatScore(value: unknown) {
     return value.toFixed(1);
 }
 
-function stateTone(state: any) {
+function stateTone(state: unknown): string {
     if (state === 'passed' || state === 'completed') {
         return 'passed';
     }
@@ -45,7 +56,7 @@ function stateTone(state: any) {
     return 'idle';
 }
 
-function aggregateCellsTone(cells: any) {
+function aggregateCellsTone(cells: unknown): string {
     const tones = asArray(cells).map((cell) => stateTone(stringValue(cell, 'state')));
     if (tones.includes('failed')) {
         return 'failed';
@@ -59,8 +70,8 @@ function aggregateCellsTone(cells: any) {
     return 'idle';
 }
 
-function groupCells(cells: any) {
-    const map = new Map();
+function groupCells(cells: unknown): Map<string, unknown[]> {
+    const map = new Map<string, unknown[]>();
     for (const cell of asArray(cells)) {
         const runId = stringValue(cell, 'run_id');
         const caseId = stringValue(cell, 'case_id');
@@ -69,7 +80,7 @@ function groupCells(cells: any) {
         }
         const key = `${runId}::${caseId}`;
         const existing = map.get(key);
-        if (Array.isArray(existing)) {
+        if (existing !== undefined) {
             existing.push(cell);
         } else {
             map.set(key, [cell]);
@@ -84,7 +95,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         selectedRunId: { type: String },
         selectedCaseRunId: { type: String },
     }
-    declare matrix: Record<string, any> | null;
+    declare matrix: Record<string, unknown> | null;
     declare selectedRunId: string;
     declare selectedCaseRunId: string;
 ;
@@ -565,7 +576,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         this.selectedCaseRunId = '';
     }
 
-    _onSelectableKeydown(event: KeyboardEvent, handler: any) {
+    _onSelectableKeydown(event: KeyboardEvent, handler: () => void) {
         if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
@@ -573,11 +584,11 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         handler.call(this);
     }
 
-    _selectRun(runId: any) {
+    _selectRun(runId: string) {
         this.emit('run-select', { run_id: runId });
     }
 
-    _selectCaseRun(cell: any) {
+    _selectCaseRun(cell: unknown) {
         const caseRunId = stringValue(cell, 'case_run_id');
         if (caseRunId.length === 0) {
             return;
@@ -586,7 +597,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const matrix = this.matrix && typeof this.matrix === 'object' ? this.matrix : null;
+        const matrix = this.matrix !== null && isRecord(this.matrix) ? this.matrix : null;
         if (matrix === null) {
             return html`
                 <section class="content-panel">
@@ -649,7 +660,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         `;
     }
 
-    _renderNoRuns(caseCount: any, runCount: any) {
+    _renderNoRuns(caseCount: number, runCount: number) {
         return html`
             <div class="empty-workbench">
                 <div class="empty-stack">
@@ -679,7 +690,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         `;
     }
 
-    _renderPipelineCard(icon: any, title: string, meta: any) {
+    _renderPipelineCard(icon: string, title: string, meta: string) {
         return html`
             <div class="pipeline-card">
                 <span class="pipeline-icon"><platform-icon name=${icon} size="17"></platform-icon></span>
@@ -691,7 +702,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         `;
     }
 
-    _renderRunHead(run: any) {
+    _renderRunHead(run: unknown) {
         const runId = stringValue(run, 'run_id');
         const state = stringValue(run, 'state');
         const tone = stateTone(state);
@@ -717,11 +728,18 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         `;
     }
 
-    _renderCaseRow(testCase: any, runs: any, grouped: any) {
+    _renderCaseRow(testCase: unknown, runs: readonly unknown[], grouped: Map<string, unknown[]>) {
         const caseId = stringValue(testCase, 'case_id');
         const name = stringValue(testCase, 'name');
-        const tags = asArray(testCase.tags);
-        const meta = tags.length > 0 ? tags.join(', ') : this.t('evaluation.matrix.no_tags');
+        const tags = asArray(isRecord(testCase) ? testCase.tags : undefined);
+        const tagLabels: string[] = [];
+        for (const tag of tags) {
+            if (typeof tag !== 'string') {
+                throw new Error('flows-evaluation-results-matrix: case tag must be a string');
+            }
+            tagLabels.push(tag);
+        }
+        const meta = tagLabels.length > 0 ? tagLabels.join(', ') : this.t('evaluation.matrix.no_tags');
         return html`
             <tr>
                 <td>
@@ -730,21 +748,24 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
                         <span class="case-meta">${meta}</span>
                     </div>
                 </td>
-                ${runs.map((run: any) => {
+                ${runs.map((run) => {
                     const runId = stringValue(run, 'run_id');
                     const key = `${runId}::${caseId}`;
                     const cells = grouped.get(key);
-                    return this._renderMatrixCell(Array.isArray(cells) ? cells : []);
+                    return this._renderMatrixCell(cells === undefined ? [] : cells);
                 })}
             </tr>
         `;
     }
 
-    _renderMatrixCell(cells: any) {
+    _renderMatrixCell(cells: readonly unknown[]) {
         if (cells.length === 0) {
             return html`<td><div class="cell-button"><span class="duration">·</span></div></td>`;
         }
         const primary = cells[0];
+        if (primary === undefined) {
+            throw new Error('flows-evaluation-results-matrix: matrix cell required');
+        }
         const score = numberOrNull(primary, 'total_score');
         const duration = numberOrNull(primary, 'duration_ms');
         const active = stringValue(primary, 'case_run_id') === this.selectedCaseRunId;
@@ -762,7 +783,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
                 >
                     <span class="score-row">
                         <span class="score" data-tone=${tone}>${formatScore(score)}</span>
-                        <span class="trials">${cells.map((cell: any) => html`<i class="dot" data-tone=${stateTone(stringValue(cell, 'state'))}></i>`)}</span>
+                        <span class="trials">${cells.map((cell) => html`<i class="dot" data-tone=${stateTone(stringValue(cell, 'state'))}></i>`)}</span>
                     </span>
                     <span class="duration">${duration === null ? this.t('evaluation.matrix.no_duration') : `${duration}ms`}</span>
                 </article>

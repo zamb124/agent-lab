@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+
+from apps.crm.di import Di
+from apps.crm.models.task import CRMTask
+from apps.crm.tasks.crm_context import set_crm_context
+from apps.crm.tasks.task_names import CRM_GENERATE_NAMESPACE_SUGGESTS
+from core.logging import get_logger
+from core.tasks import platform_task
+from core.types import JsonObject
+
+logger = get_logger(__name__)
+
+
+@platform_task(CRM_GENERATE_NAMESPACE_SUGGESTS)
+async def crm_generate_namespace_suggests_tick(
+    company_id: str,
+    namespace: str,
+    schedule_task_id: str | None = None,
+    *,
+    di: Di,
+) -> JsonObject:
+    """Генерация саджестов (дубли/пропущенные) для namespace по крону."""
+    logger.info(
+        "crm.suggests.generate.started",
+        service="crm_worker",
+        company_id=company_id,
+        namespace=namespace,
+    )
+
+    task_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    _ = await CRMTask.create(
+        CRMTask(
+            task_id=task_id,
+            task_type="namespace_suggests_tick",
+            status="running",
+            stage="running",
+            progress_pct=10,
+            company_id=company_id,
+            namespace=namespace,
+            user_id="system",
+            data={"schedule_task_id": schedule_task_id},
+            started_at=now,
+        )
+    )
+
+    await set_crm_context(company_id=company_id, namespace=namespace, interface_language=None)
+
+    try:
+        summary = await di.suggest_service.generate_namespace_suggests(
+            company_id=company_id,
+            namespace=namespace,
+        )
+        summary_patch: JsonObject = {key: value for key, value in summary.items()}
+        done = datetime.now(timezone.utc)
+        await CRMTask.patch_progress(
+            task_id,
+            company_id,
+            status="completed",
+            stage="completed",
+            progress_pct=100,
+            completed_at=done,
+            data_patch=summary_patch,
+        )
+        logger.info(
+            "crm.suggests.generate.finished",
+            service="crm_worker",
+            company_id=company_id,
+            namespace=namespace,
+            **summary,
+        )
+        return summary_patch
+    except Exception as exc:
+        failed_at = datetime.now(timezone.utc)
+        await CRMTask.patch_progress(
+            task_id,
+            company_id,
+            status="failed",
+            stage="failed",
+            progress_pct=100,
+            error_message=str(exc),
+            completed_at=failed_at,
+        )
+        raise

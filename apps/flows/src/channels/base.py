@@ -42,7 +42,6 @@ from a2a.types import (
 )
 from google.protobuf.json_format import MessageToDict
 
-from apps.agent.device_binding import bind_user_device_variables
 from apps.flows.config import get_settings
 from apps.flows.src.a2a.ensure_submitted_task import ensure_submitted_a2a_task
 from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
@@ -100,7 +99,7 @@ from apps.flows.src.streaming import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.triggers.output_actions import OutputActionExecutor
 from apps.flows.src.triggers.trigger_type_contract import effective_output_actions_for_trigger
-from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
+from apps.idle.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.a2a import (
     A2AApplicationError,
     A2AErrorCode,
@@ -394,7 +393,7 @@ class BaseChannel(ABC):
                     )
                 ) from exc
             raise PermissionDenied(
-                PermissionDeniedA2AError.for_flow(self.flow_id, required)
+                PermissionDeniedA2AError.denied_for_flow(self.flow_id, required)
             ) from exc
 
     async def _get_state(self, session_id: str) -> ExecutionState | None:
@@ -1063,13 +1062,6 @@ class BaseChannel(ABC):
                 request_scoped_variables.update(identity_vars)
                 if request_scoped_variables:
                     state.variables = {**state.variables, **request_scoped_variables}
-
-            await bind_user_device_variables(
-                state.variables,
-                self._shared_storage,
-                company_id=company_id,
-                user_id=user_id,
-            )
 
             if state_is_new:
                 company_secret_keys = await self._variables_service.secret_variable_keys()

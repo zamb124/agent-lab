@@ -69,7 +69,7 @@ def _by_in_date(quant: QuantLike) -> tuple[datetime, str]:
     return (quant.in_date or datetime.max, quant.quant_id)
 
 
-def order_candidates[Q: QuantLike](
+def order_candidates_by_strategy_asc[Q: QuantLike](
     candidates: list[Q],
     *,
     strategy: StockRemovalStrategy,

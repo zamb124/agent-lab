@@ -27,6 +27,7 @@ import type { OpController, ResourceController, ControllerFor } from '@platform/
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import {
     sidebarNavItemStyles,
     sidebarSectionStyles,
@@ -303,8 +304,10 @@ export class SyncChatList extends PlatformElement {
         const directs = this._channels.items.filter((c: Record<string, any>) => c.type === 'direct');
         const dmUserIds = new Set<string>();
         for (const dm of directs) {
-            const peer = dm.peer as Record<string, unknown> | undefined;
-            if (peer && typeof peer.user_id === 'string') dmUserIds.add(peer.user_id);
+            const peer = dm.peer;
+            if (!isPlainRecord(peer)) continue;
+            const userId = peer.user_id;
+            if (typeof userId === 'string') dmUserIds.add(userId);
         }
         const search = this._searchQuery();
         let members = this._members.items.filter((m: Record<string, any>) => !dmUserIds.has(m.user_id));
@@ -329,18 +332,25 @@ export class SyncChatList extends PlatformElement {
     async _startAdhocCallSession(channelId: string) {
         if (typeof channelId !== 'string' || channelId === '') return;
         await this._callInvite.run({ channel_id: channelId });
-        const inv = this._callInvite.lastResult as Record<string, unknown> | null;
-        if (!inv || typeof inv.call_id !== 'string') return;
+        const inv = this._callInvite.lastResult;
+        if (!isPlainRecord(inv)) return;
+        const callId = inv.call_id;
+        if (typeof callId !== 'string') return;
+        const invitedChannelId = inv.channel_id;
+        const callType = inv.call_type;
+        const roomName = inv.livekit_room_name;
+        const livekitUrl = inv.livekit_url;
+        const resolvedChannelId = typeof invitedChannelId === 'string' ? invitedChannelId : channelId;
         this._callUi.openOverlay({
-            call_id: inv.call_id,
-            channel_id: typeof inv.channel_id === 'string' ? inv.channel_id : channelId,
-            call_type: typeof inv.call_type === 'string' ? inv.call_type : 'video',
-            livekit_room_name: typeof inv.livekit_room_name === 'string' ? inv.livekit_room_name : null,
-            livekit_url: typeof inv.livekit_url === 'string' ? inv.livekit_url : null,
+            call_id: callId,
+            channel_id: resolvedChannelId,
+            call_type: typeof callType === 'string' ? callType : 'video',
+            livekit_room_name: typeof roomName === 'string' ? roomName : null,
+            livekit_url: typeof livekitUrl === 'string' ? livekitUrl : null,
         });
         this.openModal('sync.call_overlay', {
-            callId: inv.call_id,
-            channelId: typeof inv.channel_id === 'string' ? inv.channel_id : channelId,
+            callId,
+            channelId: resolvedChannelId,
         });
     }
 
@@ -355,20 +365,20 @@ export class SyncChatList extends PlatformElement {
             type: 'group',
             namespace: DEFAULT_NAMESPACE,
         });
-        const channelId = result && typeof (result as Record<string, unknown>).channel_id === 'string'
-            ? (result as { channel_id: string }).channel_id
-            : null;
-        if (channelId === null) return;
+        if (!isPlainRecord(result)) return;
+        const channelId = result.channel_id;
+        if (typeof channelId !== 'string') return;
         this.navigate('channel', { channelId });
         this.emit('adhoc-call-started', { channelId });
         await this._startAdhocCallSession(channelId);
     }
 
     _onSearchInput(e: Event) {
-        const value = typeof (e.target as HTMLInputElement | null)?.value === 'string'
-            ? (e.target as HTMLInputElement).value
-            : '';
-        this._chatUi.setSidebarSearch({ query: value });
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('sync-chat-list: search input required');
+        }
+        this._chatUi.setSidebarSearch({ query: target.value });
     }
 
     _onSearchScopeToggle(e: Event, kind: string) {

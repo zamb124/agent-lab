@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 
 from core.config import get_settings
 from core.http import get_httpx_client
@@ -58,7 +58,7 @@ async def centrifugo_publish(channel: str, data: JsonObject) -> None:
                 json={"channel": channel, "data": data},
             )
             _ = response.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise RuntimeError(f"Centrifugo publish failed for {channel}") from exc
     payload = parse_json_object(response.text, "centrifugo.publish.response")
     _ = _raise_for_centrifugo_payload(payload, path=path)
@@ -80,7 +80,7 @@ async def centrifugo_presence_stats(channel: str) -> UserPresenceSnapshot:
                 json={"channel": channel},
             )
             _ = response.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise RuntimeError(f"Centrifugo presence_stats failed for {channel}") from exc
     payload = parse_json_object(response.text, "centrifugo.presence_stats.response")
     result = _raise_for_centrifugo_payload(payload, path=path)

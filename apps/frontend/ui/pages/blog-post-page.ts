@@ -11,9 +11,21 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+
+function anyRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) {
+        return null;
+    }
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) {
+        row[key] = field;
+    }
+    return row;
+}
 
 export class BlogPostPage extends PlatformPage {
     static i18nNamespace = 'landing';
@@ -48,8 +60,8 @@ export class BlogPostPage extends PlatformPage {
     }
 
     async _loadPost(slug: string) {
-        const res = await this._postOp.run({ slug });
-        if (!res || typeof res !== 'object') {
+        const res = anyRecord(await this._postOp.run({ slug }));
+        if (res === null) {
             return;
         }
         if (typeof window === 'undefined') return;
@@ -59,13 +71,13 @@ export class BlogPostPage extends PlatformPage {
         let description;
         let bodyHtml;
         if (locale === 'ru') {
-            title = (res as Record<string, any>).title_ru;
-            description = (res as Record<string, any>).summary_ru;
-            bodyHtml = (res as Record<string, any>).body_ru;
+            title = res.title_ru;
+            description = res.summary_ru;
+            bodyHtml = res.body_ru;
         } else if (locale === 'en') {
-            title = (res as Record<string, any>).title_en;
-            description = (res as Record<string, any>).summary_en;
-            bodyHtml = (res as Record<string, any>).body_en;
+            title = res.title_en;
+            description = res.summary_en;
+            bodyHtml = res.body_en;
         } else {
             throw new Error('blog-post-page: i18n.locale must be ru or en');
         }
@@ -105,8 +117,8 @@ export class BlogPostPage extends PlatformPage {
     override render(): TemplateResult {
         const busy = this._postOp.busy;
         const err = this._postOp.error;
-        const post = this._postOp.lastResult;
-        const hasPost = post && typeof post === 'object' && typeof (post as Record<string, any>).slug === 'string';
+        const loaded = anyRecord(this._postOp.lastResult);
+        const post = loaded !== null && typeof loaded.slug === 'string' ? loaded : null;
         return html`
             <landing-header></landing-header>
             <div class="marketing-page-container">
@@ -117,8 +129,8 @@ export class BlogPostPage extends PlatformPage {
                         </button>
                     </p>
                     ${busy ? html`<glass-spinner></glass-spinner>` : null}
-                    ${err && !hasPost ? html`<p class="marketing-text-error">${this.t('blog_page.post_error')}</p>` : null}
-                    ${hasPost
+                    ${err && post === null ? html`<p class="marketing-text-error">${this.t('blog_page.post_error')}</p>` : null}
+                    ${post
                         ? html`
                               <header class="marketing-content-hero">
                                   <h1 class="marketing-content-title">${this._title(post)}</h1>

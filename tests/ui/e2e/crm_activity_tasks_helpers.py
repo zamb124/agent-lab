@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-import httpx
+import httpx2
 
 from tests.ui.apps import SERVICE_UI_REGISTRY
 from tests.ui.e2e_worker import ui_e2e_scope_headers
@@ -22,8 +22,8 @@ def crm_api_origin(origin: str) -> str:
     return urlunparse(parsed._replace(netloc=f"{parsed.hostname}:{crm_port}"))
 
 
-def _crm_client(origin: str, auth_token: str) -> httpx.AsyncClient:
-    return httpx.AsyncClient(
+def _crm_client(origin: str, auth_token: str) -> httpx2.AsyncClient:
+    return httpx2.AsyncClient(
         base_url=crm_api_origin(origin),
         cookies={"auth_token": auth_token},
         headers=ui_e2e_scope_headers(),

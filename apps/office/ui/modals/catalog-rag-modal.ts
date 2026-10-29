@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import { isJsonObject } from '@platform/lib/utils/json-object.js';
 import {
     buildAdvancedRetrievalPayloadFromPanel,
     defaultRetrievalPanelValue,
@@ -156,13 +157,9 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
             return;
         }
         const searchOptions = status.search_options;
-        this._retrievalPanel = panelValueFromSearchOptions(
-            searchOptions && typeof searchOptions === 'object' ? searchOptions as Record<string, unknown> : null,
-        );
+        this._retrievalPanel = panelValueFromSearchOptions(isJsonObject(searchOptions) ? searchOptions : null);
         const platformDefaults = status.platform_defaults;
-        this._platformDefaults = platformDefaults && typeof platformDefaults === 'object'
-            ? platformDefaults as Record<string, unknown>
-            : null;
+        this._platformDefaults = isJsonObject(platformDefaults) ? platformDefaults : null;
     }
 
     override renderHeader() {
@@ -179,10 +176,10 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
 
     private _statusPayload(): Record<string, unknown> | null {
         const result = this._status.lastResult;
-        if (!result || typeof result !== 'object') {
+        if (!isJsonObject(result)) {
             return null;
         }
-        return result as Record<string, unknown>;
+        return result;
     }
 
     private _locale() {
@@ -235,15 +232,15 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
             return;
         }
         const panel = this._retrievalPanel;
-        if (!panel || typeof panel !== 'object' || Array.isArray(panel)) {
+        if (!isJsonObject(panel)) {
             throw new Error('OfficeCatalogRagModal: invalid retrieval panel state');
         }
         /** @type {Record<string, unknown>} */
         const packed: Record<string, unknown> = { catalog_id: this.catalogId };
-        if ((panel as Record<string, unknown>).usePlatformDefaults === true) {
+        if (panel.usePlatformDefaults === true) {
             packed.clear_search_options = true;
         } else {
-            const panelPayload = buildAdvancedRetrievalPayloadFromPanel(panel as Record<string, unknown>);
+            const panelPayload = buildAdvancedRetrievalPayloadFromPanel(panel);
             Object.assign(
                 packed,
                 packSearchRequestOptions(panelPayload),
@@ -339,7 +336,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
                             ${this.t('catalog_rag_modal.search_options_save')}
                         </button>
                     </div>
-                    ${this._renderTotals(totals as Record<string, unknown> | null | undefined)}
+                    ${this._renderTotals(isJsonObject(totals) ? totals : null)}
                     <div class="hint">
                         ${includeSubcatalogs
                             ? this.t('catalog_rag_modal.subtree_scope_hint')

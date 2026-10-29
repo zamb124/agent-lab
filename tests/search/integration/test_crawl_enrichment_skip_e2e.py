@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.search_worker.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
+from apps.search.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainSeed,
@@ -74,7 +74,7 @@ async def test_crawl_enrichment_second_fetch_skips_unchanged_url(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.list_due(
+        await CrawlDomain.list_due_by_next_crawl_after_asc(
             crawl_profile_id,
             now=datetime.now(UTC),
             limit=1,
@@ -94,7 +94,7 @@ async def test_crawl_enrichment_second_fetch_skips_unchanged_url(
     first_job = await CrawlJob.get(job.crawl_job_id)
     assert first_job.urls_indexed >= 1
 
-    url_page = await CrawlUrl.list_page_for_profile(
+    url_page = await CrawlUrl.page_for_profile_by_updated_at_desc(
         crawl_profile_id=crawl_profile_id,
         crawl_status="indexed",
         domain=REAL_CRAWL_DOMAIN,

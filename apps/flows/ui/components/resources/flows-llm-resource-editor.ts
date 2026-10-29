@@ -27,7 +27,9 @@ export class FlowsLlmResourceEditor extends PlatformElement {
     }
 
     _emitConfig(config: any) {
-        const prevCfg = isPlainObject(this.resource?.config) ? (this.resource as Record<string, any>).config : {};
+        const resource = this.resource;
+        const stored = resource === null ? undefined : resource.config;
+        const prevCfg = isPlainObject(stored) ? stored : {};
         this.emit('change', { resourceId: this.resourceId, patch: { config: { ...prevCfg, ...config } } });
     }
 

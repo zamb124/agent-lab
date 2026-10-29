@@ -1,107 +1,45 @@
 # Гейты
 
-Норма → гейт закреплены в разделе «Гейты» правила-владельца; здесь — как гейты запускать и читать. Все шаги `make lint` в режиме отчёта — `.cursor/skills/refactor-engineer/scripts/gates_report.py`.
+Норма → гейт закреплены в разделе «Гейты» правила-владельца. Исполняемый список — `scripts/gates/registry.py`. Здесь — как гейты запускать и читать.
 
 ## Состав `make lint`
 
-- `make lint` = `_lint-py` + `lint-ts` (`mk/lint.mk`), `set -e`: остановка на первом упавшем шаге. `make lint <path>` — ruff + basedpyright на файл (`.py`) или `lint-ts` (`.js`, `.ts`).
-- `lint-ts` = `tsc -p tsconfig.json` + `check-events-canon` (`Makefile`) + `scripts/check_ui_kit_docs.py` + `check-field-canon` + `scripts/check_ui_kit_canon.py` + `check-logging`.
-- `make test-static` (`mk/test.mk`) = `_lint-py` + `scripts/pin_a2a_official_fixtures.py --check` + agent-гейты + `tests/core/ai/test_platform_model_scoring_fixtures.py`.
-- Вне `make lint`: `make check-a2a-fixtures`, `make check-ft-wheels` (`scripts/check_ft_wheels.sh`), `make check-gpu-dockerfile-llm-model`, проверки документации (`scripts/check_docs_locale_parity.py`, `scripts/check_scenario_docs_quality.py`); отчёты без fail — `scripts/report_ui_i18n_gaps.py`, `scripts/report_ui_cyrillic.sh`.
+- `make lint` = `_lint-py` + `lint-ts` (`mk/lint.mk`). `make lint <path>` — ruff + basedpyright на файл (`.py`) или `lint-ts` (`.js`, `.ts`).
+- `_lint-py` = `ruff check apps core` + `python -m scripts.gates --suite lint` + basedpyright + `analyze_imports.py`.
+- `lint-ts` = `tsc -p tsconfig.json` + `python -m scripts.gates --suite lint_ts`.
+- Сьют `lint_ts` включает бывший `check-events-canon`, кроме гейтов, которые уже в `lint` (файлы, MCP branding), плюс UI Kit, field canon и logging.
+- `make test-static` = `_lint-py` + `python -m scripts.gates --suite static` + `tests/core/ai/test_platform_model_scoring_fixtures.py`. Сьют `static` — `scripts/generate/a2a_fixtures.py --check`.
+- Сьют `network` — `scripts/gates/repo/ft_wheels.sh` и `scripts/generate/a2a_fixtures.py --check-remote`. Цель `make check-gpu-dockerfile-llm-model` — `scripts/gates/repo/gpu_dockerfile_llm_model.sh`. Документация — `scripts/gates/repo/docs_locale_parity.py`, `scripts/gates/repo/scenario_docs_quality.py`.
+- Отчёты без fail: `scripts/tools/report_ui_i18n_gaps.py`, `scripts/tools/report_ui_kostyli.py`.
 
-## `_lint-py`
+Прогон одного гейта: `uv run python -m scripts.gates --gate <name>` или `uv run python -m scripts.gates.<область>.<модуль>`. Имена — `python -m scripts.gates --list`.
 
-| Гейт | Держит | Allowlist |
-|---|---|---|
-| `ruff check apps core` | E, F, I, W (`pyproject.toml`, без E501) | exclude `apps/agent/desktop/vendor` |
-| `scripts/check_strict_agent_architecture.py` | отсутствие удалённых символов flows/agent, UI-контракты reflection, code_agent, observability | контракты в скрипте |
-| `scripts/audit_wider_repo_strictness.py` | `getattr(..., default)` без классификации | `GETATTR_DECISIONS` |
-| `scripts/check_files_canon.py`, `scripts/check_files_ui_canon.sh` | байты только через Files API, chunked upload, Documents bind | `ALLOWLIST_PATHS` |
-| `scripts/check_tool_tags.py` | один tag из whitelist на builtin tool | `TOOL_TAG_WHITELIST` |
-| `scripts/check_tool_contracts.py` | `parameters_schema` с `additionalProperties=false`, запрет `ServiceClient`/`CallParameter` в tools | `SERVICE_CLIENT_ALLOWLIST` |
-| `scripts/check_office_file_id_canon.py` | публичный id документа — `file_id` | исключения путей vendor/desktop |
-| `scripts/check_cross_service_imports.py` | нет импортов `apps/<a>` → `apps/<b>` | правила в docstring скрипта |
-| `scripts/check_command_owner_catalogs.py` | владелец в `_OWNER_BY_SCOPE` ⇔ непустой `<SVC>_OPERATIONS`, ключи `*_requested` | — |
-| `scripts/check_rest_handlers_call_ops.py` | REST-хендлер сервиса из `COMMAND_WS_SERVICES` зовёт `op_*` | `PROTOCOL_HANDLERS` (протоколы, принцип) |
-| `scripts/check_billing_span_canon.py` | `record_usage` только в settlement; `pending_settlement` покрыт правилом | `REQUIRE_BALANCE_*`, `RECORD_LLM_*` (принцип) |
-| `scripts/check_conf_secrets.py` | секреты `conf.json` — плейсхолдеры `YOUR_*` | `ALLOWED_PATHS` |
-| `scripts/check_conf_keys_declared.py` | каждый ключ `conf.json` объявлен в Settings | — |
-| `scripts/check_repo_hygiene.py` | корень репозитория по allowlist | allowlist корня (принцип) |
-| `scripts/check_ratchet_counts.py` | 14 счётчиков долга не растут (`scripts/ratchet_baseline.json`) | baseline = весь долг |
-| `scripts/check_dependency_injection_canon.py` | контракт `di.py`, DI только на boundary, параметр `di` | boundary-префиксы (принцип) |
-| `scripts/check_backend_error_i18n.py` | `platform:errors` ru ≡ en, `error_code` у `WsCommandError`, кириллица в `raise` | `scripts/backend_error_i18n_baseline.json` |
-| `scripts/check_mcp_branding_bundle.py` | бандл брендинга MCP | — |
-| `scripts/check_platform_brand_hardcode.py` | нет хардкода apex-домена | `ALLOWLIST_PATHS` |
-| `scripts/check_authz_canon.py` | sole PDP, нет roster-Check, мутации членства в тестах через `sync_company_member_roles` | `FGA_ONLY_*` (принцип) |
-| `scripts/check_authz_dual_write.py` | create/delete ACL-ресурса пишет tuple в том же call path | маркеры в скрипте |
-| `scripts/check_authz_backfill_completeness.py` | tuple-helper покрыт backfill | — |
-| `scripts/check_authz_model.py` | тесты модели OpenFGA | — |
-| `basedpyright --level warning --warnings apps core` | типы, warning = fail | exclude в `pyproject.toml` |
-| `analyze_imports.py` | локальные импорты: цель `Total local imports: 0` | — |
-| `scripts/check_agent_e2e_coverage.py`, `scripts/check_agent_goose_tool_contract.py`, `scripts/check_agent_test_no_monkeypatch.py` | E2E LinnexAgent, контракт goose-тулов, без моков в agent e2e | — |
-| `scripts/check_variables_legacy.sh` | нет старого API переменных | — |
-| `scripts/check_migration_files_canon.py` | цепочка `migrations/<db>/NNNN_<name>.py` от `0001_initial.py` без разрывов | — |
-| `scripts/check_stock_service_queries.py` | сервисы склада без SQL; один `PlatformModel` на файл моделей | — |
-| `scripts/check_wiki_model_files.py` | одна таблица wiki на файл `apps/wiki/models/` | — |
-| `scripts/check_office_model_files.py` | таблицы Documents в `apps/office/models/`, без каталога db | — |
-| `scripts/check_worktracker_model_files.py` | одна таблица worktracker на файл пакета models | — |
-| `scripts/check_mail_model_files.py` | одна таблица почты на файл `core/mail/models/` | — |
-| `scripts/check_crawl_model_files.py` | одна таблица краула на файл `core/crawl/models/` | — |
-| `scripts/check_identity_model_files.py` | одна таблица идентичности на файл пакета identity_models | — |
-| `scripts/check_durable_model_files.py` | одна таблица durable execution на файл пакета models | — |
-| `scripts/check_a2a_projection_model_files.py` | одна таблица проекции A2A на файл пакета a2a_projection | — |
-| `scripts/check_sync_message_model_files.py` | сообщение, блок и файл Sync в разных модулях | — |
-| `scripts/check_evaluation_lab_model_files.py` | одна таблица evaluation lab на файл пакета | — |
-| `scripts/check_datasource_model_files.py` | коннектор и подключение datasource в разных модулях | — |
-| `scripts/check_ai_model_files.py` | каталог моделей и overlay оценок в разных модулях | — |
-| `scripts/check_crm_entity_type_model_files.py` | тип сущности и ревизия каталога CRM в разных модулях | — |
-| `scripts/check_no_service_components.py` | в корне процесса нет components.py | — |
-| `scripts/check_sync_message_ops.py` | op_messages_* зовёт SyncMessageService | — |
-| `scripts/check_sync_message_send.py` | отправка сообщения Sync в message_service, не в handlers | — |
-| `scripts/check_sync_thread_git_ops.py` | треды и Git-ссылки Sync зовут сервис | — |
-| `scripts/check_sync_call_recording_ops.py` | запись звонка Sync в SyncCallRecordingService | — |
-| `scripts/check_sync_call_lifecycle_ops.py` | жизненный цикл звонка Sync в SyncCallService | — |
-| `scripts/check_sync_call_session_ops.py` | чтение, токен, сигнал и админ звонка в SyncCallService | — |
-| `scripts/check_sync_call_link_ops.py` | ссылки на звонок и вход гостя в SyncCallLinkService | — |
-| `scripts/check_sync_company_directory_ops.py` | участники компании и общие каналы в SyncChannelService | — |
-| `scripts/check_sync_file_upload_op.py` | подтверждение upload Sync через FilesService | — |
-| `scripts/check_secrets_model_files.py` | актуальная переменная и версия в разных модулях | — |
-| `scripts/check_rag_model_files.py` | статус индексации и чанк RAG в разных модулях | — |
-| `scripts/check_crm_namespace_template_model_files.py` | шаблон пространства CRM и тип в разных модулях | — |
-| `scripts/check_flows_src_clients.py` | в src flows нет каталога clients | — |
-| `scripts/check_sync_channel_ops.py` | `op_channels_*` зовёт `SyncChannelService` | — |
-| `scripts/check_redis_ttl_canon.py` | TTL у каждого ключа Redis, `from_url` только в разрешённых точках | `REDIS_FROM_URL_*` |
-| `scripts/check_taskiq_canon.py` | только `declare_task` + `@platform_task` + `enqueue` | `KIQ_*`, `CREATE_BROKER_*` (инфраструктурные точки) |
+## Пакеты `scripts/gates`
 
-## `check-events-canon`
+| Пакет | Что держит |
+|---|---|
+| `backend/` | импорты, команды и REST, DI, запрещённые пути, ratchet, один `PlatformModel` на файл, миграции, Redis, TaskIQ, billing, ошибки, события, realtime, logging, Granian |
+| `authz/` | OpenFGA: канон, dual-write, backfill, модель |
+| `files/` | Files API, object store, `FileReader`, `file_id`, корпус, UI upload |
+| `voice/` | `voice_resolver`, speakable, один apply TTS-пайплайна |
+| `ai/` | модели только через `core.ai`, один реранк |
+| `flows/` | tags и контракты tools, MCP branding, Flow UI hard cut |
+| `sync/` | `op_adapters.py` — `op_*` зовут сервис |
+| `frontend/` | UI canon, field canon, фабрики, UI Kit, core frontend, embed ESM, i18n |
+| `repo/` | гигиена корня, `conf.json`, бренд, переменные, колёса, layout скриптов, документация |
 
-| Цель | Гейт | Держит |
-|---|---|---|
-| `check-core-frontend-canon` | `scripts/check_core_frontend_canon.py`, `scripts/check_embed_esm_closure.py` | канон `core/frontend/static/lib/**`, ESM-замыкание embed |
-| `check-ui-canon` | `scripts/check_ui_canon.sh` (пункты 0–37), `scripts/check_flow_ui_hard_cut.py`, `scripts/check_platform_typography.py` | UI-канон сервисов, грамматика Flow UI, шрифты |
-| `check-ui-factories` | `scripts/check_ui_factories.py` | форма фабрик, `transport`, `restMirror` |
-| `check-command-rest-mirror` | `scripts/check_command_rest_mirror.py` | `restMirror` ↔ FastAPI route, `transport: 'ws'`; allowlist `COMMAND_WS_HTTP_ALLOWLIST` |
-| `check-platform-events-canon` | `scripts/check_platform_events_canon.py` | шина и каталог событий |
-| `check-realtime-canon` | `scripts/check_realtime_canon.py` | Centrifugo HTTP только у bus `realtime` |
-| `check-voice-*` | `scripts/check_voice_resolver_usage.py`, `scripts/check_speakable_parity.py`, `scripts/check_tts_pipeline_single_apply.py` | голос через `voice_resolver`, pronunciation pipeline |
-| `check-rag-post-retrieval-rerank` | `scripts/check_rag_post_retrieval_rerank_single.py` | один реранк |
-| `check-file-reader-canon`, `check-corpus-manifest` | `scripts/check_file_reader_canon.py`, `scripts/check_corpus_manifest_complete.py` | чтение файлов только `FileReader.read`, полный корпус |
-| `check-company-ai` | `scripts/check_company_ai_canon.py` | модели только через `core.ai` |
-| `check-files-canon`, `check-mcp-branding-bundle` | см. `_lint-py` | — |
-| `check-i18n`, `check-i18n-keys` | `scripts/check_i18n.sh`, `scripts/check_i18n_keys.py --mode missing --strict` | пары ru/en, ключи ↔ код |
-| `check-no-uvicorn` | `scripts/check_no_uvicorn.sh` | Granian only |
-
-`check-field-canon` — `scripts/check_field_canon.sh` (сырые `<input>`/`<textarea>`/`<select>`); `check-logging` — `scripts/check_logging_canon.sh` + `scripts/_check_print_calls.py`.
+Смежные пакеты не гейты: `dev/` — `run.py` и bootstrap; `db/` — миграции; `testing/` — стек pytest; `build/` — UI и i18n; `docs/` — Zensical; `generate/` — фикстуры и ассеты; `tools/` — диагностика и отчёты.
 
 ## Чтение вывода
 
-- Скрипты собирают все нарушения и выходят с 1; `make lint` прячет следующие шаги за первым падением — поэтому отчёт идёт через `gates_report.py`.
-- Мягкие режимы: `scripts/check_i18n_keys.py` без `--strict`, `scripts/check_command_rest_mirror.py` и `scripts/check_ui_factories.py` без `--strict` печатают предупреждения без fail.
-- Ratchet: рост — FAIL; снижение — OK и подсказка `--update`. Файлы по метрике — `.cursor/skills/refactor-engineer/scripts/ratchet_list.py <metric>`. Текущее число ниже baseline — лимит не подтянут: `uv run python scripts/check_ratchet_counts.py --update`.
+- Гейт собирает нарушения и выходит с 1. `python -m scripts.gates --suite` не останавливается на первом гейте: в конце строка `gates: N ran, M failed`.
+- `make lint` останавливается, если упал ruff, сьют или basedpyright. Полный отчёт по шагам — `gates_report.py`: он читает `--list`, а не рецепт Makefile.
+- Мягкие режимы: `scripts/gates/frontend/i18n_keys.py` без `--strict`, `scripts/gates/backend/command_rest_mirror.py` и `scripts/gates/frontend/ui_factories.py` без `--strict` печатают предупреждения без fail. В сьют `lint_ts` ключи i18n входят с `--mode missing --strict`.
+- Ratchet: рост — FAIL; снижение — OK и подсказка `--update`. Файлы по метрике — `.cursor/skills/refactor-engineer/scripts/ratchet_list.py <metric>`. Текущее число ниже baseline — `uv run python -m scripts.gates.backend.ratchet_counts --update`.
 - `analyze_imports.py`: читать `Total local imports`, а не код выхода.
 
 ## Allowlist: принцип или долг
 
 - Принцип (не сокращается срезом): `PROTOCOL_HANDLERS`, `COMMAND_WS_HTTP_ALLOWLIST`, инфраструктурные точки Redis/TaskIQ, billing entrypoints, allowlist корня репозитория, `FGA_ONLY_*`. Каждый пункт — `Исключение:` в правиле-владельце.
-- Долг (сокращается срезами до 0): ratchet-baseline, `scripts/backend_error_i18n_baseline.json`, пути в `ALLOWLIST_PATHS`, не оформленные `Исключение:` в правиле.
+- Долг (сокращается срезами до 0): ratchet-baseline, `scripts/gates/backend/backend_error_i18n_baseline.json`, пути в `ALLOWLIST_PATHS`, не оформленные `Исключение:` в правиле.
 - Новый пункт allowlist ради зелёного прогона запрещён; принципиальный — только вместе с `Исключение:` в правиле-владельце.

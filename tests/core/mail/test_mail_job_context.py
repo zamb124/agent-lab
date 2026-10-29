@@ -6,11 +6,11 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
-from apps.idle_worker.tasks.mail_job_context import (
+from apps.idle.tasks.mail_job_context import (
     enter_mail_binding_context,
     leave_mail_binding_context,
 )
-from apps.idle_worker.tasks.mail_recipients import (
+from apps.idle.tasks.mail_recipients import (
     mailbox_recipient_user_ids,
     mailbox_role_job_actor_user,
 )

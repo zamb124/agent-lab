@@ -10,7 +10,7 @@ from apps.provider_litserve.model_registry import (
     bootstrap_defaults_if_empty,
     create_or_replace_model,
     init_registry,
-    list_models,
+    list_models_by_created_at_desc,
     sync_defaults_from_config,
 )
 from core.config.models import (
@@ -75,7 +75,7 @@ def test_bootstrap_seeds_audio_models(tmp_path, unique_id):
     init_registry(cfg)
     bootstrap_defaults_if_empty(cfg)
 
-    api_ids = {m.api_model_id: m for m in list_models(cfg)}
+    api_ids = {m.api_model_id: m for m in list_models_by_created_at_desc(cfg)}
     assert f"gigaam-{unique_id}" in api_ids
     assert f"silero-tts-{unique_id}" in api_ids
     assert f"silero-{unique_id}" in api_ids
@@ -92,9 +92,9 @@ def test_sync_defaults_is_idempotent_for_audio_kinds(tmp_path, unique_id):
     cfg = _cfg(tmp_path, unique_id)
     init_registry(cfg)
     sync_defaults_from_config(cfg)
-    first = list_models(cfg)
+    first = list_models_by_created_at_desc(cfg)
     sync_defaults_from_config(cfg)
-    second = list_models(cfg)
+    second = list_models_by_created_at_desc(cfg)
     assert {m.api_model_id for m in first} == {m.api_model_id for m in second}
     assert len(first) == len(second)
 
@@ -113,7 +113,7 @@ def test_sync_defaults_updates_kind_when_existing_record_has_wrong_kind(
 
     sync_defaults_from_config(cfg)
 
-    by_api = {m.api_model_id: m for m in list_models(cfg)}
+    by_api = {m.api_model_id: m for m in list_models_by_created_at_desc(cfg)}
     record = by_api[f"gigaam-{unique_id}"]
     assert record.kind == "stt"
     assert record.hf_model_id == "ai-sage/GigaAM-v3"
@@ -130,7 +130,7 @@ def test_create_or_replace_audio_model_persists(tmp_path, unique_id):
         api_model_id=f"whisper-{unique_id}",
     )
     assert new_model.kind == "stt"
-    by_api = {m.api_model_id: m for m in list_models(cfg)}
+    by_api = {m.api_model_id: m for m in list_models_by_created_at_desc(cfg)}
     assert by_api[f"whisper-{unique_id}"].kind == "stt"
     assert by_api[f"whisper-{unique_id}"].hf_model_id == "openai/whisper-large-v3"
 

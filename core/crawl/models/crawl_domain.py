@@ -158,13 +158,14 @@ class CrawlDomain(PlatformModel):
         return await cls.objects.filter(crawl_profile_id=crawl_profile_id).count()
 
     @classmethod
-    async def list_due(
+    async def list_due_by_next_crawl_after_asc(
         cls,
         crawl_profile_id: str,
         *,
         now: datetime,
         limit: int,
     ) -> list[Self]:
+        """Активные домены с next_crawl_after <= now, ORDER BY next_crawl_after ASC, не больше limit. limit в теле не проверяется."""
         return await (
             cls.objects.filter(
                 crawl_profile_id=crawl_profile_id,
@@ -177,12 +178,13 @@ class CrawlDomain(PlatformModel):
         )
 
     @classmethod
-    async def list_with_pending_urls(
+    async def list_active_by_pending_count_desc_and_domain_asc(
         cls,
         crawl_profile_id: str,
         *,
         limit: int,
     ) -> list[CrawlDomain]:
+        """Активные домены с pending URL. ORDER BY pending_count DESC, domain ASC, не больше limit. limit в теле не проверяется."""
         rows = await execute_raw(
             "SELECT row_to_json(crawl_domains) AS domain FROM crawl_domains "
             + "JOIN (SELECT crawl_domain_id, count(*) AS pending_count FROM crawl_urls "
@@ -256,7 +258,7 @@ class CrawlDomain(PlatformModel):
         )
 
     @classmethod
-    async def page_by_domain(
+    async def page_by_domain_asc(
         cls,
         *,
         crawl_profile_id: str,
@@ -264,7 +266,7 @@ class CrawlDomain(PlatformModel):
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlDomain]:
-        """Страница доменов профиля, ORDER BY domain. status равный None не фильтрует. total — COUNT этого фильтра."""
+        """Страница доменов профиля, ORDER BY domain ASC. status равный None не фильтрует. total — COUNT этого фильтра."""
         rows = cls.objects.filter(crawl_profile_id=crawl_profile_id)
         if status is not None:
             rows = rows.filter(status=status)
@@ -273,7 +275,8 @@ class CrawlDomain(PlatformModel):
         return OffsetPage[CrawlDomain](items=list(items), total=total, limit=limit, offset=offset)
 
     @classmethod
-    async def count_by_status(cls, crawl_profile_id: str) -> list[CrawlStatusCount]:
+    async def status_counts(cls, crawl_profile_id: str) -> list[CrawlStatusCount]:
+        """Группы status и число доменов профиля. Порядка нет. Пустой ответ — []. Нестроковый статус и нецелый total — TypeError."""
         return await CrawlDomain.grouped_counts(
             "SELECT status, count(*)::int AS total FROM crawl_domains "
             + "WHERE crawl_profile_id = $1 GROUP BY status",

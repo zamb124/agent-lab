@@ -645,12 +645,6 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: search-tavily-api-key
       optional: true
-- name: AGENT__RELEASES__GITHUB_TOKEN
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.platformSecretName }}
-      key: agent-releases-github-token
-      optional: true
 - name: MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD
   valueFrom:
     secretKeyRef:
@@ -741,7 +735,7 @@ tolerations:
 {{/*
 Init-containers для всех app/worker подов:
   1. wait-postgres — pg_isready на Service postgres:5432 (до 180s).
-  2. db-migrate    — `python -m scripts.db_migrate upgrade` для всех сервисных БД.
+  2. db-migrate    — `python -m scripts.db.migrate upgrade` для всех сервисных БД.
 
 Oxyde берёт pg_try_advisory_lock на время apply. Параллельный старт подов ждёт:
 один пишет 0001_initial в oxyde_migrations, остальные после lock видят запись и выходят.
@@ -780,7 +774,7 @@ Oxyde берёт pg_try_advisory_lock на время apply. Параллель�
 - name: db-migrate
   image: {{ include "agentlab.image" . }}
   imagePullPolicy: {{ .Values.image.pullPolicy }}
-  command: ["python", "-m", "scripts.db_migrate", "upgrade"]
+  command: ["python", "-m", "scripts.db.migrate", "upgrade"]
   env:
     {{- include "agentlab.appEnv" . | nindent 4 }}
   volumeMounts:

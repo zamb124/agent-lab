@@ -29,7 +29,7 @@ async def _backfill_entities(authz: AuthzService, *, limit: int | None) -> int:
         raise RuntimeError("openfga.enabled must be true for CRM authz backfill")
 
     written = 0
-    rows = await CRMEntity.ordered_by_created_at()
+    rows = await CRMEntity.ordered_by_created_at_asc()
 
     for row in rows:
         if limit is not None and written >= limit:

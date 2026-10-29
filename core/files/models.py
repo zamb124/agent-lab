@@ -145,7 +145,8 @@ class FileRecord(PlatformModel):
     )
 
     @classmethod
-    async def list_expired(cls, *, before: datetime, limit: int) -> list[Self]:
+    async def list_unordered_expired(cls, *, before: datetime, limit: int) -> list[Self]:
+        """Живые файлы с expires_at не позже before и статусом не DELETED. Порядка нет. Не больше limit."""
         return await (
             cls.objects.filter(
                 deleted_at__isnull=True,
@@ -158,7 +159,8 @@ class FileRecord(PlatformModel):
         )
 
     @classmethod
-    async def list_missing_retention(cls, *, limit: int) -> list[Self]:
+    async def list_unordered_missing_retention(cls, *, limit: int) -> list[Self]:
+        """Живые файлы не DELETED без retention_kind либо с пустым expires_at при конечном виде хранения. Порядка нет. Не больше limit."""
         finite_kinds = [
             kind.value
             for kind in FileRetentionKind
@@ -184,13 +186,14 @@ class FileRecord(PlatformModel):
         )
 
     @classmethod
-    async def list_for_storage_after(
+    async def list_alive_for_storage_by_file_id_after_asc(
         cls,
         storage_id: str,
         *,
         after_file_id: str | None,
         limit: int,
     ) -> list[Self]:
+        """Живые файлы хранилища, не DELETED, ORDER BY file_id ASC, не больше limit. after_file_id is None или пустая строка не фильтрует. limit в теле не проверяется."""
         query = cls.objects.filter(storage_id=storage_id, deleted_at__isnull=True).exclude(
             status=FileStatus.DELETED
         )
@@ -228,8 +231,8 @@ class FileRecord(PlatformModel):
         return affected == 1
 
     @classmethod
-    async def list_pending_authz_with_catalog_by_created_at(cls, *, limit: int) -> list[Self]:
-        """Файлы с пустым authz_synced_at и непустым catalog_id, ORDER BY created_at, не больше limit."""
+    async def list_pending_authz_with_catalog_by_created_at_asc(cls, *, limit: int) -> list[Self]:
+        """Файлы с пустым authz_synced_at и непустым catalog_id, ORDER BY created_at ASC, не больше limit."""
         return await (
             cls.objects.filter(authz_synced_at__isnull=True, catalog_id__isnull=False)
             .order_by("created_at")
@@ -238,7 +241,8 @@ class FileRecord(PlatformModel):
         )
 
     @classmethod
-    async def alive_in_catalog(cls, *, company_id: str, catalog_id: str) -> list[Self]:
+    async def list_alive_in_catalog_by_updated_at_desc(cls, *, company_id: str, catalog_id: str) -> list[Self]:
+        """Живые файлы каталога, ORDER BY updated_at DESC. Предела нет. Пустые поля не проверяются."""
         return await (
             cls.objects.filter(company_id=company_id, catalog_id=catalog_id, deleted_at__isnull=True)
             .order_by("-updated_at")
@@ -263,7 +267,7 @@ class FileRecord(PlatformModel):
         return await cls.objects.filter(company_id=company_id, deleted_at__isnull=True, catalog_id__isnull=False).count()
 
     @classmethod
-    async def list_alive_by_original_name(
+    async def list_alive_matching_original_name_by_updated_at_desc(
         cls,
         company_id: str,
         catalog_ids: list[str],
@@ -286,7 +290,7 @@ class FileRecord(PlatformModel):
         )
 
     @classmethod
-    async def list_with_catalog_by_original_name(cls, company_id: str, query: str, limit: int) -> list[Self]:
+    async def list_with_catalog_by_original_name_asc(cls, company_id: str, query: str, limit: int) -> list[Self]:
         """Живые файлы компании с каталогом по возрастанию original_name, не больше limit. Пустой query не фильтрует имя."""
         rows = cls.objects.filter(company_id=company_id, deleted_at__isnull=True, catalog_id__isnull=False)
         if query != "":
@@ -315,7 +319,8 @@ class FileRecord(PlatformModel):
         ).all()
 
     @classmethod
-    async def trashed_in_namespace(cls, company_id: str, namespace_catalog_ids: list[str]) -> list[Self]:
+    async def trashed_in_namespace_by_deleted_at_desc(cls, company_id: str, namespace_catalog_ids: list[str]) -> list[Self]:
+        """Файлы namespace в корзине, ORDER BY deleted_at DESC. Предела нет. Пустой namespace_catalog_ids — []."""
         if not namespace_catalog_ids:
             return []
         return await (

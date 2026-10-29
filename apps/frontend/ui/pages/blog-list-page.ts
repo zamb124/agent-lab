@@ -10,6 +10,7 @@ import '../components/landing/landing-footer.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export class BlogListPage extends PlatformPage {
     static i18nNamespace = 'landing';
@@ -49,8 +50,9 @@ export class BlogListPage extends PlatformPage {
         const err = this._listOp.error;
         const raw = this._listOp.lastResult;
         let items: any[] = [];
-        if (raw && typeof raw === 'object' && Array.isArray((raw as Record<string, any>).items)) {
-            items = (raw as Record<string, any>).items;
+        if (isPlainRecord(raw)) {
+            const rawItems = raw.items;
+            if (Array.isArray(rawItems)) items = rawItems;
         }
         return html`
             <landing-header></landing-header>

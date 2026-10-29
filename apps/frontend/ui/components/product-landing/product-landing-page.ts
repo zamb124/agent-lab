@@ -12,6 +12,7 @@ import { applyPublicDocumentMeta } from '../../_helpers/public-document-meta.js'
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { AuthStatus } from '@platform/lib/events/reducers/auth.js';
 
 export type ProductLandingSection = 'hero' | 'gallery' | 'features' | 'steps' | 'benefits' | 'use-cases' | 'faq' | 'cta';
 
@@ -41,11 +42,11 @@ export class ProductLandingPage extends PlatformPage {
 
     constructor() {
         super();
-        this._authStatusSel = this.select((s: Record<string, any>) => (s.auth as { status?: string } | undefined)?.status);
-        this._localeSel = this.select((s: Record<string, any>) => (s.i18n as { locale?: string } | undefined)?.locale);
+        this._authStatusSel = this.select((s) => s.auth.status);
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
-    private _authStatusSel: SelectController<any>;
-    private _localeSel: SelectController<any>;
+    private _authStatusSel: SelectController<AuthStatus>;
+    private _localeSel: SelectController<string>;
 
 
     override connectedCallback(): void {

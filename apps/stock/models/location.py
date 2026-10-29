@@ -181,25 +181,20 @@ class StockLocation(PlatformModel):
 
 
     @classmethod
-    async def list_by_usage_and_name(cls, company_id: str) -> list[Self]:
-        """Все локации компании, ORDER BY usage, name. Предела нет."""
+    async def list_by_usage_and_name_asc(cls, company_id: str) -> list[Self]:
+        """Все локации компании, ORDER BY usage, name ASC. Предела нет."""
         return await cls.objects.filter(company_id=company_id).order_by(
             "usage", "name"
         ).all()
 
     @classmethod
-    async def list_containers(
+    async def list_active_containers_by_complete_name_asc(
         cls,
         company_id: str,
         warehouse_id: str | None = None,
         parent_location_id: str | None = None,
     ) -> list[Self]:
-        """Список контейнеров (паллет/коробов) на складе или внутри места.
-
-        Контейнер — локация ``usage=container``: сам хранит quant'ы и
-        детей, физически перемещается как единица. ``parent_location_id``
-        — «что лежит в этом контейнере» (вложенные контейнеры).
-        """
+        """Активные контейнеры, ORDER BY complete_name ASC. warehouse_id is None и parent_location_id is None не фильтруют. Предела нет. parent_location_id — контейнеры внутри этого места."""
         query = cls.objects.filter(
             company_id=company_id,
             usage=StockLocationUsage.CONTAINER,
@@ -212,14 +207,10 @@ class StockLocation(PlatformModel):
         return await query.order_by("complete_name").all()
 
     @classmethod
-    async def list_child_containers(
+    async def unordered_child_containers_by_parent(
         cls, company_id: str, parent_ids: list[str]
     ) -> dict[str, list[Self]]:
-        """Контейнеры-дети по набору родителей: ``parent_id → [container]``.
-
-        Для снимков «что стоит в ячейке» при подсказках размещения:
-        одна выборка на всех кандидатов вместо запроса на ячейку.
-        """
+        """Активные контейнеры-дети: parent_id → список. Пустой parent_ids — {}. Родитель без детей не входит. Списки без порядка. Одна выборка на всех кандидатов."""
         if not parent_ids:
             return {}
         rows = await cls.objects.filter(
@@ -235,7 +226,7 @@ class StockLocation(PlatformModel):
         return result
 
     @classmethod
-    async def list_in_subtree(
+    async def list_in_subtree_by_pick_sequence_and_complete_name_asc(
         cls,
         company_id: str,
         root: Self,
@@ -245,12 +236,7 @@ class StockLocation(PlatformModel):
         limit: int = 500,
         offset: int = 0,
     ) -> list[Self]:
-        """Всё содержимое зоны/контейнера — потомки по ``parent_path``.
-
-        «Что лежит в зоне A» = все локации, чей путь начинается с
-        ``root.parent_path``: ячейки, контейнеры, вложенные уровни.
-        Порядок — по ``pick_sequence`` (маршрут обхода при сборке).
-        """
+        """Потомки по parent_path, ORDER BY pick_sequence, complete_name ASC. usage is None не фильтрует. active_only=True оставляет активные. limit по умолчанию 500, offset по умолчанию 0, в теле не проверяются."""
         query = cls.objects.filter(
             company_id=company_id,
             parent_path__startswith=root.parent_path,
@@ -264,13 +250,8 @@ class StockLocation(PlatformModel):
         ).offset(offset).all()
 
     @classmethod
-    async def list_subtree_ids(cls, company_id: str, root_id: str) -> list[str]:
-        """Id всех потомков одним запросом — «весь объём этой зоны».
-
-        Используется при сборе остатков и при переезде контейнера:
-        поддерево — это ``root_id`` плюс все, у кого ``parent_path``
-        начинается с его пути.
-        """
+    async def list_subtree_ids_by_parent_path_asc(cls, company_id: str, root_id: str) -> list[str]:
+        """Id корня и потомков, ORDER BY parent_path ASC. Нет корня — []. Строка без location_id не входит."""
         root = await cls.by_id(company_id, root_id)
         if root is None:
             return []
@@ -289,7 +270,7 @@ class StockLocation(PlatformModel):
         ]
 
     @classmethod
-    async def list_count_bins(
+    async def list_due_bins_by_last_count_at_asc(
         cls,
         company_id: str,
         warehouse_id: str,
@@ -297,20 +278,13 @@ class StockLocation(PlatformModel):
         due_before: datetime,
         limit: int,
     ) -> list[Self]:
-        """Ячейки склада, чей пересчёт просрочен — очередь cycle count.
-
-        «Давно не считали» = ``last_count_at`` пуст (ещё ни разу) или
-        старше порога. Порог — свой у каждой ячейки: ``cycle_count_days``
-        её типа хранения (мороз реже, овощи чаще), без типа/дней —
-        глобальный ``due_before``. Порядок — самые старые первыми,
-        так тик равномерно обносит склад.
-        """
+        """Активные ячейки склада, ORDER BY last_count_at ASC, не больше limit * 5. В ответе просроченные, не больше limit. Порог — cycle_count_days типа хранения, иначе due_before. last_count_at is None тоже просрочен."""
         from apps.stock.models.storage_type import StockStorageType
 
         # Нижняя граница выборки — самый мягкий порог (минимальный
         # интервал): без неё per-type фильтрация уронила бы строки,
         # которые глобальный порог считает свежими.
-        storage_types = await StockStorageType.list_by_name_for_warehouse(
+        storage_types = await StockStorageType.list_for_warehouse_by_name_asc(
             company_id, warehouse_id
         )
         type_days = {

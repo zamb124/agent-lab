@@ -373,7 +373,7 @@ class DocumentTreeService:
         return moved
 
     async def sync_pending_authz(self, *, limit: int) -> int:
-        catalogs = await DocumentCatalog.list_pending_authz_by_created_at(limit=limit)
+        catalogs = await DocumentCatalog.list_pending_authz_by_created_at_asc(limit=limit)
         synced = 0
         for catalog in catalogs:
             source = None
@@ -382,7 +382,7 @@ class DocumentTreeService:
             await self._authz.write(self._catalog_tuples(catalog, source=source))
             await DocumentCatalog.mark_authz_synced(catalog.catalog_id, datetime.now(timezone.utc))
             synced += 1
-        files = await FileRecord.list_pending_authz_with_catalog_by_created_at(limit=limit)
+        files = await FileRecord.list_pending_authz_with_catalog_by_created_at_asc(limit=limit)
         for record in files:
             if record.catalog_id is None or record.uploaded_by is None:
                 continue

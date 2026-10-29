@@ -39,7 +39,11 @@ export class StockTransfersPage extends PlatformPage {
     }
 
     private _open(event: Event) {
-        const id = (event.currentTarget as HTMLElement | null)?.getAttribute('data-id');
+        const target = event.currentTarget;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        const id = target.getAttribute('data-id');
         if (typeof id === 'string' && id !== '') {
             this.navigate('stock_transfer', { transferId: id });
         }

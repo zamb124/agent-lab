@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.authz.company_sync import sync_company_member_roles
 from core.models.identity_models import Company, User

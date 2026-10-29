@@ -3,7 +3,7 @@
  *
  * Pages/modals импортируют отсюда; литералы `'crm/…/…'` вне
  * `events/resources` / `events/types` запрещены CI
- * (`scripts/check_platform_events_canon.py`).
+ * (`scripts/gates/backend/platform_events.py`).
  */
 
 export const CRM_NOTE_UPDATED = 'crm/note/updated';

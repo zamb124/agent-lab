@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.types import require_json_object
 from tests.fixtures.datasources import CustomerDatasource

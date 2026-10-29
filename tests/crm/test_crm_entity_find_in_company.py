@@ -330,11 +330,11 @@ async def test_list_by_name_orders_and_hides_other_company(unique_id: str) -> No
             user_id=f"user-{unique_id}",
         )
     )
-    ordered = await CRMEntity.list_by_name(company_id, "", limit=1)
+    ordered = await CRMEntity.list_by_name_asc(company_id, "", limit=1)
     assert [row.entity_id for row in ordered] == [first_id]
-    matched = await CRMEntity.list_by_name(company_id, "alpha", limit=10)
+    matched = await CRMEntity.list_by_name_asc(company_id, "alpha", limit=10)
     assert [row.entity_id for row in matched] == [first_id]
-    missing = await CRMEntity.list_by_name(company_id, f"missing-{unique_id}", limit=10)
+    missing = await CRMEntity.list_by_name_asc(company_id, f"missing-{unique_id}", limit=10)
     assert missing == []
     for entity_id in (first_id, second_id, foreign_id):
         removed = await CRMEntity.delete_returning(entity_id)
@@ -528,7 +528,7 @@ async def test_cursor_page_orders_newest_first_and_hides_other_company(unique_id
             created_at=newer_at,
         )
     )
-    first = await CRMEntity.cursor_page(
+    first = await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
         entity_type="note",
         namespace=namespace,
         company_id=company_id,
@@ -538,7 +538,7 @@ async def test_cursor_page_orders_newest_first_and_hides_other_company(unique_id
     assert first.has_more is True
     assert first.prev_cursor is None
     assert first.next_cursor is not None
-    second = await CRMEntity.cursor_page(
+    second = await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
         entity_type="note",
         namespace=namespace,
         company_id=company_id,
@@ -549,7 +549,7 @@ async def test_cursor_page_orders_newest_first_and_hides_other_company(unique_id
     assert second.has_more is False
     bad_cursor = base64.urlsafe_b64encode(b'{"ts": 1, "id": "x"}').decode()
     with pytest.raises(ValueError, match="Cursor payload has invalid shape"):
-        _ = await CRMEntity.cursor_page(
+        _ = await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
             entity_type="note",
             namespace=namespace,
             company_id=company_id,
@@ -840,11 +840,11 @@ async def test_list_fts_ranked_pairs_keeps_company_and_limit(unique_id: str) -> 
             user_id=f"user-{unique_id}",
         )
     )
-    ranked = await CRMEntity.list_fts_ranked_pairs(token, company_id=company_id, limit=1)
+    ranked = await CRMEntity.list_fts_ranked_pairs_by_fts_rank_desc(token, company_id=company_id, limit=1)
     assert len(ranked) == 1
     assert ranked[0][0].company_id == company_id
     assert ranked[0][1] > 0
-    missing = await CRMEntity.list_fts_ranked_pairs(f"absent{token}", company_id=company_id, limit=5)
+    missing = await CRMEntity.list_fts_ranked_pairs_by_fts_rank_desc(f"absent{token}", company_id=company_id, limit=5)
     assert missing == []
     for entity_id in (home_id, second_id, foreign_id):
         removed = await CRMEntity.delete_returning(entity_id)
@@ -893,11 +893,11 @@ async def test_counts_by_type_status_and_month_split_type_and_hide_other_company
             created_at=created_at,
         )
     )
-    facets = await CRMEntity.counts_by_type_status_and_month(namespace=namespace, company_id=company_id)
+    facets = await CRMEntity.counts_by_type_status_and_month_asc(namespace=namespace, company_id=company_id)
     assert facets["by_type"] == {"note": 1, "person": 1}
     assert facets["by_status"] == {"active": 2}
     assert facets["by_month"] == {"2024-06": 2}
-    empty = await CRMEntity.counts_by_type_status_and_month(namespace=f"missing-{unique_id}", company_id=company_id)
+    empty = await CRMEntity.counts_by_type_status_and_month_asc(namespace=f"missing-{unique_id}", company_id=company_id)
     assert empty == {"by_type": {}, "by_status": {}, "by_month": {}}
     for entity_id in (note_id, person_id, foreign_id):
         removed = await CRMEntity.delete_returning(entity_id)
@@ -932,7 +932,7 @@ async def test_ordered_by_created_at_spans_companies(unique_id: str) -> None:
             created_at=older_at,
         )
     )
-    rows = await CRMEntity.ordered_by_created_at()
+    rows = await CRMEntity.ordered_by_created_at_asc()
     positions = [row.entity_id for row in rows if row.entity_id in {older_id, newer_id}]
     assert positions == [older_id, newer_id]
     for entity_id in (older_id, newer_id):
@@ -1106,7 +1106,7 @@ async def test_list_note_company_ids_since_orders_companies(unique_id: str) -> N
             note_date=earlier,
         )
     )
-    found = await CRMEntity.list_note_company_ids_since(since)
+    found = await CRMEntity.list_note_company_ids_since_by_company_id_asc(since)
     assert [company_id for company_id in found if unique_id in company_id] == [
         earlier_company,
         later_company,

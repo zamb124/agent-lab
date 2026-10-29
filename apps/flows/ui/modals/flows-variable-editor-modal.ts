@@ -200,7 +200,7 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
     }
 
     override renderFooter() {
-        const valid = (this._key.trim() as any).length > 0;
+        const valid = this._key.trim().length > 0;
         return html`
             <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${!valid} @click=${this._onSubmit}>
@@ -210,7 +210,7 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
     }
 
     override async _onSubmit(): Promise<void> {
-        const key = (this._key.trim() as any);
+        const key = this._key.trim();
         if (key.length === 0) {
             return;
         }
@@ -220,30 +220,32 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
 
     _submitFlow(key: string) {
         const state = this._editor.state;
-        const skillsData = state.branchData;
-        const prevVars = isPlainObject((skillsData as any).variables) ? (skillsData as any).variables : {};
+        const skillsData = isPlainObject(state.branchData) ? state.branchData : {};
+        const prevVars = isPlainObject(skillsData.variables) ? skillsData.variables : {};
         const prevRaw = prevVars[key];
         const prevConfig = isPlainObject(prevRaw) ? prevRaw : null;
-        const orderRaw = (this._order.trim() as any);
-        let order = null;
+        const orderRaw = this._order.trim();
+        let order: number | null = null;
         if (orderRaw !== '') {
             order = Number(orderRaw);
             if (Number.isNaN(order)) {
                 throw new Error('flows-variable-editor-modal: order must be number');
             }
         }
+        const title = this._title.trim();
+        const description = this._description.trim();
         const merged = {
             ...(prevConfig !== null ? prevConfig : {}),
             value: this._value,
             secret: this._secret,
             public: this._public,
-            title: (this._title.trim() as any) === '' ? null : (this._title.trim() as any),
-            description: (this._description.trim() as any) === '' ? null : (this._description.trim() as any),
+            title: title === '' ? null : title,
+            description: description === '' ? null : description,
             order,
         };
-        const nextVars = { ...prevVars, [key]: merged };
-        (this._editor.updateBranchData({ data: { ...skillsData, variables: nextVars } }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
+        const nextVars: Record<string, unknown> = { ...prevVars, [key]: merged };
+        this._editor.updateBranchData({ data: { ...skillsData, variables: nextVars } });
+        this._editor.setDirty({ dirty: true });
         this.toast('flows:toast.variable_applied', { type: 'success' });
     }
 }

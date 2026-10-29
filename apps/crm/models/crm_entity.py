@@ -118,7 +118,7 @@ class CRMEntity(PlatformModel):
         return self.entity_type
 
     @classmethod
-    async def list_note_company_ids_since(cls, since_date: date) -> list[str]:
+    async def list_note_company_ids_since_by_company_id_asc(cls, since_date: date) -> list[str]:
         """company_id заметок с note_date не раньше since_date, по возрастанию company_id. Пустой company_id в строке — ValueError."""
         rows = await execute_raw(
             "SELECT DISTINCT company_id FROM crm_entities WHERE entity_type = 'note' AND note_date IS NOT NULL AND note_date >= $1 ORDER BY company_id",
@@ -160,7 +160,7 @@ class CRMEntity(PlatformModel):
         return scopes
 
     @classmethod
-    async def ordered_by_created_at(cls) -> list[Self]:
+    async def ordered_by_created_at_asc(cls) -> list[Self]:
         """Все строки таблицы по возрастанию created_at, без limit и без фильтра компании."""
         return await cls.objects.order_by("created_at").all()
 
@@ -296,7 +296,7 @@ class CRMEntity(PlatformModel):
         return [crm_entity_from_row(row) for row in fetched]
 
     @classmethod
-    async def list_by_name(
+    async def list_by_name_asc(
         cls,
         company_id: str,
         query: str,
@@ -354,7 +354,7 @@ class CRMEntity(PlatformModel):
         return updated
 
     @classmethod
-    async def cursor_page(
+    async def cursor_page_by_created_at_and_entity_id_desc(
         cls,
         entity_type: str | None = None,
         entity_subtype: str | None = None,
@@ -445,7 +445,7 @@ class CRMEntity(PlatformModel):
         return _int_cell(fetched, "total", "Notes draft analysis count returned empty value")
 
     @classmethod
-    async def list_notes_with_analysis_draft_not_applied(
+    async def list_notes_with_analysis_draft_not_applied_by_updated_at_and_entity_id_desc(
         cls,
         namespace: str,
         *,
@@ -550,7 +550,7 @@ class CRMEntity(PlatformModel):
         return sorted(type_ids)
 
     @classmethod
-    async def list_fts_ranked_pairs(
+    async def list_fts_ranked_pairs_by_fts_rank_desc(
         cls,
         query: str,
         entity_type: str | None = None,
@@ -591,7 +591,7 @@ class CRMEntity(PlatformModel):
         return ranked
 
     @classmethod
-    async def counts_by_type_status_and_month(
+    async def counts_by_type_status_and_month_asc(
         cls,
         namespace: str | None = None,
         company_id: str | None = None,

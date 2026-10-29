@@ -8,17 +8,15 @@ import { getPlatformBrandBootstrap } from './platform-brand.js';
  * @returns {{
  *   platformName: string,
  *   supportEmail: string,
- *   agentProductName: string,
  *   modelsProductName: string,
  *   voiceProductName: string,
  *   llmsDisplayLabel: string,
  *   flowsProductLabel: string,
  * }}
  */
-export type PlatformI18nVars = Record<'platformName' | 'supportEmail' | 'agentProductName' | 'modelsProductName' | 'voiceProductName' | 'llmsDisplayLabel' | 'flowsProductLabel', string> & {
+export type PlatformI18nVars = Record<'platformName' | 'supportEmail' | 'modelsProductName' | 'voiceProductName' | 'llmsDisplayLabel' | 'flowsProductLabel', string> & {
     platformName: string;
     supportEmail: string;
-    agentProductName: string;
     modelsProductName: string;
     voiceProductName: string;
     llmsDisplayLabel: string;
@@ -33,7 +31,6 @@ export function getPlatformI18nVars(): PlatformI18nVars {
     return {
         platformName: brand.platformName,
         supportEmail: brand.supportEmail,
-        agentProductName: brand.agentProductName,
         modelsProductName: brand.modelsProductName,
         voiceProductName: brand.voiceProductName,
         llmsDisplayLabel: brand.llmsDisplayLabel,

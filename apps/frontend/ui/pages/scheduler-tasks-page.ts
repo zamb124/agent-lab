@@ -17,6 +17,27 @@ function displayText(value: unknown): string {
     return String(value);
 }
 
+function requireScheduleTaskId(task: Record<string, unknown>): string {
+    const scheduleTaskId = task.schedule_task_id;
+    if (typeof scheduleTaskId !== 'string' || scheduleTaskId.length === 0) {
+        throw new Error('scheduler tasks: schedule_task_id required');
+    }
+    return scheduleTaskId;
+}
+
+function scheduleKind(task: Record<string, unknown>): string {
+    if (typeof task.schedule_type === 'string' && task.schedule_type.length > 0) {
+        return task.schedule_type;
+    }
+    if (typeof task.cron === 'string' && task.cron.length > 0) {
+        return 'cron';
+    }
+    if (typeof task.interval_seconds === 'number' || (typeof task.interval_seconds === 'string' && task.interval_seconds.length > 0)) {
+        return 'interval';
+    }
+    return 'one_time';
+}
+
 function shownCount(value: unknown): number | string {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string' && value.length > 0) return value;
@@ -31,6 +52,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController, ResourceController} from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const STATUSES = Object.freeze(['pending', 'paused', 'executed', 'cancelled', 'failed']);
 
@@ -128,7 +150,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
     declare _filterStatus: string;
     declare _filterService: string;
     declare _filterTask: string;
-    declare _expandedScheduleTaskId: any;
+    declare _expandedScheduleTaskId: string | null;
 ;
 
     constructor() {
@@ -162,7 +184,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
     }
 
     _reload() {
-        const filter: Record<string, any> = {};
+        const filter: Record<string, unknown> = {};
         if (this._filterStatus) filter.status = this._filterStatus;
         if (this._filterService) filter.target_service = this._filterService;
         if (this._filterTask) filter.task_name = this._filterTask;
@@ -173,31 +195,34 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         this.openModal(FrontendCreateSchedulerTaskModal);
     }
 
-    _runNow(t: Record<string, any>) {
-        this._runNowOp.run({ schedule_task_id: t.schedule_task_id });
+    _runNow(task: Record<string, unknown>) {
+        this._runNowOp.run({ schedule_task_id: requireScheduleTaskId(task) });
     }
 
-    _pauseTask(t: Record<string, any>) {
-        this._pause.run({ schedule_task_id: t.schedule_task_id });
+    _pauseTask(task: Record<string, unknown>) {
+        this._pause.run({ schedule_task_id: requireScheduleTaskId(task) });
     }
 
-    _resumeTask(t: Record<string, any>) {
-        this._resume.run({ schedule_task_id: t.schedule_task_id });
+    _resumeTask(task: Record<string, unknown>) {
+        this._resume.run({ schedule_task_id: requireScheduleTaskId(task) });
     }
 
-    async _cancelTask(t: Record<string, any>) {
-        const message = this.t('scheduler_page.confirm_cancel', { name: t.task_name || t.schedule_task_id });
+    async _cancelTask(task: Record<string, unknown>) {
+        const scheduleTaskId = requireScheduleTaskId(task);
+        const taskName = typeof task.task_name === 'string' && task.task_name.length > 0 ? task.task_name : scheduleTaskId;
+        const message = this.t('scheduler_page.confirm_cancel', { name: taskName });
         if (!(await platformConfirm(message))) return;
-        this._cancelOp.run({ schedule_task_id: t.schedule_task_id });
+        this._cancelOp.run({ schedule_task_id: scheduleTaskId });
     }
 
-    _toggleRedis(t: Record<string, any>) {
-        if (this._expandedScheduleTaskId === t.schedule_task_id) {
+    _toggleRedis(task: Record<string, unknown>) {
+        const scheduleTaskId = requireScheduleTaskId(task);
+        if (this._expandedScheduleTaskId === scheduleTaskId) {
             this._expandedScheduleTaskId = null;
             return;
         }
-        this._expandedScheduleTaskId = t.schedule_task_id;
-        this._redis.run({ schedule_task_id: t.schedule_task_id });
+        this._expandedScheduleTaskId = scheduleTaskId;
+        this._redis.run({ schedule_task_id: scheduleTaskId });
     }
 
     _statusFilterEnumConfig() {
@@ -212,11 +237,13 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         };
     }
 
-    _formatSchedule(t: Record<string, any>) {
-        const type = t.schedule_type || (t.cron ? 'cron' : (t.interval_seconds ? 'interval' : 'one_time'));
-        if (type === 'cron') return this.t('scheduler_page.schedule_cron', { cron: displayText(t.cron) });
-        if (type === 'interval') return this.t('scheduler_page.schedule_interval', { sec: shownCount(t.interval_seconds) });
-        const at = t.run_at ? new Date(t.run_at).toLocaleString() : '';
+    _formatSchedule(task: Record<string, unknown>) {
+        const type = scheduleKind(task);
+        if (type === 'cron') return this.t('scheduler_page.schedule_cron', { cron: displayText(task.cron) });
+        if (type === 'interval') return this.t('scheduler_page.schedule_interval', { sec: shownCount(task.interval_seconds) });
+        const at = typeof task.run_at === 'string' || typeof task.run_at === 'number'
+            ? new Date(task.run_at).toLocaleString()
+            : '';
         return this.t('scheduler_page.schedule_once', { at });
     }
 
@@ -278,11 +305,25 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         `;
     }
 
-    _renderRedisRow(t: Record<string, any>) {
+    _renderRedisRow(t: Record<string, unknown>) {
         const snapshotByScheduleTaskId = this._redis.state.snapshotByScheduleTaskId;
         const loadingByScheduleTaskId = this._redis.state.loadingByScheduleTaskId;
-        const snapshot = (snapshotByScheduleTaskId as Record<string, any>)[t.schedule_task_id];
-        const loading = Boolean((loadingByScheduleTaskId as Record<string, any>)[t.schedule_task_id]);
+        if (!isPlainRecord(snapshotByScheduleTaskId)) {
+            throw new Error('scheduler redis: snapshotByScheduleTaskId must be an object');
+        }
+        if (!isPlainRecord(loadingByScheduleTaskId)) {
+            throw new Error('scheduler redis: loadingByScheduleTaskId must be an object');
+        }
+        const scheduleTaskId = t.schedule_task_id;
+        if (typeof scheduleTaskId !== 'string' || scheduleTaskId === '') {
+            throw new Error('scheduler tasks: schedule_task_id required');
+        }
+        const snapshot = snapshotByScheduleTaskId[scheduleTaskId];
+        const loadingFlag = loadingByScheduleTaskId[scheduleTaskId];
+        if (loadingFlag !== undefined && typeof loadingFlag !== 'boolean') {
+            throw new Error('scheduler redis: loadingByScheduleTaskId flag must be a boolean');
+        }
+        const loading = loadingFlag === true;
         const data = !snapshot && loading
             ? html`<div><glass-spinner></glass-spinner></div>`
             : snapshot
@@ -298,29 +339,34 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         `;
     }
 
-    _renderRow(t: Record<string, any>) {
-        const status = t.status || 'pending';
-        const expanded = this._expandedScheduleTaskId === t.schedule_task_id;
+    _renderRow(task: Record<string, unknown>) {
+        const scheduleTaskId = requireScheduleTaskId(task);
+        const status = typeof task.status === 'string' && task.status.length > 0 ? task.status : 'pending';
+        const expanded = this._expandedScheduleTaskId === scheduleTaskId;
+        const nextRun = task.next_run_at;
+        const nextLabel = typeof nextRun === 'string' || typeof nextRun === 'number'
+            ? new Date(nextRun).toLocaleString()
+            : '—';
         return html`
             <tr>
-                <td class="schedule-task-id">${t.schedule_task_id}</td>
-                <td>${displayText(t.target_service)}</td>
-                <td>${displayText(t.task_name)}</td>
-                <td><code>${this._formatSchedule(t)}</code></td>
+                <td class="schedule-task-id">${scheduleTaskId}</td>
+                <td>${displayText(task.target_service)}</td>
+                <td>${displayText(task.task_name)}</td>
+                <td><code>${this._formatSchedule(task)}</code></td>
                 <td><span class="status-tag ${status}">${status}</span></td>
-                <td>${t.next_run_at ? new Date(t.next_run_at).toLocaleString() : '—'}</td>
+                <td>${nextLabel}</td>
                 <td class="actions">
-                    <button class="btn btn-ghost" @click=${() => this._runNow(t)}>${this.t('scheduler_page.run_now')}</button>
+                    <button class="btn btn-ghost" @click=${() => this._runNow(task)}>${this.t('scheduler_page.run_now')}</button>
                     <button class="btn btn-ghost"
-                        @click=${() => status === 'paused' ? this._resumeTask(t) : this._pauseTask(t)}
+                        @click=${() => status === 'paused' ? this._resumeTask(task) : this._pauseTask(task)}
                     >
                         ${status === 'paused' ? this.t('scheduler_page.resume') : this.t('scheduler_page.pause')}
                     </button>
-                    <button class="btn btn-ghost btn-danger" @click=${() => this._cancelTask(t)}>${this.t('scheduler_page.cancel')}</button>
-                    <button class="btn btn-ghost" @click=${() => this._toggleRedis(t)}>${this.t('scheduler_page.redis_open')}</button>
+                    <button class="btn btn-ghost btn-danger" @click=${() => this._cancelTask(task)}>${this.t('scheduler_page.cancel')}</button>
+                    <button class="btn btn-ghost" @click=${() => this._toggleRedis(task)}>${this.t('scheduler_page.redis_open')}</button>
                 </td>
             </tr>
-            ${expanded ? this._renderRedisRow(t) : ''}
+            ${expanded ? this._renderRedisRow(task) : ''}
         `;
     }
 

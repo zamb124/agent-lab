@@ -71,7 +71,7 @@ async def _draft_receipt(env: StockEnv, qty: Decimal) -> tuple[str, str]:
             )
         ],
     )
-    moves = await StockMove.list_for_transfer(env.company_id, transfer.transfer_id)
+    moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id)
     assert len(moves) == 1
     return transfer.transfer_id, moves[0].move_id
 
@@ -624,7 +624,7 @@ class TestPutawayRuleCrud:
         _, move_id = await _draft_receipt(env, Decimal("2"))
         move = await StockMove.by_id(env.company_id, move_id)
         assert move is not None
-        suggestions = await env.di.placement_service.suggest(
+        suggestions = await env.di.placement_service.suggest_by_allowed_group_rank_and_pick_sequence_asc(
             company_id=env.company_id,
             warehouse=env.warehouse,
             move=move,
@@ -652,7 +652,7 @@ class TestPutawayRuleCrud:
         _, move_id = await _draft_receipt(env, Decimal("2"))
         move = await StockMove.by_id(env.company_id, move_id)
         assert move is not None
-        suggestions = await env.di.placement_service.suggest(
+        suggestions = await env.di.placement_service.suggest_by_allowed_group_rank_and_pick_sequence_asc(
             company_id=env.company_id,
             warehouse=env.warehouse,
             move=move,
@@ -673,7 +673,7 @@ class TestPutawayRuleCrud:
         _, move_id = await _draft_receipt(env, Decimal("2"))
         move = await StockMove.by_id(env.company_id, move_id)
         assert move is not None
-        suggestions = await env.di.placement_service.suggest(
+        suggestions = await env.di.placement_service.suggest_by_allowed_group_rank_and_pick_sequence_asc(
             company_id=env.company_id,
             warehouse=env.warehouse,
             move=move,
@@ -693,7 +693,7 @@ class TestPutawayRuleCrud:
         )
         await StockPutawayRule.delete_rule(env.company_id, rule.rule_id)
         assert await StockPutawayRule.by_id(env.company_id, rule.rule_id) is None
-        listed = await StockPutawayRule.list_by_sequence_and_rule_id_for_warehouse(
+        listed = await StockPutawayRule.list_for_warehouse_by_sequence_and_rule_id_asc(
             env.company_id, env.warehouse.warehouse_id
         )
         assert all(r.rule_id != rule.rule_id for r in listed)

@@ -7,6 +7,7 @@
  */
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const landingAgentsLoadOp = createAsyncOp({
     name: 'frontend/landing_agents_load',
@@ -26,17 +27,17 @@ export const landingDemoSessionOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/public/landing-agents/session' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
+        if (!isPlainRecord(payload)) {
             throw new Error('frontend/landing_demo_session: payload required');
         }
-        const embedId = (payload as Record<string, any>).embed_id;
+        const embedId = payload.embed_id;
         if (typeof embedId !== 'string' || embedId === '') {
             throw new Error('frontend/landing_demo_session: embed_id required');
         }
-        const expires =
-            typeof (payload as Record<string, any>).expires_in_seconds === 'number' && (payload as Record<string, any>).expires_in_seconds >= 60
-                ? (payload as Record<string, any>).expires_in_seconds
-                : 300;
+        const expiresValue = payload.expires_in_seconds;
+        const expires = typeof expiresValue === 'number' && expiresValue >= 60
+            ? expiresValue
+            : 300;
         return httpRequest({
             method: 'POST',
             url: '/frontend/api/public/landing-agents/session',

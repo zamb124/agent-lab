@@ -10,12 +10,12 @@
 ARG BASE_GPU_IMAGE=ghcr.io/zamb124/agent-lab-base-gpu:latest
 
 # UI собирается так же, как в основном Dockerfile: браузер получает только ui-dist и embed-dist.
-FROM node:24-bookworm-slim AS ui-builder
+FROM node:26-bookworm-slim AS ui-builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.base.json ./
-COPY scripts/build_ui.mjs ./scripts/
+COPY scripts/build/ui.mjs ./scripts/build/ui.mjs
 COPY core/frontend/static ./core/frontend/static
 COPY tests/ui/design-system/components ./tests/ui/design-system/components
 COPY apps/ ./apps/

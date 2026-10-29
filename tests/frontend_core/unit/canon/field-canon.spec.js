@@ -1,9 +1,9 @@
 // Канон-тест Field canon (PHASE 1.5).
 //
 // Дублирует логику детекторов:
-//   - scripts/check_field_canon.sh    (raw input/textarea/select без pill-обёртки)
-//   - scripts/check_ui_canon.sh п.17   (локальные .form-x / .field-pill-x CSS в apps)
-//   - scripts/check_ui_canon.sh п.18   (импорт удалённых glass-input/glass-textarea)
+//   - scripts/gates/frontend/field_canon.sh    (raw input/textarea/select без pill-обёртки)
+//   - scripts/gates/frontend/ui_canon.sh п.17   (локальные .form-x / .field-pill-x CSS в apps)
+//   - scripts/gates/frontend/ui_canon.sh п.18   (импорт удалённых glass-input/glass-textarea)
 //
 // Цель — быстрая регрессия в watch-режиме vitest и подтверждение, что после
 // PHASE 1.5 ни одно нарушение пп.17/18 не попало в репозиторий, а проверка

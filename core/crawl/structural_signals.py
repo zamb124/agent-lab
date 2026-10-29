@@ -160,8 +160,6 @@ def _append_json_ld_object(objects: list[JsonObject], value: JsonValue) -> None:
 def _first_json_ld_objects(soup: BeautifulSoup) -> list[JsonObject]:
     objects: list[JsonObject] = []
     for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
-        if not isinstance(script, Tag):
-            continue
         raw = script.string
         if raw is None or not raw.strip():
             continue
@@ -255,8 +253,6 @@ def _collect_json_ld_signals(objects: list[JsonObject]) -> JsonLdSignals:
 
 def _first_time_datetime(soup: BeautifulSoup) -> date | None:
     for time_tag in soup.find_all("time"):
-        if not isinstance(time_tag, Tag):
-            continue
         parsed = _parse_iso_date(_tag_attribute_text(time_tag, "datetime"))
         if parsed is not None:
             return parsed
@@ -266,11 +262,7 @@ def _first_time_datetime(soup: BeautifulSoup) -> date | None:
 def _breadcrumb_categories(soup: BeautifulSoup) -> list[str]:
     crumbs: list[str] = []
     for nav in soup.find_all(["nav", "ol", "ul"], class_=re.compile(r"breadcrumb", re.I)):
-        if not isinstance(nav, Tag):
-            continue
         for anchor in nav.find_all("a"):
-            if not isinstance(anchor, Tag):
-                continue
             label = _normalize_text(anchor.get_text())
             if label is not None and label not in crumbs:
                 crumbs.append(label)
@@ -355,8 +347,6 @@ def extract_structural_signals_from_html(html: str, *, page_url: str = "") -> Cr
         for part in re.split(r"[,;]", keywords):
             _append_unique_token(topic_hints, part)
     for meta_tag in soup.find_all("meta", attrs={"property": "article:tag"}):
-        if not isinstance(meta_tag, Tag):
-            continue
         content = _tag_attribute_text(meta_tag, "content")
         if content is not None and content not in topic_hints:
             topic_hints.append(content)

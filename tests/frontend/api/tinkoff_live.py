@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from playwright.async_api import Locator, Page, async_playwright
 
 from core.clients.payment.base_provider import PaymentRequest

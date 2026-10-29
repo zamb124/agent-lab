@@ -2,8 +2,26 @@
  * Normalize AgentSkill API payloads for UI (strict, no fallbacks).
  */
 
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
 /** Fixed platform icon for Agent Skills (chips, list, picker, sidebar). */
 export const AGENT_SKILL_ICON = 'scroll-text';
+
+interface AgentSkillToolRef {
+    tool_id: string;
+    name?: string;
+    title?: string;
+    description?: string;
+    parameters_schema?: Record<string, unknown>;
+}
+
+interface AgentSkillFileRef {
+    original_name: string;
+    content_type: string;
+    file_size: number;
+    file_id?: string;
+    url?: string;
+}
 
 export function requireAgentSkillString(value: unknown, field: string) {
     if (typeof value !== 'string') {
@@ -12,26 +30,29 @@ export function requireAgentSkillString(value: unknown, field: string) {
     return value;
 }
 
-function _normalizeToolRef(raw: any) {
-    if (!raw || typeof raw !== 'object') {
+function _normalizeToolRef(raw: unknown): AgentSkillToolRef {
+    if (!isPlainRecord(raw)) {
         throw new Error('agent_skill: tool_refs[] must be object');
     }
     const toolId = requireAgentSkillString(raw.tool_id, 'tool_refs[].tool_id');
-    const out: any = { tool_id: toolId };
+    const out: AgentSkillToolRef = { tool_id: toolId };
     if (typeof raw.name === 'string') out.name = raw.name;
     if (typeof raw.title === 'string') out.title = raw.title;
     if (typeof raw.description === 'string') out.description = raw.description;
-    if (raw.parameters_schema && typeof raw.parameters_schema === 'object') {
+    if (raw.parameters_schema !== undefined && raw.parameters_schema !== null) {
+        if (!isPlainRecord(raw.parameters_schema)) {
+            throw new Error('agent_skill: tool_refs[].parameters_schema must be object');
+        }
         out.parameters_schema = raw.parameters_schema;
     }
     return out;
 }
 
-function _normalizeFileRef(raw: any, field: string) {
-    if (!raw || typeof raw !== 'object') {
+function _normalizeFileRef(raw: unknown, field: string): AgentSkillFileRef {
+    if (!isPlainRecord(raw)) {
         throw new Error(`agent_skill: ${field}[] must be object`);
     }
-    const out: any = {
+    const out: AgentSkillFileRef = {
         original_name: requireAgentSkillString(raw.original_name, `${field}[].original_name`),
         content_type: requireAgentSkillString(raw.content_type, `${field}[].content_type`),
         file_size: typeof raw.file_size === 'number' ? raw.file_size : 0,
@@ -43,6 +64,54 @@ function _normalizeFileRef(raw: any, field: string) {
         out.url = raw.url;
     }
     return out;
+}
+
+function recordCopies(value: unknown, field: string): Record<string, unknown>[] {
+    if (value === undefined || value === null) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        throw new Error(`agent_skill: ${field} must be an array`);
+    }
+    const rows: Record<string, unknown>[] = [];
+    for (const item of value) {
+        if (!isPlainRecord(item)) {
+            throw new Error(`agent_skill: ${field}[] must be object`);
+        }
+        rows.push({ ...item });
+    }
+    return rows;
+}
+
+function unknownList(value: unknown, field: string): unknown[] {
+    if (value === undefined || value === null) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        throw new Error(`agent_skill: ${field} must be an array`);
+    }
+    const items: unknown[] = [];
+    for (const item of value) {
+        items.push(item);
+    }
+    return items;
+}
+
+function stringCopies(value: unknown, field: string): string[] {
+    if (value === undefined || value === null) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        throw new Error(`agent_skill: ${field} must be an array`);
+    }
+    const rows: string[] = [];
+    for (const [index, item] of value.entries()) {
+        if (typeof item !== 'string') {
+            throw new Error(`agent_skill: ${field}[${index}] must be string`);
+        }
+        rows.push(item);
+    }
+    return rows;
 }
 
 const AGENT_SKILL_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -87,11 +156,11 @@ export function suggestAgentSkillCopyId(sourceId: string, existingIds: Iterable<
  * @param {object} source — mapped AgentSkill
  * @param {{ agent_skill_id: string, name?: string }} opts
  */
-export function buildAgentSkillDuplicatePayload(source: any, opts: any) {
-    if (!source || typeof source !== 'object') {
+export function buildAgentSkillDuplicatePayload(source: unknown, opts: unknown) {
+    if (!isPlainRecord(source)) {
         throw new Error('buildAgentSkillDuplicatePayload: source required');
     }
-    if (!opts || typeof opts !== 'object') {
+    if (!isPlainRecord(opts)) {
         throw new Error('buildAgentSkillDuplicatePayload: opts required');
     }
     const newId = typeof opts.agent_skill_id === 'string' ? opts.agent_skill_id.trim() : '';
@@ -110,16 +179,10 @@ export function buildAgentSkillDuplicatePayload(source: any, opts: any) {
         name,
         description: requireAgentSkillString(source.description, 'description'),
         body_markdown: requireAgentSkillString(source.body_markdown, 'body_markdown'),
-        tool_refs: Array.isArray(source.tool_refs)
-            ? source.tool_refs.map((ref: any) => ({ ...ref }))
-            : [],
-        depends_on: Array.isArray(source.depends_on) ? [...source.depends_on] : [],
-        references: Array.isArray(source.references)
-            ? source.references.map((ref: any) => ({ ...ref }))
-            : [],
-        assets: Array.isArray(source.assets)
-            ? source.assets.map((ref: any) => ({ ...ref }))
-            : [],
+        tool_refs: recordCopies(source.tool_refs, 'tool_refs'),
+        depends_on: stringCopies(source.depends_on, 'depends_on'),
+        references: recordCopies(source.references, 'references'),
+        assets: recordCopies(source.assets, 'assets'),
     };
 }
 
@@ -156,27 +219,19 @@ export function replaceAttachedAgentSkillId(attached: string[], fromId: string, 
     return next;
 }
 
-export function mapAgentSkillItem(raw: any) {
-    if (!raw || typeof raw !== 'object') {
+export function mapAgentSkillItem(raw: unknown) {
+    if (!isPlainRecord(raw)) {
         throw new Error('agent_skill: item must be object');
     }
-    const toolRefs = Array.isArray(raw.tool_refs)
-        ? raw.tool_refs.map((item: any) => _normalizeToolRef(item))
-        : [];
-    const dependsOn = Array.isArray(raw.depends_on)
-        ? raw.depends_on.map((id: string, index: number) => {
-            if (typeof id !== 'string' || id.trim().length === 0) {
+    const toolRefs = unknownList(raw.tool_refs, 'tool_refs').map((item) => _normalizeToolRef(item));
+    const dependsOn = stringCopies(raw.depends_on, 'depends_on').map((id, index) => {
+            if (id.trim().length === 0) {
                 throw new Error(`agent_skill: depends_on[${index}] must be non-empty string`);
             }
             return id;
-        })
-        : [];
-    const references = Array.isArray(raw.references)
-        ? raw.references.map((item: any) => _normalizeFileRef(item, 'references'))
-        : [];
-    const assets = Array.isArray(raw.assets)
-        ? raw.assets.map((item: any) => _normalizeFileRef(item, 'assets'))
-        : [];
+        });
+    const references = unknownList(raw.references, 'references').map((item) => _normalizeFileRef(item, 'references'));
+    const assets = unknownList(raw.assets, 'assets').map((item) => _normalizeFileRef(item, 'assets'));
     return {
         agent_skill_id: requireAgentSkillString(raw.agent_skill_id, 'agent_skill_id'),
         name: requireAgentSkillString(raw.name, 'name'),

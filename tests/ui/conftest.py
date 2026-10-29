@@ -27,7 +27,6 @@ _FORCE_LIGHT_THEME_INIT_SCRIPT = """
     try {
         window.localStorage.setItem('platform_theme', 'light');
         window.localStorage.setItem('pwa-banner-dismissed', 'true');
-        window.localStorage.removeItem('platform:frontend:landing.agent_download_card.dismissed');
     } catch (_) {}
     const root = document.documentElement;
     if (root) {

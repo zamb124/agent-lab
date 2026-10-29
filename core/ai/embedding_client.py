@@ -11,7 +11,7 @@ import math
 import re
 from typing import ClassVar, override
 
-import httpx
+import httpx2
 import tiktoken
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -180,7 +180,7 @@ class AIEmbeddingClient:
                         "input": texts,
                     },
                 )
-        except (httpx.HTTPError, OSError) as exc:
+        except (httpx2.HTTPError, OSError) as exc:
             raise ValueError(f"Embedding request failed for model {self.model_name!r}: {exc}") from exc
 
         if response.status_code != 200:

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.crm.models.api import AIAnalysisDraftStored, AIExtractedEntity
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError, EntityService

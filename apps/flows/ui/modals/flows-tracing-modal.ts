@@ -195,7 +195,7 @@ export class FlowsTracingModal extends PlatformModal {
             this._scheduleNextPoll();
             return;
         }
-        if (this._pollAttempt >= (this.constructor as Record<string, any>).pollMaxAttempts) {
+        if (this._pollAttempt >= FlowsTracingModal.pollMaxAttempts) {
             this._pollExhausted = true;
             this.requestUpdate();
             return;
@@ -220,7 +220,7 @@ export class FlowsTracingModal extends PlatformModal {
         if (!this._hasLoadTarget() || this._pollExhausted || this._activeSpans().length > 0) {
             return;
         }
-        if (this._pollAttempt >= (this.constructor as Record<string, any>).pollMaxAttempts) {
+        if (this._pollAttempt >= FlowsTracingModal.pollMaxAttempts) {
             this._pollExhausted = true;
             this.requestUpdate();
             return;
@@ -228,7 +228,7 @@ export class FlowsTracingModal extends PlatformModal {
         this._pollTimer = setTimeout(() => {
             this._pollTimer = null;
             this._loadForPoll();
-        }, (this.constructor as Record<string, any>).pollIntervalMs);
+        }, FlowsTracingModal.pollIntervalMs);
         this.requestUpdate();
     }
 
@@ -254,7 +254,7 @@ export class FlowsTracingModal extends PlatformModal {
         if (busy) {
             return true;
         }
-        return !this._pollExhausted && this._pollAttempt < (this.constructor as Record<string, any>).pollMaxAttempts;
+        return !this._pollExhausted && this._pollAttempt < FlowsTracingModal.pollMaxAttempts;
     }
 
     /** @param {CustomEvent<{ span?: unknown }>} e */

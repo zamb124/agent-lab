@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.search.providers.index import _dedupe_rag_results, _rag_document_dedup_key
+from apps.search.providers.index import _dedupe_rag_results_by_score_desc, _rag_document_dedup_key
 from core.rag.models import RAGSearchResult
 
 pytestmark = pytest.mark.unit
@@ -42,7 +42,7 @@ def test_rag_document_dedup_key_prefers_canonical_url() -> None:
 
 
 def test_dedupe_rag_results_keeps_best_score_per_document() -> None:
-    ranked = _dedupe_rag_results(
+    ranked = _dedupe_rag_results_by_score_desc(
         [
             _rag_result(
                 document_id="doc-1",

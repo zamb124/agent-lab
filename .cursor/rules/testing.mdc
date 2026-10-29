@@ -5,29 +5,29 @@ globs:
   - "mk/test.mk"
   - "docker-compose-test.yaml"
   - "pytest.ini"
-  - "scripts/test_stack.py"
+  - "scripts/testing/stack.py"
 alwaysApply: false
 ---
 
 # Тестирование
 
-Тесты — `tests/`; процессы стека — `make test-up` (`scripts/test_stack.py`, `docker-compose-test.yaml`; до старта собирает UI целью `ui-build`); лимиты pytest — `pytest.ini`; прогоны — `mk/test.mk`. Lint до тестов → `main.mdc` § Lint gate. Команды, профили, ёмкость стека, таймауты пакетов и триаж — скил `backend-engineer` (`.cursor/skills/backend-engineer/references/testing.md`); сценарные UI-инструкции — скил `documentator`.
+Тесты — `tests/`; процессы стека — `make test-up` (`scripts/testing/stack.py`, `docker-compose-test.yaml`; до старта собирает UI целью `ui-build`); лимиты pytest — `pytest.ini`; прогоны — `mk/test.mk`. Lint до тестов → `main.mdc` § Lint gate. Команды, профили, ёмкость стека, таймауты пакетов и триаж — скил `backend-engineer` (`.cursor/skills/backend-engineer/references/testing.md`); сценарные UI-инструкции — скил `documentator`.
 
 ## Канон
 
 1. **Реальная инфраструктура.** Тест работает на PostgreSQL, Redis, SeaweedFS, TaskIQ, OpenFGA, Centrifugo и HTTP-сервисах стека. Внутренние компоненты (runtime flows, фабрики, реестры, каналы, S3-клиент, модели Oxyde, сервисы, `op_*`) — реальные экземпляры из DI процесса. Гейт: ratchet `tests_monkeypatch_internal`.
-2. **Единственный мок — `MockLLM`** (`core/clients/llm/mock.py`) → § MockLLM и задачи. Гейты: ratchet `tests_asyncmock`, `scripts/check_agent_test_no_monkeypatch.py`.
+2. **Единственный мок — `MockLLM`** (`core/clients/llm/mock.py`) → § MockLLM и задачи. Гейт: ratchet `tests_asyncmock`.
 3. **Внешний API — эмулятор.** Внешний сервис заменяет локальный сервер того же протокола, адрес которого задают settings: Google Workspace — `tests/fixtures/google_api_emulator/` через `google_workspace.api_bases`; OpenAI-compatible провайдер — локальный HTTP-сервер теста; MCP — `tests/fixtures/mcp_modes_stub.py`; A2A — контейнер `test-a2a-agent`; речь — провайдер `mock` (`VOICE__STT__PROVIDER`). Патч клиента, тула или резолвера запрещён. `[без гейта]`
 4. **`unique_id` в каждом идентификаторе.** Фикстура `unique_id` (`tests/conftest.py`) входит в каждый id, ключ Redis, namespace, канал, flow, файл и порт теста; `session_id = {flow_id}:{context_id}`. Литералы вида `"test-1"` в идентификаторах запрещены. `[без гейта]`
 5. **Свои границы данных.** У теста свои `company_id` и `auth_headers_*`, RAG `namespace_id`, CRM-сущности; общие «дефолтные» записи не используются, одиночный и параллельный прогон дают одинаковый результат. `[без гейта]`
-6. **Процессы — только стек.** Granian-сервисы и TaskIQ-воркеры поднимает только `make test-up` (`scripts/test_stack.py up`); pytest процессы не стартует и не убивает. Фикстуры `<svc>_service` и `<svc>_worker` проверяют readiness (`require_http_service` в `tests/fixtures/services.py`, `require_taskiq_worker` в `tests/fixtures/workers.py`) и падают `pytest.fail` с подсказкой `make test-up`. `[без гейта]`
-7. **Миграции — только стек.** Схему и сид компании `system` накатывает `make test-up` (`scripts/test_migrate.py`); `setup_database_before_tests` (`tests/conftest.py`) только сверяет, что каждый `NNNN_*.py` каталога есть в `oxyde_migrations` базы → `database.mdc`. `[без гейта]`
+6. **Процессы — только стек.** Granian-сервисы и TaskIQ-воркеры поднимает только `make test-up` (`scripts/testing/stack.py up`); pytest процессы не стартует и не убивает. Фикстуры `<svc>_service` и `<svc>_worker` проверяют readiness (`require_http_service` в `tests/fixtures/services.py`, `require_taskiq_worker` в `tests/fixtures/workers.py`) и падают `pytest.fail` с подсказкой `make test-up`. `[без гейта]`
+7. **Миграции — только стек.** Схему и сид компании `system` накатывает `make test-up` (`scripts/testing/migrate.py`); `setup_database_before_tests` (`tests/conftest.py`) только сверяет, что каждый `NNNN_*.py` каталога есть в `oxyde_migrations` базы → `database.mdc`. `[без гейта]`
 8. **DI как в production.** Фикстура `<svc>_di` (flows — `di`) отдаёт `require_di(app, <Svc>Di)` приложения с запущенным lifespan: `ServiceProcesses.app` (`tests/fixtures/service_processes.py`) держит lifespan до конца сессии, фикстура пакета входит в `app.router.lifespan_context(app)` сама; CLI-сборка — `open_di` → `architecture.mdc` § Service Kit DI. Settings задаются до входа в lifespan; компонент подменяет только recipe подкласса `<Svc>Di` в `tests/`. `[без гейта]`
 9. **Тест — инвариант.** Тест закрепляет свойство, которое переживает рефакторинг (поля API ↔ источники данных, изоляция, коды ошибок), и поведение, видимое потребителю; приватные имена и порядок внутренних вызовов не проверяются. Смена формы ответа без правки теста падает; при смене контракта фикстуры и ассерты переписываются под новый контракт, glue и alias ради зелёных тестов запрещены → `main.mdc` § Запреты. `[без гейта]`
 10. **Уровень — от потребителя.** Сила сигнала: HTTP/ASGI-клиент (маршрут, JSON, статус, ошибка) → компонент `<svc>_di` → чистая функция с переиспользуемым контрактом. Изменение домена покрывают сценарии «запрос → ответ» и «задача воркера → эффект в БД или очереди»; команда — тождество WS ≡ REST → `architecture.mdc` § Новая команда. `[без гейта]`
 11. **Запись — ответ и состояние.** После записи (в том числе воркером) тест проверяет ответ и состояние: повторный GET/list того же контракта и/или строки через методы модели Oxyde; сырой SQL — только для агрегата или индекса без метода модели, с пояснением в кейсе. Сценарий A2A или Flow UI сверяет streaming frames, blocking `Task`, `GetTask` после rehydrate и durable projection: порядок Artifacts, Parts и metadata совпадают, snapshot и patches артефакта `state` дают state `GetTask`. `[без гейта]`
 12. **Ассерты и имена.** Ассерт сравнивает структуру целиком или явный фрагмент, статус и тело — рядом; truthy-проверка (`assert body.get("x")`) запрещена; порядок без контракта — `sorted(..., key=...)` или множества. Имя — `test_<сценарий>_<ожидание>` или `test_<действие>_when_<условие>_then_<результат>`, не `test_*_works`; кейс — в docstring; Arrange → Act → Assert; длинная подготовка — в фикстурах и хелперах `tests/`. `[без гейта]`
-13. **Таймаут — потолок зависания.** Глобальный лимит — `pytest.ini` (`timeout=5`, `timeout_method=thread`, `timeout_func_only=true`); лимиты пакетов ставит только `pytest_collection_modifyitems` (`tests/conftest.py`, `tests/ui/e2e/conftest.py`, `tests/realtime/conftest.py`); зависший xdist-воркер снимает `tests/hang_guard.py`, весь прогон — `scripts/pytest_with_timeout.py`. `[без гейта]`
+13. **Таймаут — потолок зависания.** Глобальный лимит — `pytest.ini` (`timeout=5`, `timeout_method=thread`, `timeout_func_only=true`); лимиты пакетов ставит только `pytest_collection_modifyitems` (`tests/conftest.py`, `tests/ui/e2e/conftest.py`, `tests/realtime/conftest.py`); зависший xdist-воркер снимает `tests/hang_guard.py`, весь прогон — `scripts/testing/pytest_with_timeout.py`. `[без гейта]`
 14. **Skip — только внешнее окружение.** `pytest.skip` и `pytest.mark.skip` — только при отсутствии окружения вне стека (сеть, системная библиотека, ключ провайдера) с причиной в сообщении; недоступный стек — `pytest.fail`. Гейт: ratchet `tests_skip_markers`.
 15. **Property-based — дополнительный слой.** Hypothesis-тесты (`test_*_fuzz.py`, `deadline=None`) и JS `*.fuzz.spec.js` дополняют детерминированные кейсы и не заменяют их. `[без гейта]`
 
@@ -58,7 +58,7 @@ alwaysApply: false
 
 - `mock_llm_with_queue([...])` — очередь ответов в процессе теста (текст или `{"type": "tool_call", ...}`); `mock_llm_redis([...])` — очередь `mock_llm:responses:<test_scope>` для granian и воркеров; `mock_llm_capture` — журнал вызовов `mock_llm:capture:<test_scope>`. `MockLLM` любого процесса снимает ответы только из очереди своего scope (`resolve_test_scope`, `core/test_scope.py`). `[без гейта]`
 - Фоновая side-effect задача (CRM daily/period summary, note markdown format) получает scope `{parent}:{kind}` (`side_effect_test_scope`, `core/test_scope.py`) и не снимает FIFO породившего теста. `[без гейта]`
-- UI E2E под xdist — scope `test_e2e_gwN` (`tests/ui/e2e_worker.py`); E2E без заголовка `X-Test-Scope` (`-n0`, desktop и agent) — статический `test_e2e_static` через `test_scope_default` (ENV `TEST_SCOPE_DEFAULT`). `[без гейта]`
+- UI E2E под xdist — scope `test_e2e_gwN` (`tests/ui/e2e_worker.py`); E2E без заголовка `X-Test-Scope` (`-n0`) — статический `test_e2e_static` через `test_scope_default` (ENV `TEST_SCOPE_DEFAULT`). `[без гейта]`
 - `sync_tools` исполняет `enqueue` in-process: задача получает DI своего процесса по аннотации `di` (`ServiceProcesses.di`, `tests/fixtures/service_processes.py`), как `task_di` воркера; Redis Pub/Sub реальный. `@pytest.mark.real_taskiq` отключает `sync_tools`: задача идёт через воркер стека, ответы — только `mock_llm_redis`. `[без гейта]`
 - Исполняемый `llm_node` задаёт `llm.provider="mock"` и `llm.model="mock-gpt-4"` явно: скрытый fallback на модель по умолчанию runtime отвергает (`_validate_explicit_primary`, `apps/flows/src/runtime/effective_llm_config.py`). `[без гейта]`
 - `MockLLM` повторяет контракт `LLMClient.stream` (`core/clients/llm/client.py`): чанки, `tool_calls`, `usage`; расхождение с провайдером чинится в `MockLLM`, а не в тесте. `[без гейта]`
@@ -73,8 +73,7 @@ alwaysApply: false
 - Namespace тест создаёт только через `NamespaceService` (`core/namespace/service.py`): запись в обход сервиса не пишет tuples OpenFGA → `namespace.mdc`. `[без гейта]`
 - Seed-данные компании `system` (переменные, шаблоны, roster) тест не перезаписывает и не ассертит целиком; мутирует только свои ключи с `unique_id`. `[без гейта]`
 - `BaseTool.run` (`apps/flows/src/tools/base.py`) вне HTTP-контекста исполняется под authz-контекстом фикстуры `bind_flow_tool_authz_context` (`tests/flows/_tool_authz_context.py`); обход authz-гейта тулов запрещён. `[без гейта]`
-- Процессы зачищаются только по точным сигнатурам и портам стека (`scripts/test_process_preflight_cleanup.py`); широкие шаблоны (`taskiq.*worker`) запрещены. `[без гейта]`
-- Релизный артефакт и брендирование LinnexAgent (`apps/agent/desktop/scripts/apply_branding.sh`) выполняет только `AGENT_ARTIFACT_MODE=release make agent-ensure` до pytest; фикстура `agent_local_release_artifact` (`tests/agent/fixtures/local_releases.py`) артефакт только проверяет, pytest `apply_branding.sh` не вызывает. `[без гейта]`
+- Процессы зачищаются только по точным сигнатурам и портам стека (`scripts/testing/process_preflight_cleanup.py`); широкие шаблоны (`taskiq.*worker`) запрещены. `[без гейта]`
 
 ### UI-тесты
 
@@ -90,29 +89,28 @@ alwaysApply: false
 - E2E-воркер xdist получает свою компанию `ui_e2e_gwN` (subdomain `ui-gwN`), scope `test_e2e_gwN` и одну сессию Chromium (`tests/ui/e2e_worker.py`); UI-фикстуры не добавляют членов в `system`. Персоны — `ui_page_system`, `ui_page_system_member`, `ui_page_company2`, `ui_page_company2_member`, `ui_page_anonymous`; метаданные — `ui_user_*` (`UiTestUser`, `tests/ui/personas.py`). `[без гейта]`
 - Бюджет тела E2E — 15 с (`tests/ui/e2e/conftest.py`); длиннее — `scenario(timeout_seconds=N)` или `@pytest.mark.timeout(N)` до 360 с. `[без гейта]`
 - Share Flow UI проверяется новым браузером после подтверждения сервера, а не локальным store или DOM. Parity редактора: canvas и production route рендерят один `FlowUIDocument` одним `<platform-flow-ui>`, assert идёт по `data-block-id` каждого блока; скриншот без assert модели не доказывает parity. `[без гейта]`
-- `@pytest.mark.scenario` — исходник пользовательской инструкции `docs/scenarios/<service>/<tag>/<slug>/`: `tag` из `docs/scenarios/taxonomy.yaml`, `title_en` и `description_en` на маркере, `label_en` (при `details` — `details_en`) на каждом `scenario.step`, PNG рядом с README. Процедура — скил `documentator`. Гейт: `scripts/check_scenario_docs_quality.py`.
+- `@pytest.mark.scenario` — исходник пользовательской инструкции `docs/scenarios/<service>/<tag>/<slug>/`: `tag` из `docs/scenarios/taxonomy.yaml`, `title_en` и `description_en` на маркере, `label_en` (при `details` — `details_en`) на каждом `scenario.step`, PNG рядом с README. Процедура — скил `documentator`. Гейт: `scripts/gates/repo/scenario_docs_quality.py`.
 
 ## Запреты
 
-1. `unittest.mock` (`patch`, `MagicMock`, `AsyncMock`) и фейковые классы внутренних компонентов. Гейты: ratchet `tests_asyncmock`, `scripts/check_agent_test_no_monkeypatch.py`.
+1. `unittest.mock` (`patch`, `MagicMock`, `AsyncMock`) и фейковые классы внутренних компонентов. Гейт: ratchet `tests_asyncmock`.
 2. `monkeypatch.setattr` по модулям `core.` и `apps.` сверх baseline. Гейт: ratchet `tests_monkeypatch_internal`.
 3. `SessionServerManager`, `SessionWorkerManager` и старт процессов стека в фикстурах. `[без гейта]`
-4. В теле теста: `try/except` и `except: pass` (ожидаемая ошибка — `pytest.raises`); свой `AsyncClient`, `httpx.Client`, сессия БД или процесс; чтение `app.state.di`; `os.environ[...] = ...` (только `monkeypatch.setenv`) и присвоение атрибута модуля (только `monkeypatch.setattr`); ожидание через `time.sleep` (только `asyncio.wait_for` или поллинг `asyncio.sleep`). `[без гейта]`
+4. В теле теста: `try/except` и `except: pass` (ожидаемая ошибка — `pytest.raises`); свой `AsyncClient`, `httpx2.Client`, сессия БД или процесс; чтение `app.state.di`; `os.environ[...] = ...` (только `monkeypatch.setenv`) и присвоение атрибута модуля (только `monkeypatch.setattr`); ожидание через `time.sleep` (только `asyncio.wait_for` или поллинг `asyncio.sleep`). `[без гейта]`
 5. Прямой сброс singleton (`_settings_instance = None`) и мутация готового DI. `[без гейта]`
-6. Повышение таймаута, poll или httpx `timeout` вместо устранения причины (очередь воркера, лишний запрос, Check OpenFGA); `@pytest.mark.timeout` короче лимита пакета sandbox (`_is_sandbox_runtime_test`, `tests/conftest.py`). `[без гейта]`
+6. Повышение таймаута, poll или httpx2 `timeout` вместо устранения причины (очередь воркера, лишний запрос, Check OpenFGA); `@pytest.mark.timeout` короче лимита пакета sandbox (`_is_sandbox_runtime_test`, `tests/conftest.py`). `[без гейта]`
 
 ## Исключения
 
 - Исключение: `patch("core.push.service.webpush")` — только `tests/core/push/test_push_service.py` и `tests/core/push/test_delivery_offline.py`: Web Push требует device token и VAPID-ключей провайдера. `[без гейта]`
-- Исключение: autouse `patch_service_clients_asgi` (`tests/fixtures/clients.py`) направляет `ServiceClient` в ASGI-приложения процесса теста, `_inject_test_scope_header` (`tests/conftest.py`) добавляет `X-Test-Scope` в запросы `httpx`, `sync_tools` исполняет `enqueue` in-process; production-путь — маркеры `no_service_client_patch`, `no_test_doubles`, `real_taskiq`. `[без гейта]`
+- Исключение: autouse `patch_service_clients_asgi` (`tests/fixtures/clients.py`) направляет `ServiceClient` в ASGI-приложения процесса теста, `_inject_test_scope_header` (`tests/conftest.py`) добавляет `X-Test-Scope` в запросы `httpx2`, `sync_tools` исполняет `enqueue` in-process; production-путь — маркеры `no_service_client_patch`, `no_test_doubles`, `real_taskiq`. `[без гейта]`
 - Исключение: `taskiq_scheduler` (`tests/fixtures/workers.py`) — subprocess на сессию: scheduler не входит в стек. `[без гейта]`
 
 ## Гейты
 
-- `scripts/check_ratchet_counts.py` (`make lint`) — `tests_monkeypatch_internal`, `tests_asyncmock`, `tests_skip_markers` в `tests/` не растут относительно `scripts/ratchet_baseline.json`.
-- `scripts/check_agent_test_no_monkeypatch.py` (`make lint`, `make test-static`) — нет `monkeypatch`, `patch`, `MagicMock`, `AsyncMock` в `tests/agent/e2e` и `tests/agent/desktop_e2e`.
-- `make test-static` (`mk/test.mk`) — первый шаг `make test`: `_lint-py`, `scripts/pin_a2a_official_fixtures.py --check`, agent-гейты, `tests/core/ai/test_platform_model_scoring_fixtures.py`; warning basedpyright — fail.
-- `scripts/check_scenario_docs_quality.py` (`make doc`) — шаги и PNG инструкции, `tag` из taxonomy, `README.en.md`, `title_en`, `description_en`, `label_en` на маркерах.
+- `scripts/gates/backend/ratchet_counts.py` (`make lint`) — `tests_monkeypatch_internal`, `tests_asyncmock`, `tests_skip_markers` в `tests/` не растут относительно `scripts/gates/backend/ratchet_baseline.json`.
+- `make test-static` (`mk/test.mk`) — первый шаг `make test`: `_lint-py`, `scripts/generate/a2a_fixtures.py --check`, `tests/core/ai/test_platform_model_scoring_fixtures.py`; warning basedpyright — fail.
+- `scripts/gates/repo/scenario_docs_quality.py` (`make doc`) — шаги и PNG инструкции, `tag` из taxonomy, `README.en.md`, `title_en`, `description_en`, `label_en` на маркерах.
 - `enforce_no_test_doubles` (`tests/conftest.py`) — тест `no_test_doubles` падает при запросе фикстур-двойников.
 - `setup_database_before_tests` (`tests/conftest.py`) — `pytest.fail` с подсказкой `make test-up`, если файл цепочки миграций не применён.
 - `tests/core/di/test_service_kit.py`, `tests/core/di/test_service_kit_boundary.py` — DI процесса, override recipe подкласса, boundary FastAPI/TaskIQ/WS.

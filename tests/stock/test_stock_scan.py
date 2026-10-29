@@ -300,7 +300,7 @@ class TestScanCommit:
         _ = await env.di.move_engine.assign_transfer(
             company_id=env.company_id, transfer_id=delivery.transfer_id
         )
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             env.company_id, delivery.transfer_id
         )
         move = moves[0]

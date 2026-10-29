@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.flow_ui.document import (
     FlowUIButton,

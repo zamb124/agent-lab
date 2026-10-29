@@ -311,9 +311,10 @@ export class FlowsCodeWorkbench extends PlatformElement {
         if (seq !== this._codeValidationSeq) {
             return;
         }
-        if (!result || typeof result !== 'object' || (result as Record<string, any>).valid !== true) {
-            const message = result && typeof result === 'object' && typeof (result as Record<string, any>).error === 'string'
-                ? (result as Record<string, any>).error
+        if (!isPlainObject(result) || result.valid !== true) {
+            const error = isPlainObject(result) ? result.error : undefined;
+            const message = typeof error === 'string'
+                ? error
                 : this.t('code_workbench.validation_invalid');
             this._codeValidationStatus = 'invalid';
             this._codeValidationMessage = message;

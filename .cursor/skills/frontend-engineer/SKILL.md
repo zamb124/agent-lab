@@ -1,6 +1,6 @@
 ---
 name: frontend-engineer
-description: "Frontend инженер Платформы: TypeScript strict + Lit 3 + EventBus + шесть фабрик, эталонная архитектура без фолбеков и замалчивания. Без задачи или по «проверь фронт / что не доделано / выровняй UI» — автономный рекурсивный цикл: discovery ui_audit → срез по приоритету → устранение корня → гейты → следующий срез, пока discovery не пуст; большой рефакторинг ради корня — норма. Использовать ВСЕГДА при правках core/frontend/static/lib/**, apps/*/ui/**, tests/frontend_core/**, tests/ui/design-system/**, core/i18n/translations/**, tsconfig*, scripts/build_ui.mjs и UI-гейтов; при упоминании TypeScript, tsc, esbuild, ui-dist, Lit, PlatformElement, PlatformPage, PlatformApp, PlatformModal, PlatformFormModal, useResource, useOp, useForm, useCursorList, useFacets, useSlice, createAsyncOp, createResourceCollection, createCursorList, createFacets, createForm, createSlice, dispatch, EventBus, restMirror, transport='ws', commandType, modal, bottom sheet, sidebar, breadcrumbs, toast, platform-field, tokens.css, Figma, i18n; при ошибках tsc, check_ui_canon, check_ui_factories, check_field_canon, check_i18n_keys, check_core_frontend_canon, check_command_rest_mirror, check_ui_kit_docs, check_ui_kit_canon."
+description: "Frontend инженер Платформы: TypeScript strict + Lit 3 + EventBus + шесть фабрик, эталонная архитектура без фолбеков и замалчивания. Без задачи или по «проверь фронт / что не доделано / выровняй UI» — автономный рекурсивный цикл: discovery ui_audit → срез по приоритету → устранение корня → гейты → следующий срез, пока discovery не пуст; большой рефакторинг ради корня — норма. Использовать ВСЕГДА при правках core/frontend/static/lib/**, apps/*/ui/**, tests/frontend_core/**, tests/ui/design-system/**, core/i18n/translations/**, tsconfig*, scripts/build/ui.mjs и UI-гейтов; при упоминании TypeScript, tsc, esbuild, ui-dist, Lit, PlatformElement, PlatformPage, PlatformApp, PlatformModal, PlatformFormModal, useResource, useOp, useForm, useCursorList, useFacets, useSlice, createAsyncOp, createResourceCollection, createCursorList, createFacets, createForm, createSlice, dispatch, EventBus, restMirror, transport='ws', commandType, modal, bottom sheet, sidebar, breadcrumbs, toast, platform-field, tokens.css, Figma, i18n; при ошибках tsc, check_ui_canon, check_ui_factories, check_field_canon, check_i18n_keys, check_core_frontend_canon, check_command_rest_mirror, check_ui_kit_docs, check_ui_kit_canon."
 ---
 
 # Frontend Engineer
@@ -46,7 +46,7 @@ description: "Frontend инженер Платформы: TypeScript strict + Li
 ### Выбрать инструмент
 
 1. Доменные данные — всегда фабрика: CRUD → `createResourceCollection`; лента с курсором → `createCursorList`; одиночная команда или объект → `createAsyncOp`; typeahead → `createFacets`; форма → `createForm` с `submitEvent`; состояние без сети → `createSlice`. Кейс не ложится — комбинация фабрик; седьмая фабрика и локальный store запрещены.
-2. Транспорт: сервис из `COMMAND_WS_SERVICES` (`scripts/check_command_rest_mirror.py`) → `transport: 'ws'` + `wsTimeoutMs` + `restMirror`; имя фабрики ≠ команде backend → `commandType`.
+2. Транспорт: сервис из `COMMAND_WS_SERVICES` (`scripts/gates/backend/command_rest_mirror.py`) → `transport: 'ws'` + `wsTimeoutMs` + `restMirror`; имя фабрики ≠ команде backend → `commandType`.
 3. UI-примитив — core UI Kit (`core/frontend/static/lib/components/`); не хватает возможности — расширяется core-компонент. Поле — `<platform-field>`.
 4. Тип — из эталонного контракта (`references/target-architecture.md` § Типовой контракт); его нет в kit — это корень, а не повод для каста.
 
@@ -92,7 +92,7 @@ LOOP:
 2. **P1 — замалчивание в runtime.** Ошибка эффекта без `*_FAILED` своей операции; `catch` без привязки; `console` вместо ошибки; раздача без `ui-dist` не падает; литеральный фолбек в core.
 3. **P2 — типовой контракт.** Негенерические фабрики и контроллеры, реестр без типов по имени, ручные wire-интерфейсы вместо генерации из Pydantic, события без карты типов; `any`, двойной каст и non-null как следствие.
 4. **P3 — один источник.** Две копии Lit, shim, vendored-копии npm-пакетов, import map при бандле, мосты резолва, мёртвые артефакты миграции.
-5. **P4 — канон слоёв UI.** Hard-правила `scripts/ui_canon_rules.py`, zero-import, фабрики, модалки, поля, мерж push.
+5. **P4 — канон слоёв UI.** Hard-правила `scripts/gates/frontend/ui_canon_rules.py`, zero-import, фабрики, модалки, поля, мерж push.
 6. **P5 — тесты.** `.js`-тесты → `.ts`, тесты на том же Lit, что прод, раннеры без мостов.
 7. **P6 — soft.** `hex_colors`, `window_listeners`, `manual_busy_state`, `innerhtml_raw`, `setinterval_poll`, нормы `[без гейта]`.
 
@@ -122,13 +122,13 @@ make ui-build                     # esbuild → apps/<svc>/ui-dist/, core/fronte
 make lint-ts                      # tsc + check-events-canon + check_ui_kit_docs + field + ui kit canon + logging
 make test-frontend-core           # канон core + vitest + WTR (включая UIKDS L1)
 make ui                           # всё выше одной командой — эталонный гейт UI
-uv run python scripts/check_ui_kit_canon.py                              # ratchet hard-правил; --update только вниз
+uv run python -m scripts.gates.frontend.ui_kit_canon                              # ratchet hard-правил; --update только вниз
 uv run python .cursor/skills/frontend-engineer/scripts/ui_audit.py       # дельта к preflight
 ```
 
 - Затронут Python, скрипты гейтов или правила — `make lint`; все шаги без остановки — `uv run python .cursor/skills/refactor-engineer/scripts/gates_report.py /tmp/ui_gates`.
 - Core UI Kit или модалка — `make test-ui-components`; UIKDS-сценарии и доки — `make ui-doc` (нужен `make test-up`).
-- i18n — `make check-i18n`, `make check-i18n-keys`, `uv run python scripts/report_ui_i18n_gaps.py --app <svc>`.
+- i18n — `make check-i18n`, `make check-i18n-keys`, `uv run python -m scripts.tools.report_ui_i18n_gaps --app <svc>`.
 
 ## Визуальная проверка
 

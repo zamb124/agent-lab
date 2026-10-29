@@ -7,8 +7,8 @@
  *   3. history: undo / redo
  *   4. actions: execution panel / variables / smart-guides / data-wires / help
  *
- * Источник state: useOp('flows/editor') as unknown as ControllerFor<'flows/editor'>.state.{activeTool,canUndo,canRedo,
- * smartGuidesEnabled,showDataWires,executionPanelOpen,viewBox,skillsData,flowConfig}.
+ * Источник state: useOp('flows/editor').state — activeTool, canUndo, canRedo,
+ * smartGuidesEnabled, showDataWires, executionPanelOpen, viewBox, flowConfig.
  */
 
 import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
@@ -16,11 +16,40 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
-import { asObject, isPlainObject, getBranchNodes } from '../../_helpers/flows-resolvers.js';
+import { isPlainObject, getBranchNodes } from '../../_helpers/flows-resolvers.js';
 import { computeFitViewBox, FLOWS_EDITOR_DEFAULT_VIEWBOX } from '../../_helpers/flows-viewbox.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 
 const ZOOM_FACTOR = 1.2;
+
+interface EditorViewBox {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+interface ToolbarButton {
+    icon: string;
+    title: string;
+    onClick: () => void;
+    active?: boolean;
+    disabled?: boolean;
+}
+
+function editorViewBox(value: unknown): EditorViewBox {
+    if (!isPlainObject(value)) {
+        return { ...FLOWS_EDITOR_DEFAULT_VIEWBOX };
+    }
+    const x = value.x;
+    const y = value.y;
+    const w = value.w;
+    const h = value.h;
+    if (typeof x !== 'number' || typeof y !== 'number' || typeof w !== 'number' || typeof h !== 'number') {
+        throw new Error('flows-bottom-toolbar: viewBox numbers required');
+    }
+    return { x, y, w, h };
+}
 
 export class FlowsBottomToolbar extends PlatformElement {
     static override styles: CSSResultGroup = [
@@ -56,59 +85,64 @@ export class FlowsBottomToolbar extends PlatformElement {
         this._editor = this.useOp('flows/editor');
     }
 
-    _viewBox() {
-        const vb = isPlainObject(this._editor.state) ? this._editor.state.viewBox : null;
-        return isPlainObject(vb) ? vb : { ...FLOWS_EDITOR_DEFAULT_VIEWBOX };
+    _viewBox(): EditorViewBox {
+        return editorViewBox(this._editor.state.viewBox);
     }
 
-    _setViewBox(vb: any) {
-        (this._editor.setViewBox({ viewBox: vb }) as any);
+    _setViewBox(viewBox: EditorViewBox) {
+        this._editor.setViewBox({ viewBox });
     }
 
-    _zoom(factor: any) {
-        const vb = this._viewBox();
-        const cx = (vb as any).x + (vb as any).w / 2;
-        const cy = (vb as any).y + (vb as any).h / 2;
-        const w = (vb as any).w * factor;
-        const h = (vb as any).h * factor;
-        this._setViewBox({ x: cx - w / 2, y: cy - h / 2, w, h });
+    _zoom(factor: number) {
+        const viewBox = this._viewBox();
+        const centerX = viewBox.x + viewBox.w / 2;
+        const centerY = viewBox.y + viewBox.h / 2;
+        const width = viewBox.w * factor;
+        const height = viewBox.h * factor;
+        this._setViewBox({ x: centerX - width / 2, y: centerY - height / 2, w: width, h: height });
     }
 
     _zoomIn() { this._zoom(1 / ZOOM_FACTOR); }
     _zoomOut() { this._zoom(ZOOM_FACTOR); }
     _zoom100() {
-        const vb = this._viewBox();
-        const d = FLOWS_EDITOR_DEFAULT_VIEWBOX;
-        this._setViewBox({ x: (vb as any).x + (vb as any).w / 2 - d.w / 2, y: (vb as any).y + (vb as any).h / 2 - d.h / 2, w: d.w, h: d.h });
+        const viewBox = this._viewBox();
+        const next = FLOWS_EDITOR_DEFAULT_VIEWBOX;
+        this._setViewBox({
+            x: viewBox.x + viewBox.w / 2 - next.w / 2,
+            y: viewBox.y + viewBox.h / 2 - next.h / 2,
+            w: next.w,
+            h: next.h,
+        });
     }
 
     _fitView() {
-        const state = asObject(this._editor.state);
-        const nodes = getBranchNodes(state);
-        const vb = computeFitViewBox(Object.values(nodes));
-        if (vb === null) {
+        const nodes = getBranchNodes(this._editor.state);
+        const viewBox = computeFitViewBox(Object.values(nodes));
+        if (viewBox === null) {
             this._setViewBox({ ...FLOWS_EDITOR_DEFAULT_VIEWBOX });
             return;
         }
-        this._setViewBox(vb);
+        this._setViewBox(viewBox);
     }
 
-    _setTool(tool: any) { (this._editor.setActiveTool({ tool }) as any); }
-    _undo() { (this._editor.undo({}) as any); }
-    _redo() { (this._editor.redo({}) as any); }
+    _setTool(tool: string) { this._editor.setActiveTool({ tool }); }
+    _undo() { this._editor.undo({}); }
+    _redo() { this._editor.redo({}); }
     _openVariables() {
-        const flowId = ((this._editor.state as any).flowConfig?.flow_id as any);
-        this.openModal('flows.variables', { scope: 'flow', flowId });
+        const flowConfig = this._editor.state.flowConfig;
+        if (!isPlainObject(flowConfig) || typeof flowConfig.flow_id !== 'string' || flowConfig.flow_id.length === 0) {
+            throw new Error('flows-bottom-toolbar: flow_id required');
+        }
+        this.openModal('flows.variables', { scope: 'flow', flowId: flowConfig.flow_id });
     }
-    _toggleGuides() { (this._editor.toggleSmartGuides({}) as any); }
-    _toggleDataWires() { (this._editor.toggleDataWires({}) as any); }
+    _toggleGuides() { this._editor.toggleSmartGuides({}); }
+    _toggleDataWires() { this._editor.toggleDataWires({}); }
     _toggleExecutionPanel() {
-        const state = asObject(this._editor.state);
-        (this._editor.setExecutionPanelOpen as any)({ open: !Boolean((state as any).executionPanelOpen) });
+        this._editor.setExecutionPanelOpen({ open: this._editor.state.executionPanelOpen !== true });
     }
     _help() { this.openModal('flows.canvas_help', {}); }
 
-    _renderIconButton({ icon, title, onClick, active = false, disabled = false }: any) {
+    _renderIconButton({ icon, title, onClick, active = false, disabled = false }: ToolbarButton) {
         const variant = active ? 'secondary' : 'ghost';
         return html`
             <platform-button
@@ -125,11 +159,11 @@ export class FlowsBottomToolbar extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const state = asObject(this._editor.state);
-        const activeTool = typeof (state as any).activeTool === 'string' && (state as any).activeTool.length > 0 ? (state as any).activeTool : 'select';
-        const guidesOn = (state as any).smartGuidesEnabled !== false;
-        const wiresOn = Boolean((state as any).showDataWires);
-        const executionOpen = Boolean((state as any).executionPanelOpen);
+        const activeTool = this._editor.state.activeTool;
+        const tool = typeof activeTool === 'string' && activeTool.length > 0 ? activeTool : 'select';
+        const guidesOn = this._editor.state.smartGuidesEnabled !== false;
+        const wiresOn = this._editor.state.showDataWires === true;
+        const executionOpen = this._editor.state.executionPanelOpen === true;
         return html`
             ${this._renderIconButton({ icon: 'plus', title: this.t('canvas.toolbar.zoom_in'), onClick: () => this._zoomIn() })}
             ${this._renderIconButton({ icon: 'minus', title: this.t('canvas.toolbar.zoom_out'), onClick: () => this._zoomOut() })}
@@ -142,13 +176,13 @@ export class FlowsBottomToolbar extends PlatformElement {
                 icon: 'target',
                 title: this.t('canvas.toolbar.tool_select'),
                 onClick: () => this._setTool('select'),
-                active: activeTool === 'select',
+                active: tool === 'select',
             })}
             ${this._renderIconButton({
                 icon: 'drag-handle',
                 title: this.t('canvas.toolbar.tool_pan'),
                 onClick: () => this._setTool('pan'),
-                active: activeTool === 'pan',
+                active: tool === 'pan',
             })}
 
             <span class="divider"></span>
@@ -157,13 +191,13 @@ export class FlowsBottomToolbar extends PlatformElement {
                 icon: 'undo',
                 title: this.t('canvas.toolbar.undo'),
                 onClick: () => this._undo(),
-                disabled: !(state as any).canUndo,
+                disabled: this._editor.state.canUndo !== true,
             })}
             ${this._renderIconButton({
                 icon: 'redo',
                 title: this.t('canvas.toolbar.redo'),
                 onClick: () => this._redo(),
-                disabled: !(state as any).canRedo,
+                disabled: this._editor.state.canRedo !== true,
             })}
 
             <span class="divider"></span>

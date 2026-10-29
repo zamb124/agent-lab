@@ -437,7 +437,7 @@ class TestSubtreeListing:
             usage=StockLocationUsage.BIN,
             barcode=None,
         )
-        ids = await StockLocation.list_subtree_ids(
+        ids = await StockLocation.list_subtree_ids_by_parent_path_asc(
             env.company_id, zone.location_id
         )
         assert zone.location_id in ids

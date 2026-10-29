@@ -96,10 +96,10 @@ class MaintenanceService:
     # --- Компании и склады ---
 
     async def list_company_ids(self) -> list[str]:
-        return await StockWarehouse.list_company_ids()
+        return await StockWarehouse.list_distinct_company_ids_by_company_id_asc()
 
     async def _warehouses(self, company_id: str) -> list[StockWarehouse]:
-        return await StockWarehouse.list_by_code(
+        return await StockWarehouse.list_by_code_asc(
             company_id, limit=500, offset=0
         )
 
@@ -148,10 +148,10 @@ class MaintenanceService:
                 expected[key] += line.quantity
             # Резерв «тара целиком» разворачиваем по остаткам поддерева.
             for root_id in container_roots:
-                subtree = await StockLocation.list_subtree_ids(
+                subtree = await StockLocation.list_subtree_ids_by_parent_path_asc(
                     company_id, root_id
                 )
-                inside = await StockQuant.list_for_locations(
+                inside = await StockQuant.list_unordered_for_locations(
                     company_id, subtree, for_update=True
                 )
                 for quant in inside:
@@ -187,7 +187,7 @@ class MaintenanceService:
                 company_id, warehouse_id
             )
             for move in open_moves:
-                all_lines = await StockMoveLine.list_all_for_move(
+                all_lines = await StockMoveLine.list_for_move_by_created_at_asc(
                     company_id, move.move_id
                 )
                 if not all_lines:
@@ -251,7 +251,7 @@ class MaintenanceService:
         report = ClaimsGcReport(warehouse_id=warehouse_id)
 
         async def body(_scope: LaneScope) -> LaneOutcome[ClaimsGcReport]:
-            stale = await StockMoveLine.list_stale_claimed(
+            stale = await StockMoveLine.list_unordered_stale_claimed(
                 company_id, warehouse_id, claimed_before
             )
             for line in stale:
@@ -286,21 +286,21 @@ class MaintenanceService:
         confirm → assign → validate.
         """
         created = 0
-        rules = await StockReorderRule.list_by_rule_id(
+        rules = await StockReorderRule.list_by_rule_id_asc(
             company_id, active_only=True
         )
         for rule in rules:
-            open_moves = await StockMove.list_open_by_origin(
+            open_moves = await StockMove.list_unordered_open_by_origin(
                 company_id, "reorder_rule", rule.rule_id
             )
             if open_moves:
                 continue
-            subtree = await StockLocation.list_subtree_ids(
+            subtree = await StockLocation.list_subtree_ids_by_parent_path_asc(
                 company_id, rule.location_id
             )
             if not subtree:
                 continue
-            quants = await StockQuant.list_for_locations(
+            quants = await StockQuant.list_unordered_for_locations(
                 company_id, subtree
             )
             on_hand = sum(
@@ -380,15 +380,15 @@ class MaintenanceService:
         report = CycleCountReport(warehouse_id=warehouse_id)
 
         async def body(_scope: LaneScope) -> LaneOutcome[CycleCountReport]:
-            bins = await StockLocation.list_count_bins(
+            bins = await StockLocation.list_due_bins_by_last_count_at_asc(
                 company_id, warehouse_id, due_before=due_before, limit=limit
             )
             now = utcnow()
             for bin_loc in bins:
-                subtree = await StockLocation.list_subtree_ids(
+                subtree = await StockLocation.list_subtree_ids_by_parent_path_asc(
                     company_id, bin_loc.location_id
                 )
-                quants = await StockQuant.list_for_locations(
+                quants = await StockQuant.list_unordered_for_locations(
                     company_id, subtree
                 )
                 products = sorted(

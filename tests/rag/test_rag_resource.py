@@ -1,11 +1,10 @@
 """Контракт RAGResource: поиск через HTTP RAG API (ASGI); add_document через pgvector в той же БД."""
 
-from apps.flows.di import FlowsDi
-
 import uuid
 
 import pytest
 
+from apps.flows.di import FlowsDi
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
 from core.rag.rag_resource import RAGResource

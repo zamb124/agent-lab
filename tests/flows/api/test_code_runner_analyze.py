@@ -22,9 +22,9 @@ async def test_code_runner_analyze_returns_contract(
     sandbox_services, service_key: str, prefix: str, language: str
 ):
     base_url = sandbox_services[service_key]
-    import httpx
+    import httpx2
 
-    async with httpx.AsyncClient(timeout=30.0) as http_client:
+    async with httpx2.AsyncClient(timeout=30.0) as http_client:
         response = await http_client.post(
             f"{base_url}/{prefix}/api/v1/analyze",
             json={"language": language, "code": CODE_SAMPLE},
@@ -43,9 +43,9 @@ async def test_code_runner_analyze_empty_code(
     sandbox_services, service_key: str, prefix: str, language: str
 ):
     base_url = sandbox_services[service_key]
-    import httpx
+    import httpx2
 
-    async with httpx.AsyncClient(timeout=30.0) as http_client:
+    async with httpx2.AsyncClient(timeout=30.0) as http_client:
         response = await http_client.post(
             f"{base_url}/{prefix}/api/v1/analyze",
             json={"language": language, "code": ""},
@@ -60,9 +60,9 @@ async def test_code_runner_analyze_empty_code(
 @pytest.mark.asyncio
 async def test_code_runner_analyze_invalid_json_422(sandbox_services):
     base_url = sandbox_services["code_runner_python"]
-    import httpx
+    import httpx2
 
-    async with httpx.AsyncClient(timeout=30.0) as http_client:
+    async with httpx2.AsyncClient(timeout=30.0) as http_client:
         response = await http_client.post(
             f"{base_url}/code-runner-python/api/v1/analyze",
             content=b"not-json",

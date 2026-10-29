@@ -5,15 +5,15 @@
 ## Владение процессами
 
 Все процессы тестового стека (granian HTTP-сервисы 9001-9022 и TaskIQ-воркеры)
-стартует **`make test-up`** через супервизор `scripts/test_stack.py` — единственный
+стартует **`make test-up`** через супервизор `scripts/testing/stack.py` — единственный
 владелец процессов. pytest ничего не запускает и не убивает: ни FileLock,
 ни pid/ref-count файлов, ни pkill в фикстурах нет.
 
-- `scripts/test_stack.py up` — параллельный старт всех процессов + параллельное
+- `scripts/testing/stack.py up` — параллельный старт всех процессов + параллельное
   ожидание readiness; манифест `/tmp/platform_test_stack.json`, логи
   `/tmp/platform_test_stack/<name>.{log,err}`.
-- `scripts/test_stack.py down` / `status` — остановка/диагностика по манифесту.
-- Миграции применяет `scripts/test_migrate.py` (тоже из `make test-up`).
+- `scripts/testing/stack.py down` / `status` — остановка/диагностика по манифесту.
+- Миграции применяет `scripts/testing/migrate.py` (тоже из `make test-up`).
 
 ## Структура
 
@@ -108,7 +108,7 @@ Redis Stream группы `taskiq`):
 ```python
 @pytest.mark.real_taskiq  # Маркер для тестов с реальным TaskIQ
 async def test_with_worker(rag_worker):
-    from apps.rag_worker.tasks.indexing_tasks import index_document_profile_task
+    from apps.rag.tasks.indexing_tasks import index_document_profile_task
 
     task = await enqueue(RAG_INDEX_DOCUMENT_S3, ...)
     result = await task.wait_result(timeout=10)
@@ -127,17 +127,17 @@ async def test_with_worker(rag_worker):
 
 ## Конфигурация окружения
 
-Единая конфигурация стека — `scripts/test_stack.py::COMMON_TEST_ENV`
+Единая конфигурация стека — `scripts/testing/stack.py::COMMON_TEST_ENV`
 (база — `tests/fixtures/test_database_env.py::TEST_DATABASE_ENV`).
 
 ## Добавление нового сервиса
 
 1. Добавь `GranianService`/`TaskiqWorkerService` в декларативную таблицу
-   `scripts/test_stack.py` (порт, app path, env, readiness timeout).
+   `scripts/testing/stack.py` (порт, app path, env, readiness timeout).
 2. Добавь readiness-фикстуру в `services.py`/`workers.py`
    (`require_http_service` / `require_taskiq_worker`).
 3. При необходимости добавь клиента в `clients.py`.
-4. Добавь порт/команду в `scripts/test_process_preflight_cleanup.py`.
+4. Добавь порт/команду в `scripts/testing/process_preflight_cleanup.py`.
 
 ## Best Practices
 
@@ -152,11 +152,11 @@ async def test_with_worker(rag_worker):
 ### Сервис не запущен
 
 ```bash
-uv run python -m scripts.test_stack status
+uv run python -m scripts.testing.stack status
 tail -f /tmp/platform_test_stack/<name>.err
 make test-up
 ```
 
 ### Порт занят посторонним процессом
 
-`make test-up` выполняет preflight-зачистку (`scripts/test_process_preflight_cleanup.py`).
+`make test-up` выполняет preflight-зачистку (`scripts/testing/process_preflight_cleanup.py`).

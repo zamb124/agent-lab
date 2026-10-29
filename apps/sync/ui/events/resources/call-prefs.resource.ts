@@ -14,6 +14,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { SyncCallPrefsSlice } from '../sync.types.js';
 
 const EMPTY_DEVICE_IDS = Object.freeze({
@@ -21,6 +22,29 @@ const EMPTY_DEVICE_IDS = Object.freeze({
     videoinput: '',
     audiooutput: '',
 });
+
+function eventRecord(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
+
+function booleanValue(payload: unknown): boolean | null {
+    const record = eventRecord(payload);
+    if (record === null) {
+        return null;
+    }
+    const value = record.value;
+    return typeof value === 'boolean' ? value : null;
+}
+
+function boolField(record: Record<string, unknown>, key: string, current: boolean): boolean {
+    const value = record[key];
+    return typeof value === 'boolean' ? value : current;
+}
+
+function stringField(record: Record<string, unknown>, key: string, current: string): string {
+    const value = record[key];
+    return typeof value === 'string' ? value : current;
+}
 
 export const callPrefsSlice = createSlice({
     name: 'sync/call_prefs',
@@ -49,57 +73,56 @@ export const callPrefsSlice = createSlice({
         setHydrated: 'hydrated',
     },
     extraReducer: (state: SyncCallPrefsSlice, event) => {
-        const s = state as SyncCallPrefsSlice;
         switch (event.type) {
             case 'sync/call_prefs/camera_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.value !== 'boolean') return state;
-                return { ...state, cameraEnabled: p.value };
+                const value = booleanValue(event.payload);
+                if (value === null) return state;
+                return { ...state, cameraEnabled: value };
             }
             case 'sync/call_prefs/noise_suppression_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.value !== 'boolean') return state;
-                return { ...state, noiseSuppression: p.value };
+                const value = booleanValue(event.payload);
+                if (value === null) return state;
+                return { ...state, noiseSuppression: value };
             }
             case 'sync/call_prefs/echo_cancellation_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.value !== 'boolean') return state;
-                return { ...state, echoCancellation: p.value };
+                const value = booleanValue(event.payload);
+                if (value === null) return state;
+                return { ...state, echoCancellation: value };
             }
             case 'sync/call_prefs/auto_gain_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.value !== 'boolean') return state;
-                return { ...state, autoGainControl: p.value };
+                const value = booleanValue(event.payload);
+                if (value === null) return state;
+                return { ...state, autoGainControl: value };
             }
             case 'sync/call_prefs/device_id_set': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p.kind !== 'string' || typeof p.id !== 'string') return state;
-                if (p.kind !== 'audioinput' && p.kind !== 'videoinput' && p.kind !== 'audiooutput') return state;
+                const p = eventRecord(event.payload);
+                if (p === null) return state;
+                const kind = p.kind;
+                const id = p.id;
+                if (typeof id !== 'string') return state;
+                if (kind !== 'audioinput' && kind !== 'videoinput' && kind !== 'audiooutput') return state;
                 return {
                     ...state,
-                    deviceIds: Object.freeze({ ...s.deviceIds, [p.kind]: p.id }),
+                    deviceIds: Object.freeze({ ...state.deviceIds, [kind]: id }),
                 };
             }
             case 'sync/call_prefs/hydrated': {
-                const p = event.payload as Record<string, any> | null;
-                if (!p || typeof p !== 'object') return state;
-                const cameraEnabled = typeof p.cameraEnabled === 'boolean' ? p.cameraEnabled : state.cameraEnabled;
-                const noiseSuppression = typeof p.noiseSuppression === 'boolean' ? p.noiseSuppression : state.noiseSuppression;
-                const echoCancellation = typeof p.echoCancellation === 'boolean' ? p.echoCancellation : state.echoCancellation;
-                const autoGainControl = typeof p.autoGainControl === 'boolean' ? p.autoGainControl : state.autoGainControl;
-                const deviceIds = (p.deviceIds && typeof p.deviceIds === 'object')
+                const p = eventRecord(event.payload);
+                if (p === null) return state;
+                const devices = p.deviceIds;
+                const deviceIds = isPlainRecord(devices)
                     ? Object.freeze({
-                        audioinput: typeof p.deviceIds.audioinput === 'string' ? p.deviceIds.audioinput : s.deviceIds.audioinput,
-                        videoinput: typeof p.deviceIds.videoinput === 'string' ? p.deviceIds.videoinput : s.deviceIds.videoinput,
-                        audiooutput: typeof p.deviceIds.audiooutput === 'string' ? p.deviceIds.audiooutput : s.deviceIds.audiooutput,
+                        audioinput: stringField(devices, 'audioinput', state.deviceIds.audioinput),
+                        videoinput: stringField(devices, 'videoinput', state.deviceIds.videoinput),
+                        audiooutput: stringField(devices, 'audiooutput', state.deviceIds.audiooutput),
                     })
-                    : s.deviceIds;
+                    : state.deviceIds;
                 return {
                     ...state,
-                    cameraEnabled,
-                    noiseSuppression,
-                    echoCancellation,
-                    autoGainControl,
+                    cameraEnabled: boolField(p, 'cameraEnabled', state.cameraEnabled),
+                    noiseSuppression: boolField(p, 'noiseSuppression', state.noiseSuppression),
+                    echoCancellation: boolField(p, 'echoCancellation', state.echoCancellation),
+                    autoGainControl: boolField(p, 'autoGainControl', state.autoGainControl),
                     deviceIds,
                     hydrated: true,
                 };

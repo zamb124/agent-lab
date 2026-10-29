@@ -110,13 +110,14 @@ class StorageEntry(PlatformModel):
         return len(rows) > 0
 
     @classmethod
-    async def by_key_prefix(
+    async def list_unordered_by_key_prefix(
         cls,
         prefix: str,
         *,
         alias: str,
         limit: int,
     ) -> list[Self]:
+        """Строки по префиксу ключа. Порядка нет. limit обязателен и в теле не проверяется."""
         return await (
             cls.objects.filter(key__startswith=prefix)
             .limit(limit)
@@ -133,7 +134,7 @@ class StorageEntry(PlatformModel):
         return deleted > 0
 
     @classmethod
-    async def list_by_prefix_json_text_equals(
+    async def json_text_values_by_prefix_equals_created_at_asc_or_desc(
         cls,
         prefix: str,
         *,
@@ -145,6 +146,7 @@ class StorageEntry(PlatformModel):
         created_after: datetime | None = None,
         created_before: datetime | None = None,
     ) -> list[str]:
+        """Тексты value по префиксу ключа и равенству поля JSON. newest_first — ORDER BY created_at DESC, иначе ASC. limit обязателен и в теле не проверяется. created_after и created_before равные None не фильтруют. Нестроковый value — TypeError."""
         params: list[str | int | datetime] = [f"{prefix}%", field, equals]
         conditions = ["key LIKE $1", "value ->> $2 = $3"]
         if created_after is not None:
@@ -172,7 +174,7 @@ class StorageEntry(PlatformModel):
         return payloads
 
     @classmethod
-    async def by_key_prefix_updated(
+    async def list_by_key_prefix_updated_at_desc(
         cls,
         prefix: str,
         *,
@@ -180,6 +182,7 @@ class StorageEntry(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Строки по префиксу ключа, ORDER BY updated_at DESC. limit и offset обязательны и в теле не проверяются."""
         return await (
             cls.objects.filter(key__startswith=prefix)
             .order_by("-updated_at")
@@ -189,5 +192,6 @@ class StorageEntry(PlatformModel):
         )
 
     @classmethod
-    async def by_keys(cls, keys: list[str], *, alias: str) -> list[Self]:
+    async def list_unordered_by_keys(cls, keys: list[str], *, alias: str) -> list[Self]:
+        """Строки по ключам. Порядка и предела нет. Пустой список ключей в теле не отсекается. Отсутствующие ключи не входят."""
         return await cls.objects.filter(key__in=keys).all(using=alias)

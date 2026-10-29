@@ -10,6 +10,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 
 const INTEGRATION_OP = 'office/integration_status';
@@ -51,8 +52,8 @@ export class OfficeIntegrationBanner extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const result = this._integration.lastResult as { configured?: boolean } | null;
-        if (!result) return html``;
+        const result = this._integration.lastResult;
+        if (!isPlainRecord(result)) return html``;
         if (result.configured) return html``;
         return html`
             <div class="banner">

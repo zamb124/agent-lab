@@ -1,11 +1,12 @@
-"""AST-нарезка исходника через tree-sitter-language-pack (Parser.parse(str))."""
+"""AST-нарезка исходника через tree-sitter-language-pack (Parser.parse(bytes))."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import tiktoken
-from tree_sitter_language_pack import Node, Parser, Tree, get_parser
+from tree_sitter import Node, Parser, Tree
+from tree_sitter_language_pack import get_parser
 
 from core.rag_indexing_schema import IndexProfileSplitConfig
 
@@ -73,12 +74,10 @@ def split_code_text(
         raise ValueError(
             f"split.strategy=code: tree-sitter language {language!r} is unavailable"
         ) from exc
-    tree: Tree | None = parser.parse(raw)
-    if tree is None:
-        raise ValueError(f"split.strategy=code: tree-sitter did not parse {language!r}")
-    root: Node = tree.root_node()
     source_bytes = raw.encode("utf-8")
-    named_count = root.named_child_count()
+    tree: Tree = parser.parse(source_bytes)
+    root: Node = tree.root_node
+    named_count = root.named_child_count
     if named_count == 0:
         return [raw]
     tokenizer = tiktoken.get_encoding(_ENCODING_NAME)
@@ -91,7 +90,7 @@ def split_code_text(
             raise ValueError(
                 f"split.strategy=code: named_child({index}) is empty for {language!r}"
             )
-        fragment = source_bytes[node.start_byte() : node.end_byte()].decode("utf-8")
+        fragment = source_bytes[node.start_byte : node.end_byte].decode("utf-8")
         stripped = fragment.strip()
         if not stripped:
             continue

@@ -97,7 +97,7 @@ async def list_company_pronunciation_rules(
     """Список правил произношения TTS компании."""
     user = require_context().user
     await _ensure_member(di, user, company_id)
-    rows = await PronunciationRule.list_for_company_scope(company_id=company_id)
+    rows = await PronunciationRule.list_for_company_scope_by_created_at_asc(company_id=company_id)
     return PronunciationRulesListResponse(company_id=company_id, items=rows)
 
 
@@ -198,7 +198,7 @@ async def test_company_pronunciation_rules(
     user = require_context().user
     await _ensure_member(di, user, company_id)
 
-    rows = await PronunciationRule.list_enabled_for_company_scope(company_id=company_id)
+    rows = await PronunciationRule.list_enabled_for_company_scope_by_created_at_asc(company_id=company_id)
     rule_set = PronunciationRuleSet(rules=rows, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(rule_set)
 

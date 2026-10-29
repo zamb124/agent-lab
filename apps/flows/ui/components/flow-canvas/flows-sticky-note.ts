@@ -185,14 +185,17 @@ export class FlowsStickyNote extends PlatformElement {
         }
     }
 
-    _onDragStart(e: CustomEvent) {
-        if ((e as Record<string, any>).button !== 0) return;
+    _onDragStart(e: Event) {
+        if (!(e instanceof PointerEvent)) {
+            throw new Error('flows-sticky-note: drag requires a pointer event');
+        }
+        if (e.button !== 0) return;
         e.stopPropagation();
         this.emit('drag-start', {
             noteId: this.noteId,
-            x: (e as Record<string, any>).clientX,
-            y: (e as Record<string, any>).clientY,
-            pointerId: (e as Record<string, any>).pointerId,
+            x: e.clientX,
+            y: e.clientY,
+            pointerId: e.pointerId,
         });
     }
 
@@ -223,14 +226,17 @@ export class FlowsStickyNote extends PlatformElement {
         this.emit('remove', { noteId: this.noteId });
     }
 
-    _onResizeStart(e: MouseEvent) {
+    _onResizeStart(e: Event) {
+        if (!(e instanceof PointerEvent)) {
+            throw new Error('flows-sticky-note: resize requires a pointer event');
+        }
         if (e.button !== 0) return;
         e.stopPropagation();
         this.emit('resize-start', {
             noteId: this.noteId,
             x: e.clientX,
             y: e.clientY,
-            pointerId: (e as Record<string, any>).pointerId,
+            pointerId: e.pointerId,
         });
     }
 

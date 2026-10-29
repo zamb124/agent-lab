@@ -149,7 +149,7 @@ def role_from_flags(
     return MailFolderRole.OTHER
 
 
-def build_mail_folder_list_result(
+def build_mail_folder_list_result_by_role_and_name_asc(
     *,
     list_entries: list[ParsedImapListEntry],
     namespace_prefix: str,

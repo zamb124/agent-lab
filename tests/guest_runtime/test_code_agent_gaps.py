@@ -5,7 +5,7 @@ import time
 from collections.abc import Mapping
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.clients.guest_runtime_client import GuestRuntimeClient
 from core.config import get_settings

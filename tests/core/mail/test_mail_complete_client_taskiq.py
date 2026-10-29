@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
-from apps.idle_worker.tasks.mail_mutation_tasks import (
+from apps.idle.tasks.mail_mutation_tasks import (
     mail_send_task,
     mail_star_task,
     mail_trash_task,
@@ -85,7 +85,7 @@ async def test_mail_trash_task_moves_on_imap(
             pushes.append((user_id, event_type, payload))
 
     monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_mutation_tasks.publish_event_to_users",
+        "apps.idle.tasks.mail_mutation_tasks.publish_event_to_users",
         _fake_publish,
     )
     await mail_trash_task(
@@ -178,7 +178,7 @@ async def test_mail_send_task_failure_publishes_send_failed(
             pushes.append((uid, event_type, payload))
 
     monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_mutation_tasks.publish_event_to_users",
+        "apps.idle.tasks.mail_mutation_tasks.publish_event_to_users",
         _fake_publish,
     )
 

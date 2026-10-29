@@ -19,6 +19,18 @@
 import { html, css, nothing } from 'lit';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
+function fieldDefinitions(value: unknown): Record<string, Record<string, unknown>> {
+    if (!isPlainRecord(value)) return {};
+    const fields: Record<string, Record<string, unknown>> = {};
+    for (const [key, definition] of Object.entries(value)) {
+        if (!isPlainRecord(definition)) {
+            throw new Error('CRMEntityCard: field definition must be an object');
+        }
+        fields[key] = definition;
+    }
+    return fields;
+}
+
 function textControlValue(event: Event): string {
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return target.value;
@@ -127,9 +139,9 @@ export class CRMEntityCard extends PlatformElement {
     declare surface: string;
     declare panelMode: string;
     declare layoutVariant: string;
-    declare entity: Record<string, any> | null;
+    declare entity: Record<string, unknown> | null;
     declare entityId: string;
-    declare cardBundle: Record<string, any> | null;
+    declare cardBundle: Record<string, unknown> | null;
     declare prefillEntityType: string;
     declare prefillNamespace: string;
     declare showEntityActions: boolean;
@@ -138,17 +150,17 @@ export class CRMEntityCard extends PlatformElement {
     declare _step: string;
     declare _loadingCard: boolean;
     declare _loadError: string | null;
-    declare _entityData: Record<string, any> | null;
-    declare _relationshipsData: Record<string, any>[];
-    declare _relatedById: Record<string, Record<string, any>>;
-    declare _attachmentsData: Record<string, any>[];
+    declare _entityData: Record<string, unknown> | null;
+    declare _relationshipsData: Record<string, unknown>[];
+    declare _relatedById: Record<string, Record<string, unknown>>;
+    declare _attachmentsData: Record<string, unknown>[];
     declare _loadingAttachments: boolean;
     declare _addRelOpen: boolean;
     declare _addRelType: string;
     declare _addRelDirection: string;
     declare _addRelTargetQuery: string;
-    declare _addRelTarget: Record<string, any> | null;
-    declare _addRelSearchResults: Record<string, any>[];
+    declare _addRelTarget: Record<string, unknown> | null;
+    declare _addRelSearchResults: Record<string, unknown>[];
     declare _addRelSearching: boolean;
     declare _addRelBusy: boolean;
     declare _uploading: boolean;
@@ -1141,13 +1153,11 @@ export class CRMEntityCard extends PlatformElement {
         this._grantsOp = this.useOp('crm/grants_list');
         this._relatedOp = this.useOp('crm/related_entities');
 
-        this._namespaceSel = this.select((s: Record<string, any>) => {
-            const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return null;
-            const cid = user.company_id;
-            const map = s.ui.namespace.selectionByCompany;
-            const sel = map[cid];
-            if (sel === 'all' || sel === undefined || sel === null) return null;
+        this._namespaceSel = this.select((state) => {
+            const user = state.auth.user;
+            if (user === null || typeof user.company_id !== 'string') return null;
+            const sel = state.ui.namespace.selectionByCompany[user.company_id];
+            if (sel === undefined || sel === 'all') return null;
             return sel;
         });
 
@@ -1243,9 +1253,9 @@ export class CRMEntityCard extends PlatformElement {
         this._loadCard();
     }
 
-    _hydrateFromBundle(bundle: Record<string, any>): void {
+    _hydrateFromBundle(bundle: Record<string, unknown>): void {
         const card = bundle;
-        if (!card.entity || typeof card.entity !== 'object') {
+        if (!isPlainRecord(card.entity)) {
             throw new Error('CRMEntityCard: cardBundle.entity required');
         }
         this._loadingCard = false;
@@ -1272,13 +1282,13 @@ export class CRMEntityCard extends PlatformElement {
         this._cardBundleApplied = true;
     }
 
-    _applyRelatedAttachmentsFromBundle(card: Record<string, any>): void {
+    _applyRelatedAttachmentsFromBundle(card: Record<string, unknown>): void {
         if (!card || typeof card !== 'object') {
             throw new Error('CRMEntityCard._applyRelatedAttachmentsFromBundle: card required');
         }
         this._relationshipsData = Array.isArray(card.relationships) ? card.relationships : [];
         const related = Array.isArray(card.related_entities) ? card.related_entities : [];
-        const relatedMap: Record<string, Record<string, any>> = {};
+        const relatedMap: Record<string, Record<string, unknown>> = {};
         for (const raw of related) {
             if (!isPlainRecord(raw) || typeof raw.entity_id !== 'string') continue;
             relatedMap[raw.entity_id] = raw;
@@ -1516,13 +1526,13 @@ export class CRMEntityCard extends PlatformElement {
         this._loadingCard = false;
         const payload = isPlainRecord(event.payload) ? event.payload : null;
         const card = payload !== null && isPlainRecord(payload.result) ? payload.result : null;
-        if (!card || typeof card !== 'object' || !card.entity) {
+        if (card === null || !isPlainRecord(card.entity)) {
             throw new Error('CRMEntityCard: invalid card response (missing entity)');
         }
         this._entityData = card.entity;
         const relationships = Array.isArray(card.relationships) ? card.relationships : [];
         const related = Array.isArray(card.related_entities) ? card.related_entities : [];
-        const relatedMap: Record<string, Record<string, any>> = {};
+        const relatedMap: Record<string, Record<string, unknown>> = {};
         for (const raw of related) {
             if (!isPlainRecord(raw) || typeof raw.entity_id !== 'string') continue;
             relatedMap[raw.entity_id] = raw;
@@ -1577,7 +1587,7 @@ export class CRMEntityCard extends PlatformElement {
         const items = result && Array.isArray(result.items) ? result.items : [];
         this._addRelSearching = false;
         const myId = this._effectiveEntityId();
-        this._addRelSearchResults = items.filter((item: Record<string, any>) => item.entity_id !== myId);
+        this._addRelSearchResults = items.filter((item: Record<string, unknown>) => item.entity_id !== myId);
     }
 
     _selectedType() {
@@ -1720,7 +1730,7 @@ export class CRMEntityCard extends PlatformElement {
         this._onFooterCancel();
     }
 
-    setEditTemplateFromListRow(item: Record<string, any>): void {
+    setEditTemplateFromListRow(item: Record<string, unknown>): void {
         if (this.panelMode !== MODE_EDIT) {
             throw new Error('CRMEntityCard.setEditTemplateFromListRow: panelMode must be edit');
         }
@@ -1784,11 +1794,11 @@ export class CRMEntityCard extends PlatformElement {
             || key === 'due';
     }
 
-    _attributesSchema(type: Record<string, any> | null): { key: string; def: Record<string, any>; required: boolean }[] {
-        const required: Record<string, Record<string, any>> = type && type.required_fields && typeof type.required_fields === 'object' ? type.required_fields : {};
-        const optional: Record<string, Record<string, any>> = type && type.optional_fields && typeof type.optional_fields === 'object' ? type.optional_fields : {};
+    _attributesSchema(type: Record<string, unknown> | null): { key: string; def: Record<string, unknown>; required: boolean }[] {
+        const required = fieldDefinitions(type === null ? null : type.required_fields);
+        const optional = fieldDefinitions(type === null ? null : type.optional_fields);
         const hideWork = this._isTaskEntityType();
-        const out: { key: string; def: Record<string, any>; required: boolean }[] = [];
+        const out: { key: string; def: Record<string, unknown>; required: boolean }[] = [];
         for (const [key, def] of Object.entries(required)) {
             if (hideWork && this._isWorkAttributeKey(key)) continue;
             out.push({ key, def, required: true });
@@ -1801,7 +1811,7 @@ export class CRMEntityCard extends PlatformElement {
         return out;
     }
 
-    _fieldType(def: Record<string, any> | null, key: unknown): string {
+    _fieldType(def: Record<string, unknown> | null, key: unknown): string {
         if (typeof key === 'string' && key === 'external_refs') return 'external_refs';
         if (!def || typeof def !== 'object') return 'string';
         const t = typeof def.type === 'string' ? def.type.trim() : '';
@@ -1814,11 +1824,11 @@ export class CRMEntityCard extends PlatformElement {
         if (value !== null && typeof value === 'object') return 'object';
         return 'string';
     }
-    _fieldLabel(key: string, def: Record<string, any> | null): string {
+    _fieldLabel(key: string, def: Record<string, unknown> | null): string {
         if (def && typeof def.label === 'string' && def.label.length > 0) return def.label;
         return key;
     }
-    _fieldConfig(def: Record<string, any> | null): Record<string, unknown> {
+    _fieldConfig(def: Record<string, unknown> | null): Record<string, unknown> {
         if (!def || typeof def !== 'object') return {};
         if (Array.isArray(def.values)) return { values: def.values };
         return {};
@@ -2048,7 +2058,7 @@ export class CRMEntityCard extends PlatformElement {
         return ctrl.items;
     }
 
-    _heroIconName(entity: Record<string, any> | null): string {
+    _heroIconName(entity: Record<string, unknown> | null): string {
         const currentId = this._effectiveEntityId();
         const catalogRows = this._entityTypesCatalogRows();
         if (
@@ -2078,7 +2088,7 @@ export class CRMEntityCard extends PlatformElement {
         return `entities.status.${v}`;
     }
 
-    _renderSemanticIndexRibbon(entity: Record<string, any> | null): unknown {
+    _renderSemanticIndexRibbon(entity: Record<string, unknown> | null): unknown {
         if (!entity || typeof entity !== 'object') return nothing;
         const st = entity.semantic_text_index_status;
         if (st !== 'pending_embedding' && st !== 'absent') return nothing;
@@ -2098,7 +2108,7 @@ export class CRMEntityCard extends PlatformElement {
         `;
     }
 
-    _renderHero(entity: Record<string, any> | null, nameValue: unknown, descriptionValue: unknown): unknown {
+    _renderHero(entity: Record<string, unknown> | null, nameValue: unknown, descriptionValue: unknown): unknown {
         const readonly = this._isReadOnlyShell();
         const pct = searchScorePercent(entity);
         const statusRaw = entity && entity.status;
@@ -2182,7 +2192,7 @@ export class CRMEntityCard extends PlatformElement {
         `;
     }
 
-    _onRemoveRelationship(rel: Record<string, any> | null): void {
+    _onRemoveRelationship(rel: Record<string, unknown> | null): void {
         if (!rel || typeof rel.relationship_id !== 'string') return;
         this._relationships.remove(rel.relationship_id);
     }
@@ -2238,8 +2248,12 @@ export class CRMEntityCard extends PlatformElement {
             related_entities: Object.values(this._relatedById),
         };
         const edges = extractNeighborEdges(card, myId, { skipTaskNeighbors: true });
-        return edges.map(({ rel, otherId, otherEntity, isOutgoing }: Record<string, any>) => {
-            const isBusy = this._relationships.isBusy(rel.relationship_id);
+        return edges.map(({ rel, otherId, otherEntity, isOutgoing }) => {
+            const relationshipId = rel.relationship_id;
+            if (typeof relationshipId !== 'string' || relationshipId.length === 0) {
+                throw new Error('CRMEntityCard: relationship_id required');
+            }
+            const isBusy = this._relationships.isBusy(relationshipId);
             return {
                 relationshipId: rel.relationship_id,
                 otherId,
@@ -2346,10 +2360,14 @@ export class CRMEntityCard extends PlatformElement {
         }, 250);
     }
 
-    _onPickRelTarget(item: Record<string, any>): void {
+    _onPickRelTarget(item: Record<string, unknown>): void {
         this._addRelTarget = item;
         this._addRelSearchResults = [];
-        this._addRelTargetQuery = item.name;
+        const targetName = item.name;
+        if (typeof targetName !== 'string') {
+            throw new Error('CRMEntityCard: relationship target name required');
+        }
+        this._addRelTargetQuery = targetName;
     }
 
     _canSubmitRelationship() {
@@ -2417,7 +2435,7 @@ export class CRMEntityCard extends PlatformElement {
                 ${this._addRelSearchResults.length > 0
                     ? html`
                         <div class="search-results">
-                            ${this._addRelSearchResults.map((item: Record<string, any>) => html`
+                            ${this._addRelSearchResults.map((item: Record<string, unknown>) => html`
                                 <button type="button" class="search-result" @click=${() => this._onPickRelTarget(item)}>
                                     <span>${item.name}</span>
                                     <span class="id">${item.entity_id}</span>
@@ -2471,7 +2489,7 @@ export class CRMEntityCard extends PlatformElement {
         });
     }
 
-    _onRemoveAttachment(att: Record<string, any> | null): void {
+    _onRemoveAttachment(att: Record<string, unknown> | null): void {
         const id = this._effectiveEntityId();
         if (typeof id !== 'string' || id.length === 0) {
             throw new Error('CRMEntityCard._onRemoveAttachment: entity_id required');
@@ -2495,9 +2513,7 @@ export class CRMEntityCard extends PlatformElement {
             const filename = typeof item.filename === 'string' && item.filename.length > 0
                 ? item.filename
                 : attachmentId;
-            const metadata = item && typeof item.metadata === 'object' && item.metadata !== null
-                ? item.metadata
-                : {};
+            const metadata = isPlainRecord(item.metadata) ? item.metadata : {};
             const contentType = typeof metadata.content_type === 'string' ? metadata.content_type : '';
             const sizeBytes = typeof item.size_bytes === 'number'
                 ? item.size_bytes
@@ -2585,7 +2601,7 @@ export class CRMEntityCard extends PlatformElement {
         this._onRemoveAttachment({ document_id: attachmentId });
     }
 
-    _openEntityAttachmentItem(item: Record<string, any> | null): void {
+    _openEntityAttachmentItem(item: Record<string, unknown> | null): void {
         if (!item || typeof item !== 'object') return;
         if (typeof item.id === 'string' && item.id.length > 0) {
             this.openFile({
@@ -2602,7 +2618,7 @@ export class CRMEntityCard extends PlatformElement {
         }
     }
 
-    _onEntityAttachmentRowKeydown(event: KeyboardEvent, item: Record<string, any>): void {
+    _onEntityAttachmentRowKeydown(event: KeyboardEvent, item: Record<string, unknown>): void {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         this._openEntityAttachmentItem(item);
@@ -2735,15 +2751,19 @@ export class CRMEntityCard extends PlatformElement {
         `;
     }
 
-    _onEditNavigate(entity: Record<string, any>): void {
-        this.navigate('entity', { itemId: entity.entity_id }, { search: '?edit=1' });
+    _onEditNavigate(entity: Record<string, unknown>): void {
+        const entityId = entity.entity_id;
+        if (typeof entityId !== 'string' || entityId.length === 0) {
+            throw new Error('CRMEntityCard: entity_id required');
+        }
+        this.navigate('entity', { itemId: entityId }, { search: '?edit=1' });
     }
 
-    _onShare(entity: Record<string, any>): void {
+    _onShare(entity: Record<string, unknown>): void {
         this.openModal('crm.share', { entityId: entity.entity_id });
     }
 
-    _onAccessRequest(entity: Record<string, any>): void {
+    _onAccessRequest(entity: Record<string, unknown>): void {
         this.openModal('crm.access_request', { entityId: entity.entity_id });
     }
 
@@ -2754,14 +2774,20 @@ export class CRMEntityCard extends PlatformElement {
         }
     }
 
-    _onToggleRelated(entityId: Event) {
+    _onToggleRelated(entityId: unknown) {
+        if (typeof entityId !== 'string' || entityId.length === 0) {
+            throw new Error('CRMEntityCard: related entity id required');
+        }
         this._relatedExpanded = !this._relatedExpanded;
         if (this._relatedExpanded) {
             this._relatedOp.run({ entity_id: entityId });
         }
     }
 
-    _onOpenRelated(relatedId: Event) {
+    _onOpenRelated(relatedId: unknown) {
+        if (typeof relatedId !== 'string' || relatedId.length === 0) {
+            throw new Error('CRMEntityCard: related entity id required');
+        }
         this.dispatch('crm/entity_card/related_selected', { entity_id: relatedId }, { source: 'local' });
     }
 
@@ -2781,7 +2807,7 @@ export class CRMEntityCard extends PlatformElement {
         `;
     }
 
-    _renderViewBodyPage(entity: Record<string, any>): TemplateResult {
+    _renderViewBodyPage(entity: Record<string, unknown>): TemplateResult {
         const type = this._selectedType();
         const typeIcon = type && typeof type.icon === 'string' && type.icon.length > 0 ? type.icon : 'folder';
         const nameValue = typeof entity.name === 'string' ? entity.name : '';

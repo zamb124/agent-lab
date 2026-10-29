@@ -10,6 +10,10 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
+function hasOwnKey<T extends object>(catalog: T, key: string): key is Extract<keyof T, string> {
+    return Object.prototype.hasOwnProperty.call(catalog, key);
+}
+
 const HEALTH_TONES = {
     healthy: 'var(--success)',
     unhealthy: 'var(--error)',
@@ -189,7 +193,7 @@ export class DashboardServiceCard extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const tone = (HEALTH_TONES as Record<string, string>)[this.healthState];
+        const tone = hasOwnKey(HEALTH_TONES, this.healthState) ? HEALTH_TONES[this.healthState] : undefined;
         const cardStyle = `--brand-from: ${this.brandFrom}; --brand-to: ${this.brandTo}; --health-tone: ${tone};`;
         const title = this.t(this.nameKey, null, 'platform');
         const description = this.t(this.descriptionKey, null, 'platform');

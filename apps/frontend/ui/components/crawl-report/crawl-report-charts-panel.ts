@@ -10,6 +10,18 @@ import {
     URL_STATUS_CHART_COLORS,
 } from './crawl-report-chart-colors.js';
 
+function hasOwnKey<T extends object>(catalog: T, key: string): key is Extract<keyof T, string> {
+    return Object.prototype.hasOwnProperty.call(catalog, key);
+}
+
+function chartColor<T extends object>(catalog: T, status: unknown): string {
+    if (typeof status !== 'string' || !hasOwnKey(catalog, status)) {
+        return 'var(--text-tertiary)';
+    }
+    const color = catalog[status];
+    return typeof color === 'string' ? color : 'var(--text-tertiary)';
+}
+
 export class CrawlReportChartsPanel extends PlatformElement {
     static i18nNamespace = 'frontend';
 
@@ -110,7 +122,7 @@ export class CrawlReportChartsPanel extends PlatformElement {
             key: row.status,
             label: this.statusLabel(row.status),
             value: row.count,
-            color: (URL_STATUS_CHART_COLORS as Record<string, string>)[row.status] || 'var(--text-tertiary)',
+            color: chartColor(URL_STATUS_CHART_COLORS, row.status),
         }));
     }
 
@@ -120,7 +132,7 @@ export class CrawlReportChartsPanel extends PlatformElement {
             key: row.status,
             label: this.statusLabel(row.status),
             value: row.count,
-            color: (DOMAIN_STATUS_CHART_COLORS as Record<string, string>)[row.status] || 'var(--text-tertiary)',
+            color: chartColor(DOMAIN_STATUS_CHART_COLORS, row.status),
         }));
     }
 
@@ -175,10 +187,10 @@ export class CrawlReportChartsPanel extends PlatformElement {
         const runningJob = this.summary && this.summary.running_job;
         if (runningJob) {
             return {
-                fetched: (runningJob as Record<string, any>).urls_fetched,
-                indexed: (runningJob as Record<string, any>).urls_indexed,
-                enriched: (runningJob as Record<string, any>).urls_enriched,
-                errors: (runningJob as Record<string, any>).errors,
+                fetched: runningJob.urls_fetched,
+                indexed: runningJob.urls_indexed,
+                enriched: runningJob.urls_enriched,
+                errors: runningJob.errors,
             };
         }
         let fetched = 0;

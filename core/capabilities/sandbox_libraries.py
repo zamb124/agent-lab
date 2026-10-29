@@ -80,6 +80,7 @@ PYTHON_FORBIDDEN_IMPORT_ROOTS: frozenset[str] = frozenset(
         "core",
         "ctypes",
         "httpx",
+        "httpx2",
         "importlib",
         "multiprocessing",
         "os",

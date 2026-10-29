@@ -297,7 +297,7 @@ extraReducer: (state, event) => {
 1. Ключ в `core/i18n/translations/ru/<ns>.json` и `en/<ns>.json` одной структурой: `{ "widgets": { "toast_created": "Виджет создан" } }` / `"Widget created"`; переменные — `{{name}}`.
 2. Код: `this.t('widgets.toast_created')`, чужой namespace — `this.t('action_save', null, 'common')`; toast-ключ фабрики — `'<ns>:widgets.toast_created'`.
 3. Конечный набор статусов — отдельный ключ на статус и явная ветка кода с `throw` на неизвестном.
-4. Прогон: `make check-i18n`, `make check-i18n-keys`, `uv run python scripts/report_ui_i18n_gaps.py --app <svc>`.
+4. Прогон: `make check-i18n`, `make check-i18n-keys`, `uv run python -m scripts.tools.report_ui_i18n_gaps --app <svc>`.
 
 ## 13. Bridge-effect
 

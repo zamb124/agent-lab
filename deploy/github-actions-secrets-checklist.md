@@ -34,7 +34,7 @@ gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github
 
 ## 1c. Локальный pull test-образов (make test-up)
 
-`make test` перед `docker-compose-test` вызывает `scripts/ensure_test_compose_images.py`: образы тянутся из GHCR, при отсутствии — локальная сборка.
+`make test` перед `docker-compose-test` вызывает `scripts/testing/ensure_compose_images.py`: образы тянутся из GHCR, при отсутствии — локальная сборка.
 
 **Обязательно для каждого разработчика:** установлен **GitHub CLI (`gh`)**. При первом `make test-up` без GHCR-сессии скрипт **интерактивно запускает** `gh auth login -s read:packages` и затем `docker login ghcr.io` через токен `gh`.
 
@@ -136,44 +136,9 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 | `PROXY__ENABLED` / `PROXY__PROXIES` | (опционально) исходящий HTTP(S) прокси платформы: `PROXY__ENABLED` — `true` / `false`; `PROXY__PROXIES` — **одна строка**, JSON-массив URL, например `["http://user:pass@host:3128"]`. Попадает в Kubernetes `platform-secrets` и в Pod env как `PROXY__ENABLED` / `PROXY__PROXIES` (см. `settings.proxy`). |
 | `SEARCH__TINYFISH__API_KEY` / `SEARCH__LINKUP__API_KEY` / `SEARCH__SERPER__API_KEY` / `SEARCH__TAVILY__API_KEY` | (опционально) ключи провайдеров Search MCP. Без ключа конкретный provider возвращает typed provider error; provider policy пробует следующий доступный provider. |
 | `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` | (опционально) ISPmanager authinfo для `mail.system` на company `system`. Hosts/user — в `app-conf.k8s-overlay.json`. |
-| `AGENT__RELEASES__GITHUB_TOKEN` | (опционально) PAT для GitHub Releases API на prod (`/frontend/api/agent/download/*`). **Обязателен для private repo.** Fallback в deploy: `GHCR_PULL_TOKEN`, если у него есть `repo` / Contents Read. Без токена API отдаёт 404. |
 
 **Voice/Speech:** `STT__CLOUD_RU__API_KEY` попадает в Kubernetes Secret `platform-secrets` как `stt-cloud-ru-api-key`; в Pod env проброшен как **`VOICE__STT__CLOUD_RU__API_KEY`** (`settings.voice.stt.cloud_ru.api_key`). Остальные ключи `VOICE__STT__*` / `VOICE__TTS__*` маппятся через `helm_platform_secrets_json.sh` в `platformSecrets.{stt,tts}{Yandex,Sber,CloudRu}{ApiKey,FolderId,ClientId,ClientSecret}`, оттуда в `platform-secrets` (ключи `stt-yandex-api-key` и т.п.).
 
 В **`helm_platform_secrets_json.sh`** ключ embedding в платформенный Secret попадает только из **`RAG_EMBEDDING_API_KEY`**; подстановки из **`LLM__OPENROUTER__API_KEY`** нет.
 
 Полное описание назначения — в [`deploy/README.md`](README.md).
-
-## 4. LinnexAgent desktop release (`humanitec-agent-build.yml`)
-
-Запускается **только вручную** (`workflow_dispatch` в GitHub Actions). Без секретов ниже macOS/Windows job'ы собирают **unsigned** артефакты; Linux-сборки проходят как обычно.
-
-| Имя в GitHub | Назначение |
-|---|---|
-| `APPLE_ID` | Apple ID для notarization |
-| `APPLE_ID_PASSWORD` | App-specific password ([appleid.apple.com](https://appleid.apple.com)) |
-| `APPLE_TEAM_ID` | Apple Team ID (`MLL2V8KTV4` — тот же, что iOS/mobile в `conf.json`) |
-| `MACOS_CERTIFICATE_P12_BASE64` | Developer ID Application certificate (`.p12`, base64) |
-| `MACOS_CERTIFICATE_PASSWORD` | Пароль экспорта `.p12` |
-| `WINDOWS_CERTIFICATE_FILE` | Authenticode certificate (base64 или путь — как настроено в Goose forge) |
-| `WINDOWS_CERTIFICATE_PASSWORD` | пароль сертификата |
-
-**Не использовать для desktop:** `AUTH_APPLE_PRIVATE_KEY` (.p8) — Sign in with Apple на сайте, не codesign `.app`.
-
-`KEYCHAIN_PATH` создаётся на macOS-раннере в CI (не GitHub Secret). Подробности: [`apps/agent/desktop/docs/MACOS_SIGNING.md`](../apps/agent/desktop/docs/MACOS_SIGNING.md).
-
-Workflow использует `GITHUB_TOKEN` для публикации GitHub Release; отдельный PAT не нужен (`permissions: contents: write`).
-
-Release tag по умолчанию: `linnex-agent-{short_sha}` (тот же short SHA, что Helm `image.tag` после Deploy).
-
-Phase 1 публикует signed macOS `.dmg` сразу и шлёт submit в Apple (`AGENT_MACOS_NOTARIZE=submit-only`).
-
-## 5. LinnexAgent macOS notarize follow-up (`humanitec-agent-macos-notarize.yml`)
-
-Триггеры: cron каждые 30 мин, успешный `humanitec-agent-build`, `workflow_dispatch`.
-
-Те же Apple/macOS secrets, что в §4. Без них job пропускается.
-
-До 48 ч после release: poll Apple → stapler → replace `.dmg` в том же GitHub Release (`--clobber`).
-
-Локально: `make agent-notarize-followup AGENT_RELEASE_TAG=humanitec-agent-<short_sha>`.

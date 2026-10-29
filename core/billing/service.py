@@ -35,7 +35,7 @@ from core.billing.settlement_rules import (
     SettlementRulesDocument,
     parse_settlement_rules_json,
     quantity_from_span,
-    resolve_matched_rules,
+    resolve_matched_rules_by_priority_asc,
 )
 from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.models.identity_models import SYSTEM_COMPANY_ID
@@ -553,7 +553,7 @@ class BillingService:
         if not rules_doc.rules:
             raise ValueError("settlement rules document must contain at least one enabled rule")
 
-        matched = resolve_matched_rules(rules_doc, span)
+        matched = resolve_matched_rules_by_priority_asc(rules_doc, span)
         if not matched:
             logger.warning("billing.settlement.span_id.operation_name", span_id=span.span_id, operation_name=span.operation_name)
             return 0
@@ -614,7 +614,7 @@ class BillingService:
 
         current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        all_usage_records = await UsageRecord.list_company_since(company_id, current_month)
+        all_usage_records = await UsageRecord.list_unordered_since(company_id, current_month)
 
         stats: CompanyUsageStats = {
             "total_cost": 0.0,

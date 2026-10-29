@@ -7,7 +7,7 @@ User Story: Каскадное удаление с откатом при оши�
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_str
 from tests.crm.e2e.attachment_upload_helpers import upload_and_attach_crm_file

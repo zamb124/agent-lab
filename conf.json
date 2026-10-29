@@ -199,7 +199,6 @@
     "humanitec.ru": {
       "platform_name": "Humanitec",
       "support_email": "helpme@humanitec.ru",
-      "agent_product_name": "HumanitecAgent",
       "models_product_name": "Humanitec Models",
       "voice_product_name": "Humanitec Voice",
       "llms_display_label": "Humanitec LLMs",
@@ -248,7 +247,6 @@
     "agents-lab.ru": {
       "platform_name": "Humanitec",
       "support_email": "helpme@humanitec.ru",
-      "agent_product_name": "HumanitecAgent",
       "models_product_name": "Humanitec Models",
       "voice_product_name": "Humanitec Voice",
       "llms_display_label": "Humanitec LLMs",
@@ -295,7 +293,6 @@
     "linnex.io": {
       "platform_name": "Linnex",
       "support_email": "info@linnex.io",
-      "agent_product_name": "LinnexAgent",
       "models_product_name": "Linnex Models",
       "voice_product_name": "Linnex Voice",
       "llms_display_label": "Linnex LLMs",
@@ -346,7 +343,6 @@
     "localhost": {
       "platform_name": "Linnex",
       "support_email": "info@linnex.io",
-      "agent_product_name": "LinnexAgent",
       "models_product_name": "Linnex Models",
       "voice_product_name": "Linnex Voice",
       "llms_display_label": "Linnex LLMs",
@@ -359,7 +355,6 @@
     "lvh.me": {
       "platform_name": "Linnex",
       "support_email": "info@linnex.io",
-      "agent_product_name": "LinnexAgent",
       "models_product_name": "Linnex Models",
       "voice_product_name": "Linnex Voice",
       "llms_display_label": "Linnex LLMs",
@@ -1128,15 +1123,5 @@
   "guest_runtime": {
     "executor": "inprocess",
     "data_dir": "/tmp/guest-runtime"
-  },
-  "agent": {
-    "releases": {
-      "github_owner": "zamb124",
-      "github_repo": "agent-lab"
-    },
-    "pairing_ttl_seconds": 600,
-    "tunnel_online_ttl_seconds": 120,
-    "pairing_rate_limit_per_hour": 20,
-    "register_rate_limit_per_hour": 60
   }
 }

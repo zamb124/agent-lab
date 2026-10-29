@@ -45,8 +45,8 @@ if TYPE_CHECKING:
     )
     from .llm_context_source import RAGLLMContextSource
     from .post_retrieval_rerank import (
-        apply_rerank_after_retrieve,
-        apply_rerank_after_retrieve_grouped,
+        apply_rerank_after_retrieve_by_score_desc,
+        apply_rerank_after_retrieve_grouped_by_score_desc,
     )
     from .providers import AgentsetRAGProvider, PgVectorProvider
     from .rag_resource import RAGResource
@@ -77,13 +77,13 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
         "core.rag.llm_context_memory_store",
         "llm_context_memory_namespace_id",
     ),
-    "apply_rerank_after_retrieve": (
+    "apply_rerank_after_retrieve_by_score_desc": (
         "core.rag.post_retrieval_rerank",
-        "apply_rerank_after_retrieve",
+        "apply_rerank_after_retrieve_by_score_desc",
     ),
-    "apply_rerank_after_retrieve_grouped": (
+    "apply_rerank_after_retrieve_grouped_by_score_desc": (
         "core.rag.post_retrieval_rerank",
-        "apply_rerank_after_retrieve_grouped",
+        "apply_rerank_after_retrieve_grouped_by_score_desc",
     ),
     "AgentsetRAGProvider": ("core.rag.providers", "AgentsetRAGProvider"),
     "PgVectorProvider": ("core.rag.providers", "PgVectorProvider"),
@@ -120,8 +120,8 @@ __all__ = [
     "RAGLLMContextSource",
     "RAGLLMContextMemoryStore",
     "llm_context_memory_namespace_id",
-    "apply_rerank_after_retrieve",
-    "apply_rerank_after_retrieve_grouped",
+    "apply_rerank_after_retrieve_by_score_desc",
+    "apply_rerank_after_retrieve_grouped_by_score_desc",
     "AgentsetRAGProvider",
     "PgVectorProvider",
 ]

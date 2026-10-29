@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.realtime.presence import is_user_connected
 from core.utils.tokens import get_token_service

@@ -40,8 +40,8 @@ class PlatformEventLog(PlatformModel):
         return await cls.objects.create(instance=row)
 
     @classmethod
-    async def list_expired_commands(cls, *, now: datetime, limit: int) -> list[Self]:
-        """Команды с deadline_at < now в received и dispatched, ORDER BY deadline_at, не больше limit."""
+    async def list_expired_by_deadline_at_asc(cls, *, now: datetime, limit: int) -> list[Self]:
+        """Команды с deadline_at < now в received и dispatched, ORDER BY deadline_at ASC, не больше limit."""
         return await (
             cls.objects.filter(
                 deadline_at__isnull=False,

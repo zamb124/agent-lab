@@ -14,9 +14,9 @@ from types import TracebackType
 from typing import ClassVar, TypedDict, Unpack, cast
 from urllib.parse import urljoin, urlparse
 
-import httpx
-from httpx._transports.base import AsyncBaseTransport
-from httpx._types import (
+import httpx2
+from httpx2._transports.base import AsyncBaseTransport
+from httpx2._types import (
     AuthTypes,
     CertTypes,
     CookieTypes,
@@ -41,14 +41,14 @@ from core.types import JsonValue, require_json_value
 logger = get_logger(__name__)
 
 
-def http_header_text(headers: httpx.Headers, name: str) -> str | None:
-    """Строковое значение заголовка. ``Headers.get`` в stub httpx возвращает Any."""
+def http_header_text(headers: httpx2.Headers, name: str) -> str | None:
+    """Строковое значение заголовка. ``Headers.get`` в stub httpx2 возвращает Any."""
     value = cast(object, headers.get(name))
     if isinstance(value, str):
         return value
     return None
 
-_CONNECT_RETRY_EXCEPTIONS = (httpx.ConnectError, httpx.ConnectTimeout)
+_CONNECT_RETRY_EXCEPTIONS = (httpx2.ConnectError, httpx2.ConnectTimeout)
 
 # Базовый набор статусов для SMART (401 добавляется через settings.proxy.retry_http_401_via_proxy).
 HTTP_STATUS_RETRY_VIA_PROXY = frozenset({403, 429, 451})
@@ -87,10 +87,10 @@ class HttpClientKwargs(TypedDict, total=False):
     http2: bool
     mounts: Mapping[str, AsyncBaseTransport | None] | None
     follow_redirects: bool
-    limits: httpx.Limits
+    limits: httpx2.Limits
     max_redirects: int
     event_hooks: Mapping[str, list[Callable[..., object]]] | None
-    base_url: httpx.URL | str
+    base_url: httpx2.URL | str
     transport: AsyncBaseTransport | None
     default_encoding: str | Callable[[bytes], str]
 
@@ -102,11 +102,11 @@ def _normalized_request_kwargs(kwargs: HttpRequestKwargs) -> HttpRequestKwargs:
 
 
 async def _send_request(
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     method: str,
     url: str,
     kwargs: HttpRequestKwargs,
-) -> httpx.Response:
+) -> httpx2.Response:
     return await client.request(method, url, **_normalized_request_kwargs(kwargs))
 
 
@@ -163,7 +163,7 @@ def _retry_http_statuses_for_smart() -> frozenset[int]:
     return frozenset(s)
 
 
-def _response_indicates_geo_block(response: httpx.Response) -> bool:
+def _response_indicates_geo_block(response: httpx2.Response) -> bool:
     """Узкий маркер geo-block (не любой HTTP 400). Тело уже должно быть прочитано."""
     if response.status_code != 400:
         return False
@@ -171,7 +171,7 @@ def _response_indicates_geo_block(response: httpx.Response) -> bool:
     return any(marker in body for marker in _GEO_BLOCK_BODY_MARKERS)
 
 
-async def _should_retry_http_via_proxy(response: httpx.Response) -> bool:
+async def _should_retry_http_via_proxy(response: httpx2.Response) -> bool:
     if response.status_code in _retry_http_statuses_for_smart():
         return True
     if response.status_code != 400:
@@ -189,7 +189,7 @@ async def _request_direct_burst(
     attempts: int,
     httpx_client_kwargs: HttpClientKwargs | None = None,
     **kwargs: Unpack[HttpRequestKwargs],
-) -> httpx.Response:
+) -> httpx2.Response:
     http_method = method.upper()
     last: BaseException | None = None
     hck = httpx_client_kwargs or {}
@@ -222,7 +222,7 @@ async def request_public_oauth(
     direct_attempts_after_proxy: int = PUBLIC_OAUTH_DIRECT_ATTEMPTS_AFTER_PROXY,
     httpx_client_kwargs: HttpClientKwargs | None = None,
     **kwargs: Unpack[HttpRequestKwargs],
-) -> httpx.Response:
+) -> httpx2.Response:
     """
     Исходящие запросы к публичным OAuth/identity API: несколько попыток без прокси,
     затем через platform proxy (если proxy.enabled и список proxies непустой),
@@ -273,7 +273,7 @@ async def request_with_strategy(
     direct_attempts: int = 2,
     timeout: float = 30.0,
     **kwargs: Unpack[HttpRequestKwargs],
-) -> httpx.Response:
+) -> httpx2.Response:
     """
     Программируемый HTTP клиент с настраиваемой стратегией прокси.
 
@@ -286,13 +286,13 @@ async def request_with_strategy(
         timeout: Таймаут запросов
         **kwargs: Параметры для `client.request` (json, data, files, headers, ...). Ключи только
             для запроса (`json`, `data`, `files`, `content`, `extensions`) не передаются в
-            конструктор `httpx.AsyncClient`.
+            конструктор `httpx2.AsyncClient`.
 
     Возвращает:
-        httpx.Response
+        httpx2.Response
 
     Исключения:
-        httpx.ConnectError: Если все попытки подключения не удались
+        httpx2.ConnectError: Если все попытки подключения не удались
     """
     strategy = _require_proxy_strategy(strategy)
 
@@ -307,7 +307,7 @@ async def request_with_strategy(
 
     if strategy == ProxyStrategy.PROXY_ONLY:
         if not _platform_proxy_active():
-            raise httpx.ConnectError("Proxy requested but not configured")
+            raise httpx2.ConnectError("Proxy requested but not configured")
         client_kw = _httpx_async_client_kwargs(kwargs)
         async with get_httpx_client(
             timeout=timeout,
@@ -420,7 +420,7 @@ class SmartProxyClient:
         self.timeout: float = timeout
         self.use_proxy: bool = use_proxy
         self.kwargs: HttpClientKwargs = kwargs
-        self._client: httpx.AsyncClient | None = None
+        self._client: httpx2.AsyncClient | None = None
         self._settings: BaseSettings | None = None
         self._strategy: ProxyStrategy = strategy
         self._proxy_attempts: int = proxy_attempts
@@ -456,7 +456,7 @@ class SmartProxyClient:
     def strategy(self) -> ProxyStrategy:
         return self._strategy
 
-    def _create_client(self, proxy_url: str | None = None) -> httpx.AsyncClient:
+    def _create_client(self, proxy_url: str | None = None) -> httpx2.AsyncClient:
         if self.use_proxy:
             settings = self._get_settings()
             connect_timeout = settings.proxy.connect_timeout
@@ -465,14 +465,14 @@ class SmartProxyClient:
 
         kwargs = self.kwargs
 
-        return httpx.AsyncClient(
-            timeout=httpx.Timeout(self.timeout, connect=connect_timeout),
+        return httpx2.AsyncClient(
+            timeout=httpx2.Timeout(self.timeout, connect=connect_timeout),
             proxy=proxy_url,
             trust_env=False,
             **kwargs,
         )
 
-    def create_client(self, proxy_url: str | None = None) -> httpx.AsyncClient:
+    def create_client(self, proxy_url: str | None = None) -> httpx2.AsyncClient:
         return self._create_client(proxy_url)
 
     def _absolute_request_url(self, url: str) -> str:
@@ -507,7 +507,7 @@ class SmartProxyClient:
 
     async def _request_via_proxy_rotation(
         self, http_method: str, url: str, **kwargs: Unpack[HttpRequestKwargs]
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         settings = self._get_settings()
 
         for attempt in range(self.MAX_PROXY_RETRIES):
@@ -519,7 +519,7 @@ class SmartProxyClient:
                     response = await _send_request(client, http_method, url, kwargs)
                     return response
 
-            except (httpx.ConnectTimeout, httpx.ConnectError) as e:
+            except (httpx2.ConnectTimeout, httpx2.ConnectError) as e:
                 settings.proxy.mark_last_proxy_failed()
 
                 if attempt < self.MAX_PROXY_RETRIES - 1:
@@ -540,7 +540,7 @@ class SmartProxyClient:
         method: str,
         url: str,
         **kwargs: Unpack[HttpRequestKwargs],
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         http_method = method.upper()
         strategy = self._strategy
 
@@ -601,19 +601,19 @@ class SmartProxyClient:
 
         return await self._request_via_proxy_rotation(http_method, url, **kwargs)
 
-    async def get(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx.Response:
+    async def get(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx2.Response:
         return await self._request_with_retry("get", url, **kwargs)
 
-    async def post(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx.Response:
+    async def post(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx2.Response:
         return await self._request_with_retry("post", url, **kwargs)
 
-    async def put(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx.Response:
+    async def put(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx2.Response:
         return await self._request_with_retry("put", url, **kwargs)
 
-    async def delete(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx.Response:
+    async def delete(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx2.Response:
         return await self._request_with_retry("delete", url, **kwargs)
 
-    async def patch(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx.Response:
+    async def patch(self, url: str, **kwargs: Unpack[HttpRequestKwargs]) -> httpx2.Response:
         return await self._request_with_retry("patch", url, **kwargs)
 
     async def request(
@@ -621,7 +621,7 @@ class SmartProxyClient:
         method: str,
         url: str,
         **kwargs: Unpack[HttpRequestKwargs],
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         return await self._request_with_retry(method.lower(), url, **kwargs)
 
     def stream(
@@ -647,10 +647,10 @@ class _StreamContextManager:
         self._method: str = method
         self._url: str = url
         self._kwargs: HttpRequestKwargs = kwargs
-        self._client: httpx.AsyncClient | None = None
-        self._stream_cm: AbstractAsyncContextManager[httpx.Response] | None = None
+        self._client: httpx2.AsyncClient | None = None
+        self._stream_cm: AbstractAsyncContextManager[httpx2.Response] | None = None
 
-    async def _enter_direct_stream(self) -> httpx.Response:
+    async def _enter_direct_stream(self) -> httpx2.Response:
         self._client = self._smart_client.create_client()
         self._stream_cm = self._client.stream(
             self._method,
@@ -667,7 +667,7 @@ class _StreamContextManager:
             await self._client.aclose()
             self._client = None
 
-    async def __aenter__(self) -> httpx.Response:
+    async def __aenter__(self) -> httpx2.Response:
         strategy = self._smart_client.strategy
 
         if self._smart_client.is_local_url(self._url):
@@ -703,7 +703,7 @@ class _StreamContextManager:
                     await self._cleanup_stream()
                     await egress_prefer_proxy_delete(origin)
                     return await self._enter_direct_stream()
-                except (httpx.ConnectTimeout, httpx.ConnectError) as e:
+                except (httpx2.ConnectTimeout, httpx2.ConnectError) as e:
                     last_exc = e
                     settings.proxy.mark_last_proxy_failed()
                     await self._cleanup_stream()
@@ -733,7 +733,7 @@ class _StreamContextManager:
                             if response.is_success:
                                 await egress_prefer_proxy_set(origin)
                             return response
-                        except (httpx.ConnectTimeout, httpx.ConnectError) as e:
+                        except (httpx2.ConnectTimeout, httpx2.ConnectError) as e:
                             settings.proxy.mark_last_proxy_failed()
                             await self._cleanup_stream()
                             if attempt < self._smart_client.MAX_PROXY_RETRIES - 1:
@@ -760,7 +760,7 @@ class _StreamContextManager:
                             if response.is_success:
                                 await egress_prefer_proxy_set(origin)
                             return response
-                        except (httpx.ConnectTimeout, httpx.ConnectError) as e:
+                        except (httpx2.ConnectTimeout, httpx2.ConnectError) as e:
                             settings.proxy.mark_last_proxy_failed()
                             await self._cleanup_stream()
                             if attempt < self._smart_client.MAX_PROXY_RETRIES - 1:
@@ -794,7 +794,7 @@ class _StreamContextManager:
                 )
                 return await self._stream_cm.__aenter__()
 
-            except (httpx.ConnectTimeout, httpx.ConnectError) as e:
+            except (httpx2.ConnectTimeout, httpx2.ConnectError) as e:
                 settings.proxy.mark_last_proxy_failed()
                 await self._cleanup_stream()
 
@@ -839,7 +839,7 @@ def get_httpx_client(
         strategy: Стратегия (direct_first, proxy_first, direct_only, proxy_only, smart)
         proxy_attempts: Количество попыток через прокси (для proxy_first)
         direct_attempts: Количество попыток прямого подключения (для direct_first)
-        **kwargs: Дополнительные параметры для httpx.AsyncClient
+        **kwargs: Дополнительные параметры для httpx2.AsyncClient
 
     Возвращает:
         SmartProxyClient с настроенной стратегией

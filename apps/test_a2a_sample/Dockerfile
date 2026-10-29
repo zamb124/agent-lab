@@ -13,8 +13,8 @@ COPY apps/test_a2a_sample ./apps/test_a2a_sample
 COPY apps/__init__.py ./apps/
 
 RUN uv pip install --python "${VIRTUAL_ENV}/bin/python" \
-    granian>=2.7.4 \
-    httpx>=0.28.1 \
+    granian>=2.8.6 \
+    "httpx2[http2]>=2.16.0" \
     "a2a-sdk[fastapi]>=1.0,<2"
 
 EXPOSE 8005

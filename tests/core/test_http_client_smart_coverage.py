@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from typing import cast
 from unittest.mock import MagicMock, PropertyMock
 
-import httpx
+import httpx2
 import pytest
 
 from core.clients.redis_client import RedisClient
@@ -128,14 +128,14 @@ def test_retry_http_statuses_includes_401_when_proxy_setting_enabled(
 async def test_request_direct_burst_all_fail_reraises_last_connect_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def handler(request: httpx.Request) -> None:
-        raise httpx.ConnectError("burst", request=request)
+    def handler(request: httpx2.Request) -> None:
+        raise httpx2.ConnectError("burst", request=request)
 
     install_mock_httpx_client(
         monkeypatch,
-        cast(Callable[[httpx.Request], httpx.Response], handler),
+        cast(Callable[[httpx2.Request], httpx2.Response], handler),
     )
-    with pytest.raises(httpx.ConnectError, match="burst"):
+    with pytest.raises(httpx2.ConnectError, match="burst"):
         await _request_direct_burst("GET", "https://burst.example/x", timeout=1.0, attempts=2)
 
 
@@ -147,7 +147,7 @@ async def test_request_direct_burst_zero_attempts_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_relative_path_resolves_with_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
+    install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(200))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART, base_url="https://api.example") as client:
         r = await client.request("GET", "/v1/r")
     assert r.status_code == 200
@@ -155,15 +155,15 @@ async def test_relative_path_resolves_with_base_url(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_smart_connect_failure_raises_when_proxy_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    def handler(request: httpx.Request) -> None:
-        raise httpx.ConnectError("x", request=request)
+    def handler(request: httpx2.Request) -> None:
+        raise httpx2.ConnectError("x", request=request)
 
     install_mock_httpx_client(
         monkeypatch,
-        cast(Callable[[httpx.Request], httpx.Response], handler),
+        cast(Callable[[httpx2.Request], httpx2.Response], handler),
     )
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: False)
-    with pytest.raises(httpx.ConnectError):
+    with pytest.raises(httpx2.ConnectError):
         async with get_httpx_client(strategy=ProxyStrategy.SMART) as client:
             await client.request("GET", "https://no-proxy-fail.example/y")
 
@@ -174,7 +174,7 @@ async def test_stream_smart_connect_failure_raises_when_proxy_disabled(
 ) -> None:
     class StreamFail:
         async def __aenter__(self) -> object:
-            raise httpx.ConnectError("s", request=httpx.Request("GET", "https://x"))
+            raise httpx2.ConnectError("s", request=httpx2.Request("GET", "https://x"))
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -195,9 +195,9 @@ async def test_stream_smart_connect_failure_raises_when_proxy_disabled(
         def stream(self, method: str, url: str, **kwargs: object) -> StreamFail:
             return StreamFail()
 
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: False)
-    with pytest.raises(httpx.ConnectError):
+    with pytest.raises(httpx2.ConnectError):
         async with get_httpx_client(strategy=ProxyStrategy.SMART) as client:
             async with client.stream("GET", "https://stream-no-proxy.example/s"):
                 pass
@@ -205,7 +205,7 @@ async def test_stream_smart_connect_failure_raises_when_proxy_disabled(
 
 @pytest.mark.asyncio
 async def test_stream_direct_first_local(monkeypatch: pytest.MonkeyPatch) -> None:
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(201))
+    install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(201))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.DIRECT_FIRST) as client:
         async with client.stream("GET", "http://127.0.0.1:8010/df") as resp:
             assert resp.status_code == 201
@@ -213,7 +213,7 @@ async def test_stream_direct_first_local(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.asyncio
 async def test_stream_direct_first_remote(monkeypatch: pytest.MonkeyPatch) -> None:
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
+    install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(200))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.DIRECT_FIRST) as client:
         async with client.stream("GET", "https://df-remote.example/s") as resp:
             assert resp.status_code == 200
@@ -223,13 +223,13 @@ async def test_stream_direct_first_remote(monkeypatch: pytest.MonkeyPatch) -> No
 async def test_http_method_shortcuts(monkeypatch: pytest.MonkeyPatch) -> None:
     methods: list[str] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         methods.append(request.method)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
     install_mock_httpx_client(
         monkeypatch,
-        cast(Callable[[httpx.Request], httpx.Response], handler),
+        cast(Callable[[httpx2.Request], httpx2.Response], handler),
     )
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         await client.get("https://m.example/g")
@@ -242,7 +242,7 @@ async def test_http_method_shortcuts(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.asyncio
 async def test_smart_proxy_client_aclose_inner_client() -> None:
-    inner = httpx.AsyncClient()
+    inner = httpx2.AsyncClient()
     client = get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART)
     client._client = inner
     await client.aclose()
@@ -252,7 +252,7 @@ async def test_smart_proxy_client_aclose_inner_client() -> None:
 
 @pytest.mark.asyncio
 async def test_smart_proxy_client_aexit_closes_inner_client() -> None:
-    inner = httpx.AsyncClient()
+    inner = httpx2.AsyncClient()
     client = get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART)
     client._client = inner
     async with client:
@@ -271,8 +271,8 @@ def test_get_settings_cached_on_smart_client() -> None:
 @pytest.mark.asyncio
 async def test_stream_prefer_sticky_success_calls_set(monkeypatch: pytest.MonkeyPatch) -> None:
     class StreamOk:
-        async def __aenter__(self) -> httpx.Response:
-            return httpx.Response(200)
+        async def __aenter__(self) -> httpx2.Response:
+            return httpx2.Response(200)
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -293,7 +293,7 @@ async def test_stream_prefer_sticky_success_calls_set(monkeypatch: pytest.Monkey
         def stream(self, method: str, url: str, **kwargs: object) -> StreamOk:
             return StreamOk()
 
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
     async with _prefer_proxy_origin(monkeypatch, "https://sticky-ok.example/s"):
@@ -319,15 +319,15 @@ async def test_stream_prefer_zero_retries_raises_unexpected_state(monkeypatch: p
 @pytest.mark.asyncio
 async def test_stream_403_proxy_phase_all_connect_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     class Direct403:
-        async def __aenter__(self) -> httpx.Response:
-            return httpx.Response(403)
+        async def __aenter__(self) -> httpx2.Response:
+            return httpx2.Response(403)
 
         async def __aexit__(self, *args: object) -> None:
             return None
 
     class ProxyFail:
         async def __aenter__(self) -> object:
-            raise httpx.ConnectError("px", request=httpx.Request("GET", "https://x"))
+            raise httpx2.ConnectError("px", request=httpx2.Request("GET", "https://x"))
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -354,9 +354,9 @@ async def test_stream_403_proxy_phase_all_connect_fail(monkeypatch: pytest.Monke
             return ProxyFail()
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
-    with pytest.raises(httpx.ConnectError):
+    with pytest.raises(httpx2.ConnectError):
         async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
             async with client.stream("GET", "https://stream-403-dead.example/s"):
                 pass
@@ -366,7 +366,7 @@ async def test_stream_403_proxy_phase_all_connect_fail(monkeypatch: pytest.Monke
 async def test_stream_proxy_only_all_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     class AlwaysFail:
         async def __aenter__(self) -> object:
-            raise httpx.ConnectError("p", request=httpx.Request("GET", "https://x"))
+            raise httpx2.ConnectError("p", request=httpx2.Request("GET", "https://x"))
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -388,8 +388,8 @@ async def test_stream_proxy_only_all_fail(monkeypatch: pytest.MonkeyPatch) -> No
             return AlwaysFail()
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    with pytest.raises(httpx.ConnectError):
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
+    with pytest.raises(httpx2.ConnectError):
         async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.PROXY_ONLY) as client:
             async with client.stream("GET", "https://p-only-dead.example/s"):
                 pass
@@ -397,7 +397,7 @@ async def test_stream_proxy_only_all_fail(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.asyncio
 async def test_stream_context_aexit_closes(monkeypatch: pytest.MonkeyPatch) -> None:
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
+    install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(200))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         stream_cm = client.stream("GET", "https://aexit.example/s")
         async with stream_cm as resp:
@@ -406,7 +406,7 @@ async def test_stream_context_aexit_closes(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.asyncio
 async def test_relative_url_requires_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
+    install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(200))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         with pytest.raises(ValueError, match="base_url"):
             await client.request("GET", "/relative-only")
@@ -442,7 +442,7 @@ async def test_smart_local_skip_proxy_no_rotation(host: str, monkeypatch: pytest
                 else:
                     try:
                         response = await client.request("GET", url)
-                    except (httpx.ConnectError, httpx.ConnectTimeout):
+                    except (httpx2.ConnectError, httpx2.ConnectTimeout):
                         response = None
                     else:
                         assert response.status_code == 200
@@ -469,10 +469,10 @@ async def test_smart_429_retries_via_proxy(monkeypatch: pytest.MonkeyPatch) -> N
         async def request(self, method: str, url: str, **kwargs: object) -> object:
             if self._proxy_kw is None:
                 return first
-            return httpx.Response(200)
+            return httpx2.Response(200)
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -500,10 +500,10 @@ async def test_smart_451_retries_via_proxy(monkeypatch: pytest.MonkeyPatch) -> N
         async def request(self, method: str, url: str, **kwargs: object) -> object:
             if self._proxy_kw is None:
                 return first
-            return httpx.Response(200)
+            return httpx2.Response(200)
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -537,9 +537,9 @@ async def test_smart_401_retries_when_setting_enabled(monkeypatch: pytest.Monkey
         async def request(self, method: str, url: str, **kwargs: object) -> object:
             if self._proxy_kw is None:
                 return first
-            return httpx.Response(200)
+            return httpx2.Response(200)
 
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -588,7 +588,7 @@ async def test_prefer_proxy_error_status_falls_back_direct(monkeypatch: pytest.M
 
 @pytest.mark.asyncio
 async def test_stream_smart_mock_transport_200(monkeypatch: pytest.MonkeyPatch) -> None:
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200, content=b"ok"))
+    install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(200, content=b"ok"))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         async with client.stream("GET", "https://stream.example/s") as resp:
@@ -599,14 +599,14 @@ async def test_stream_smart_mock_transport_200(monkeypatch: pytest.MonkeyPatch) 
 async def test_stream_smart_connect_then_proxy_success(monkeypatch: pytest.MonkeyPatch) -> None:
     class StreamFailDirect:
         async def __aenter__(self) -> object:
-            raise httpx.ConnectError("d", request=httpx.Request("GET", "https://x"))
+            raise httpx2.ConnectError("d", request=httpx2.Request("GET", "https://x"))
 
         async def __aexit__(self, *args: object) -> None:
             return None
 
     class StreamOk:
-        async def __aenter__(self) -> httpx.Response:
-            return httpx.Response(200, content=b"p")
+        async def __aenter__(self) -> httpx2.Response:
+            return httpx2.Response(200, content=b"p")
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -630,7 +630,7 @@ async def test_stream_smart_connect_then_proxy_success(monkeypatch: pytest.Monke
             return StreamOk()
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -655,13 +655,13 @@ async def test_smart_request_connect_fail_then_proxy_rotation(monkeypatch: pytes
         async def aclose(self) -> None:
             return None
 
-        async def request(self, http_method: str, url: str, **kwargs: object) -> httpx.Response:
+        async def request(self, http_method: str, url: str, **kwargs: object) -> httpx2.Response:
             if self._proxy_kw is None:
-                raise httpx.ConnectError("d", request=httpx.Request(http_method, url))
-            return httpx.Response(200)
+                raise httpx2.ConnectError("d", request=httpx2.Request(http_method, url))
+            return httpx2.Response(200)
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -677,7 +677,7 @@ async def test_smart_request_connect_fail_then_proxy_rotation(monkeypatch: pytes
 async def test_stream_direct_connect_fail_all_proxy_streams_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     class StreamFail:
         async def __aenter__(self) -> object:
-            raise httpx.ConnectError("f", request=httpx.Request("GET", "https://x"))
+            raise httpx2.ConnectError("f", request=httpx2.Request("GET", "https://x"))
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -699,9 +699,9 @@ async def test_stream_direct_connect_fail_all_proxy_streams_fail(monkeypatch: py
             return StreamFail()
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
-    with pytest.raises(httpx.ConnectError):
+    with pytest.raises(httpx2.ConnectError):
         async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
             async with client.stream("GET", "https://stream-all-proxy-dead.example/s"):
                 pass
@@ -710,15 +710,15 @@ async def test_stream_direct_connect_fail_all_proxy_streams_fail(monkeypatch: py
 @pytest.mark.asyncio
 async def test_stream_smart_403_retries_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
     class StreamCM403:
-        async def __aenter__(self) -> httpx.Response:
-            return httpx.Response(403)
+        async def __aenter__(self) -> httpx2.Response:
+            return httpx2.Response(403)
 
         async def __aexit__(self, *args: object) -> None:
             return None
 
     class StreamCM200:
-        async def __aenter__(self) -> httpx.Response:
-            return httpx.Response(200)
+        async def __aenter__(self) -> httpx2.Response:
+            return httpx2.Response(200)
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -742,7 +742,7 @@ async def test_stream_smart_403_retries_proxy(monkeypatch: pytest.MonkeyPatch) -
             return StreamCM200()
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -765,8 +765,8 @@ async def test_stream_prefer_proxy_non_success_falls_back_direct(monkeypatch: py
             return None
 
     class Ok:
-        async def __aenter__(self) -> httpx.Response:
-            return httpx.Response(200)
+        async def __aenter__(self) -> httpx2.Response:
+            return httpx2.Response(200)
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -789,7 +789,7 @@ async def test_stream_prefer_proxy_non_success_falls_back_direct(monkeypatch: py
                 return Bad()
             return Ok()
 
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
     async with _prefer_proxy_origin(monkeypatch, "https://stream-prefer-bad.example/s"):
@@ -805,14 +805,14 @@ async def test_stream_prefer_proxy_non_success_falls_back_direct(monkeypatch: py
 async def test_stream_prefer_all_proxies_fail_then_direct(monkeypatch: pytest.MonkeyPatch) -> None:
     class FailingStream:
         async def __aenter__(self) -> object:
-            raise httpx.ConnectError("p", request=httpx.Request("GET", "https://x"))
+            raise httpx2.ConnectError("p", request=httpx2.Request("GET", "https://x"))
 
         async def __aexit__(self, *args: object) -> None:
             return None
 
     class OkStream:
-        async def __aenter__(self) -> httpx.Response:
-            return httpx.Response(200)
+        async def __aenter__(self) -> httpx2.Response:
+            return httpx2.Response(200)
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -839,7 +839,7 @@ async def test_stream_prefer_all_proxies_fail_then_direct(monkeypatch: pytest.Mo
             return OkStream()
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with _prefer_proxy_origin(monkeypatch, "https://stream-prefer-dead.example/s"):
         async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -852,7 +852,7 @@ async def test_stream_prefer_all_proxies_fail_then_direct(monkeypatch: pytest.Mo
 
 @pytest.mark.asyncio
 async def test_request_public_oauth_direct_ok(monkeypatch: pytest.MonkeyPatch) -> None:
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200, text="d"))
+    install_mock_httpx_client(monkeypatch, lambda r: httpx2.Response(200, text="d"))
     r = await request_public_oauth("GET", "https://oauth.example/ok", timeout=5.0, httpx_client_kwargs={})
     assert r.status_code == 200
 
@@ -861,15 +861,15 @@ async def test_request_public_oauth_direct_ok(monkeypatch: pytest.MonkeyPatch) -
 async def test_request_public_oauth_proxy_after_direct_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     n = {"i": 0}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         n["i"] += 1
         if n["i"] <= 3:
-            raise httpx.ConnectError("d", request=request)
-        return httpx.Response(200, text="via")
+            raise httpx2.ConnectError("d", request=request)
+        return httpx2.Response(200, text="via")
 
     install_mock_httpx_client(
         monkeypatch,
-        cast(Callable[[httpx.Request], httpx.Response], handler),
+        cast(Callable[[httpx2.Request], httpx2.Response], handler),
     )
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
@@ -882,15 +882,15 @@ async def test_request_public_oauth_proxy_after_direct_failures(monkeypatch: pyt
 async def test_request_public_oauth_proxy_fail_then_direct_burst(monkeypatch: pytest.MonkeyPatch) -> None:
     n = {"i": 0}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         n["i"] += 1
         if n["i"] <= 4:
-            raise httpx.ConnectError("x", request=request)
-        return httpx.Response(200, text="final")
+            raise httpx2.ConnectError("x", request=request)
+        return httpx2.Response(200, text="final")
 
     install_mock_httpx_client(
         monkeypatch,
-        cast(Callable[[httpx.Request], httpx.Response], handler),
+        cast(Callable[[httpx2.Request], httpx2.Response], handler),
     )
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
@@ -923,10 +923,10 @@ async def test_stream_proxy_only_rotates(monkeypatch: pytest.MonkeyPatch) -> Non
         def __init__(self, n: int) -> None:
             self._n = n
 
-        async def __aenter__(self) -> httpx.Response:
+        async def __aenter__(self) -> httpx2.Response:
             if self._n < 3:
-                raise httpx.ConnectError("p", request=httpx.Request("GET", "https://x"))
-            return httpx.Response(200)
+                raise httpx2.ConnectError("p", request=httpx2.Request("GET", "https://x"))
+            return httpx2.Response(200)
 
         async def __aexit__(self, *args: object) -> None:
             return None
@@ -957,7 +957,7 @@ async def test_stream_proxy_only_rotates(monkeypatch: pytest.MonkeyPatch) -> Non
         return FakeAsyncClient(*args, **kwargs)
 
     _proxy_settings(monkeypatch)
-    monkeypatch.setattr("core.http.client.httpx.AsyncClient", factory)
+    monkeypatch.setattr("core.http.client.httpx2.AsyncClient", factory)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.PROXY_ONLY) as client:
         async with client.stream("GET", "https://p-only.example/s") as resp:
             assert resp.status_code == 200
@@ -972,7 +972,7 @@ async def test_stream_plain_400_does_not_raise_response_not_read(
     error_body = b'{"error":{"message":"The model nvidia/NVIDIA-Nemotron is not supported"}}'
     calls = {"n": 0}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         calls["n"] += 1
         return unread_json_response(request, 400, error_body)
 

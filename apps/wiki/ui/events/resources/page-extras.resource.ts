@@ -8,8 +8,7 @@ import { createAsyncOp } from '@platform/lib/events/index.js';
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import { httpRequest } from '@platform/lib/events/http.js';
-
-type EventPayload = Record<string, unknown>;
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const API_URL = '/wiki/api/v1';
 
@@ -19,20 +18,41 @@ function unwrapWikiPageResult(state: AsyncOpSlice, event: PlatformEvent, events:
     if (event.type !== events.SUCCEEDED) {
         return state;
     }
-    const payload = event.payload as EventPayload | null;
-    if (!payload || !('result' in payload)) {
+    if (!isPlainRecord(event.payload) || !('result' in event.payload)) {
         throw new Error('wiki extras: SUCCEEDED payload.result required');
     }
-    const result = payload.result as { page?: unknown } | null;
-    if (
-        !result
-        || typeof result !== 'object'
-        || result.page === null
-        || typeof result.page !== 'object'
-    ) {
+    const result = event.payload.result;
+    if (!isPlainRecord(result)) {
         throw new Error('wiki extras: ожидался WikiPageResponse с полем page');
     }
-    return { ...state, lastResult: result.page };
+    const page = result.page;
+    if (!isPlainRecord(page)) {
+        throw new Error('wiki extras: ожидался WikiPageResponse с полем page');
+    }
+    return { ...state, lastResult: page };
+}
+
+function linkToken(payload: unknown): string {
+    if (!isPlainRecord(payload)) {
+        throw new Error('wiki public: link_token required');
+    }
+    const token = payload.link_token;
+    if (typeof token !== 'string' || token === '') {
+        throw new Error('wiki public: link_token required');
+    }
+    return token;
+}
+
+function publicPageRef(payload: unknown): { linkToken: string; wikiPageId: string } {
+    if (!isPlainRecord(payload)) {
+        throw new Error('wiki public: link_token and wiki_page_id required');
+    }
+    const token = payload.link_token;
+    const wikiPageId = payload.wiki_page_id;
+    if (typeof token !== 'string' || token === '' || typeof wikiPageId !== 'string' || wikiPageId === '') {
+        throw new Error('wiki public: link_token and wiki_page_id required');
+    }
+    return { linkToken: token, wikiPageId };
 }
 
 export const wikiAccessReadOp = createAsyncOp({
@@ -166,10 +186,10 @@ export const wikiPublicPageOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/wiki/api/v1/public/pages/:link_token' },
     request: ({ payload }) => {
-        const p = payload as { link_token: string };
+        const token = linkToken(payload);
         return httpRequest({
             method: 'GET',
-            url: `${API_URL}/public/pages/${p.link_token}`,
+            url: `${API_URL}/public/pages/${token}`,
         });
     },
 });
@@ -179,10 +199,10 @@ export const wikiPublicTreeOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/wiki/api/v1/public/pages/:link_token/tree' },
     request: ({ payload }) => {
-        const p = payload as { link_token: string };
+        const token = linkToken(payload);
         return httpRequest({
             method: 'GET',
-            url: `${API_URL}/public/pages/${p.link_token}/tree`,
+            url: `${API_URL}/public/pages/${token}/tree`,
         });
     },
 });
@@ -195,10 +215,10 @@ export const wikiPublicSitePageOp = createAsyncOp({
         path: '/wiki/api/v1/public/pages/:link_token/pages/:wiki_page_id',
     },
     request: ({ payload }) => {
-        const p = payload as { link_token: string; wiki_page_id: string };
+        const ref = publicPageRef(payload);
         return httpRequest({
             method: 'GET',
-            url: `${API_URL}/public/pages/${p.link_token}/pages/${p.wiki_page_id}`,
+            url: `${API_URL}/public/pages/${ref.linkToken}/pages/${ref.wikiPageId}`,
         });
     },
 });

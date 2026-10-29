@@ -20,7 +20,12 @@
 
 import { CoreEvents } from '@platform/lib/events/index.js';
 import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+
+function hasOwnKey<T extends object>(catalog: T, key: string): key is Extract<keyof T, string> {
+    return Object.prototype.hasOwnProperty.call(catalog, key);
+}
 
 const KEYS = Object.freeze({
     selectedChannelId:      platformStorageKey('sync', 'chat.selected_channel_id'),
@@ -36,19 +41,24 @@ const HYDRATION_ACTIONS = Object.freeze({
 });
 
 function _extractStringField(event: PlatformEvent, fieldName: string) {
-    if (!event.payload || typeof event.payload !== 'object') return null;
-    const value = (event.payload as Record<string, unknown>)[fieldName];
+    if (!isPlainRecord(event.payload)) return null;
+    const value = event.payload[fieldName];
     return typeof value === 'string' && value !== '' ? value : null;
 }
 
 const PERSIST_TRIGGERS = Object.freeze({
-    'sync/channels/channel_selected': (event: PlatformEvent) => ({ key: KEYS.selectedChannelId,  value: _extractStringField(event, 'channelId') }),
-    'sync/chat_ui/section_toggled':   (event: PlatformEvent, getState: () => Record<string, any>) => {
-        const slice = getState().syncChatUi;
-        if (!slice || !slice.sidebarSectionOpen || typeof slice.sidebarSectionOpen !== 'object') {
+    'sync/channels/channel_selected': (event: PlatformEvent, _getState: () => unknown) => ({
+        key: KEYS.selectedChannelId,
+        value: _extractStringField(event, 'channelId'),
+    }),
+    'sync/chat_ui/section_toggled': (_event: PlatformEvent, getState: () => unknown) => {
+        const state = getState();
+        const slice = isPlainRecord(state) ? state.syncChatUi : null;
+        const sections = isPlainRecord(slice) ? slice.sidebarSectionOpen : null;
+        if (!isPlainRecord(sections)) {
             return { key: KEYS.sidebarSectionOpen, value: {} };
         }
-        return { key: KEYS.sidebarSectionOpen, value: { ...slice.sidebarSectionOpen } };
+        return { key: KEYS.sidebarSectionOpen, value: { ...sections } };
     },
 });
 
@@ -79,11 +89,13 @@ export function createSyncPersistEffect() {
         }
 
         if (event.type === CoreEvents.STORAGE_LOADED) {
-            if (!event.payload || typeof event.payload !== 'object') return;
-            const { key, value } = event.payload as { key?: unknown; value?: unknown };
+            if (!isPlainRecord(event.payload)) return;
+            const key = event.payload.key;
+            const value = event.payload.value;
             if (value === null || value === undefined) return;
-            const factory = typeof key === 'string' ? (HYDRATION_ACTIONS as Record<string, (v: unknown) => { type: string; payload: unknown } | null>)[key] : undefined;
-            if (typeof factory !== 'function') return;
+            if (typeof key !== 'string' || !hasOwnKey(HYDRATION_ACTIONS, key)) return;
+            const factory = HYDRATION_ACTIONS[key];
+            if (factory === undefined) return;
             const action = factory(value);
             if (action && typeof action.type === 'string') {
                 ctx.dispatch(action.type, action.payload, { source: 'storage' });
@@ -91,10 +103,8 @@ export function createSyncPersistEffect() {
             return;
         }
 
-        const persistFn = (PERSIST_TRIGGERS as Record<string, (e: PlatformEvent, gs: () => Record<string, any>) => { key: string; value: unknown }>)[event.type];
-        if (persistFn) {
-            const { key, value } = persistFn(event, ctx.getState as () => Record<string, any>);
-            ctx.dispatch(CoreEvents.STORAGE_PERSIST_REQUESTED, { key, value }, { source: 'system' });
-        }
+        if (!hasOwnKey(PERSIST_TRIGGERS, event.type)) return;
+        const { key, value } = PERSIST_TRIGGERS[event.type](event, ctx.getState);
+        ctx.dispatch(CoreEvents.STORAGE_PERSIST_REQUESTED, { key, value }, { source: 'system' });
     };
 }

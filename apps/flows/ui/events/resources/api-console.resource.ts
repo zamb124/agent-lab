@@ -21,15 +21,52 @@ import {
 } from '@platform/lib/flow-ui/protocol/a2a-stream.js';
 import { textFromParts as _extractA2aTextFromParts } from '@platform/lib/flow-ui/protocol/parts.js';
 
-const EMPTY_LIST = Object.freeze([]);
-const EMPTY_OBJECT = Object.freeze({});
+interface ConsoleStream {
+    taskId: string | null;
+    contextId: string | null;
+    terminalState: string | null;
+    terminal: boolean;
+    responseChunks: string[];
+    reasoningChunks: string[];
+    frames: unknown[];
+}
 
-function _dataPartText(part: any) {
-    if (!part || typeof part !== 'object') {
+interface ConsoleJsonRpcResult {
+    mode: string;
+    task_id: string | null;
+    context_id: string | null;
+    terminal_state: string | null;
+    response_text: string;
+    reasoning_text: string;
+    frames: unknown[];
+    raw: unknown;
+}
+
+interface ConsoleHttpResponse {
+    status: number;
+    status_text: string;
+    headers: Record<string, unknown>;
+    content_type: string;
+    body_kind: string;
+    raw_text: string;
+    body: unknown;
+}
+
+interface ConsoleExchangeResult extends ConsoleJsonRpcResult {
+    request: HttpRequestSpec;
+    response: ConsoleHttpResponse;
+}
+
+function _isConsoleObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function _dataPartText(part: unknown): string {
+    if (!_isConsoleObject(part)) {
         return '';
     }
     const data = part.data;
-    if (!data || typeof data !== 'object') {
+    if (!_isConsoleObject(data)) {
         return '';
     }
     const res = data.res;
@@ -39,22 +76,22 @@ function _dataPartText(part: any) {
     return '';
 }
 
-function _partsDataText(parts: any) {
+function _partsDataText(parts: unknown): string {
     if (!Array.isArray(parts)) {
         return '';
     }
     return parts.map(_dataPartText).filter((text) => text.length > 0).join('');
 }
 
-function _appendConsoleResultText(target: any, text: any) {
+function _appendConsoleResultText(target: string[], text: unknown): void {
     if (typeof text !== 'string' || text.length === 0) {
         return;
     }
     target.push(text);
 }
 
-function _collectConsoleFrame(frame: any, stream: any) {
-    if (!frame || typeof frame !== 'object') {
+function _collectConsoleFrame(frame: unknown, stream: ConsoleStream): void {
+    if (!_isConsoleObject(frame)) {
         return;
     }
     if (frame.error) {
@@ -62,7 +99,7 @@ function _collectConsoleFrame(frame: any, stream: any) {
     }
     stream.frames.push(frame);
     const result = frame.result;
-    if (!result || typeof result !== 'object') {
+    if (!_isConsoleObject(result)) {
         return;
     }
 
@@ -81,8 +118,8 @@ function _collectConsoleFrame(frame: any, stream: any) {
     }
 
     if (unwrapped.frameKind === 'artifactUpdate') {
-        const artifact = unwrapped.event.artifact as Record<string, any> | null;
-        if (artifact && typeof artifact === 'object') {
+        const artifact = unwrapped.event.artifact;
+        if (_isConsoleObject(artifact)) {
             const text = _extractA2aTextFromParts(artifact.parts);
             const dataText = _partsDataText(artifact.parts);
             const artifactName = typeof artifact.name === 'string' ? artifact.name : 'response';
@@ -96,31 +133,33 @@ function _collectConsoleFrame(frame: any, stream: any) {
     }
 
     if (unwrapped.frameKind === 'message') {
-        _appendConsoleResultText(stream.responseChunks, _extractA2aTextFromParts(unwrapped.event.parts as any));
+        _appendConsoleResultText(stream.responseChunks, _extractA2aTextFromParts(unwrapped.event.parts));
     }
 
-    if (unwrapped.frameKind === 'statusUpdate' && unwrapped.event.status && typeof unwrapped.event.status === 'object') {
-        const status = unwrapped.event.status as Record<string, any>;
-        if (typeof status.state === 'string') {
-            stream.terminalState = status.state;
-        }
-        if (stream.responseChunks.length === 0 && status.message && typeof status.message === 'object') {
-            _appendConsoleResultText(
-                stream.responseChunks,
-                _extractA2aTextFromParts(status.message.parts),
-            );
-        }
-        if (_isStreamBoundaryState(stream.terminalState)) {
-            stream.terminal = true;
-        }
+    if (unwrapped.frameKind !== 'statusUpdate') {
+        return;
+    }
+    const status = unwrapped.event.status;
+    if (!_isConsoleObject(status)) {
+        return;
+    }
+    const state = status.state;
+    if (typeof state === 'string') {
+        stream.terminalState = state;
+    }
+    const message = status.message;
+    if (stream.responseChunks.length === 0 && _isConsoleObject(message)) {
+        _appendConsoleResultText(
+            stream.responseChunks,
+            _extractA2aTextFromParts(message.parts),
+        );
+    }
+    if (_isStreamBoundaryState(stream.terminalState)) {
+        stream.terminal = true;
     }
 }
 
-function _isConsoleObject(value: unknown) {
-    return value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function _jsonRpcResponseError(frame: any) {
+function _jsonRpcResponseError(frame: unknown): HttpError {
     const err = _isConsoleObject(frame) ? frame.error : null;
     let errMsg = 'a2a response error';
     if (_isConsoleObject(err)) {
@@ -133,7 +172,7 @@ function _jsonRpcResponseError(frame: any) {
     return new HttpError(errMsg, 0, err);
 }
 
-function _consoleModeFromPayload(payload: any, body: any) {
+function _consoleModeFromPayload(payload: Record<string, unknown>, body: Record<string, unknown>): 'stream' | 'sync' | 'async' {
     if (typeof payload.mode === 'string' && payload.mode.length > 0) {
         const mode = payload.mode.trim().toLowerCase();
         if (mode === 'stream' || mode === 'sync' || mode === 'async') {
@@ -141,14 +180,14 @@ function _consoleModeFromPayload(payload: any, body: any) {
         }
         throw new Error('flows/api_console_run: mode must be stream, sync or async');
     }
-    if (_isConsoleObject(body) && body.method === 'SendStreamingMessage') {
+    if (body.method === 'SendStreamingMessage') {
         return 'stream';
     }
-    if (_isConsoleObject(body) && body.method === 'SendMessage') {
+    if (body.method === 'SendMessage') {
         const params = _isConsoleObject(body.params) ? body.params : null;
         const configuration =
-            params && _isConsoleObject(params.configuration) ? params.configuration : null;
-        if (configuration && configuration.returnImmediately === true) {
+            params !== null && _isConsoleObject(params.configuration) ? params.configuration : null;
+        if (configuration !== null && configuration.returnImmediately === true) {
             return 'async';
         }
         return 'sync';
@@ -158,7 +197,7 @@ function _consoleModeFromPayload(payload: any, body: any) {
     );
 }
 
-function _taskIdFromTask(task: any) {
+function _taskIdFromTask(task: unknown): string | null {
     if (!_isConsoleObject(task)) {
         return null;
     }
@@ -174,7 +213,7 @@ function _taskIdFromTask(task: any) {
     return null;
 }
 
-function _contextIdFromTask(task: any, fallbackContextId: any) {
+function _contextIdFromTask(task: unknown, fallbackContextId: string | null): string | null {
     if (!_isConsoleObject(task)) {
         return fallbackContextId;
     }
@@ -187,18 +226,18 @@ function _contextIdFromTask(task: any, fallbackContextId: any) {
     return fallbackContextId;
 }
 
-function _statusStateFromTask(task: any) {
+function _statusStateFromTask(task: unknown): string | null {
     if (!_isConsoleObject(task)) {
         return null;
     }
     const status = _isConsoleObject(task.status) ? task.status : null;
-    if (status && typeof status.state === 'string' && status.state.length > 0) {
+    if (status !== null && typeof status.state === 'string' && status.state.length > 0) {
         return status.state;
     }
     return null;
 }
 
-function _appendConsolePartsText(responseChunks: any, reasoningChunks: any, parts: any, name: string) {
+function _appendConsolePartsText(responseChunks: string[], reasoningChunks: string[], parts: unknown, name: string): void {
     const text = _extractA2aTextFromParts(parts);
     const dataText = _partsDataText(parts);
     if (name === 'reasoning') {
@@ -210,9 +249,9 @@ function _appendConsolePartsText(responseChunks: any, reasoningChunks: any, part
     _appendConsoleResultText(responseChunks, dataText);
 }
 
-function _consoleTaskText(task: any) {
-    const responseChunks: any[] = [];
-    const reasoningChunks: any[] = [];
+function _consoleTaskText(task: unknown): { response_text: string; reasoning_text: string } {
+    const responseChunks: string[] = [];
+    const reasoningChunks: string[] = [];
     if (_isConsoleObject(task) && Array.isArray(task.artifacts)) {
         for (const artifact of task.artifacts) {
             if (!_isConsoleObject(artifact)) {
@@ -224,8 +263,8 @@ function _consoleTaskText(task: any) {
     }
     if (responseChunks.length === 0 && _isConsoleObject(task)) {
         const status = _isConsoleObject(task.status) ? task.status : null;
-        const message = status && _isConsoleObject(status.message) ? status.message : null;
-        if (message) {
+        const message = status !== null && _isConsoleObject(status.message) ? status.message : null;
+        if (message !== null) {
             _appendConsolePartsText(responseChunks, reasoningChunks, message.parts, 'response');
         }
     }
@@ -238,7 +277,7 @@ function _consoleTaskText(task: any) {
     };
 }
 
-function _consoleResultFromJsonRpc(response: any, mode: string, fallbackContextId: any) {
+function _consoleResultFromJsonRpc(response: unknown, mode: string, fallbackContextId: string | null): ConsoleJsonRpcResult {
     if (!_isConsoleObject(response)) {
         throw new Error('flows/api_console_run: JSON-RPC response object required');
     }
@@ -262,13 +301,13 @@ function _consoleResultFromJsonRpc(response: any, mode: string, fallbackContextI
     };
 }
 
-function _consoleSleep(ms: any) {
+function _consoleSleep(ms: number): Promise<void> {
     return new Promise((resolve) => {
         setTimeout(resolve, ms);
     });
 }
 
-function _getTaskConsoleBody(taskId: any) {
+function _getTaskConsoleBody(taskId: string): Record<string, unknown> {
     return {
         jsonrpc: '2.0',
         id: `get_${Date.now()}`,
@@ -284,7 +323,7 @@ function _consoleAcceptForMode(mode: string) {
     return 'application/json';
 }
 
-function _consoleRequestEnvelope(flowId: string, body: any, mode: string): HttpRequestSpec {
+function _consoleRequestEnvelope(flowId: string, body: unknown, mode: string): HttpRequestSpec {
     return {
         url: `/flows/api/v1/${encodeURIComponent(flowId)}`,
         method: 'POST',
@@ -298,26 +337,31 @@ function _consoleRequestEnvelope(flowId: string, body: any, mode: string): HttpR
     };
 }
 
-function _consoleResponseEnvelope(envelope: any, bodyKind: any) {
+function _consoleResponseEnvelope(envelope: unknown, bodyKind: string): ConsoleHttpResponse {
     if (!_isConsoleObject(envelope)) {
         throw new Error('flows/api_console_run: HTTP response envelope required');
     }
-    const headers = _isConsoleObject(envelope.headers) ? envelope.headers : EMPTY_OBJECT;
+    const headers: Record<string, unknown> = _isConsoleObject(envelope.headers) ? envelope.headers : {};
+    const contentType = headers['content-type'];
     return {
         status: typeof envelope.status === 'number' ? envelope.status : 0,
         status_text: typeof envelope.statusText === 'string' ? envelope.statusText : '',
         headers,
-        content_type: typeof headers['content-type'] === 'string' ? headers['content-type'] : '',
+        content_type: typeof contentType === 'string' ? contentType : '',
         body_kind: bodyKind,
         raw_text: typeof envelope.raw === 'string' ? envelope.raw : '',
         body: envelope.body,
     };
 }
 
-function _consoleStreamEvents(frames: any) {
-    if (!Array.isArray(frames)) {
-        return EMPTY_LIST;
+function _httpEnvelopeBody(envelope: unknown): unknown {
+    if (!_isConsoleObject(envelope)) {
+        throw new Error('flows/api_console_run: HTTP response envelope required');
     }
+    return envelope.body;
+}
+
+function _consoleStreamEvents(frames: readonly unknown[]) {
     return frames.map((frame, index) => ({
         index,
         event: 'message',
@@ -325,7 +369,11 @@ function _consoleStreamEvents(frames: any) {
     }));
 }
 
-function _consoleResultWithExchange(result: any, request: any, response: any) {
+function _consoleResultWithExchange(
+    result: ConsoleJsonRpcResult,
+    request: HttpRequestSpec,
+    response: ConsoleHttpResponse,
+): ConsoleExchangeResult {
     return {
         ...result,
         request,
@@ -333,14 +381,14 @@ function _consoleResultWithExchange(result: any, request: any, response: any) {
     };
 }
 
-async function _pollConsoleAsyncTask(flowId: string, submittedResult: any) {
+async function _pollConsoleAsyncTask(flowId: string, submittedResult: ConsoleExchangeResult) {
     const taskId = submittedResult.task_id;
     if (typeof taskId !== 'string' || taskId.length === 0) {
         return submittedResult;
     }
-    const frames = [submittedResult.raw];
-    const pollExchanges: any[] = [];
-    let latest = submittedResult;
+    const frames: unknown[] = [submittedResult.raw];
+    const pollExchanges: { attempt: number; request: HttpRequestSpec; response: ConsoleHttpResponse }[] = [];
+    let latest: ConsoleExchangeResult = submittedResult;
     for (let attempt = 0; attempt < 80; attempt += 1) {
         if (attempt > 0) {
             await _consoleSleep(500);
@@ -349,7 +397,7 @@ async function _pollConsoleAsyncTask(flowId: string, submittedResult: any) {
         const pollRequest = _consoleRequestEnvelope(flowId, pollBody, 'sync');
         const pollEnvelope = await httpRequest({ ...pollRequest, returnMeta: true });
         const pollResponse = _consoleResponseEnvelope(pollEnvelope, 'json');
-        const frame = (pollEnvelope as any).body;
+        const frame = _httpEnvelopeBody(pollEnvelope);
         pollExchanges.push({
             attempt: attempt + 1,
             request: pollRequest,
@@ -396,22 +444,22 @@ export const apiConsoleRunOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'POST', path: '/flows/api/v1/:flow_id' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
+        if (!_isConsoleObject(payload)) {
             throw new Error('flows/api_console_run: payload required');
         }
-        const flowId = (payload as Record<string, unknown>).flow_id;
-        const body = (payload as Record<string, unknown>).body;
+        const flowId = payload.flow_id;
+        const body = payload.body;
         if (typeof flowId !== 'string' || flowId.length === 0) {
             throw new Error('flows/api_console_run: flow_id required');
         }
-        if (!body || typeof body !== 'object') {
+        if (!_isConsoleObject(body)) {
             throw new Error('flows/api_console_run: body required');
         }
         const mode = _consoleModeFromPayload(payload, body);
-        const params = (body as Record<string, any>).params;
-        const message = params && typeof params === 'object' ? params.message : null;
+        const params = body.params;
+        const message = _isConsoleObject(params) ? params.message : null;
         const contextId =
-            message && typeof message.contextId === 'string' && message.contextId.length > 0
+            _isConsoleObject(message) && typeof message.contextId === 'string' && message.contextId.length > 0
                 ? message.contextId
                 : null;
         if (mode !== 'stream') {
@@ -419,7 +467,7 @@ export const apiConsoleRunOp = createAsyncOp({
             const envelope = await httpRequest({ ...request, returnMeta: true });
             const response = _consoleResponseEnvelope(envelope, 'json');
             const result = _consoleResultWithExchange(
-                _consoleResultFromJsonRpc((envelope as any).body, mode, contextId),
+                _consoleResultFromJsonRpc(_httpEnvelopeBody(envelope), mode, contextId),
                 request,
                 response,
             );
@@ -428,7 +476,7 @@ export const apiConsoleRunOp = createAsyncOp({
             }
             return result;
         }
-        const stream = {
+        const stream: ConsoleStream = {
             taskId: null,
             contextId,
             terminalState: null,

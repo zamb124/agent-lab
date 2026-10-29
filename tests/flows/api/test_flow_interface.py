@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.src.models import FlowConfig
 from core.context import Context, clear_context, set_context

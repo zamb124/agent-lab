@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from tests.fixtures.platform_events import platform_events_listener
 from tests.realtime.bus_events import bus_notify_event

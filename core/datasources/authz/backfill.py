@@ -43,7 +43,7 @@ async def backfill_datasource_authz(*, limit: int | None = None) -> tuple[int, i
 
     authz = build_authz_service()
     written = 0
-    for row in await DatasourceConnection.list_all_by_datasource_id(limit=limit):
+    for row in await DatasourceConnection.list_all_by_datasource_id_asc(limit=limit):
         await authz.write(
             [
                 datasource_company_link(row.datasource_id, row.company_id),

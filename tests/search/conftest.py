@@ -15,7 +15,7 @@ from core.models.identity_models import Company
 from core.search.index_models import SearchIndexCrawlTaxonomy
 
 _ = wire_worker("search")
-import apps.search_worker.tasks.crawl_tasks as _search_crawl_tasks  # noqa: E402, F401
+import apps.search.tasks.crawl_tasks as _search_crawl_tasks  # noqa: E402, F401
 
 _SEARCH_PROVIDER_AVAILABILITY_SCOPES = ("platform", "company_system")
 

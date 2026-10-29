@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from tests.flows.e2e.evaluation.helpers import (
     assert_case_stores_ids_only,

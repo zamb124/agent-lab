@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, cast
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.capabilities import (
     CAPABILITY_LANGUAGES,

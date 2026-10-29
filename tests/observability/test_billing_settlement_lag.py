@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import core.tracing.attributes as trace_attr
-from apps.idle_worker.tasks.span_billing_settlement_tasks import span_billing_settlement_tick
+from apps.idle.tasks.span_billing_settlement_tasks import span_billing_settlement_tick
 from core.logging.attributes import LOG_BILLING_SETTLEMENT_LAG_MS, LOG_OPERATION_NAME
 from core.models.billing_models import UsageType
 from core.models.identity_models import Company
@@ -86,7 +86,7 @@ async def test_billing_settlement_lag_emitted_for_pending_span(
     rec = await wait_for_caplog_event(
         observability_caplog,
         message=BILLING_SETTLEMENT_LAG.message,
-        logger_name="apps.idle_worker.tasks.span_billing_settlement_tasks",
+        logger_name="apps.idle.tasks.span_billing_settlement_tasks",
         predicate=lambda fields: fields.get(LOG_OPERATION_NAME) == expected_operation_name,
     )
     fields = require_log_fields(

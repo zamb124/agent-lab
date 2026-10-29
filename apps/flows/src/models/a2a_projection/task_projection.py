@@ -274,11 +274,7 @@ class A2ATaskProjection(PlatformModel):
                 sequence=sequence,
             )
             current_task = task_from_row(task_row)
-            artifact_rows = await (
-                A2AArtifactProjection.objects.filter(task_id=event.task_id)
-                .order_by("ordinal")
-                .all()
-            )
+            artifact_rows = await A2AArtifactProjection.list_for_task_by_ordinal_asc(event.task_id)
             next_task = _apply_event_to_task(
                 current_task,
                 artifact_rows=artifact_rows,
@@ -363,14 +359,14 @@ class A2ATaskProjection(PlatformModel):
 
 
     @classmethod
-    async def list_events_after_sequence(
+    async def list_events_after_sequence_asc(
         cls,
         *,
         company_id: str,
         task_id: str,
         after_sequence: int,
     ) -> list[A2AStoredEvent]:
-        """Return durable events with sequence in (after_sequence, latest]."""
+        """События с sequence в (after_sequence, latest], ORDER BY sequence ASC."""
         if after_sequence < 0:
             raise A2ATaskRepositoryError("after_sequence must be >= 0")
         task_row = await A2ATaskProjection.objects.filter(
@@ -488,7 +484,7 @@ class A2ATaskProjection(PlatformModel):
         return True
 
     @classmethod
-    async def latest_task_for_context(
+    async def latest_task_for_context_by_updated_at_desc(
         cls,
         *,
         company_id: str,
@@ -496,6 +492,7 @@ class A2ATaskProjection(PlatformModel):
         flow_id: str,
         context_id: str,
     ) -> Task | None:
+        """Последняя задача контекста, ORDER BY updated_at DESC. Несколько с одним updated_at — какая именно, не задано. Нет строки — None."""
         task_row = await (
             A2ATaskProjection.objects.filter(
                 company_id=company_id,
@@ -511,7 +508,7 @@ class A2ATaskProjection(PlatformModel):
         return task_from_row(task_row)
 
     @classmethod
-    async def list_tasks(
+    async def tasks_and_total_by_updated_at_desc(
         cls,
         *,
         company_id: str,
@@ -522,6 +519,7 @@ class A2ATaskProjection(PlatformModel):
         limit: int,
         offset: int,
     ) -> tuple[list[Task], int]:
+        """Окно задач владельца и total того же фильтра, ORDER BY updated_at DESC. context_id is None и task_state is None не фильтруют."""
         query = A2ATaskProjection.objects.filter(
             company_id=company_id,
             owner_user_id=owner_user_id,
@@ -536,7 +534,7 @@ class A2ATaskProjection(PlatformModel):
         return [task_from_row(row) for row in rows], total
 
     @classmethod
-    async def list_tasks_for_context(
+    async def tasks_for_context_and_total_by_updated_at_desc(
         cls,
         *,
         company_id: str,
@@ -546,7 +544,7 @@ class A2ATaskProjection(PlatformModel):
         limit: int,
         offset: int,
     ) -> tuple[list[Task], int]:
-        """List only one pre-authorized live-share context."""
+        """Окно одного уже разрешённого контекста и total, ORDER BY updated_at DESC. task_state is None не фильтрует."""
         query = A2ATaskProjection.objects.filter(
             company_id=company_id,
             flow_id=flow_id,
@@ -567,9 +565,7 @@ class A2ATaskProjection(PlatformModel):
         ).first()
         if task_row is None:
             raise A2ATaskRepositoryError(f"A2A Task {task_id!r} not found")
-        rows = await (
-            A2ATaskEvent.objects.filter(task_id=task_id).order_by("sequence").all()
-        )
+        rows = await A2ATaskEvent.list_for_task_by_sequence_asc(task_id)
         if not rows or rows[0].event_kind != A2A_TASK_SNAPSHOT_KIND:
             raise A2ATaskRepositoryError(f"A2A Task {task_id!r} has no snapshot event")
         initial_task = task_from_json_dict(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.config import get_settings
 from tests.fixtures.datasources import (

@@ -6,8 +6,8 @@
  * Mobile: branches — вторая строка; overflow-menu для tiered actions.
  *
  * Источники state:
- *   - useOp('flows/editor') as unknown as ControllerFor<'flows/editor'>.state.flowConfig — текущая модель flow.
- *   - useOp('flows/editor') as unknown as ControllerFor<'flows/editor'>.state.{isDirty, isSaving, workspace, publishedAt}.
+ *   - useOp('flows/editor').state.flowConfig — текущая модель flow.
+ *   - useOp('flows/editor').state: isDirty, isSaving, workspace, publishedAt.
  *   - useResource('flows/flows') — флаг has_bundle_update и список branches.
  *
  * Ops:
@@ -24,20 +24,87 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-help-hint.js';
-import '@platform/lib/components/platform-popover.js';
+import { PlatformPopover } from '@platform/lib/components/platform-popover.js';
 import '@platform/lib/components/fields/platform-field.js';
 import {
     asArray,
-    asObject,
     isPlainObject,
     buildFlowPublishBody,
     getBranchNodes,
 } from '../../_helpers/flows-resolvers.js';
+import type { DocumentProblem } from '../interface-editor/interface-editor-domain.js';
 import { openPlatformLaraAssistant } from '@platform/lib/flow-ui/shell/preferences.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 const MENU_PORTAL_GAP_PX = 4;
 const MENU_PORTAL_VIEWPORT_INSET_PX = 16;
+
+type WorkspaceId = 'logic' | 'interface' | 'run';
+
+interface StatusBadge {
+    key: 'dirty' | 'published' | 'idle';
+    textKey: string;
+}
+
+interface ChromeIssue {
+    kind: 'dataflow' | 'interface';
+    nodeId: string;
+    nodeName: string;
+    severity: 'error' | 'warning';
+    message: string;
+    pageId?: string | null;
+    blockId?: string | null;
+}
+
+interface BranchTabItem {
+    value: string;
+    label: string;
+    title: string;
+    closable?: boolean;
+}
+
+interface HeaderIconButtonArgs {
+    title: string;
+    icon: string;
+    iconSize?: string;
+    onClick: (event: Event) => void;
+    dataAction?: string;
+}
+
+interface MenuButtonArgs {
+    label: string;
+    icon: string;
+    onClick: () => void;
+}
+
+function requireEditorState(state: unknown): Record<string, unknown> {
+    if (!isPlainObject(state)) throw new Error('flows-editor-header: editor state required');
+    return state;
+}
+
+function workspaceId(value: unknown): WorkspaceId {
+    if (value !== 'logic' && value !== 'interface' && value !== 'run') {
+        throw new Error(`flows-editor-header: unsupported workspace ${String(value)}`);
+    }
+    return value;
+}
+
+function problemParams(params: Record<string, unknown>): Record<string, string | number> {
+    const out: Record<string, string | number> = {};
+    for (const [key, value] of Object.entries(params)) {
+        if (typeof value !== 'string' && typeof value !== 'number') {
+            throw new Error('flows-editor-header: problem param must be a string or number');
+        }
+        out[key] = value;
+    }
+    return out;
+}
+
+function issueText(value: unknown): string {
+    if (value === undefined || value === null || value === '') return '';
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+    throw new Error('flows-editor-header: issue text must be a scalar');
+}
 
 const HEADER_MENU_CSS = `
         .flows-editor-header-menu-portal {
@@ -114,8 +181,8 @@ export class FlowsEditorHeader extends PlatformElement {
     declare flowId: string;
     declare branchId: string;
     declare interfaceDirty: boolean;
-    declare interfaceProblems: any;
-    declare _isMobile: any;
+    declare interfaceProblems: readonly DocumentProblem[];
+    declare _isMobile: boolean;
     declare _overflowOpen: boolean;
     declare _problemsOpen: boolean;
 ;
@@ -405,15 +472,15 @@ export class FlowsEditorHeader extends PlatformElement {
     private _reload: OpController;
     private _flows: ResourceController;
     private _branchRemove: OpController;
-    private _overflowAnchor: any;
-    private _problemsAnchor: any;
+    private _overflowAnchor: HTMLElement | null;
+    private _problemsAnchor: HTMLElement | null;
     private _outsideCloseArmed: boolean;
-    private _outsideCloseFrame: any;
-    private _editorMql: any;
-    private _onEditorMobileMql: any;
-    private _onDocPointer: any;
-    private _overflowPortalHost: any;
-    private _problemsPortalHost: any;
+    private _outsideCloseFrame: number | null;
+    private _editorMql: MediaQueryList | null;
+    private _onEditorMobileMql: (() => void) | null;
+    private _onDocPointer: (event: Event) => void;
+    private _overflowPortalHost: HTMLElement | null;
+    private _problemsPortalHost: HTMLElement | null;
 
     constructor() {
         super();
@@ -435,6 +502,8 @@ export class FlowsEditorHeader extends PlatformElement {
         this._outsideCloseFrame = null;
         this._editorMql = null;
         this._onEditorMobileMql = null;
+        this._overflowPortalHost = null;
+        this._problemsPortalHost = null;
         this._onDocPointer = (e: Event) => {
             if (!this._overflowOpen && !this._problemsOpen) {
                 return;
@@ -450,13 +519,13 @@ export class FlowsEditorHeader extends PlatformElement {
                 if (n === this._overflowPortalHost || n === this._problemsPortalHost) {
                     return;
                 }
-                if (n == null || typeof n !== 'object' || !('classList' in n) || !n.classList) {
+                if (!(n instanceof Element)) {
                     continue;
                 }
                 if (
-                    (n.classList as Record<string, any>).contains('header-actions')
-                    || (n.classList as Record<string, any>).contains('overflow-anchor')
-                    || (n.classList as Record<string, any>).contains('problems-anchor')
+                    n.classList.contains('header-actions')
+                    || n.classList.contains('overflow-anchor')
+                    || n.classList.contains('problems-anchor')
                 ) {
                     return;
                 }
@@ -486,23 +555,27 @@ export class FlowsEditorHeader extends PlatformElement {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
             return;
         }
-        this._editorMql = window.matchMedia('(max-width: 767px)');
-        this._onEditorMobileMql = () => {
-            const next = this._editorMql.matches;
-            if (next !== this._isMobile) {
-                this._isMobile = next;
+        const editorMql = window.matchMedia('(max-width: 767px)');
+        this._editorMql = editorMql;
+        const onEditorMobileMql = () => {
+            const nextMobile = editorMql.matches;
+            if (nextMobile !== this._isMobile) {
+                this._isMobile = nextMobile;
             }
         };
-        this._editorMql.addEventListener('change', this._onEditorMobileMql);
-        const next = this._editorMql.matches;
+        this._onEditorMobileMql = onEditorMobileMql;
+        editorMql.addEventListener('change', onEditorMobileMql);
+        const next = editorMql.matches;
         if (next !== this._isMobile) {
             this._isMobile = next;
         }
     }
 
     override disconnectedCallback(): void {
-        if (this._editorMql && this._onEditorMobileMql) {
-            this._editorMql.removeEventListener('change', this._onEditorMobileMql);
+        const editorMql = this._editorMql;
+        const onEditorMobileMql = this._onEditorMobileMql;
+        if (editorMql !== null && onEditorMobileMql !== null) {
+            editorMql.removeEventListener('change', onEditorMobileMql);
         }
         document.removeEventListener('pointerdown', this._onDocPointer);
         if (typeof window !== 'undefined') {
@@ -533,7 +606,9 @@ export class FlowsEditorHeader extends PlatformElement {
             const root = this.renderRoot;
             const popovers = root === undefined || root === null ? [] : root.querySelectorAll('platform-popover');
             for (const popover of popovers) {
-                (popover as Record<string, any>).reposition();
+                if (popover instanceof PlatformPopover) {
+                    popover.reposition();
+                }
             }
         }
     }
@@ -594,17 +669,23 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderProblemsPortalContent(issues: any) {
+    _renderProblemsPortalContent(issues: readonly ChromeIssue[]) {
         return html`
             <div class="problems-header">${this.t('canvas.dataflow.problems_title')}</div>
-            ${issues.map((item: any) => html`
+            ${issues.map((item) => html`
                 <article
                     class="problem-item"
                     role="button"
                     tabindex="0"
                     data-severity=${item.severity}
                     @click=${() => this._goToProblem(item)}
-                    @keydown=${(e: CustomEvent) => { if ((e as Record<string, any>).key === 'Enter' || (e as Record<string, any>).key === ' ') { e.preventDefault(); this._goToProblem(item); } }}
+                    @keydown=${(e: Event) => {
+                        if (!(e instanceof KeyboardEvent)) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            this._goToProblem(item);
+                        }
+                    }}
                 >
                     <platform-icon name=${item.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>
                     <span class="problem-body">
@@ -616,7 +697,7 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _resolveStatusBadge(state: any) {
+    _resolveStatusBadge(state: Record<string, unknown>): StatusBadge {
         if ((state && state.isDirty) || this.interfaceDirty) return { key: 'dirty', textKey: 'editor_header.status_draft' };
         if (state && state.publishedAt) return { key: 'published', textKey: 'editor_header.status_published' };
         return { key: 'idle', textKey: 'editor_header.status_draft' };
@@ -624,19 +705,19 @@ export class FlowsEditorHeader extends PlatformElement {
 
     _onNameChange(e: CustomEvent) {
         const detail = e.detail;
-        if (!detail || typeof detail.value !== 'string') {
-            return;
+        if (!isPlainObject(detail) || typeof detail.value !== 'string') {
+            throw new Error('flows-editor-header: name string required');
         }
-        (this._editor.setName({ name: detail.value }) as any);
+        this._editor.setName({ name: detail.value });
     }
 
-    _setWorkspace(workspace: any) {
-        (this._editor.setWorkspace({ workspace }) as any);
+    _setWorkspace(workspace: WorkspaceId) {
+        this._editor.setWorkspace({ workspace });
     }
 
     _toggleExecutionPanel() {
-        const state = asObject(this._editor.state);
-        (this._editor.setExecutionPanelOpen as any)({ open: !Boolean((state as any).executionPanelOpen) });
+        const state = requireEditorState(this._editor.state);
+        this._editor.setExecutionPanelOpen({ open: state.executionPanelOpen !== true });
     }
 
     _back() {
@@ -680,7 +761,7 @@ export class FlowsEditorHeader extends PlatformElement {
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
         }
-        const state = asObject(this._editor.state);
+        const state = requireEditorState(this._editor.state);
         const body = buildFlowPublishBody(state);
         if (!body) {
             return;
@@ -720,7 +801,7 @@ export class FlowsEditorHeader extends PlatformElement {
         this.openModal('flows.employee_settings', { flowId: this.flowId });
     }
 
-    _isEmployeeEnabled(state: any, flow: any) {
+    _isEmployeeEnabled(state: Record<string, unknown>, flow: unknown) {
         const fromConfig =
             isPlainObject(state.flowConfig) && isPlainObject(state.flowConfig.employee)
                 ? state.flowConfig.employee.enabled === true
@@ -728,12 +809,12 @@ export class FlowsEditorHeader extends PlatformElement {
         if (fromConfig) {
             return true;
         }
-        return Boolean(
-            flow && isPlainObject(flow.employee) && flow.employee.enabled === true,
-        );
+        if (!isPlainObject(flow)) return false;
+        const employee = flow.employee;
+        return isPlainObject(employee) && employee.enabled === true;
     }
 
-    _renderEmployeeChip(active: any) {
+    _renderEmployeeChip(active: boolean) {
         const title = active
             ? this.t('editor_header.employee_active_aria')
             : this.t('editor_header.employee_settings');
@@ -796,7 +877,7 @@ export class FlowsEditorHeader extends PlatformElement {
         this.navigate('flow_evaluation_branch', { flowId: this.flowId, branchId: bid });
     }
 
-    _selectBranch(branchId: any) {
+    _selectBranch(branchId: string) {
         if (branchId === 'base') {
             this.navigate('flow_editor', { flowId: this.flowId });
         } else {
@@ -808,7 +889,7 @@ export class FlowsEditorHeader extends PlatformElement {
         this.openModal('flows.branch_create', { flowId: this.flowId });
     }
 
-    async _deleteBranch(branchId: any) {
+    async _deleteBranch(branchId: string) {
         if (!this.flowId || branchId === 'base') return;
         await this._branchRemove.run({ flow_id: this.flowId, branch_id: branchId });
         if (this.branchId === branchId) {
@@ -816,18 +897,20 @@ export class FlowsEditorHeader extends PlatformElement {
         }
     }
 
-    _branchItems(flow: any, branchIds: any) {
-        const items: any[] = [
+    _branchItems(flow: unknown, branchIds: readonly string[]): BranchTabItem[] {
+        const items: BranchTabItem[] = [
             {
                 value: 'base',
                 label: this.t('branches_tabs.base'),
                 title: this.t('branches_tabs.base'),
             },
         ];
+        const branches = isPlainObject(flow) && isPlainObject(flow.branches) ? flow.branches : null;
         for (const bid of branchIds) {
-            const branch = flow && flow.branches && flow.branches[bid] ? flow.branches[bid] : null;
-            const label = branch && typeof branch.name === 'string' && branch.name.length > 0
-                ? branch.name
+            const branch = branches === null ? null : branches[bid];
+            const branchRecord = isPlainObject(branch) ? branch : null;
+            const label = branchRecord !== null && typeof branchRecord.name === 'string' && branchRecord.name.length > 0
+                ? branchRecord.name
                 : bid;
             items.push({
                 value: bid,
@@ -839,7 +922,7 @@ export class FlowsEditorHeader extends PlatformElement {
         return items;
     }
 
-    _renderHeaderIconButton({ title, icon, iconSize = '16', onClick, dataAction }: any) {
+    _renderHeaderIconButton({ title, icon, iconSize = '16', onClick, dataAction }: HeaderIconButtonArgs) {
         return html`
             <platform-button
                 variant="ghost"
@@ -847,7 +930,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 density="dense"
                 aria-label=${title}
                 title=${title}
-                data-action=${dataAction || nothing}
+                data-action=${typeof dataAction === 'string' && dataAction.length > 0 ? dataAction : nothing}
                 @click=${onClick}
             >
                 <platform-icon name=${icon} size=${iconSize}></platform-icon>
@@ -855,7 +938,7 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderMenuButton({ label, icon, onClick }: any) {
+    _renderMenuButton({ label, icon, onClick }: MenuButtonArgs) {
         const host = this;
         return html`
             <platform-button
@@ -873,31 +956,34 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _dataflowIssues(state: any) {
-        const dataflow = state && typeof state.dataflow === 'object' ? state.dataflow : null;
-        const nodes = dataflow && typeof dataflow.nodes === 'object' ? dataflow.nodes : null;
-        if (!nodes) return [];
+    _dataflowIssues(state: Record<string, unknown>): ChromeIssue[] {
+        const dataflow = isPlainObject(state.dataflow) ? state.dataflow : null;
+        const nodes = dataflow !== null && isPlainObject(dataflow.nodes) ? dataflow.nodes : null;
+        if (nodes === null) return [];
         const branchNodes = getBranchNodes(state);
-        const out = [];
+        const out: ChromeIssue[] = [];
         for (const [nodeId, info] of Object.entries(nodes)) {
-            const issues = info && Array.isArray((info as Record<string, any>).issues) ? (info as Record<string, any>).issues : [];
+            if (!isPlainObject(info)) continue;
+            const issues = Array.isArray(info.issues) ? info.issues : [];
             for (const issue of issues) {
-                if (!issue || (issue.severity !== 'error' && issue.severity !== 'warning')) continue;
-                const node = branchNodes && typeof branchNodes === 'object' ? branchNodes[nodeId] : null;
-                const nodeName = node && typeof node.name === 'string' && node.name.length > 0 ? node.name : nodeId;
-                const issueMessage = issue.message === undefined || issue.message === null || issue.message === ''
-                    ? (issue.code === undefined || issue.code === null || issue.code === '' ? '' : String(issue.code))
-                    : String(issue.message);
-                out.push({ nodeId, nodeName, severity: issue.severity, message: issueMessage });
+                if (!isPlainObject(issue)) continue;
+                const severity = issue.severity;
+                if (severity !== 'error' && severity !== 'warning') continue;
+                const node = isPlainObject(branchNodes) ? branchNodes[nodeId] : null;
+                const nodeName = isPlainObject(node) && typeof node.name === 'string' && node.name.length > 0
+                    ? node.name
+                    : nodeId;
+                const issueMessage = issueText(issue.message).length > 0 ? issueText(issue.message) : issueText(issue.code);
+                out.push({ kind: 'dataflow', nodeId, nodeName, severity, message: issueMessage });
             }
         }
         out.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
         return out;
     }
 
-    _chromeIssues(state: any) {
-        const graph = this._dataflowIssues(state).map((item) => ({ ...item, kind: 'dataflow' }));
-        const uiIssues = (this.interfaceProblems.map as any)((problem: any) => {
+    _chromeIssues(state: Record<string, unknown>): ChromeIssue[] {
+        const graph = this._dataflowIssues(state);
+        const uiIssues: ChromeIssue[] = this.interfaceProblems.map((problem) => {
             const nodeName = typeof problem.blockId === 'string' && problem.blockId.length > 0
                 ? problem.blockId
                 : (typeof problem.pageId === 'string' && problem.pageId.length > 0
@@ -908,7 +994,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 nodeId: nodeName,
                 nodeName,
                 severity: problem.severity,
-                message: this.t(`interface_editor.problem_${problem.code}`, problem.params),
+                message: this.t(`interface_editor.problem_${problem.code}`, problemParams(problem.params)),
                 pageId: problem.pageId,
                 blockId: problem.blockId,
             };
@@ -927,21 +1013,21 @@ export class FlowsEditorHeader extends PlatformElement {
         this._problemsOpen = next;
     }
 
-    _goToProblem(item: any) {
+    _goToProblem(item: ChromeIssue) {
         this._problemsOpen = false;
         if (item.kind === 'interface') {
-            (this._editor.setWorkspace({ workspace: 'interface' }) as any);
+            this._editor.setWorkspace({ workspace: 'interface' });
             this.emit('interface-problem-select', { pageId: item.pageId, blockId: item.blockId });
             return;
         }
-        if (typeof item.nodeId === 'string' && item.nodeId.length > 0) {
-            (this._editor.selectNode({ nodeId: item.nodeId }) as any);
+        if (item.nodeId.length > 0) {
+            this._editor.selectNode({ nodeId: item.nodeId });
         }
     }
 
-    _renderProblemsButton(issues: any) {
+    _renderProblemsButton(issues: readonly ChromeIssue[]) {
         if (issues.length === 0) return '';
-        const errorCount = issues.filter((i: any) => i.severity === 'error').length;
+        const errorCount = issues.filter((issue) => issue.severity === 'error').length;
         const severity = errorCount > 0 ? 'error' : 'warning';
         const count = issues.length;
         return html`
@@ -978,7 +1064,7 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderOverflowMenu(hasBundleUpdate: any) {
+    _renderOverflowMenu(hasBundleUpdate: boolean) {
         return html`
             <div class="overflow-anchor" ?data-open=${this._overflowOpen}>
                 <span class="overflow-btn-wrap">
@@ -1010,15 +1096,25 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderBranchTabs(branchItems: any) {
+    _renderBranchTabs(branchItems: readonly BranchTabItem[]) {
         return html`
             <platform-segmented-control
                 density="compact"
                 .value=${this.branchId}
                 .items=${branchItems}
                 aria-label=${this.t('branches_tabs.group_aria')}
-                @change=${(e: CustomEvent) => this._selectBranch(e.detail.value)}
-                @segment-close=${(e: CustomEvent) => { void this._deleteBranch(e.detail.value); }}
+                @change=${(e: CustomEvent) => {
+                    if (!isPlainObject(e.detail) || typeof e.detail.value !== 'string') {
+                        throw new Error('flows-editor-header: branch id required');
+                    }
+                    this._selectBranch(e.detail.value);
+                }}
+                @segment-close=${(e: CustomEvent) => {
+                    if (!isPlainObject(e.detail) || typeof e.detail.value !== 'string') {
+                        throw new Error('flows-editor-header: branch id required');
+                    }
+                    void this._deleteBranch(e.detail.value);
+                }}
             ></platform-segmented-control>
         `;
     }
@@ -1039,14 +1135,24 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderBranchesControls(branchItems: any) {
+    _renderBranchesControls(branchItems: readonly BranchTabItem[]) {
         return html`
             <div class="branches-scroll">${this._renderBranchTabs(branchItems)}</div>
             <div class="branches-add">${this._renderBranchAddButton()}</div>
         `;
     }
 
-    _renderPrimaryRow(state: any, flowName: any, workspace: any, saving: any, status: any, hasBundleUpdate: any, branchItems: any, issues: any, employeeActive: any) {
+    _renderPrimaryRow(
+        state: Record<string, unknown>,
+        flowName: string,
+        workspace: WorkspaceId,
+        saving: boolean,
+        status: StatusBadge,
+        hasBundleUpdate: boolean,
+        branchItems: readonly BranchTabItem[],
+        issues: readonly ChromeIssue[],
+        employeeActive: boolean,
+    ) {
         const showBranches = typeof this.flowId === 'string' && this.flowId.length > 0;
         return html`
             <div class="chrome-row chrome-row-primary">
@@ -1072,7 +1178,7 @@ export class FlowsEditorHeader extends PlatformElement {
                             placeholder=${this.t('editor_header.flow_name_placeholder')}
                             @change=${this._onNameChange}
                         ></platform-field>
-                        <span class="status-badge" data-status=${(status as Record<string, any>).key}>${this.t((status as Record<string, any>).textKey)}</span>
+                        <span class="status-badge" data-status=${status.key}>${this.t(status.textKey)}</span>
                     </div>
                 </div>
 
@@ -1145,7 +1251,7 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderBranchesRow(branchItems: any) {
+    _renderBranchesRow(branchItems: readonly BranchTabItem[]) {
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return '';
         }
@@ -1160,24 +1266,21 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const state = asObject(this._editor.state);
-        let flowName;
-        if (isPlainObject((state as any).flowConfig) && typeof (state as any).flowConfig.name === 'string' && (state as any).flowConfig.name.length > 0) {
-            flowName = (state as any).flowConfig.name;
-        } else if (typeof this.flowId === 'string' && this.flowId.length > 0) {
+        const state = requireEditorState(this._editor.state);
+        const flowConfig = state.flowConfig;
+        let flowName = '';
+        if (isPlainObject(flowConfig) && typeof flowConfig.name === 'string' && flowConfig.name.length > 0) {
+            flowName = flowConfig.name;
+        } else if (this.flowId.length > 0) {
             flowName = this.flowId;
-        } else {
-            flowName = '';
         }
-        const workspace = (state as any).workspace;
-        if (workspace !== 'logic' && workspace !== 'interface' && workspace !== 'run') {
-            throw new Error(`flows-editor-header: unsupported workspace ${String(workspace)}`);
-        }
-        const saving = Boolean((state as any).isSaving);
+        const workspace = workspaceId(state.workspace);
+        const saving = state.isSaving === true;
         const status = this._resolveStatusBadge(state);
-        const flow = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
-        const hasBundleUpdate = Boolean(flow && flow.has_bundle_update);
-        const branchIds = flow && flow.branches ? Object.keys(flow.branches) : [];
+        const flowItem = asArray(this._flows.items).find((item) => isPlainObject(item) && item.flow_id === this.flowId);
+        const flow = isPlainObject(flowItem) ? flowItem : null;
+        const hasBundleUpdate = flow !== null && flow.has_bundle_update === true;
+        const branchIds = flow !== null && isPlainObject(flow.branches) ? Object.keys(flow.branches) : [];
         const branchItems = this._branchItems(flow, branchIds);
         const issues = this._chromeIssues(state);
         const employeeActive = this._isEmployeeEnabled(state, flow);

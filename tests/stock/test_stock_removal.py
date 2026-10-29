@@ -1,6 +1,6 @@
 """Чистые стратегии отбора (без БД): fifo/fefo/lifo/closest/least_containers.
 
-`order_candidates`/`full_container_cover` работают на frozen-двойниках
+`order_candidates_by_strategy_asc`/`full_container_cover` работают на frozen-двойниках
 StockQuant — проверяем только очередь обхода кандидатов, не данные.
 """
 
@@ -14,7 +14,7 @@ from apps.stock.models.enums import StockLocationUsage, StockRemovalStrategy
 from apps.stock.models.removal import (
     RemovalBin,
     container_exact_cover,
-    order_candidates,
+    order_candidates_by_strategy_asc,
 )
 
 
@@ -60,7 +60,7 @@ class TestFifo:
             _Quant("q-old", "loc-a", in_date=_D1),
             _Quant("q-mid", "loc-a", in_date=_D2),
         ]
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.FIFO,
             needed=Decimal("5"),
@@ -73,7 +73,7 @@ class TestFifo:
             _Quant("q-b", "loc-a", in_date=_D1),
             _Quant("q-a", "loc-a", in_date=_D1),
         ]
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.FIFO,
             needed=Decimal("5"),
@@ -89,7 +89,7 @@ class TestLifo:
             _Quant("q-new", "loc-a", in_date=_D3),
             _Quant("q-mid", "loc-a", in_date=_D2),
         ]
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.LIFO,
             needed=Decimal("5"),
@@ -104,7 +104,7 @@ class TestFefo:
             _Quant("q-late", "loc-a", removal_at=_D3),
             _Quant("q-soon", "loc-a", removal_at=_D1),
         ]
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.FEFO,
             needed=Decimal("5"),
@@ -117,7 +117,7 @@ class TestFefo:
             _Quant("q-none", "loc-a", in_date=_D1),
             _Quant("q-exp", "loc-a", in_date=_D3, removal_at=_D2),
         ]
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.FEFO,
             needed=Decimal("5"),
@@ -136,7 +136,7 @@ class TestClosest:
             "loc-near": _bin("loc-near", pick_sequence=1),
             "loc-far": _bin("loc-far", pick_sequence=99),
         }
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.CLOSEST,
             needed=Decimal("5"),
@@ -150,7 +150,7 @@ class TestClosest:
             _Quant("q-new", "loc-a", in_date=_D3),
             _Quant("q-old", "loc-a", in_date=_D1),
         ]
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.CLOSEST,
             needed=Decimal("5"),
@@ -173,7 +173,7 @@ class TestLeastContainers:
 
     def test_covering_container_goes_first(self) -> None:
         quants, bins = self._setup()
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.LEAST_CONTAINERS,
             needed=Decimal("30"),
@@ -191,7 +191,7 @@ class TestLeastContainers:
             "loc-big": _bin("loc-big", usage=StockLocationUsage.CONTAINER),
             "loc-fit": _bin("loc-fit", usage=StockLocationUsage.CONTAINER),
         }
-        ordered = order_candidates(
+        ordered = order_candidates_by_strategy_asc(
             quants,
             strategy=StockRemovalStrategy.LEAST_CONTAINERS,
             needed=Decimal("20"),

@@ -289,7 +289,7 @@ async def test_relay_publishes_pending_commit(service_processes) -> None:
         using=_DB, created_before=utcnow(), limit=100, lane_id=lane
     )
     assert again == 0
-    pending = await LaneCommit.list_unpublished_by_lane_seq(
+    pending = await LaneCommit.list_unpublished_by_lane_id_and_lane_seq_asc(
         created_before=utcnow(), limit=1000, using=_DB, lane_id=lane
     )
     assert pending == []

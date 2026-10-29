@@ -10,7 +10,7 @@ batch-клиенты под капотом.
 * для voice/flows/eval — **только** через
   `core.clients.voice_resolver.get_tts_client(*, company_id, override)`.
   Прямой импорт классов из этого модуля в `apps/**` запрещён CI
-  (`scripts/check_voice_resolver_usage.py`).
+  (`scripts/gates/voice/resolver_usage.py`).
 
 ``PronunciationAwareTTSClient`` — декоратор поверх ``BaseTTSClient``,
 применяющий ``TtsTextPipeline`` перед делегированием провайдеру. Собирается
@@ -24,7 +24,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, override
 
-import httpx
+import httpx2
 from pydantic import BaseModel, Field
 
 from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
@@ -66,7 +66,7 @@ def _sanitize_tts_voice_id(voice: str | None) -> str | None:
     return cleaned
 
 
-def _tts_upstream_error_summary(response: httpx.Response) -> str:
+def _tts_upstream_error_summary(response: httpx2.Response) -> str:
     try:
         data = parse_json_object(response.content, "tts.upstream_error")
     except ValueError:
@@ -405,7 +405,7 @@ class PronunciationAwareTTSClient(BaseTTSClient):
 
     Создаётся в ``voice_resolver.get_tts_client`` для всех провайдеров.
     Является **единственным** местом вызова ``TtsTextPipeline.transform`` —
-    CI ``scripts/check_tts_pipeline_single_apply.py`` проверяет это.
+    CI ``scripts/gates/voice/tts_pipeline_single_apply.py`` проверяет это.
 
     ``provider_name`` используется для фильтрации правил по capabilities matrix
     (например stress-маркеры не применяются для ``cloud_ru``).

@@ -7,24 +7,35 @@ import '@platform/lib/components/platform-modal-search-field.js';
 import { evaluationCatalogCategoryKey, evaluationCatalogNameKey } from '../../_helpers/evaluation-catalog-labels.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
-function asArray(value: unknown) {
-    return Array.isArray(value) ? value : [];
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function stringValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function asArray(value: unknown): unknown[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const items: unknown[] = [];
+    for (const item of value) {
+        items.push(item);
+    }
+    return items;
+}
+
+function stringValue(record: unknown, field: string): string {
+    if (!isRecord(record)) {
         return '';
     }
     const value = record[field];
     return typeof value === 'string' ? value : '';
 }
 
-function lower(value: unknown) {
-    return (value as any).toLocaleLowerCase();
+function lower(value: string): string {
+    return value.toLocaleLowerCase();
 }
 
-function enabledCount(cases: any) {
-    return asArray(cases).filter((item) => item && item.enabled === true).length;
+function enabledCount(cases: unknown): number {
+    return asArray(cases).filter((item) => isRecord(item) && item.enabled === true).length;
 }
 
 export class FlowsEvaluationSuiteSidebar extends PlatformElement {
@@ -37,9 +48,9 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         activePanel: { type: String },
         _query: { state: true },
     }
-    declare suites: any[];
-    declare cases: any[];
-    declare catalog: any[];
+    declare suites: unknown[];
+    declare cases: unknown[];
+    declare catalog: unknown[];
     declare selectedSuiteId: string;
     declare selectedCaseId: string;
     declare activePanel: string;
@@ -282,7 +293,7 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
     }
 
     _filteredCases() {
-        const query = lower((this._query.trim() as any));
+        const query = lower(this._query.trim());
         if (query.length === 0) {
             return asArray(this.cases);
         }
@@ -293,15 +304,15 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         });
     }
 
-    _selectSuite(suiteId: any) {
+    _selectSuite(suiteId: string) {
         this.emit('suite-select', { suite_id: suiteId });
     }
 
-    _selectCase(caseId: any) {
+    _selectCase(caseId: string) {
         this.emit('case-select', { case_id: caseId });
     }
 
-    _selectPanel(panel: any) {
+    _selectPanel(panel: string) {
         this.emit('panel-select', { panel });
     }
 
@@ -321,7 +332,7 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         this._query = rawValue;
     }
 
-    _onSelectableKeydown(event: KeyboardEvent, handler: any) {
+    _onSelectableKeydown(event: KeyboardEvent, handler: (this: FlowsEvaluationSuiteSidebar) => void) {
         if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
@@ -437,7 +448,7 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         `;
     }
 
-    _renderSuite(suite: any) {
+    _renderSuite(suite: unknown) {
         const suiteId = stringValue(suite, 'suite_id');
         const name = stringValue(suite, 'name');
         const description = stringValue(suite, 'description');
@@ -461,11 +472,21 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         `;
     }
 
-    _renderCase(testCase: any) {
+    _renderCase(testCase: unknown) {
+        if (!isRecord(testCase)) {
+            throw new Error('flows-evaluation-suite-sidebar: case must be an object');
+        }
         const caseId = stringValue(testCase, 'case_id');
         const name = stringValue(testCase, 'name');
         const tags = asArray(testCase.tags);
-        const subtitle = tags.length > 0 ? tags.join(', ') : this.t('evaluation.sidebar.case_no_tags');
+        const tagLabels: string[] = [];
+        for (const tag of tags) {
+            if (typeof tag !== 'string') {
+                throw new Error('flows-evaluation-suite-sidebar: case tag must be a string');
+            }
+            tagLabels.push(tag);
+        }
+        const subtitle = tagLabels.length > 0 ? tagLabels.join(', ') : this.t('evaluation.sidebar.case_no_tags');
         const active = caseId === this.selectedCaseId;
         return html`
             <article
@@ -486,7 +507,7 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         `;
     }
 
-    _renderPanel(panel: any, icon: any, label: string) {
+    _renderPanel(panel: string, icon: string, label: string) {
         const active = panel === this.activePanel;
         return html`
             <article
@@ -506,7 +527,7 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         `;
     }
 
-    _renderCatalogChip(item: any) {
+    _renderCatalogChip(item: unknown) {
         const evaluatorId = stringValue(item, 'evaluator_id');
         const category = stringValue(item, 'category');
         const name = this.t(evaluationCatalogNameKey(evaluatorId));
@@ -522,7 +543,7 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         return html`<div class="empty">${message}</div>`;
     }
 
-    _renderEmptyAction(message: string, label: string, handler: any) {
+    _renderEmptyAction(message: string, label: string, handler: (this: FlowsEvaluationSuiteSidebar) => void) {
         return html`
             <article
                 class="empty empty-action"

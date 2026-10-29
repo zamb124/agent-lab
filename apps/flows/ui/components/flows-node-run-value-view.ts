@@ -13,6 +13,7 @@ import {
     classifyNodeRunValue,
     serializeNodeRunValue,
 } from '../_helpers/flows-node-run-result.js';
+import { isPlainObject } from '../_helpers/flows-resolvers.js';
 import './flows-json-tree.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
@@ -195,11 +196,11 @@ export class FlowsNodeRunValueView extends PlatformElement {
         return html`
             <div class="status-list">
                 ${entries.map(([key, entry]) => {
-                    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+                    if (!isPlainObject(entry)) {
                         throw new Error('flows-node-run-value-view: status entry must be an object');
                     }
-                    const ok = (entry as Record<string, any>).ok === true;
-                    const latencyMs = (entry as Record<string, any>).latency_ms;
+                    const ok = entry.ok === true;
+                    const latencyMs = entry.latency_ms;
                     return html`
                         <div class="status-card" data-ok=${ok ? 'true' : 'false'}>
                             <span class="status-key">${key}</span>
@@ -257,7 +258,10 @@ export class FlowsNodeRunValueView extends PlatformElement {
             `;
         }
         if (classified.kind === 'status_map') {
-            return this._renderStatusMap(/** @type {Record<string, unknown>} */ (classified.parsed));
+            if (!isPlainObject(classified.parsed)) {
+                throw new Error('flows-node-run-value-view: status map requires an object');
+            }
+            return this._renderStatusMap(classified.parsed);
         }
         if (classified.kind === 'json_string' || classified.kind === 'array' || classified.kind === 'object') {
             return this._renderStructure(classified.parsed);

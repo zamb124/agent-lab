@@ -52,12 +52,12 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         _showAdvanced: { state: true },
         _draggedFallbackIndex: { state: true },
     }
-    declare config: Record<string, any> | null;
+    declare config: Record<string, unknown> | null;
     declare capability: string;
     declare readOnly: boolean;
     declare allowFallbacks: boolean;
     declare _showAdvanced: boolean;
-    declare _draggedFallbackIndex: any;
+    declare _draggedFallbackIndex: number | null;
 ;
 
     static override styles: CSSResultGroup = [
@@ -277,8 +277,8 @@ export class FlowsLlmConfigEditor extends PlatformElement {
     ];
     private _models: OpController;
     private _providers: OpController;
-    private _loadedModelsKey: any;
-    private _loadedProvidersKey: any;
+    private _loadedModelsKey: string | null;
+    private _loadedProvidersKey: string | null;
     private _compositeNormalizeConsumed: boolean;
 
     constructor() {
@@ -355,42 +355,40 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this.emit('change', { config: next });
     }
 
-    _readString(field: any) {
-        const cfg = this.config;
-        if (!cfg || typeof cfg !== 'object') return '';
-        const v = cfg[field];
-        return typeof v === 'string' ? v : '';
+    _readString(field: string) {
+        if (!isPlainObject(this.config)) return '';
+        const value = this.config[field];
+        return typeof value === 'string' ? value : '';
     }
 
-    _readNumberField(field: any) {
-        const cfg = this.config;
-        if (!cfg || typeof cfg !== 'object') return null;
-        const v = cfg[field];
-        return typeof v === 'number' && Number.isFinite(v) ? v : null;
+    _readNumberField(field: string) {
+        if (!isPlainObject(this.config)) return null;
+        const value = this.config[field];
+        return typeof value === 'number' && Number.isFinite(value) ? value : null;
     }
 
-    _emitPatch(patch: any) {
-        const base = this.config && typeof this.config === 'object' ? this.config : {};
+    _emitPatch(patch: Record<string, unknown>) {
+        const base = isPlainObject(this.config) ? this.config : {};
         const next = { ...base, ...patch };
         this.emit('change', { config: next });
     }
 
-    _onString(field: any, value: unknown) {
-        const v = typeof value === 'string' ? value : '';
-        if (v.length === 0) {
-            const base = this.config && typeof this.config === 'object' ? this.config : {};
-            const next = { ...base };
+    _onString(field: string, value: unknown) {
+        const text = typeof value === 'string' ? value : '';
+        if (text.length === 0) {
+            const base = isPlainObject(this.config) ? this.config : {};
+            const next: Record<string, unknown> = { ...base };
             delete next[field];
             this.emit('change', { config: next });
             return;
         }
-        this._emitPatch({ [field]: v });
+        this._emitPatch({ [field]: text });
     }
 
-    _onNumberField(field: any, detailValue: any) {
+    _onNumberField(field: string, detailValue: unknown) {
         if (detailValue === null || detailValue === undefined) {
-            const base = this.config && typeof this.config === 'object' ? this.config : {};
-            const next = { ...base };
+            const base = isPlainObject(this.config) ? this.config : {};
+            const next: Record<string, unknown> = { ...base };
             delete next[field];
             this.emit('change', { config: next });
             return;
@@ -399,9 +397,9 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this._emitPatch({ [field]: detailValue });
     }
 
-    _onJson(field: any, parsed: any) {
-        const base = this.config && typeof this.config === 'object' ? this.config : {};
-        const next = { ...base };
+    _onJson(field: string, parsed: unknown) {
+        const base = isPlainObject(this.config) ? this.config : {};
+        const next: Record<string, unknown> = { ...base };
         if (parsed === null || parsed === undefined) {
             delete next[field];
         } else {
@@ -426,13 +424,17 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this._onJson('extra_request_headers', headers);
     }
 
-    _fallbackModels() {
-        const raw = this.config && typeof this.config === 'object' ? this.config.fallback_models : null;
+    _fallbackModels(): Record<string, unknown>[] {
+        const raw = isPlainObject(this.config) ? this.config.fallback_models : null;
         if (!Array.isArray(raw)) return [];
-        return raw.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
+        const items: Record<string, unknown>[] = [];
+        for (const item of raw) {
+            if (isPlainObject(item)) items.push(item);
+        }
+        return items;
     }
 
-    _emitFallbackModels(items: Record<string, any>[]) {
+    _emitFallbackModels(items: Record<string, unknown>[]) {
         this._onJson('fallback_models', items.length > 0 ? items : null);
     }
 
@@ -441,12 +443,10 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this._emitFallbackModels([...items, {}]);
     }
 
-    _updateFallbackModel(idx: number, nextConfig: any) {
+    _updateFallbackModel(idx: number, nextConfig: unknown) {
         const items = this._fallbackModels();
         if (idx < 0 || idx >= items.length) return;
-        const value = nextConfig && typeof nextConfig === 'object' && !Array.isArray(nextConfig)
-            ? nextConfig
-            : {};
+        const value = isPlainObject(nextConfig) ? nextConfig : {};
         this._emitFallbackModels(items.map((item, i) => (i === idx ? value : item)));
     }
 
@@ -460,11 +460,10 @@ export class FlowsLlmConfigEditor extends PlatformElement {
     }
 
     _onProviderChange(value: unknown) {
-        const base = this.config && typeof this.config === 'object' && !Array.isArray(this.config)
-            ? this.config
-            : {};
-        if (this._isHumanitecLlmProvider(value as string)) {
-            const next = {
+        const base = isPlainObject(this.config) ? this.config : {};
+        const provider = typeof value === 'string' ? value : '';
+        if (this._isHumanitecLlmProvider(provider)) {
+            const next: Record<string, unknown> = {
                 ...base,
                 provider: HUMANITEC_LLM_PROVIDER,
                 model: HUMANITEC_LLM_AUTO_MODEL,
@@ -476,13 +475,13 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 'extra_request_body',
                 'extra_request_headers',
             ]) {
-                delete (next as any)[field];
+                delete next[field];
             }
             this.emit('change', { config: next });
             return;
         }
         const next: Record<string, unknown> = { ...base, provider: value };
-        if ((value as any).length === 0) {
+        if (provider.length === 0) {
             delete next.provider;
         }
         if (base.provider === HUMANITEC_LLM_PROVIDER && next.model === HUMANITEC_LLM_AUTO_MODEL) {
@@ -491,11 +490,14 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this.emit('change', { config: next });
     }
 
-    _moveFallbackModel(from: any, to: any) {
+    _moveFallbackModel(from: number, to: number) {
         const items = this._fallbackModels();
         if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return;
         const next = [...items];
         const [item] = next.splice(from, 1);
+        if (item === undefined) {
+            throw new Error('flows-llm-config-editor: fallback model required');
+        }
         next.splice(to, 0, item);
         this._emitFallbackModels(next);
     }
@@ -536,9 +538,9 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         e.currentTarget.classList.remove('drag-over');
         const raw = e.dataTransfer.getData('text/plain');
         const parsed = Number.parseInt(raw, 10);
-        const from = Number.isInteger(parsed) ? parsed : this._draggedFallbackIndex;
-        if (Number.isInteger(from)) {
-            this._moveFallbackModel(from, idx);
+        const fromIndex = Number.isInteger(parsed) ? parsed : this._draggedFallbackIndex;
+        if (typeof fromIndex === 'number') {
+            this._moveFallbackModel(fromIndex, idx);
         }
         this._draggedFallbackIndex = null;
     }
@@ -550,14 +552,14 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         }
     }
 
-    _fallbackTitle(item: any, idx: number) {
-        const model = item && typeof item.model === 'string' ? item.model.trim() : '';
-        return model || this.t('llm_config_editor.fallback_untitled', { index: idx + 1 });
+    _fallbackTitle(item: unknown, idx: number) {
+        const model = isPlainObject(item) && typeof item.model === 'string' ? item.model.trim() : '';
+        return model.length > 0 ? model : this.t('llm_config_editor.fallback_untitled', { index: idx + 1 });
     }
 
-    _fallbackProviderLabel(item: any) {
-        const provider = item && typeof item.provider === 'string' ? item.provider.trim() : '';
-        return provider || this.t('llm_config_editor.fallback_inherit_provider');
+    _fallbackProviderLabel(item: unknown) {
+        const provider = isPlainObject(item) && typeof item.provider === 'string' ? item.provider.trim() : '';
+        return provider.length > 0 ? provider : this.t('llm_config_editor.fallback_inherit_provider');
     }
 
     _modelsList() {
@@ -627,27 +629,40 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         const providers = this._providersList();
         const providerEnumValues = [
             { value: '', label: '—' },
-            ...providers.map((p: any) => {
-                if (p && typeof p === 'object') {
-                    const value = typeof p.value === 'string' ? p.value : '';
-                    const label = typeof p.label === 'string' && p.label.length > 0 ? p.label : value;
+            ...providers.map((providerItem) => {
+                if (isPlainObject(providerItem)) {
+                    const value = typeof providerItem.value === 'string' ? providerItem.value : '';
+                    const label = typeof providerItem.label === 'string' && providerItem.label.length > 0
+                        ? providerItem.label
+                        : value;
                     return { value, label };
                 }
-                return { value: p, label: p };
-            }).filter((p: any) => typeof p.value === 'string'),
+                if (typeof providerItem !== 'string') {
+                    throw new Error('flows-llm-config-editor: provider item required');
+                }
+                return { value: providerItem, label: providerItem };
+            }),
         ];
         const providerViewValues = provider.length > 0
             ? [{ value: provider, label: provider }]
             : [{ value: '', label: '—' }];
         const modelEnumValues = [
             { value: '', label: '—' },
-            ...models.map((m: any) => {
-                const optValue = typeof m === 'string' ? m : asString(typeof m.value === 'string' && m.value.length > 0 ? m.value : m.id);
-                let optLabel;
-                if (typeof m === 'string') optLabel = m;
-                else if (typeof m.label === 'string' && m.label.length > 0) optLabel = m.label;
-                else if (typeof m.value === 'string' && m.value.length > 0) optLabel = m.value;
-                else optLabel = String(m.id);
+            ...models.map((modelItem) => {
+                if (typeof modelItem === 'string') {
+                    return { value: modelItem, label: modelItem };
+                }
+                if (!isPlainObject(modelItem)) {
+                    throw new Error('flows-llm-config-editor: model item required');
+                }
+                const valueField = typeof modelItem.value === 'string' && modelItem.value.length > 0
+                    ? modelItem.value
+                    : modelItem.id;
+                const optValue = asString(valueField);
+                let optLabel = '';
+                if (typeof modelItem.label === 'string' && modelItem.label.length > 0) optLabel = modelItem.label;
+                else if (typeof modelItem.value === 'string' && modelItem.value.length > 0) optLabel = modelItem.value;
+                else optLabel = asString(modelItem.id);
                 return { value: optValue, label: optLabel };
             }),
         ];

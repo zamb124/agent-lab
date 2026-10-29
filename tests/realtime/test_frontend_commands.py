@@ -3,7 +3,7 @@
 Hop как у SPA: SESSION JWT → Centrifugo :19000 `platform.event` → bus :9025
 → `POST /frontend/api/internal/realtime/command` → тот же `op_*`. REST — Granian :9004.
 
-Мутации настроек компании (AI-провайдеры, тариф, embed, LinnexAgent, roster) идут от
+Мутации настроек компании (AI-провайдеры, тариф, embed, roster) идут от
 одноразового principal со своей компанией, чтобы не трогать `system`, на котором
 держатся остальные тесты стека.
 """
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.frontend.di import FrontendDi
 from apps.frontend.realtime.command_router import FRONTEND_OPERATIONS
@@ -30,7 +30,6 @@ from core.files.company_storage_service import CompanyStorageService
 from core.models.identity_models import Company, User
 from core.types import JsonObject, JsonValue, require_json_object
 from core.utils.tokens import get_token_service
-from tests.agent._helpers import create_pairing_via_http, register_device_via_http
 from tests.fixtures.ai_provider_defaults import make_test_company
 from tests.fixtures.auth import set_test_company_member_roles
 from tests.realtime.centrifugo_ws import connect_centrifugo, rpc_platform_event
@@ -245,21 +244,6 @@ async def _create_namespace(ctx: LiveCtx, *, name: str | None = None) -> str:
     _ = await _expect_json(response, ok=(200, 201), label="namespace_create")
     ctx.marker = resolved_name
     return resolved_name
-
-
-async def _register_device(ctx: LiveCtx) -> str:
-    pairing = await create_pairing_via_http(ctx.frontend, auth_cookie=ctx.principal.token)
-    pairing_code = pairing["pairing_code"]
-    device_id = f"live-device-{ctx.token()}"
-    _ = await register_device_via_http(
-        ctx.frontend,
-        pairing_code=str(pairing_code),
-        device_id=device_id,
-        device_name=f"Live device {ctx.token()}",
-        os_name="darwin",
-        hostname=f"host-{ctx.token()}",
-    )
-    return device_id
 
 
 async def _custom_provider_body(ctx: LiveCtx) -> JsonObject:
@@ -528,14 +512,6 @@ async def _setup_embed_update(ctx: LiveCtx) -> JsonObject:
 async def _setup_embed_code(ctx: LiveCtx) -> JsonObject:
     created = await _create_embed(ctx)
     return {"embed_id": created["embed_id"], "public_origin": _PUBLIC_ORIGIN}
-
-
-async def _setup_device_revoke(ctx: LiveCtx) -> JsonObject:
-    return {"device_id": await _register_device(ctx)}
-
-
-async def _setup_device_policy(ctx: LiveCtx) -> JsonObject:
-    return {"device_id": await _register_device(ctx), "policy": {"allowed_roots": ["/tmp/live"], "exec_whitelist": []}}
 
 
 async def _setup_lead_requests(ctx: LiveCtx) -> JsonObject:
@@ -986,30 +962,7 @@ _CASES: dict[str, OpCase] = {
         principal="throwaway",
     ),
     "frontend/embed_configs/code_requested": OpCase(
-        RestMirror("GET", f"{_API}/embed/configs/{{embed_id}}/code", "none"), _setup_embed_code, True, principal="throwaway"
-    ),
-    "frontend/agent/pairing_create_requested": OpCase(
-        RestMirror("POST", f"{_API}/agent/pairing", "none"), _empty, True, "succeeded_only", principal="throwaway"
-    ),
-    "frontend/agent/devices_list_requested": OpCase(
-        RestMirror("GET", f"{_API}/agent/devices", "query"), _payload(mine=False), True, principal="throwaway"
-    ),
-    "frontend/agent/device_revoke_requested": OpCase(
-        RestMirror("DELETE", f"{_API}/agent/devices/{{device_id}}", "none"),
-        _setup_device_revoke,
-        False,
-        principal="throwaway",
-        volatile=frozenset({"device_id"}),
-    ),
-    "frontend/agent/device_policy_update_requested": OpCase(
-        RestMirror("PATCH", f"{_API}/agent/devices/{{device_id}}/policy", "body_minus_path"),
-        _setup_device_policy,
-        True,
-        principal="throwaway",
-        volatile=frozenset({"is_tunnel_online"}),
-    ),
-    "frontend/agent/audit_list_requested": OpCase(
-        RestMirror("GET", f"{_API}/agent/audit", "query"), _payload(limit=50), True, "succeeded_only"
+        RestMirror("GET", f"{_API}/embed/configs/{{embed_id}}/code", "none"), _setup_embed_code, True,         principal="throwaway"
     ),
     "frontend/company_storages/list_requested": OpCase(
         RestMirror("GET", f"{_API}/company-storages", "none"),

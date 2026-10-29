@@ -89,10 +89,10 @@ class StockContainerType(PlatformModel):
         return {row.container_type_id: row for row in rows}
 
     @classmethod
-    async def list_by_name_for_warehouse(
+    async def list_for_warehouse_by_name_asc(
         cls, company_id: str, warehouse_id: str
     ) -> list[Self]:
-        """Все типы контейнеров склада, ORDER BY name. Предела нет."""
+        """Все типы контейнеров склада, ORDER BY name ASC. Предела нет."""
         return await cls.objects.filter(
             company_id=company_id, warehouse_id=warehouse_id
         ).order_by("name").all()

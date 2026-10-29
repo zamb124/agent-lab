@@ -159,6 +159,25 @@ import { createCrmGraphLegacyRoutesEffect } from '../events/crm-graph-legacy-rou
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import type { CompanyListEntry } from '@platform/lib/utils/company-host-guard.js';
 import { getPlatformBus } from '@platform/lib/events/bus-singleton.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { CompanyRecord } from '@platform/lib/events/reducers/companies.js';
+
+function companyListEntries(list: readonly CompanyRecord[]): CompanyListEntry[] {
+    const entries: CompanyListEntry[] = [];
+    for (const row of list) {
+        const companyId = row.company_id;
+        if (typeof companyId !== 'string' || companyId.length === 0) {
+            throw new Error('crm-app: company list entry company_id required');
+        }
+        const subdomain = row.subdomain;
+        if (typeof subdomain === 'string' && subdomain.length > 0) {
+            entries.push({ company_id: companyId, subdomain });
+            continue;
+        }
+        entries.push({ company_id: companyId });
+    }
+    return entries;
+}
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import {
     getActivePlatformNamespaceName,
@@ -220,8 +239,8 @@ export class CRMApp extends PlatformApp {
         showLauncher: true,
     };
 
-    private _companiesListSel: SelectController<Record<string, any> | undefined>;
-    private _companiesLoadingSel: SelectController<Record<string, any> | undefined>;
+    private _companiesListSel: SelectController<CompanyRecord[]>;
+    private _companiesLoadingSel: SelectController<boolean>;
     private _laraActiveCompanySel: SelectController<string | null>;
     private _laraSummary: OpController;
     private _crmMql: MediaQueryList | null;
@@ -230,8 +249,8 @@ export class CRMApp extends PlatformApp {
 
     constructor() {
         super();
-        this._companiesListSel = this.select((s: Record<string, any>) => s.companies.list);
-        this._companiesLoadingSel = this.select((s: Record<string, any>) => s.companies.loading);
+        this._companiesListSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._laraActiveCompanySel = this.select((s: Record<string, any>) => s.auth.activeCompanyId);
         this._laraSummary = this.useOp('crm/lara_summary');
         this._crmMql = null;
@@ -414,8 +433,8 @@ export class CRMApp extends PlatformApp {
         const auth = this._authSelect.value;
         applyCompanyHostRedirectIfNeeded(
             auth,
-            (this._companiesListSel.value === undefined ? [] : this._companiesListSel.value) as ReadonlyArray<CompanyListEntry>,
-            Boolean(this._companiesLoadingSel.value),
+            companyListEntries(this._companiesListSel.value),
+            this._companiesLoadingSel.value,
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );
         this._hydrateCrmNamespaceSelection(auth);
@@ -436,7 +455,7 @@ export class CRMApp extends PlatformApp {
         }
         const trimmed = cid.trim();
         const bus = getPlatformBus();
-        const map = (bus.getState() as { ui?: { namespace?: { selectionByCompany?: unknown } } }).ui?.namespace?.selectionByCompany;
+        const map = bus.getState().ui.namespace.selectionByCompany;
         if (map != null && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, trimmed)) {
             return;
         }
@@ -455,15 +474,14 @@ export class CRMApp extends PlatformApp {
         }
         const namespace = getActivePlatformNamespaceName(companyId.trim());
         const summary = await this._laraSummary.run({ namespace });
-        if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+        if (!isPlainRecord(summary)) {
             throw new Error('CRM Lara summary request failed');
         }
-        const s = summary as Record<string, unknown>;
         const context = {
             namespace,
-            crm_knowledge_imports_awaiting_review: s.knowledge_imports_awaiting_review,
-            crm_knowledge_imports_in_progress: s.knowledge_imports_in_progress,
-            crm_notes_analysis_draft_not_applied: s.notes_with_analysis_draft_not_applied,
+            crm_knowledge_imports_awaiting_review: summary.knowledge_imports_awaiting_review,
+            crm_knowledge_imports_in_progress: summary.knowledge_imports_in_progress,
+            crm_notes_analysis_draft_not_applied: summary.notes_with_analysis_draft_not_applied,
             crm_lara_summary_json: JSON.stringify(summary),
         };
         if (routeKey === 'note' && typeof params.itemId === 'string' && params.itemId !== '') {

@@ -114,10 +114,6 @@ class AuthzObject:
         return cls(AuthzObjectType.FLOW_UI_SHARE, share_grant_id)
 
     @classmethod
-    def agent_device(cls, device_id: str) -> "AuthzObject":
-        return cls(AuthzObjectType.AGENT_DEVICE, device_id)
-
-    @classmethod
     def datasource(cls, datasource_id: str, *, company_id: str) -> "AuthzObject":
         return cls(
             AuthzObjectType.DATASOURCE,

@@ -360,7 +360,7 @@ class CompanyInitService:
         Возвращает:
             Список существующих типов компании
         """
-        return await EntityType.catalog(
+        return await EntityType.catalog_by_is_system_desc_and_type_id_asc(
             company_id=company_id,
         )
 
@@ -536,7 +536,7 @@ class CompanyInitService:
         if existing_mapping is not None:
             return
 
-        page = await CRMEntity.cursor_page(
+        page = await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
             entity_type="organization",
             namespace="default",
             company_id=company_id,
@@ -568,7 +568,7 @@ class CompanyInitService:
             await index_crm_entity(self._rag, entity, replace=False)
         except UniqueViolationError:
             logger.info("crm.organization.entity.worker.company", entity_id=entity.entity_id, company=company_id)
-            page = await CRMEntity.cursor_page(
+            page = await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
                 entity_type="organization",
                 namespace="default",
                 company_id=company_id,

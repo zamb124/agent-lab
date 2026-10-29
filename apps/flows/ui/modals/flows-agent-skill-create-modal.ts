@@ -9,6 +9,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
 const SKILL_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -18,6 +19,45 @@ const DEFAULT_BODY = `# Skill
 2. List the steps
 3. Call unlocked tools when needed
 `;
+
+function causationId(event: unknown): string | null {
+    if (!isPlainRecord(event)) {
+        return null;
+    }
+    const meta = event.meta;
+    if (!isPlainRecord(meta)) {
+        return null;
+    }
+    const id = meta.causation_id;
+    return typeof id === 'string' ? id : null;
+}
+
+function createdItem(event: unknown): Record<string, unknown> | null {
+    if (!isPlainRecord(event)) {
+        return null;
+    }
+    const payload = event.payload;
+    if (!isPlainRecord(payload)) {
+        return null;
+    }
+    const item = payload.item;
+    if (!isPlainRecord(item)) {
+        return null;
+    }
+    return item;
+}
+
+function failedMessage(event: unknown): string {
+    if (!isPlainRecord(event)) {
+        return 'create failed';
+    }
+    const payload = event.payload;
+    if (!isPlainRecord(payload)) {
+        return 'create failed';
+    }
+    const message = payload.message;
+    return typeof message === 'string' ? message : 'create failed';
+}
 
 export class FlowsAgentSkillCreateModal extends PlatformFormModal {
     static modalKind = 'flows.agent_skill_create';
@@ -30,7 +70,7 @@ export class FlowsAgentSkillCreateModal extends PlatformFormModal {
         _name: { state: true },
         _description: { state: true },
     }
-    declare onCreated: any;
+    declare onCreated: ((item: Record<string, unknown> | null) => void) | null;
     declare _agentSkillId: string;
     declare _name: string;
     declare _description: string;
@@ -82,8 +122,8 @@ export class FlowsAgentSkillCreateModal extends PlatformFormModal {
     _canSubmit() {
         return (
             SKILL_ID_PATTERN.test(this._agentSkillId)
-            && (this._name.trim() as any).length > 0
-            && (this._description.trim() as any).length > 0
+            && this._name.trim().length > 0
+            && this._description.trim().length > 0
             && !this._skills.createInFlight
         );
     }
@@ -91,9 +131,9 @@ export class FlowsAgentSkillCreateModal extends PlatformFormModal {
     override async handleSubmit() {
         if (!this._canSubmit()) return;
         const payload = {
-            agent_skill_id: (this._agentSkillId.trim() as any),
-            name: (this._name.trim() as any),
-            description: (this._description.trim() as any),
+            agent_skill_id: this._agentSkillId.trim(),
+            name: this._name.trim(),
+            description: this._description.trim(),
             body_markdown: DEFAULT_BODY,
             tool_refs: [],
             depends_on: [],
@@ -111,7 +151,7 @@ export class FlowsAgentSkillCreateModal extends PlatformFormModal {
         this.closeAfterSave();
     }
 
-    _waitCreated(requestedId: any) {
+    _waitCreated(requestedId: string): Promise<Record<string, unknown> | null> {
         const bus = this._skills.bus;
         const successType = this._skills.resource.events.CREATED;
         const failedType = this._skills.resource.events.CREATE_FAILED;
@@ -122,21 +162,15 @@ export class FlowsAgentSkillCreateModal extends PlatformFormModal {
                 if (typeof offSuccess === 'function') offSuccess();
                 if (typeof offFailed === 'function') offFailed();
             };
-            offSuccess = bus.subscribeType(successType, (event: any) => {
-                if (!(event as Record<string, any>).meta || (event as Record<string, any>).meta.causation_id !== requestedId) return;
+            offSuccess = bus.subscribeType(successType, (event: unknown) => {
+                if (causationId(event) !== requestedId) return;
                 cleanup();
-                const item = (event as Record<string, any>).payload && typeof (event as Record<string, any>).payload.item === 'object'
-                    ? (event as Record<string, any>).payload.item
-                    : null;
-                resolve(item);
+                resolve(createdItem(event));
             });
-            offFailed = bus.subscribeType(failedType, (event: any) => {
-                if (!(event as Record<string, any>).meta || (event as Record<string, any>).meta.causation_id !== requestedId) return;
+            offFailed = bus.subscribeType(failedType, (event: unknown) => {
+                if (causationId(event) !== requestedId) return;
                 cleanup();
-                const message = (event as Record<string, any>).payload && typeof (event as Record<string, any>).payload.message === 'string'
-                    ? (event as Record<string, any>).payload.message
-                    : 'create failed';
-                reject(new Error(message));
+                reject(new Error(failedMessage(event)));
             });
         });
     }

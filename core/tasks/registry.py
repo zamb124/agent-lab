@@ -4,13 +4,13 @@
 
 Два plain-dict реестра (core не импортирует apps):
 - ``_TASK_SPECS``: ``name -> TaskSpec`` — заполняется ``declare_task`` в лёгких
-  declaration-модулях (``apps/<svc>_worker/tasks/task_names.py``).
+  declaration-модулях (``apps/<svc>/tasks/task_names.py``).
 - ``_QUEUE_BROKERS``: ``queue -> AsyncBroker`` — заполняется ``create_broker``
   (``core.tasks.broker``) при создании брокера очереди.
 
 Единственный способ объявить задачу — ``@platform_task(spec)``; прямой
 декоратор ``broker.task`` в ``apps/**`` запрещён CI-гейтом
-``scripts/check_taskiq_canon.py``.
+``scripts/gates/backend/taskiq.py``.
 """
 
 from __future__ import annotations
@@ -146,14 +146,14 @@ def platform_task(
     """Единственный способ объявить исполнителя задачи.
 
     Биндит функцию к реальному брокеру очереди (broker должен быть зарегистрирован
-    через ``create_broker`` до импорта impl-модуля — гарантируется порядком в
-    ``apps/worker_manifest.py``: сначала брокеры, затем autodiscover).
+    через ``create_broker`` до импорта impl-модуля — гарантируется
+    ``apps/worker_manifest.py``: сначала брокер, затем autodiscover).
     Проставляет ``queue_name`` label (нужен scheduler dispatch и kick-роутингу).
     """
     broker = _QUEUE_BROKERS.get(task.queue)
     if broker is None:
         msg = f"platform_task: брокер очереди {task.queue!r} не зарегистрирован"
-        raise RuntimeError(f"{msg}; import the broker module before impl (apps/worker_manifest)")
+        raise RuntimeError(f"{msg}; wire_worker registers the broker before impl (apps/worker_manifest)")
     return broker.task(
         task_name=task.name,
         queue_name=task.queue,

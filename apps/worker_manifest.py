@@ -1,81 +1,96 @@
 """Единая топология TaskIQ платформы.
 
-Один источник правды: очередь → брокер-модуль и очередь → пакеты задач.
+Один источник правды: очередь → ``service_name`` брокера и очередь → модули задач.
 
-- ``wire_worker(queue)`` — импортирует брокер-модуль очереди (регистрирует
-  ``queue → broker`` через ``create_broker``) и autodiscover'ит impl-модули этой
-  очереди. Вызывается из ``build_worker``.
-- ``wire_brokers()`` — только брокеры всех очередей (HTTP scheduler API для kick).
-- ``wire_all()`` — брокеры + impl-задачи всех очередей (scheduler-процесс).
+- ``wire_worker(queue)`` — создаёт брокер очереди через ``create_broker`` и
+  импортирует её impl-модули. Вызывается из ``worker.py``.
+- ``wire_brokers()`` — брокеры всех очередей (HTTP scheduler API для kick).
+- ``wire_all()`` — брокеры и impl-задачи всех очередей (процесс scheduler).
 
 HTTP-продюсеры сюда не заходят: они делают ``enqueue(SPEC, ...)``, где брокер
-очереди создаётся kick-only лениво, а SPEC берётся из лёгкого
-``apps/<svc>_worker/tasks/task_names.py``.
+очереди создаётся kick-only лениво, а SPEC берётся из declaration-модуля
+(``apps/<svc>/tasks/task_names.py``, flows — ``apps/flows/src/tasks/task_names.py``,
+sync — ``apps/sync/realtime/task_names.py``).
 """
 
 from __future__ import annotations
 
-import importlib
-
 from taskiq_redis import RedisStreamBroker
 
 from core.tasks.autodiscover import import_task_modules
+from core.tasks.broker import create_broker
 from core.tasks.registry import queue_broker
 
-_QUEUE_BROKER_MODULE: dict[str, str] = {
-    "flows_worker": "apps.flows_worker.broker",
-    "idle": "apps.idle_worker.broker",
-    "a2a_push": "apps.idle_worker.a2a_push_broker",
-    "rag": "apps.rag_worker.broker",
-    "crm": "apps.crm_worker.broker",
-    "crm_summary": "apps.crm_worker.summary_broker",
-    "sync": "apps.sync.realtime.broker",
-    "search": "apps.search_worker.broker",
-    "stock": "apps.stock_worker.broker",
+_QUEUE_SERVICE: dict[str, str] = {
+    "flows_worker": "flows_worker",
+    "idle": "idle_worker",
+    "a2a_push": "a2a_push_worker",
+    "rag": "rag_worker",
+    "crm": "crm_worker",
+    "crm_summary": "crm_summary_worker",
+    "sync": "sync_worker",
+    "search": "search_worker",
+    "stock": "stock_worker",
+}
+
+# push_notification_tasks биндит задачи и idle, и a2a_push: оба брокера
+# регистрируются до импорта модуля.
+_IMPORT_BROKERS: dict[str, tuple[str, ...]] = {
+    "idle": ("idle", "a2a_push"),
+    "a2a_push": ("idle", "a2a_push"),
 }
 
 _QUEUE_TASK_MODULES: dict[str, tuple[str, ...]] = {
-    "flows_worker": ("apps.flows.src.tasks", "apps.flows_worker.evaluation_tasks"),
-    "idle": ("apps.idle_worker.tasks",),
-    "a2a_push": ("apps.idle_worker.tasks.push_notification_tasks",),
-    "rag": ("apps.rag_worker.tasks",),
+    "flows_worker": ("apps.flows.src.tasks",),
+    "idle": ("apps.idle.tasks",),
+    "a2a_push": ("apps.idle.tasks.push_notification_tasks",),
+    "rag": ("apps.rag.tasks",),
     "crm": (
-        "apps.crm_worker.tasks.analysis_tasks",
-        "apps.crm_worker.tasks.draft_repair_tasks",
-        "apps.crm_worker.tasks.knowledge_import_tasks",
-        "apps.crm_worker.tasks.namespace_integration_tasks",
-        "apps.crm_worker.tasks.note_markdown_tasks",
-        "apps.crm_worker.tasks.reembed_tasks",
-        "apps.crm_worker.tasks.scheduled_integration_sync_tasks",
-        "apps.crm_worker.tasks.suggest_tasks",
+        "apps.crm.tasks.analysis_tasks",
+        "apps.crm.tasks.draft_repair_tasks",
+        "apps.crm.tasks.knowledge_import_tasks",
+        "apps.crm.tasks.namespace_integration_tasks",
+        "apps.crm.tasks.note_markdown_tasks",
+        "apps.crm.tasks.reembed_tasks",
+        "apps.crm.tasks.scheduled_integration_sync_tasks",
+        "apps.crm.tasks.suggest_tasks",
     ),
-    "crm_summary": ("apps.crm_worker.tasks.daily_summary_tasks",),
+    "crm_summary": ("apps.crm.tasks.daily_summary_tasks",),
     "sync": ("apps.sync.realtime.tasks", "apps.sync.realtime.notification_tasks"),
-    "search": ("apps.search_worker.tasks",),
-    "stock": ("apps.stock_worker.tasks",),
+    "search": ("apps.search.tasks",),
+    "stock": ("apps.stock.tasks",),
 }
 
 
+def _ensure_broker(queue: str) -> RedisStreamBroker:
+    if queue not in _QUEUE_SERVICE:
+        raise ValueError(f"unknown queue {queue!r}")
+    existing = queue_broker(queue)
+    if existing is not None:
+        if not isinstance(existing, RedisStreamBroker):
+            raise RuntimeError(f"queue broker {queue!r} is not RedisStreamBroker")
+        return existing
+    return create_broker(queue_name=queue, service_name=_QUEUE_SERVICE[queue])
+
+
 def all_queues() -> tuple[str, ...]:
-    return tuple(_QUEUE_BROKER_MODULE.keys())
+    return tuple(_QUEUE_SERVICE.keys())
 
 
 def wire_brokers() -> None:
     """Зарегистрировать брокеры всех очередей (без impl-задач)."""
-    for queue in _QUEUE_BROKER_MODULE:
-        _ = importlib.import_module(_QUEUE_BROKER_MODULE[queue])
+    for queue in _QUEUE_SERVICE:
+        _ = _ensure_broker(queue)
 
 
 def wire_worker(queue: str) -> RedisStreamBroker:
-    """Импортировать брокер очереди и зарегистрировать её impl-задачи."""
-    if queue not in _QUEUE_BROKER_MODULE:
+    """Создать брокер очереди и зарегистрировать её impl-задачи."""
+    if queue not in _QUEUE_SERVICE:
         raise ValueError(f"wire_worker: unknown queue {queue!r}")
-    _ = importlib.import_module(_QUEUE_BROKER_MODULE[queue])
+    for required in _IMPORT_BROKERS.get(queue, (queue,)):
+        _ = _ensure_broker(required)
     _ = import_task_modules(_QUEUE_TASK_MODULES[queue])
-    broker = queue_broker(queue)
-    if not isinstance(broker, RedisStreamBroker):
-        raise RuntimeError(f"wire_worker: queue broker {queue!r} is not registered")
-    return broker
+    return _ensure_broker(queue)
 
 
 def wire_all() -> None:

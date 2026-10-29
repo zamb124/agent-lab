@@ -21,7 +21,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 
 def _enabled() -> bool:

@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from apps.guest_runtime.services.deny import assert_source_allowed
 from apps.guest_runtime.services.lease_store import GuestLeaseStore
@@ -793,7 +793,7 @@ class GuestFarmService:
             "env": self._guest_env(body, slot.executor),
         }
         self._bind_slot_log_scope(slot, body)
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx2.AsyncClient(timeout=10.0) as client:
             response = await client.post(f"{slot.shim_url}/context", json=payload)
             if response.status_code >= 400:
                 raise RuntimeError(
@@ -826,7 +826,7 @@ class GuestFarmService:
             lease, ttl_seconds=self._leases.remaining_ttl(lease)
         )
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx2.AsyncClient(timeout=120.0) as client:
                 invoke_body: JsonObject = {"text": text, "metadata": metadata}
                 response = await client.post(
                     f"{slot.shim_url}/invoke",

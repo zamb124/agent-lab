@@ -18,7 +18,7 @@ FROM ghcr.io/astral-sh/uv:bookworm-slim
 
 WORKDIR /app
 
-ARG NODE_MAJOR=24
+ARG NODE_MAJOR=26
 
 # GIL build CPython 3.14: ABI совместима с published torchaudio/torch/pyannote wheels.
 # PYTHON_GIL не задаём — default для GIL-build = 1 (GIL включён).

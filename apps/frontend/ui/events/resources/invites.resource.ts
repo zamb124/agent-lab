@@ -10,15 +10,37 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { buildCompanySubdomainUrl } from '@platform/lib/utils/company-url.js';
+
+function shortCodeOf(payload: unknown, label: string): string {
+    if (!isPlainRecord(payload)) {
+        throw new Error(`${label}: short_code required`);
+    }
+    const shortCode = payload.short_code;
+    if (typeof shortCode !== 'string' || shortCode === '') {
+        throw new Error(`${label}: short_code required`);
+    }
+    return shortCode;
+}
+
+function acceptedSubdomain(result: unknown): string {
+    if (!isPlainRecord(result)) {
+        throw new Error('invite_accept: subdomain required in result');
+    }
+    const subdomain = result.subdomain;
+    if (typeof subdomain !== 'string' || subdomain.trim() === '') {
+        throw new Error('invite_accept: subdomain required in result');
+    }
+    return subdomain.trim();
+}
 
 export const previewInviteOp = createAsyncOp({
     name: 'frontend/invite_preview',
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/invites/preview' },
     request: async ({ payload }) => {
-        const shortCode = payload && (payload as Record<string, any>).short_code;
-        if (!shortCode) throw new Error('invite_preview: short_code required');
+        const shortCode = shortCodeOf(payload, 'invite_preview');
         return await httpRequest({
             method: 'POST',
             url: '/frontend/api/invites/preview',
@@ -33,8 +55,7 @@ export const acceptInviteOp = createAsyncOp({
     errorToastKey: 'frontend:join_page.toast_failed',
     restMirror: { method: 'POST', path: '/frontend/api/invites/accept' },
     request: async ({ payload }) => {
-        const shortCode = payload && (payload as Record<string, any>).short_code;
-        if (!shortCode) throw new Error('invite_accept: short_code required');
+        const shortCode = shortCodeOf(payload, 'invite_accept');
         return await httpRequest({
             method: 'POST',
             url: '/frontend/api/invites/accept',
@@ -42,11 +63,9 @@ export const acceptInviteOp = createAsyncOp({
         });
     },
     onSuccess: (_ctx, result) => {
-        if (!result || typeof (result as Record<string, any>).subdomain !== 'string' || (result as Record<string, any>).subdomain.trim() === '') {
-            throw new Error('invite_accept: subdomain required in result');
-        }
+        const subdomain = acceptedSubdomain(result);
         const path = '/dashboard';
-        window.location.replace(buildCompanySubdomainUrl((result as Record<string, any>).subdomain.trim(), path));
+        window.location.replace(buildCompanySubdomainUrl(subdomain, path));
     },
 });
 

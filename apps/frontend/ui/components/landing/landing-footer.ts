@@ -5,8 +5,9 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { ControllerFor, OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export class LandingFooter extends PlatformElement {
     static i18nNamespace = 'landing';
@@ -224,7 +225,7 @@ export class LandingFooter extends PlatformElement {
         this._localeSel = this.select((s: Record<string, any>) => s.i18n.locale);
     }
     private _bundle: OpController;
-    private _cookieConsent: unknown;
+    private _cookieConsent: ControllerFor<'frontend/cookie_consent'>;
     private _localeSel: SelectController<any>;
 
 
@@ -238,7 +239,7 @@ export class LandingFooter extends PlatformElement {
     }
 
     _openCookieSettings() {
-        ((this._cookieConsent as { openSettings?: () => void } | null)?.openSettings)?.();
+        this._cookieConsent.openSettings(null);
     }
 
     _legalUrl(pathname: string) {
@@ -252,7 +253,7 @@ export class LandingFooter extends PlatformElement {
         throw new Error('landing-footer: i18n.locale must be ru or en');
     }
 
-    _requireLegalString(legal: Record<string, any>, key: string) {
+    _requireLegalString(legal: Record<string, unknown>, key: string) {
         const value = legal[key];
         if (typeof value !== 'string' || value === '') {
             throw new Error(`landing-footer: legal.${key} required`);
@@ -260,21 +261,21 @@ export class LandingFooter extends PlatformElement {
         return value;
     }
 
-    _companyName(legal: Record<string, any>) {
+    _companyName(legal: Record<string, unknown>) {
         const locale = this._localeSel.value;
         if (locale === 'ru') return this._requireLegalString(legal, 'company_name_ru');
         if (locale === 'en') return this._requireLegalString(legal, 'company_name_en');
         throw new Error('landing-footer: i18n.locale must be ru or en');
     }
 
-    _legalAddress(legal: Record<string, any>) {
+    _legalAddress(legal: Record<string, unknown>) {
         const locale = this._localeSel.value;
         if (locale === 'ru') return this._requireLegalString(legal, 'legal_address_ru');
         if (locale === 'en') return this._requireLegalString(legal, 'legal_address_en');
         throw new Error('landing-footer: i18n.locale must be ru or en');
     }
 
-    _bankName(legal: Record<string, any>) {
+    _bankName(legal: Record<string, unknown>) {
         const locale = this._localeSel.value;
         if (locale === 'ru') return this._requireLegalString(legal, 'bank_name_ru');
         if (locale === 'en') return this._requireLegalString(legal, 'bank_name_en');
@@ -283,15 +284,16 @@ export class LandingFooter extends PlatformElement {
 
     override render(): TemplateResult {
         const bundleRes = this._bundle.lastResult;
-        let legal = null;
+        let legal: Record<string, unknown> | null = null;
         let telegramUrl = '';
-        if (bundleRes && typeof bundleRes === 'object') {
-            if (!(bundleRes as Record<string, any>).legal || typeof (bundleRes as Record<string, any>).legal !== 'object') {
+        if (isPlainRecord(bundleRes)) {
+            const legalValue = bundleRes.legal;
+            if (!isPlainRecord(legalValue)) {
                 throw new Error('landing-footer: legal missing');
             }
-            legal = (bundleRes as Record<string, any>).legal;
-            const marketing = (bundleRes as Record<string, any>).marketing;
-            if (!marketing || typeof marketing !== 'object') {
+            legal = legalValue;
+            const marketing = bundleRes.marketing;
+            if (!isPlainRecord(marketing)) {
                 throw new Error('landing-footer: marketing missing');
             }
             const rawUrl = marketing.telegram_community_url;

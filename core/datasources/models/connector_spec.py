@@ -91,7 +91,8 @@ class DatasourceConnectorSpec(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_stamped_for_company(cls, company_id: str) -> list[Self]:
+    async def list_stamped_for_company_by_name_and_connector_id_asc(cls, company_id: str) -> list[Self]:
+        """Коннекторы компании, ORDER BY name ASC, connector_id ASC. Предела нет. Пустой company_id — ValueError."""
         return await cls.objects.filter(
             company_id=datasource_required(company_id, "company_id"),
         ).order_by("name", "connector_id").all()

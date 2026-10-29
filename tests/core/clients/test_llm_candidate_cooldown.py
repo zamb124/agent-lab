@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-import httpx
+import httpx2
 import pytest
 from pydantic import ValidationError
 
@@ -27,10 +27,10 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 
 
-def _http_status_error(status: int, body: str) -> httpx.HTTPStatusError:
-    request = httpx.Request("POST", "https://example.test/v1/chat/completions")
-    response = httpx.Response(status, text=body, request=request)
-    return httpx.HTTPStatusError(f"HTTP {status}", request=request, response=response)
+def _http_status_error(status: int, body: str) -> httpx2.HTTPStatusError:
+    request = httpx2.Request("POST", "https://example.test/v1/chat/completions")
+    response = httpx2.Response(status, text=body, request=request)
+    return httpx2.HTTPStatusError(f"HTTP {status}", request=request, response=response)
 
 
 def _candidate(unique_id: str) -> LLMCallConfig:
@@ -77,7 +77,7 @@ def test_classify_timeout_classes() -> None:
     idle = classify_ai_provider_error("groq", LLMStreamIdleTimeoutError(1.5, 0))
     assert idle.error_class == AIProviderErrorClass.TIMEOUT
     assert isinstance(LLMStreamIdleTimeoutError(1.5, 0), TimeoutError)
-    httpx_timeout = classify_ai_provider_error("groq", httpx.TimeoutException("idle"))
+    httpx_timeout = classify_ai_provider_error("groq", httpx2.TimeoutException("idle"))
     assert httpx_timeout.error_class == AIProviderErrorClass.TIMEOUT
 
 

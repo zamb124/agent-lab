@@ -45,21 +45,24 @@ class LLMModelScore(PlatformModel):
         self.updated_at = datetime.now(timezone.utc)
 
     @classmethod
-    async def list_all(cls) -> list[Self]:
+    async def list_by_capability_provider_and_model_id_asc(cls) -> list[Self]:
+        """Все оценки, ORDER BY capability, provider, model_id ASC. Предела нет."""
         return await cls.objects.order_by("capability", "provider", "model_id").all()
 
     @classmethod
-    async def rows_for_capability(cls, capability: AICapability | str) -> list[Self]:
+    async def list_unordered_for_capability(cls, capability: AICapability | str) -> list[Self]:
+        """Оценки одной capability. Порядка и предела нет."""
         return await cls.objects.filter(capability=_score_capability(capability)).all()
 
     @classmethod
-    async def overlay_row(
+    async def by_provider_model_id_and_capability(
         cls,
         *,
         provider: str,
         model_id: str,
         capability: AICapability | str,
     ) -> Self | None:
+        """Уникальный ключ provider, model_id, capability. Нет строки — None."""
         return await cls.objects.filter(
             provider=_required_score_field(provider, "provider"),
             model_id=_required_score_field(model_id, "model_id"),
@@ -67,7 +70,7 @@ class LLMModelScore(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def upsert_overlay(
+    async def upsert_result_by_provider_model_id_and_capability(
         cls,
         *,
         provider: str,
@@ -78,12 +81,13 @@ class LLMModelScore(PlatformModel):
         note: str | None = None,
         updated_by_user_id: str | None = None,
     ) -> LLMModelScoreUpsertResult:
+        """Слияние по ключу provider, model_id, capability. created — только при вставке, updated всегда True."""
         provider = _required_score_field(provider, "provider")
         model_id = _required_score_field(model_id, "model_id")
         capability_value = _score_capability(capability)
         prior = _editorial_prior(editorial_prior)
         now = datetime.now(timezone.utc)
-        row = await cls.overlay_row(provider=provider, model_id=model_id, capability=capability_value)
+        row = await cls.by_provider_model_id_and_capability(provider=provider, model_id=model_id, capability=capability_value)
         if row is None:
             created = cls(
                 provider=provider,
@@ -107,13 +111,14 @@ class LLMModelScore(PlatformModel):
         return LLMModelScoreUpsertResult(row=row, created=False, updated=True)
 
     @classmethod
-    async def delete_overlay(
+    async def delete_by_provider_model_id_and_capability(
         cls,
         *,
         provider: str,
         model_id: str,
         capability: AICapability | str,
     ) -> bool:
+        """Удаление по ключу provider, model_id, capability. Нет строки — False."""
         deleted = await cls.objects.filter(
             provider=_required_score_field(provider, "provider"),
             model_id=_required_score_field(model_id, "model_id"),

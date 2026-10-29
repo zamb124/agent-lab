@@ -59,12 +59,13 @@ class WikiPageLink(PlatformModel):
                 _ = await cls.objects.create(instance=link)
 
     @classmethod
-    async def list_for_target(
+    async def list_unordered_for_target(
         cls,
         company_id: str,
         target_kind: WikiLinkTargetKind,
         target_id: str,
     ) -> list[Self]:
+        """Ссылки на цель. Порядка и limit нет. Пустые поля не проверяются."""
         return await cls.objects.filter(
             company_id=company_id,
             target_kind=target_kind,

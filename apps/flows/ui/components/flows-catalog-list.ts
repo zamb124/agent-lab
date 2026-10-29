@@ -24,12 +24,12 @@ import './flow-card.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
-function _fieldIncludesSubstring(normalizedQuery: any, value: unknown) {
+function _fieldIncludesSubstring(normalizedQuery: string, value: unknown) {
     if (typeof value !== 'string' || value.length === 0) return false;
     return value.toLowerCase().includes(normalizedQuery);
 }
 
-function flowMatchesSidebarSearch(flow: any, normalizedQuery: any) {
+function flowMatchesSidebarSearch(flow: unknown, normalizedQuery: string) {
     if (normalizedQuery.length === 0) return true;
     if (!isPlainObject(flow)) return false;
     if (_fieldIncludesSubstring(normalizedQuery, flow.name)) return true;
@@ -60,7 +60,7 @@ export class FlowsCatalogList extends PlatformElement {
     }
     declare mode: string;
     declare collapsedSidebar: boolean;
-    declare _expanded: Record<string, any>;
+    declare _expanded: Record<string, boolean>;
     declare _flowSearchQuery: string;
 ;
 
@@ -134,7 +134,7 @@ export class FlowsCatalogList extends PlatformElement {
     ];
     private _flows: ResourceController;
     private _branchRemove: OpController;
-    private _currentFlowSel: SelectController<any>;
+    private _currentFlowSel: SelectController<string | null>;
 
     constructor() {
         super();
@@ -145,8 +145,8 @@ export class FlowsCatalogList extends PlatformElement {
         this._flows = this.useResource('flows/flows', { autoload: true });
         this._branchRemove = this.useOp('flows/branch_remove');
         this._currentFlowSel = this.select((s) => {
-            const params = isPlainObject(s.router) && isPlainObject((s as any).router.params) ? (s as any).router.params : {};
-            return typeof params.flowId === 'string' ? params.flowId : null;
+            const flowId = s.router.params.flowId;
+            return typeof flowId === 'string' ? flowId : null;
         });
     }
 
@@ -154,7 +154,10 @@ export class FlowsCatalogList extends PlatformElement {
         this.emit('flows-catalog-dismiss-mobile', null);
     }
 
-    async _confirmDeleteFlow(flowId: any) {
+    async _confirmDeleteFlow(flowId: unknown) {
+        if (typeof flowId !== 'string' || flowId === '') {
+            throw new Error('flows-catalog-list: flowId required');
+        }
         const ok = await platformConfirm(
             this.t('flows_sidebar.delete_flow_message', { id: flowId }),
             {
@@ -169,7 +172,13 @@ export class FlowsCatalogList extends PlatformElement {
         await this._flows.remove(flowId);
     }
 
-    async _confirmDeleteBranch(flowId: any, branchId: any) {
+    async _confirmDeleteBranch(flowId: unknown, branchId: unknown) {
+        if (typeof flowId !== 'string' || flowId === '') {
+            throw new Error('flows-catalog-list: flowId required');
+        }
+        if (typeof branchId !== 'string' || branchId === '') {
+            throw new Error('flows-catalog-list: branchId required');
+        }
         const ok = await platformConfirm(
             this.t('flows_sidebar.delete_branch_message', { id: branchId }),
             {
@@ -186,22 +195,17 @@ export class FlowsCatalogList extends PlatformElement {
     }
 
     _onFlowAction(e: CustomEvent) {
-        const { action, flowId, branchId } = (isPlainObject(e.detail) ? e.detail : {}) as Record<string, any>;
+        if (!isPlainObject(e.detail)) return;
+        const action = e.detail.action;
+        const flowId = e.detail.flowId;
+        const branchId = e.detail.branchId;
         switch (action) {
             case 'chat':
-                if (branchId) {
-                    this.navigate('flow_chat_branch', { flowId, branchId });
-                } else {
-                    this.navigate('flow_chat', { flowId });
-                }
+                this._openFlow(flowId, branchId, 'flow_chat', 'flow_chat_branch');
                 this._requestDismissMobile();
                 break;
             case 'edit':
-                if (branchId) {
-                    this.navigate('flow_editor_branch', { flowId, branchId });
-                } else {
-                    this.navigate('flow_editor', { flowId });
-                }
+                this._openFlow(flowId, branchId, 'flow_editor', 'flow_editor_branch');
                 this._requestDismissMobile();
                 break;
             case 'delete':
@@ -211,12 +215,29 @@ export class FlowsCatalogList extends PlatformElement {
                 this._confirmDeleteBranch(flowId, branchId);
                 break;
             case 'create-branch':
+                if (typeof flowId !== 'string' || flowId === '') {
+                    throw new Error('flows-catalog-list: flowId required');
+                }
                 this.openModal('flows.branch_create', { flowId });
                 break;
             case 'toggle':
-                this._expanded = { ...this._expanded, [flowId]: !(this._expanded as Record<string, any>)[flowId] };
+                if (typeof flowId !== 'string' || flowId === '') {
+                    throw new Error('flows-catalog-list: flowId required');
+                }
+                this._expanded = { ...this._expanded, [flowId]: this._expanded[flowId] !== true };
                 break;
         }
+    }
+
+    _openFlow(flowId: unknown, branchId: unknown, flowRoute: string, branchRoute: string) {
+        if (typeof flowId !== 'string' || flowId === '') {
+            throw new Error('flows-catalog-list: flowId required');
+        }
+        if (typeof branchId === 'string' && branchId !== '') {
+            this.navigate(branchRoute, { flowId, branchId });
+            return;
+        }
+        this.navigate(flowRoute, { flowId });
     }
 
     _createFlow() {
@@ -282,16 +303,26 @@ export class FlowsCatalogList extends PlatformElement {
                             ? html`<div class="flows-search-empty">${this.t('flows_sidebar.search_empty')}</div>`
                             : repeat(
                                 filteredItems,
-                                (a) => a.flow_id,
-                                (flowItem) => html`
+                                (item) => {
+                                    if (!isPlainObject(item) || typeof item.flow_id !== 'string' || item.flow_id.length === 0) {
+                                        throw new Error('flows-catalog-list: flow_id required');
+                                    }
+                                    return item.flow_id;
+                                },
+                                (flowItem) => {
+                                    if (!isPlainObject(flowItem) || typeof flowItem.flow_id !== 'string') {
+                                        throw new Error('flows-catalog-list: flow_id required');
+                                    }
+                                    return html`
                                     <flow-card
                                         .flow=${flowItem}
                                         ?active=${flowItem.flow_id === currentFlowId}
-                                        ?expanded=${Boolean((this._expanded as any)[flowItem.flow_id])}
+                                        ?expanded=${this._expanded[flowItem.flow_id] === true}
                                         ?collapsed=${cardCollapsed}
                                         @flow-action=${this._onFlowAction}
                                     ></flow-card>
-                                `,
+                                `;
+                                },
                             )}
                 </div>
             </div>

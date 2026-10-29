@@ -25,7 +25,6 @@
         "**/node_modules/**",
         "**/ui-dist/**",
         "**/vendor/**",
-        "apps/agent/**",
         ".cache/**",
         "ui-dist/**"
     ]

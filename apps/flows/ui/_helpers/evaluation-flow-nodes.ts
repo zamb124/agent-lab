@@ -3,7 +3,7 @@
  * Judge/tester bodies live in flow JSON; cases store only node ids.
  */
 
-function isPlainObject(value: unknown) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -11,12 +11,41 @@ function asString(value: unknown) {
     return typeof value === 'string' ? value : '';
 }
 
+function unknownArray(value: unknown): unknown[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const items: unknown[] = [];
+    for (const item of value) {
+        items.push(item);
+    }
+    return items;
+}
+
+interface FlowUpdateBody {
+    flow_id: string;
+    name: string;
+    description: string;
+    entry: string;
+    nodes: Record<string, unknown>;
+    edges: unknown[];
+    variables: Record<string, unknown>;
+    tags: unknown[];
+    branches: Record<string, unknown>;
+    triggers: Record<string, unknown>;
+    resources: Record<string, unknown>;
+    store_card_image_url: string | null;
+    speech: Record<string, unknown> | null;
+    chat: Record<string, unknown> | null;
+    employee: Record<string, unknown> | undefined;
+}
+
 /**
  * @param {unknown} flow
  * @param {string} branchId
  * @returns {Record<string, object>}
  */
-export function effectiveFlowNodesMap(flow: any, branchId: any) {
+export function effectiveFlowNodesMap(flow: unknown, branchId: unknown): Record<string, unknown> {
     if (!isPlainObject(flow)) {
         throw new Error('effectiveFlowNodesMap: flow object required');
     }
@@ -47,7 +76,7 @@ export function effectiveFlowNodesMap(flow: any, branchId: any) {
  * @param {unknown} node
  * @returns {string}
  */
-export function evaluationRoleFromNode(node: any) {
+export function evaluationRoleFromNode(node: unknown) {
     if (!isPlainObject(node)) {
         return '';
     }
@@ -64,7 +93,7 @@ export function evaluationRoleFromNode(node: any) {
  * @param {unknown} node
  * @returns {boolean}
  */
-export function isEvaluationRoleNode(node: any) {
+export function isEvaluationRoleNode(node: unknown) {
     const role = evaluationRoleFromNode(node);
     return role === 'judge' || role === 'tester';
 }
@@ -74,7 +103,7 @@ export function isEvaluationRoleNode(node: any) {
  * @param {unknown} node
  * @returns {boolean}
  */
-export function isPortlessCanvasNode(node: any) {
+export function isPortlessCanvasNode(node: unknown) {
     if (!isPlainObject(node)) {
         return false;
     }
@@ -89,7 +118,7 @@ export function isPortlessCanvasNode(node: any) {
  * @param {unknown} node
  * @returns {string}
  */
-export function canvasNodeTypeSubtitle(node: any) {
+export function canvasNodeTypeSubtitle(node: unknown) {
     if (!isPlainObject(node)) {
         return '';
     }
@@ -105,22 +134,22 @@ export function canvasNodeTypeSubtitle(node: any) {
  * @param {string} branchId
  * @returns {{ node_id: string, name: string, evaluation_role: string, prompt: string }[]}
  */
-export function listEffectiveLlmNodes(flow: any, branchId: any) {
+export function listEffectiveLlmNodes(flow: unknown, branchId: unknown) {
     const nodes = effectiveFlowNodesMap(flow, branchId);
     const items = [];
     for (const [nodeId, raw] of Object.entries(nodes)) {
         if (!isPlainObject(raw)) {
             continue;
         }
-        if (asString((raw as any).type) !== 'llm_node') {
+        if (asString(raw.type) !== 'llm_node') {
             continue;
         }
-        const name = asString((raw as any).name);
+        const name = asString(raw.name);
         items.push({
             node_id: nodeId,
             name: name.length > 0 ? name : nodeId,
             evaluation_role: evaluationRoleFromNode(raw),
-            prompt: asString((raw as any).prompt),
+            prompt: asString(raw.prompt),
         });
     }
     items.sort((left, right) => left.name.localeCompare(right.name));
@@ -138,7 +167,7 @@ export function listEffectiveLlmNodes(flow: any, branchId: any) {
  * @param {unknown} flow
  * @returns {object}
  */
-function flowUpdateBodyBase(flow: any) {
+function flowUpdateBodyBase(flow: unknown): FlowUpdateBody {
     if (!isPlainObject(flow)) {
         throw new Error('flowUpdateBodyBase: flow object required');
     }
@@ -154,9 +183,9 @@ function flowUpdateBodyBase(flow: any) {
         description: typeof flow.description === 'string' ? flow.description : '',
         entry,
         nodes: isPlainObject(flow.nodes) ? { ...flow.nodes } : {},
-        edges: Array.isArray(flow.edges) ? [...flow.edges] : [],
+        edges: unknownArray(flow.edges),
         variables: isPlainObject(flow.variables) ? flow.variables : {},
-        tags: Array.isArray(flow.tags) ? flow.tags : [],
+        tags: unknownArray(flow.tags),
         branches: isPlainObject(flow.branches) ? { ...flow.branches } : {},
         triggers: isPlainObject(flow.triggers) ? flow.triggers : {},
         resources: isPlainObject(flow.resources) ? flow.resources : {},
@@ -166,7 +195,6 @@ function flowUpdateBodyBase(flow: any) {
         speech: isPlainObject(flow.speech) ? flow.speech : null,
         chat: isPlainObject(flow.chat) ? flow.chat : null,
         employee: isPlainObject(flow.employee) ? flow.employee : undefined,
-        agent_toolkit_ids: Array.isArray(flow.agent_toolkit_ids) ? flow.agent_toolkit_ids : [],
     };
 }
 
@@ -177,7 +205,7 @@ function flowUpdateBodyBase(flow: any) {
  * @param {object} nodeConfig
  * @returns {object}
  */
-export function flowBodyWithNode(flow: any, branchId: any, nodeId: string, nodeConfig: any) {
+export function flowBodyWithNode(flow: unknown, branchId: unknown, nodeId: string, nodeConfig: unknown) {
     if (typeof nodeId !== 'string' || nodeId.length === 0) {
         throw new Error('flowBodyWithNode: nodeId required');
     }
@@ -209,7 +237,7 @@ export function flowBodyWithNode(flow: any, branchId: any, nodeId: string, nodeC
  * @param {string} nodeId
  * @returns {object}
  */
-export function flowBodyWithoutNode(flow: any, branchId: any, nodeId: string) {
+export function flowBodyWithoutNode(flow: unknown, branchId: unknown, nodeId: string) {
     if (typeof nodeId !== 'string' || nodeId.length === 0) {
         throw new Error('flowBodyWithoutNode: nodeId required');
     }
@@ -245,7 +273,7 @@ export function flowBodyWithoutNode(flow: any, branchId: any, nodeId: string) {
             const branchNodes = isPlainObject(existing.nodes) ? { ...existing.nodes } : {};
             delete branchNodes[nodeId];
             const branchEdges = Array.isArray(existing.edges)
-                ? existing.edges.filter((edge: any) => {
+                ? unknownArray(existing.edges).filter((edge) => {
                     if (!isPlainObject(edge)) {
                         return false;
                     }

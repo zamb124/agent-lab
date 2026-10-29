@@ -18,6 +18,18 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function memberRows(items: unknown[]): Record<string, unknown>[] {
+    const rows: Record<string, unknown>[] = [];
+    for (const item of items) {
+        if (!isPlainRecord(item)) {
+            throw new Error('office.catalog_members: member must be an object');
+        }
+        rows.push(item);
+    }
+    return rows;
+}
 
 const MEMBERS_NAME = 'office/catalog_members';
 const COMPANY_MEMBERS_NAME = 'office/company_members';
@@ -158,16 +170,25 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
     }
 
     private _activeMembers(): Array<Record<string, unknown>> {
-        const items = (this._members.state as Record<string, unknown>).items;
-        return Array.isArray(items) ? items as Array<Record<string, unknown>> : [];
+        const items = this._members.state.items;
+        if (items === undefined || items === null) return [];
+        if (!Array.isArray(items)) {
+            throw new Error('office.catalog_members: members items must be an array');
+        }
+        return memberRows(items);
     }
 
     _candidates() {
-        const result = this._company.lastResult as { items?: unknown } | null;
-        if (result != null && (typeof result !== 'object' || !Array.isArray(result.items))) {
+        const result = this._company.lastResult;
+        if (result === null || result === undefined) return [];
+        if (!isPlainRecord(result)) {
             throw new Error('office.catalog_members: company_members.lastResult.items required');
         }
-        const company = (result == null ? [] : result.items) as Array<Record<string, unknown>>;
+        const items = result.items;
+        if (!Array.isArray(items)) {
+            throw new Error('office.catalog_members: company_members.lastResult.items required');
+        }
+        const company = memberRows(items);
         const memberIds = new Set(this._activeMembers().map((m) => m.user_id));
         const q = this._query.trim().toLowerCase();
         return company.filter((u: Record<string, unknown>) => {

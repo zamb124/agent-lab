@@ -19,7 +19,7 @@ alwaysApply: false
 
 1. `PlatformEvent` (`core/events/contract.py`): `event_id`, `type` (`<scope>/<entity>/<verb>`, lowercase snake_case, ≥ 3 сегмента), `company_id` (обязателен, `system` для платформенных), `payload`, `meta` (`ts`, `source`, `actor_user_id`, `causation_id`, `correlation_id`, `trace_id`, `request_id`), `delivery`.
 2. `delivery: EventDelivery | None` — ровно одно из `user_ids`, `company_id`, `broadcast`; `None` — доменное событие без UI-доставки.
-3. Публикация — только хелперы `core/events/publisher.py`: `publish_event_to_user`, `publish_event_to_users`, `publish_event_to_company`, `publish_event_broadcast`, `publish_domain_event`; все идут через `submit_platform_event` (`core/realtime/submit.py`: persist `platform_event_log` (`PlatformEventLog.create`) → XADD → Centrifugo publish). `list_expired_commands(*, now, limit) -> list[PlatformEventLog]` — команды с `deadline_at < now` в `received` и `dispatched`, `ORDER BY deadline_at`, не больше `limit`. `terminal_query(causation_id) -> Query[PlatformEventLog]` — строки этого `causation_id` с типом на `_succeeded` или `_failed`. Порядок задаёт вызывающий. `trace_id`, `request_id`, `company_id` наследуются из контекста; bus недоступен — публикация падает.
+3. Публикация — только хелперы `core/events/publisher.py`: `publish_event_to_user`, `publish_event_to_users`, `publish_event_to_company`, `publish_event_broadcast`, `publish_domain_event`; все идут через `submit_platform_event` (`core/realtime/submit.py`: persist `platform_event_log` (`PlatformEventLog.create`) → XADD → Centrifugo publish). `list_expired_by_deadline_at_asc(*, now, limit) -> list[PlatformEventLog]` — команды с `deadline_at < now` в `received` и `dispatched`, `ORDER BY deadline_at ASC`, не больше `limit`. `terminal_query(causation_id) -> Query[PlatformEventLog]` — строки этого `causation_id` с типом на `_succeeded` или `_failed`. Порядок задаёт вызывающий. `trace_id`, `request_id`, `company_id` наследуются из контекста; bus недоступен — публикация падает.
 4. Один доменный факт — одна запись стрима при любом числе получателей (`user_ids` — список).
 5. Тип, который публикуется или слушается триггером, зарегистрирован `register_platform_event(type, payload_model, description=...)` (`core/events/registry.py`) в `apps/<svc>/events.py`, `apps/flows/src/events.py`, `core/worktracker/events.py` или `core/mail/events.py`; один тип — одна модель payload.
 6. Каталог: каждый процесс на старте пишет регистрации в Redis HASH `platform:event_catalog` (`store_registered_platform_events`); полный каталог — `load_platform_event_catalog` (`GET /flows/api/v1/platform-events/catalog`). `filter_fields` записи выводит `derive_filter_fields` из JSON Schema payload; UI schema не парсит.
@@ -36,7 +36,7 @@ alwaysApply: false
 
 ### Вне шины
 
-Свои каналы, а не `platform:events`: A2A/LLM `stream:{task_id}` и `ui-action` (→ `a2a.mdc`), tunnel LinnexAgent, lock-release документа Office, ledger `workflow_events`, TaskIQ-задачи, voice WS и LiveKit, HTTP poll отчёта crawl и pairing агента, команда `company_init`. Доменное следствие `ui-action` после durable commit — обычный зарегистрированный `PlatformEvent` с собственным `event_id`.
+Свои каналы, а не `platform:events`: A2A/LLM `stream:{task_id}` и `ui-action` (→ `a2a.mdc`), lock-release документа Office, ledger `workflow_events`, TaskIQ-задачи, voice WS и LiveKit, HTTP poll отчёта crawl, команда `company_init`. Доменное следствие `ui-action` после durable commit — обычный зарегистрированный `PlatformEvent` с собственным `event_id`.
 
 ### Уведомления
 
@@ -55,6 +55,6 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_platform_events_canon.py` (`make check-events-canon`) — прямой XADD, регистрация publish-литералов, fan-out в цикле, orphan-типы, HTTP wake, reload страницы на push, запрещённые имена в коде и правилах.
-- `scripts/check_realtime_canon.py` (`make check-events-canon`) — user WS только Centrifugo `/realtime`, HTTP к Centrifugo только из bus, без connect-proxy и `connection_token`.
+- `scripts/gates/backend/platform_events.py` (`make check-events-canon`) — прямой XADD, регистрация publish-литералов, fan-out в цикле, orphan-типы, HTTP wake, reload страницы на push, запрещённые имена в коде и правилах.
+- `scripts/gates/backend/realtime.py` (`make check-events-canon`) — user WS только Centrifugo `/realtime`, HTTP к Centrifugo только из bus, без connect-proxy и `connection_token`.
 - `tests/fixtures/platform_events.py::platform_events_listener` — чтение стрима с id последней записи (на пустом стриме `0-0`); `tests/realtime/**` — живой Centrifugo + bus.

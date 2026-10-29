@@ -125,13 +125,14 @@ class EntityType(PlatformModel):
         return rows
 
     @classmethod
-    def by_company_namespace_and_type_id(
+    def query_by_company_namespace_and_type_id(
         cls,
         *,
         company_id: str,
         namespace: str,
         type_id: str,
     ) -> Query[Self]:
+        """Запрос типа по компании, namespace и type_id. Порядка нет. Пустые поля не проверяются."""
         return cls.objects.filter(
             company_id=company_id,
             namespace=namespace,
@@ -139,12 +140,13 @@ class EntityType(PlatformModel):
         )
 
     @classmethod
-    async def catalog(
+    async def catalog_by_is_system_desc_and_type_id_asc(
         cls,
         *,
         namespace: str | None = None,
         company_id: str | None = None,
     ) -> list[EntityType]:
+        """Каталог типов компании, ORDER BY is_system DESC, type_id ASC. Больше CATALOG_MAX_ROWS — RuntimeError. namespace None не фильтрует."""
         resolved_company_id = resolve_entity_type_company(company_id)
         revision_before = await EntityTypeCatalogRevision.catalog_revision(resolved_company_id)
         cached = get_entry(resolved_company_id, namespace)
@@ -192,7 +194,7 @@ class EntityType(PlatformModel):
             raise ValueError("entity type update requires fields")
         resolved_company_id = resolve_entity_type_company(company_id)
         async with atomic(using="crm"):
-            updated = await cls.by_company_namespace_and_type_id(
+            updated = await cls.query_by_company_namespace_and_type_id(
                 company_id=resolved_company_id,
                 namespace=namespace,
                 type_id=type_id,
@@ -216,7 +218,7 @@ class EntityType(PlatformModel):
         if len(extra) == 0:
             return
         async with atomic(using="crm"):
-            entity_type = await cls.by_company_namespace_and_type_id(
+            entity_type = await cls.query_by_company_namespace_and_type_id(
                 company_id=company_id,
                 namespace=namespace,
                 type_id=type_id,
@@ -233,7 +235,7 @@ class EntityType(PlatformModel):
                     changed = True
             if not changed:
                 return
-            updated = await cls.by_company_namespace_and_type_id(
+            updated = await cls.query_by_company_namespace_and_type_id(
                 company_id=company_id,
                 namespace=namespace,
                 type_id=type_id,
@@ -255,14 +257,14 @@ class EntityType(PlatformModel):
         company_id: str | None = None,
     ) -> Self:
         resolved_company_id = resolve_entity_type_company(company_id)
-        source = await cls.by_company_namespace_and_type_id(
+        source = await cls.query_by_company_namespace_and_type_id(
             company_id=resolved_company_id,
             namespace=source_namespace,
             type_id=type_id,
         ).get_or_none()
         if source is None:
             raise ValueError(f"EntityType {type_id!r} not found in namespace {source_namespace!r}")
-        existing = await cls.by_company_namespace_and_type_id(
+        existing = await cls.query_by_company_namespace_and_type_id(
             company_id=resolved_company_id,
             namespace=target_namespace,
             type_id=type_id,
@@ -295,7 +297,7 @@ class EntityType(PlatformModel):
         try:
             return await cls.create(clone)
         except UniqueViolationError:
-            raced = await cls.by_company_namespace_and_type_id(
+            raced = await cls.query_by_company_namespace_and_type_id(
                 company_id=resolved_company_id,
                 namespace=target_namespace,
                 type_id=type_id,
@@ -314,7 +316,7 @@ class EntityType(PlatformModel):
     ) -> bool:
         resolved_company_id = resolve_entity_type_company(company_id)
         async with atomic(using="crm"):
-            deleted = await cls.by_company_namespace_and_type_id(
+            deleted = await cls.query_by_company_namespace_and_type_id(
                 company_id=resolved_company_id,
                 namespace=namespace,
                 type_id=type_id,

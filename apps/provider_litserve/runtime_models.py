@@ -11,7 +11,7 @@ from apps.provider_litserve.model_registry import (
     build_stt_api_pairs,
     build_tts_api_pairs,
     build_vad_api_pairs,
-    list_ready_active_models,
+    list_ready_active_models_by_created_at_desc,
 )
 from core.config.models import ProviderLitserveInfraConfig
 
@@ -65,7 +65,7 @@ def replace_runtime_catalog(models: list[RuntimeCatalogItem]) -> dict[str, int]:
 
 
 def reload_runtime_catalog_from_sqlite(cfg: ProviderLitserveInfraConfig) -> dict[str, int]:
-    models = list_ready_active_models(cfg)
+    models = list_ready_active_models_by_created_at_desc(cfg)
     payload: list[RuntimeCatalogItem] = [
         {
             "kind": model.kind,

@@ -26,7 +26,7 @@ description: "Backend-разработка Платформы: новая фич
 
 - Во время работы — `make lint <path>`; перед завершением — `make lint`. Полный список падений без остановки — `uv run python .cursor/skills/refactor-engineer/scripts/gates_report.py`.
 - `make test-up` один раз, затем `uv run pytest tests/<домен>/ -q`; после изменения DI, транспорта или контрактов — архитектурные тесты из `references/testing.md`.
-- Права и dual-write: `uv run python scripts/check_authz_canon.py`, `uv run python scripts/check_authz_dual_write.py`.
+- Права и dual-write: `uv run python -m scripts.gates.authz.canon`, `uv run python -m scripts.gates.authz.dual_write`.
 - Задача завершена, когда lint зелёный (падения до изменения доказаны baseline) и тесты домена проходят.
 
 ## References

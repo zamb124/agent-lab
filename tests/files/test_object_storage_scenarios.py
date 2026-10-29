@@ -115,7 +115,7 @@ async def test_probe_rejects_bad_endpoint_without_active_row():
                 access_key_id="not-a-key",
                 secret_access_key="not-a-secret",
             )
-        assert await ObjectStorage.list_by_created_at(company_id) == []
+        assert await ObjectStorage.list_by_created_at_asc(company_id) == []
     finally:
         reset_context(token)
 

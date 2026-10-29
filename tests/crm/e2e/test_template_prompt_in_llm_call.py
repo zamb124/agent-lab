@@ -28,7 +28,7 @@ from collections.abc import Awaitable, Callable
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.crm.models.relationship_type import RelationshipType
 from apps.crm.system_templates import (

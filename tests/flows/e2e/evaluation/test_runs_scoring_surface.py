@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.src.evaluation.lab_service import (
     EVALUATION_JUDGE_TOOL_NAME,

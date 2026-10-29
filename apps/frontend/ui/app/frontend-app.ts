@@ -10,10 +10,46 @@
  */
 
 import { html, css } from 'lit';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+interface FrontendCookieConsentState {
+    hydrated: boolean;
+    analyticsAllowed: boolean;
+    consentTextVersion: string;
+}
+
+function requireCookieConsent(value: unknown): FrontendCookieConsentState {
+    if (!isPlainRecord(value)
+        || typeof value.hydrated !== 'boolean'
+        || typeof value.analyticsAllowed !== 'boolean'
+        || typeof value.consentTextVersion !== 'string') {
+        throw new Error('FrontendApp: cookie consent state required');
+    }
+    return {
+        hydrated: value.hydrated,
+        analyticsAllowed: value.analyticsAllowed,
+        consentTextVersion: value.consentTextVersion,
+    };
+}
+
+function companyListEntries(list: readonly CompanyRecord[]): CompanyListEntry[] {
+    const entries: CompanyListEntry[] = [];
+    for (const company of list) {
+        if (typeof company.company_id !== 'string' || company.company_id.length === 0) {
+            throw new Error('FrontendApp: company_id required');
+        }
+        const entry: CompanyListEntry = { company_id: company.company_id };
+        if (typeof company.subdomain === 'string') {
+            entry.subdomain = company.subdomain;
+        }
+        entries.push(entry);
+    }
+    return entries;
+}
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
-import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
+import type { CompanyRecord } from '@platform/lib/events/reducers/companies.js';
+import { applyCompanyHostRedirectIfNeeded, type CompanyListEntry } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 
@@ -100,15 +136,6 @@ import {
     searchProviderOrderPutOp,
     searchProviderDeleteOp,
 } from '@platform/lib/events/resources/search-providers.resource.js';
-import {
-    agentPairingCreateOp,
-    agentDevicesLoadOp,
-    agentDeviceRevokeOp,
-    agentReleasesStatusOp,
-    agentDevicePolicyPatchOp,
-    agentAuditLoadOp,
-} from '../events/resources/agent.resource.js';
-import { agentToolkitsListOp } from '@platform/lib/events/resources/flows-agent-toolkits.resource.js';
 import { leadSubmitOp, leadRequestsList } from '../events/resources/leads.resource.js';
 import { tracingSpansList, tracingFacets, tracingTraceLoadOp } from '../events/resources/tracing.resource.js';
 import {
@@ -177,7 +204,6 @@ import '../pages/products/product-rag-page.js';
 import '../pages/products/product-crm-page.js';
 import '../pages/products/product-sync-page.js';
 import '../pages/products/product-documents-page.js';
-import '../pages/agent-download-page.js';
 import '../pages/legal-page.js';
 import '../components/landing/cookie-consent-banner.js';
 import '../pages/support-page.js';
@@ -217,7 +243,6 @@ const FRONTEND_ROUTES = [
     { key: 'product-crm',             path: 'products/crm',             parent: 'landing',     titleKey: 'routes.product-crm' },
     { key: 'product-sync',            path: 'products/sync',            parent: 'landing',     titleKey: 'routes.product-sync' },
     { key: 'product-documents',       path: 'products/documents',       parent: 'landing',     titleKey: 'routes.product-documents' },
-    { key: 'agent-download',          path: 'agent',                    parent: 'landing',     titleKey: 'routes.agent-download' },
     { key: 'policy',                  path: 'policy',                   parent: 'landing',     titleKey: 'routes.policy' },
     { key: 'terms',                   path: 'terms',                    parent: 'landing',     titleKey: 'routes.terms' },
     { key: 'cookies',                 path: 'cookies',                  parent: 'landing',     titleKey: 'routes.cookies' },
@@ -253,7 +278,6 @@ const PUBLIC_ROUTE_KEYS = new Set([
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
-    'agent-download',
     'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -264,7 +288,6 @@ const LANDING_ROUTE_KEYS = new Set([
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
-    'agent-download',
     'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -277,7 +300,6 @@ const DOCUMENT_META_SKIP = new Set([
     'product-crm',
     'product-sync',
     'product-documents',
-    'agent-download',
     'blog-post',
 ]);
 
@@ -298,7 +320,6 @@ const FRONTEND_BOTTOM_NAV_HIDE_ON_ROUTES = [
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
-    'agent-download',
     'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -382,13 +403,6 @@ export class FrontendApp extends PlatformApp {
         searchProviderPutOp,
         searchProviderOrderPutOp,
         searchProviderDeleteOp,
-        agentPairingCreateOp,
-        agentDevicesLoadOp,
-        agentDeviceRevokeOp,
-        agentReleasesStatusOp,
-        agentDevicePolicyPatchOp,
-        agentAuditLoadOp,
-        agentToolkitsListOp,
         leadSubmitOp,
         leadRequestsList,
         tracingSpansList,
@@ -444,23 +458,15 @@ export class FrontendApp extends PlatformApp {
         this._deferredAuthMeRequested = false;
         this._lastPublicMetaSig = '';
         this._publicSiteBundle = this.useOp('frontend/public_site_bundle');
-        this._cookieConsentSel = this.select((s: Record<string, any>) => s.frontendCookieConsent);
-        this._companiesSel = this.select((s: Record<string, any>) => s.companies.list);
-        this._companiesLoadingSel = this.select((s: Record<string, any>) => s.companies.loading);
-        // Реактивность document.title: ждём полный GET /api/i18n/{locale}.
-        // initialI18nState кладёт bootstrap-stub (только common.loading) —
-        // !!translations[locale] всегда true и раньше давал false-positive.
-        this._i18nPublicMetaSel = this.select((s: Record<string, any>) => {
-            const bundle = s.i18n.translations[s.i18n.locale];
+        this._cookieConsentSel = this.select((state) => requireCookieConsent(state.frontendCookieConsent));
+        this._companiesSel = this.select((state) => state.companies.list);
+        this._companiesLoadingSel = this.select((state) => state.companies.loading);
+        this._i18nPublicMetaSel = this.select((state) => {
+            const bundle = state.i18n.translations[state.i18n.locale];
+            const landing = bundle === undefined ? undefined : bundle.landing;
             return {
-                locale: s.i18n.locale,
-                hasBundle: Boolean(
-                    !s.i18n.loading
-                    && bundle
-                    && typeof bundle === 'object'
-                    && bundle.landing
-                    && typeof bundle.landing === 'object',
-                ),
+                locale: state.i18n.locale,
+                hasBundle: !state.i18n.loading && isPlainRecord(landing),
             };
         });
         this._frontendMql = null;
@@ -473,10 +479,10 @@ export class FrontendApp extends PlatformApp {
     private _deferredAuthMeRequested: boolean;
     private _lastPublicMetaSig: string;
     private _publicSiteBundle: OpController;
-    private _cookieConsentSel: SelectController<any>;
-    private _companiesSel: SelectController<any>;
-    private _companiesLoadingSel: SelectController<any>;
-    private _i18nPublicMetaSel: SelectController<any>;
+    private _cookieConsentSel: SelectController<FrontendCookieConsentState>;
+    private _companiesSel: SelectController<CompanyRecord[]>;
+    private _companiesLoadingSel: SelectController<boolean>;
+    private _i18nPublicMetaSel: SelectController<{ locale: string; hasBundle: boolean }>;
     private _frontendMql: MediaQueryList | null = null;
     private _onFrontendMobileMql: (() => void) | null = null;
     private _frontendMobile: unknown;
@@ -562,7 +568,7 @@ export class FrontendApp extends PlatformApp {
         return !PUBLIC_ROUTE_KEYS.has(routeKey);
     }
 
-    override async getPlatformAssistantContextVariables(routeKey: string, _params: Record<string, any>): Promise<Record<string, unknown>> {
+    override async getPlatformAssistantContextVariables(routeKey: string, _params: Record<string, string>): Promise<Record<string, unknown>> {
         return buildFrontendAssistantContext(routeKey);
     }
 
@@ -624,7 +630,7 @@ export class FrontendApp extends PlatformApp {
         ) {
             const companies = this._companiesSel ? this._companiesSel.value : [];
             const loading = this._companiesLoadingSel ? this._companiesLoadingSel.value : false;
-            applyCompanyHostRedirectIfNeeded(auth, companies, loading, {
+            applyCompanyHostRedirectIfNeeded(auth, companyListEntries(companies), loading, {
                 loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null),
             });
         }
@@ -645,7 +651,7 @@ export class FrontendApp extends PlatformApp {
         }
     }
 
-    override renderRoute(routeKey: string, params: Record<string, any>) {
+    override renderRoute(routeKey: string, params: Record<string, string>) {
         if (!routeKey) {
             return html`<div class="loading-container"><platform-spinner size="xl"></platform-spinner></div>`;
         }
@@ -769,7 +775,7 @@ export class FrontendApp extends PlatformApp {
 
     _maybeBootstrapPublicAnalytics() {
         if (typeof window === 'undefined') return;
-        if ((window as Record<string, any>).__humanitecAnalyticsInjected) return;
+        if (Reflect.get(window, '__humanitecAnalyticsInjected') === true) return;
         const route = this._routerSelect ? this._routerSelect.value : null;
         const routeKey = route ? route.routeKey : null;
         if (!routeKey || !LANDING_ROUTE_KEYS.has(routeKey)) return;
@@ -784,14 +790,15 @@ export class FrontendApp extends PlatformApp {
             return;
         }
         const bundleRes = this._publicSiteBundle.lastResult;
-        if (!bundleRes || typeof bundleRes !== 'object') {
+        if (!isPlainRecord(bundleRes)) {
             return;
         }
-        const version = (bundleRes as Record<string, any>).cookie_consent_text_version;
+        const version = bundleRes.cookie_consent_text_version;
         if (typeof version !== 'string' || version === '') {
             throw new Error('FrontendApp: cookie_consent_text_version required');
         }
-        if (typeof (bundleRes as Record<string, any>).analytics_configured !== 'boolean') {
+        const analyticsConfigured = bundleRes.analytics_configured;
+        if (typeof analyticsConfigured !== 'boolean') {
             throw new Error('FrontendApp: analytics_configured boolean required');
         }
         if (!canInjectPublicAnalytics({
@@ -801,13 +808,13 @@ export class FrontendApp extends PlatformApp {
             analyticsAllowed: consent.analyticsAllowed,
             consentTextVersion: consent.consentTextVersion,
             bundleVersion: version,
-            analyticsConfigured: (bundleRes as Record<string, any>).analytics_configured,
+            analyticsConfigured,
         })) {
             return;
         }
 
-        const marketing = (bundleRes as Record<string, any>).marketing;
-        if (!marketing || typeof marketing !== 'object') {
+        const marketing = bundleRes.marketing;
+        if (!isPlainRecord(marketing)) {
             throw new Error('FrontendApp: marketing required');
         }
 
@@ -848,13 +855,12 @@ export class FrontendApp extends PlatformApp {
         }
 
         if (injected) {
-            (window as Record<string, any>).__humanitecAnalyticsInjected = true;
+            Reflect.set(window, '__humanitecAnalyticsInjected', true);
         }
     }
 
-    _renderPublic(routeKey: string, params: Record<string, any>) {
-        const p = params && typeof params === 'object' ? params : {};
-        const slug = typeof p.slug === 'string' ? p.slug : '';
+    _renderPublic(routeKey: string, params: Record<string, string>) {
+        const slug = typeof params.slug === 'string' ? params.slug : '';
         let page;
         switch (routeKey) {
             case 'landing':            page = html`<landing-page></landing-page>`; break;
@@ -864,7 +870,6 @@ export class FrontendApp extends PlatformApp {
             case 'product-crm':        page = html`<product-crm-page></product-crm-page>`; break;
             case 'product-sync':       page = html`<product-sync-page></product-sync-page>`; break;
             case 'product-documents':  page = html`<product-documents-page></product-documents-page>`; break;
-            case 'agent-download':     page = html`<agent-download-page></agent-download-page>`; break;
             case 'policy':             page = html`<legal-page kind="policy"></legal-page>`; break;
             case 'terms':              page = html`<legal-page kind="terms"></legal-page>`; break;
             case 'cookies':            page = html`<legal-page kind="cookies"></legal-page>`; break;

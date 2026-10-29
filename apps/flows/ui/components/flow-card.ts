@@ -7,7 +7,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import './branch-item.js';
-import { asString } from '../_helpers/flows-resolvers.js';
+import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { resolveFlowCoverGradient } from '../_helpers/flow-cover-gradients.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
@@ -370,7 +370,11 @@ export class FlowCard extends PlatformElement {
     }
 
     _handleHeaderClick(e: Event) {
-        if ((e.target as HTMLElement | null)?.closest('.flow-actions')) return;
+        const target = e.target;
+        if (!(target instanceof Element)) {
+            throw new Error('flow-card: click target required');
+        }
+        if (target.closest('.flow-actions')) return;
         this._emitAction('toggle', e);
     }
 
@@ -393,10 +397,8 @@ export class FlowCard extends PlatformElement {
         const editTitle = this.t('flow_card.edit_title');
         const deleteTitle = this.t('flow_card.delete_title');
         const addBranchTitle = this.t('flow_card.add_branch_title');
-        const employeeEnabled =
-            this.flow.employee &&
-            typeof this.flow.employee === 'object' &&
-            (this.flow.employee as Record<string, any>).enabled === true;
+        const employee = this.flow.employee;
+        const employeeEnabled = isPlainObject(employee) && employee.enabled === true;
         const employeeBadgeTitle = this.t('flow_card.employee_badge_title');
 
         return html`

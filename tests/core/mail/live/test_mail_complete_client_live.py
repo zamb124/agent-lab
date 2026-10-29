@@ -355,7 +355,7 @@ async def test_live_complete_client_sync_triage_search_drafts_role(
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен")
     # messages via StoredMailMessage
-    _ = await StoredMailMessage.delete_folder(
+    _ = await StoredMailMessage.delete_by_binding_and_folder(
         binding_b.mailbox_binding_id, folder=INBOX_FOLDER
     )
     wiped_local = await mail_live_service.list_messages(

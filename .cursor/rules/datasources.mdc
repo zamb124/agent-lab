@@ -17,8 +17,8 @@ alwaysApply: false
 
 ## Модель
 
-- `DatasourceConnectorSpec` (`connector_id`): `postgres`, `mysql`, `clickhouse` — платформенные (`core/datasources/catalog.py`, без `company_id`, не сохраняются); `mcp` и `flow` — stamp-коннекторы компании.
-- `DatasourceConnection` (`datasource_id`): host, port, `database_name`, username, `password_encrypted` (Fernet `encrypt_secret`), `ssl_mode`, `allowed_operations` (по умолчанию `["select"]`), `statement_timeout_ms` (15 с), `max_rows` (1000). `list_by_name_and_datasource_id(company_id) -> list[DatasourceConnection]` — все подключения компании, `ORDER BY name, datasource_id`, без предела. Пустой или пробельный `company_id` — `ValueError`. `list_all_by_datasource_id(*, limit) -> list[DatasourceConnection]` — все подключения, `ORDER BY datasource_id`. `limit is None` не ограничивает.
+- `DatasourceConnectorSpec` (`connector_id`): `postgres`, `mysql`, `clickhouse` — платформенные (`core/datasources/catalog.py`, без `company_id`, не сохраняются); `mcp` и `flow` — stamp-коннекторы компании. `DatasourceConnectorSpec.list_stamped_for_company_by_name_and_connector_id_asc(company_id) -> list[DatasourceConnectorSpec]` — stamp-коннекторы компании, `ORDER BY name ASC, connector_id ASC`, без предела. Пустой `company_id` — `ValueError`.
+- `DatasourceConnection` (`datasource_id`): host, port, `database_name`, username, `password_encrypted` (Fernet `encrypt_secret`), `ssl_mode`, `allowed_operations` (по умолчанию `["select"]`), `statement_timeout_ms` (15 с), `max_rows` (1000). `list_by_name_and_datasource_id_asc(company_id) -> list[DatasourceConnection]` — все подключения компании, `ORDER BY name, datasource_id ASC`, без предела. Пустой или пробельный `company_id` — `ValueError`. `list_all_by_datasource_id_asc(*, limit) -> list[DatasourceConnection]` — все подключения, `ORDER BY datasource_id ASC`. `limit is None` не ограничивает.
 - Модели — `core/datasources/models/`: `DatasourceConnectorSpec` в `connector_spec.py`, `DatasourceConnection` в `connection.py`, контракты протокола в `contracts.py`. Сценарий и dispatch — `DatasourceService` (`core/datasources/service.py`); `test` = introspect с `as_test=True`.
 - Нода — `{connector_id, datasource_id, datasource_operation, sql}`; протокол один: `introspect`, `query`, `execute`.
 
@@ -54,6 +54,6 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_datasource_model_files.py` (`make lint`) — коннектор и подключение datasource в разных модулях.
-- `scripts/check_authz_backfill_completeness.py` (`make lint`) — backfill `datasource` (`uv run python -m core.datasources.authz.backfill`).
+- `scripts/gates/backend/model_files.py` (`make lint`) — коннектор и подключение datasource в разных модулях.
+- `scripts/gates/authz/backfill_completeness.py` (`make lint`) — backfill `datasource` (`uv run python -m core.datasources.authz.backfill`).
 - `tests/fixtures/datasources.py` (`customer_datasource`, БД `platform_datasource_customer`), `test_datasource_flow_connector.py`, `tests/fixtures/mcp_modes_stub.py`.

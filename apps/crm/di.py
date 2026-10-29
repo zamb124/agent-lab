@@ -16,6 +16,7 @@ from apps.crm.services.graph_service import GraphService
 from apps.crm.services.integration_auto_sync_service import IntegrationAutoSyncService
 from apps.crm.services.lara_namespace_service import LaraNamespaceService
 from apps.crm.services.namespace_template_service import NamespaceTemplateService
+from apps.crm.services.note_processing_service import NoteProcessingService
 from apps.crm.services.suggest_service import SuggestService
 from apps.crm.services.task_service import TaskService
 from apps.crm.services.user_person_service import UserPersonService
@@ -121,6 +122,7 @@ class CrmDi(PlatformDi, recipes=CRM_RECIPES):
     integration_registry: IntegrationRegistry
     lara_namespace_service: LaraNamespaceService
     namespace_template_service: NamespaceTemplateService
+    note_processing_service: NoteProcessingService
     suggest_service: SuggestService
     task_service: TaskService
     user_person_service: UserPersonService

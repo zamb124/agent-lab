@@ -77,7 +77,6 @@ MODULES=(
   apps.worktracker.authz
   core.mail.authz
   core.datasources.authz.backfill
-  apps.agent.authz
 )
 
 for mod in "${MODULES[@]}"; do

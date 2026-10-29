@@ -57,11 +57,11 @@ async def test_message_create_and_list(
     )
     assert msg.message_id == msg_1
 
-    listed = await SyncMessage.list_root_lane(ch_msg, company_id=company_id)
+    listed = await SyncMessage.list_root_lane_by_sent_at_desc(ch_msg, company_id=company_id)
     assert len(listed) == 1
     assert listed[0].message_id == msg_1
 
-    listed_contents = await SyncMessageContent.list_for_message(msg_1)
+    listed_contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(msg_1)
     assert len(listed_contents) == 1
     assert listed_contents[0].type == MessageContentType.TEXT_PLAIN
     assert isinstance(listed_contents[0].data, TextPlainContent)
@@ -131,7 +131,7 @@ async def test_message_list_by_thread(
         ],
     )
 
-    thread_msgs = await SyncMessage.list_alive_by_sent_at(thr_1, company_id=company_id)
+    thread_msgs = await SyncMessage.list_alive_by_sent_at_asc(thr_1, company_id=company_id)
     assert [m.message_id for m in thread_msgs] == [msg_root, msg_reply]
 
 
@@ -185,7 +185,7 @@ async def test_main_channel_feed_includes_reply_with_parent(
         ],
     )
 
-    listed = await SyncMessage.list_root_lane(ch_main, company_id=company_id, limit=50)
+    listed = await SyncMessage.list_root_lane_by_sent_at_desc(ch_main, company_id=company_id, limit=50)
     ids = {m.message_id for m in listed}
     assert ids == {root_a, reply_b}
 
@@ -233,7 +233,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
         ],
     )
 
-    batch = await SyncMessage.channel_lane_summaries(
+    batch = await SyncMessage.channel_lane_summaries_by_channel_id_asc_and_sent_at_desc(
         company_id=company_id,
         channel_ids=[ch_lane],
         viewer_user_id="u_viewer",
@@ -250,7 +250,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
         datetime(2026, 3, 1, 13, 0, 0, tzinfo=UTC),
         company_id=company_id,
     )
-    batch2 = await SyncMessage.channel_lane_summaries(
+    batch2 = await SyncMessage.channel_lane_summaries_by_channel_id_asc_and_sent_at_desc(
         company_id=company_id,
         channel_ids=[ch_lane],
         viewer_user_id="u_viewer",
@@ -301,7 +301,7 @@ async def test_channel_lane_summaries_batch_mention_unread_count(
             ),
         ],
     )
-    batch = await SyncMessage.channel_lane_summaries(
+    batch = await SyncMessage.channel_lane_summaries_by_channel_id_asc_and_sent_at_desc(
         company_id=company_id,
         channel_ids=[ch_men],
         viewer_user_id="u_viewer",

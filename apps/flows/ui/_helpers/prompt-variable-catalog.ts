@@ -16,8 +16,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function unwrapFlowVariable(value: unknown) {
-    if (isObject(value) && Object.hasOwn(value, 'value')) return (value as any).value;
+function unwrapFlowVariable(value: unknown): unknown {
+    if (isObject(value) && Object.hasOwn(value, 'value')) return value.value;
     return value;
 }
 
@@ -72,7 +72,13 @@ function typeOf(value: unknown, fallback = 'any') {
     return fallback || 'any';
 }
 
-function sampleFromDescriptor(descriptor: any) {
+function descriptorAvailability(descriptor: Record<string, unknown>): string {
+    const availability = descriptor.availability;
+    if (typeof availability !== 'string' || availability === '') return 'guaranteed';
+    return availability;
+}
+
+function sampleFromDescriptor(descriptor: unknown) {
     if (!isObject(descriptor) || !Object.hasOwn(descriptor, 'sample_value')) {
         return { hasValue: false, value: undefined };
     }
@@ -94,24 +100,41 @@ export function buildPromptVariableContext({
     previewExecutionState = null,
     now = new Date(),
 }: {
-    flowVariables?: Record<string, any> | null;
-    nodeLocalVariables?: Record<string, any> | null;
-    dataflowNode?: Record<string, any> | null;
-    previewExecutionState?: Record<string, any> | null;
+    flowVariables?: Record<string, unknown> | null;
+    nodeLocalVariables?: Record<string, unknown> | null;
+    dataflowNode?: Record<string, unknown> | null;
+    previewExecutionState?: Record<string, unknown> | null;
     now?: Date;
 } = {}) {
-    const entries = new Map();
-    const values = {};
+    const entries = new Map<string, {
+        name: string;
+        source: string;
+        type: string;
+        availability: string;
+        hasValue: boolean;
+    }>();
+    const values: Record<string, unknown> = {};
 
-    const put = (name: string, { value, hasValue = true, source, type = 'any', availability = 'guaranteed' }: any) => {
+    const put = (name: string, entry: {
+        value?: unknown;
+        hasValue?: boolean;
+        source: string;
+        type?: string;
+        availability?: string;
+    }) => {
         if (typeof name !== 'string' || name.length === 0) return;
-        entries.set(name, { name, source, type: typeOf(value, type), availability, hasValue });
-        if (hasValue) (values as any)[name] = value;
-        else delete (values as any)[name];
+        const hasValue = entry.hasValue !== false;
+        const type = entry.type === undefined ? 'any' : entry.type;
+        const availability = entry.availability === undefined ? 'guaranteed' : entry.availability;
+        entries.set(name, { name, source: entry.source, type: typeOf(entry.value, type), availability, hasValue });
+        if (hasValue) values[name] = entry.value;
+        else delete values[name];
     };
 
-    const isInterfaceDescriptor = (descriptor: any) => descriptor.source === 'interface'
-        || (Array.isArray(descriptor.source) && descriptor.source.includes('interface'));
+    const isInterfaceDescriptor = (descriptor: Record<string, unknown>) => {
+        const source = descriptor.source;
+        return source === 'interface' || (Array.isArray(source) && source.includes('interface'));
+    };
     const interfaceFields = [];
 
     const previewStore = previewExecutionState === null || previewExecutionState === undefined
@@ -120,14 +143,15 @@ export function buildPromptVariableContext({
     const previewTimezone = isObject(previewStore) && typeof previewStore.timezone === 'string'
         ? previewStore.timezone
         : null;
-    const datetimeValues = buildRuntimeDatetimePreview(now, previewTimezone);
+    const datetimeValues: Record<string, string | number> = buildRuntimeDatetimePreview(now, previewTimezone);
     for (const name of RUNTIME_SYSTEM_KEYS) {
         const hasValue = Object.hasOwn(datetimeValues, name);
+        const value = datetimeValues[name];
         put(name, {
-            value: (datetimeValues as any)[name],
+            value,
             hasValue,
             source: 'system',
-            type: name.startsWith('current_') ? typeOf((datetimeValues as any)[name], 'string') : 'string',
+            type: name.startsWith('current_') ? typeOf(value, 'string') : 'string',
             availability: 'runtime',
         });
     }
@@ -154,7 +178,7 @@ export function buildPromptVariableContext({
                 hasValue: sample.hasValue,
                 source: 'upstream',
                 type: typeof descriptor.type === 'string' ? descriptor.type : 'any',
-                availability: descriptor.availability || 'guaranteed',
+                availability: descriptorAvailability(descriptor),
             });
             continue;
         }
@@ -168,7 +192,7 @@ export function buildPromptVariableContext({
                 hasValue: sample.hasValue,
                 source: 'interface',
                 type: typeof descriptor.type === 'string' ? descriptor.type : 'any',
-                availability: descriptor.availability || 'guaranteed',
+                availability: descriptorAvailability(descriptor),
             });
         }
     }
@@ -215,7 +239,7 @@ export function buildPromptVariableContext({
     return {
         values,
         catalog: [...entries.values()].sort((a, b) => {
-            const sourceOrder = {
+            const sourceOrder: Record<string, number> = {
                 local: 0,
                 input: 1,
                 interface: 2,
@@ -224,7 +248,12 @@ export function buildPromptVariableContext({
                 flow: 3,
                 system: 4,
             };
-            return ((sourceOrder as any)[a.source] ?? 9) - ((sourceOrder as any)[b.source] ?? 9) || a.name.localeCompare(b.name);
+            const left = sourceOrder[a.source];
+            const right = sourceOrder[b.source];
+            if (left === undefined || right === undefined) {
+                throw new Error(`prompt variable catalog: unknown source "${left === undefined ? a.source : b.source}"`);
+            }
+            return left - right || a.name.localeCompare(b.name);
         }),
     };
 }

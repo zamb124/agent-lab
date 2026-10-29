@@ -42,9 +42,9 @@ import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
-function branchRecord(value: unknown): Record<string, any> | null {
+function branchRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainObject(value)) return null;
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) row[key] = field;
     return row;
 }
@@ -90,7 +90,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     declare _variable: string;
     declare _operator: string;
     declare _value: string;
-    declare _pythonCode: any;
+    declare _pythonCode: string;
     declare _codeLanguage: string;
     declare _hydrated: boolean;
     declare _codeValidationStatus: string;
@@ -258,7 +258,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         if (this._hydrated || this.edgeIndex < 0) return;
         const edges = this._currentEdges();
         const edge = edges[this.edgeIndex];
-        if (!edge) return;
+        if (!isPlainObject(edge)) return;
         this._loadCondition(edge.condition);
         this._hydrated = true;
     }
@@ -271,7 +271,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         }
     }
 
-    _currentEdges() {
+    _currentEdges(): unknown[] {
         const data = branchRecord(this._editor.state?.branchData);
         if (data === null || !Array.isArray(data.edges)) return [];
         return data.edges;
@@ -283,7 +283,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         return edges[this.edgeIndex];
     }
 
-    _loadCondition(condition: any) {
+    _loadCondition(condition: unknown) {
         if (condition === null || condition === undefined || condition === '') {
             this._mode = 'simple';
             this._variable = '';
@@ -293,11 +293,11 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             this._pythonCode = edgeConditionStarterCodeForLanguage(this._codeLanguage);
             return;
         }
-        if (typeof condition === 'object') {
+        if (isPlainObject(condition)) {
             const type = condition.type;
             if (type === 'code') {
                 this._mode = 'python';
-                this._codeLanguage = normalizeFlowCodeLanguage(condition.language) as string;
+                this._codeLanguage = normalizeFlowCodeLanguage(condition.language);
                 this._pythonCode = typeof condition.code === 'string' && condition.code.length > 0
                     ? condition.code
                     : edgeConditionStarterCodeForLanguage(this._codeLanguage);
@@ -317,7 +317,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     }
 
     _collectVariables() {
-        const set = new Set();
+        const set = new Set<string>();
         const data = branchRecord(this._editor.state?.branchData);
         if (data !== null) {
             const variables = data.variables;
@@ -327,12 +327,13 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 }
             }
             const edge = this._currentEdge();
-            if (edge) {
+            if (isPlainObject(edge)) {
                 const { from_node: fromId } = getEdgeEndpoints(edge);
-                const sourceNode = fromId && data.nodes ? data.nodes[fromId] : null;
-                if (sourceNode && sourceNode.config) {
+                const nodes = data.nodes;
+                const sourceNode = fromId.length > 0 && isPlainObject(nodes) ? nodes[fromId] : null;
+                if (isPlainObject(sourceNode) && isPlainObject(sourceNode.config)) {
                     const mapping = sourceNode.config.output_mapping;
-                    if (mapping && typeof mapping === 'object') {
+                    if (isPlainObject(mapping)) {
                         for (const target of Object.values(mapping)) {
                             if (typeof target === 'string' && target.length > 0) {
                                 set.add(target);
@@ -340,7 +341,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                         }
                     }
                     const schema = sourceNode.config.output_schema;
-                    if (sourceNode.config.structured_output && schema && schema.properties && !mapping) {
+                    if (sourceNode.config.structured_output === true && isPlainObject(schema) && isPlainObject(schema.properties) && !isPlainObject(mapping)) {
                         for (const prop of Object.keys(schema.properties)) {
                             set.add(prop);
                         }
@@ -360,7 +361,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 code: this._pythonCode,
             };
         }
-        if ((this._variable.length as any) === 0 || (this._value.length as any) === 0) {
+        if (this._variable.length === 0 || this._value.length === 0) {
             return null;
         }
         return {
@@ -373,21 +374,21 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
 
     _previewText() {
         if (this._mode === 'python') return this.t('edge_condition_modal.preview_python');
-        if ((this._variable.length as any) === 0 || (this._value.length as any) === 0) return '';
+        if (this._variable.length === 0 || this._value.length === 0) return '';
         return `${this._variable} ${this._operator} ${quoteValue(this._value)}`;
     }
 
     override validateForm() {
-        const errors: any = {};
+        const errors: Record<string, string> = {};
         if (this._mode === 'simple') {
-            if ((this._variable.length as any) === 0 && (this._value.length as any) > 0) {
+            if (this._variable.length === 0 && this._value.length > 0) {
                 errors.variable = this.t('edge_condition_modal.err_variable');
             }
-            if ((this._variable.length as any) > 0 && (this._value.length as any) === 0) {
+            if (this._variable.length > 0 && this._value.length === 0) {
                 errors.value = this.t('edge_condition_modal.err_value');
             }
         } else if (this._mode === 'python') {
-            if ((this._pythonCode.trim() as any).length === 0) {
+            if (this._pythonCode.trim().length === 0) {
                 errors.code = this.t('edge_condition_modal.err_code');
             } else if (this._codeValidationStatus === 'pending') {
                 errors.code = this.t('code_workbench.validation_checking');
@@ -402,47 +403,51 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         this._persist(this._buildConditionValue());
     }
 
-    _persist(condition: any) {
+    _persist(condition: unknown) {
         const data = branchRecord(this._editor.state?.branchData);
         if (data === null || this.edgeIndex < 0) {
             this.closeAfterSave();
             return;
         }
-        const edges = Array.isArray(data.edges) ? [...data.edges] : [];
+        const edges: unknown[] = Array.isArray(data.edges) ? [...data.edges] : [];
         if (this.edgeIndex >= edges.length) {
             this.closeAfterSave();
             return;
         }
+        const currentEdge = edges[this.edgeIndex];
         edges[this.edgeIndex] = syncReflectionEdgeFromPort(
-            edges[this.edgeIndex],
+            currentEdge,
             condition,
-            this._reflectionAllowedExitIds(data, edges[this.edgeIndex]),
+            this._reflectionAllowedExitIds(data, currentEdge),
         );
-        (this._editor.updateBranchData({ data: { ...data, edges } }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
+        this._editor.updateBranchData({ data: { ...data, edges } });
+        this._editor.setDirty({ dirty: true });
         this.closeAfterSave();
     }
 
-    _reflectionAllowedExitIds(branchData: any, edge: any) {
-        if (!edge || typeof edge !== 'object') {
+    _reflectionAllowedExitIds(branchData: Record<string, unknown>, edge: unknown): string[] | null {
+        if (!isPlainObject(edge)) {
             return null;
         }
-        const fromNodeId = typeof edge.from_node === 'string' ? edge.from_node : null;
-        if (!fromNodeId) {
+        const fromNodeId = typeof edge.from_node === 'string' && edge.from_node.length > 0 ? edge.from_node : null;
+        if (fromNodeId === null) {
             return null;
         }
-        const nodes = branchData && typeof branchData.nodes === 'object' ? branchData.nodes : null;
-        if (!nodes || typeof nodes !== 'object') {
+        const nodes = branchData.nodes;
+        if (!isPlainObject(nodes)) {
             return null;
         }
         const node = nodes[fromNodeId];
-        if (!node || typeof node !== 'object' || node.type !== 'reflection') {
+        if (!isPlainObject(node) || node.type !== 'reflection') {
             return null;
         }
-        const policy = node.critic_policy && typeof node.critic_policy === 'object'
-            ? node.critic_policy
-            : null;
-        return listReflectionExits(policy).map((item: any) => item.id);
+        const policy = isPlainObject(node.critic_policy) ? node.critic_policy : null;
+        return listReflectionExits(policy).map((item: { id: unknown }) => {
+            if (typeof item.id !== 'string' || item.id.length === 0) {
+                throw new Error('flows-edge-condition-modal: reflection exit id required');
+            }
+            return item.id;
+        });
     }
 
     _onModeChange(mode: string) {
@@ -485,15 +490,15 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         this.isDirty = true;
     }
 
-    _setCodeLanguage(language: any) {
+    _setCodeLanguage(language: unknown) {
         const normalized = normalizeFlowCodeLanguage(language);
         if (this._codeLanguage === normalized) {
             return;
         }
-        const currentCode = typeof this._pythonCode === 'string' ? this._pythonCode : '';
+        const currentCode = this._pythonCode;
         this._codeLanguage = normalized;
         if (currentCode.trim().length === 0 || isKnownEdgeConditionStarterCode(currentCode)) {
-            this._pythonCode = edgeConditionStarterCodeForLanguage(normalized) as string;
+            this._pythonCode = edgeConditionStarterCodeForLanguage(normalized);
         }
         this.isDirty = true;
     }
@@ -513,7 +518,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             window.clearTimeout(this._codeValidationTimer);
             this._codeValidationTimer = 0;
         }
-        if (this._mode !== 'python' || (this._pythonCode.trim() as any).length === 0) {
+        if (this._mode !== 'python' || this._pythonCode.trim().length === 0) {
             this._codeValidationSeq += 1;
             this._codeValidationStatus = 'idle';
             this._codeValidationMessage = '';

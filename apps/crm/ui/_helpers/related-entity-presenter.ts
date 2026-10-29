@@ -5,11 +5,9 @@
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { NOTE_ROOT_ENTITY_TYPE_ID } from './entity-type-ids.js';
 
-function entityRecord(value: unknown): Record<string, any> | null {
+function entityRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
-    for (const [key, field] of Object.entries(value)) row[key] = field;
-    return row;
+    return value;
 }
 
 /** Если строк каталога типов нет или в каталоге нет icon для type_id — без угадывания типа в коде. */
@@ -19,12 +17,12 @@ export function fallbackEntityGlyph() {
     return FALLBACK_ENTITY_GLYPH;
 }
 
-export function entityKind(entity: Record<string, any> | null | undefined): string {
+export function entityKind(entity: Record<string, unknown> | null | undefined): string {
     if (!entity || typeof entity.entity_type !== 'string') return '';
     return entity.entity_type;
 }
 
-export function relatedTone(entity: Record<string, any> | null | undefined): string {
+export function relatedTone(entity: Record<string, unknown> | null | undefined): string {
     const type = entityKind(entity);
     if (type === 'company' || type === 'organization' || type === 'team') return 'yellow';
     if (type === NOTE_ROOT_ENTITY_TYPE_ID || type === 'event' || type === 'meeting' || type === 'document') {
@@ -42,7 +40,7 @@ export function relatedIcon(entity: unknown): string {
     return FALLBACK_ENTITY_GLYPH;
 }
 
-export function relatedSubtitle(entity: Record<string, any> | null | undefined): string {
+export function relatedSubtitle(entity: Record<string, unknown> | null | undefined): string {
     if (entity && typeof entity.entity_subtype === 'string' && entity.entity_subtype.length > 0) {
         return entity.entity_subtype;
     }
@@ -98,7 +96,7 @@ function iconFromEntityTypesRow(typeId: unknown, rows: unknown, namespace: strin
  * Иконка для отображения сущности: subtype и root по строкам каталога entity_types;
  * если в каталоге нет icon для type_id — {@link fallbackEntityGlyph}.
  */
-export function entityDisplayIconName(entity: Record<string, any> | null | undefined, entityTypeRows: unknown): string {
+export function entityDisplayIconName(entity: Record<string, unknown> | null | undefined, entityTypeRows: unknown): string {
     if (!entity || typeof entity !== 'object') {
         return 'folder';
     }
@@ -126,7 +124,7 @@ export function summaryChipUnresolvedIconName() {
     return 'folder';
 }
 
-function rememberSummaryEntity(map: Map<string, Record<string, any>>, value: unknown): void {
+function rememberSummaryEntity(map: Map<string, Record<string, unknown>>, value: unknown): void {
     const ent = entityRecord(value);
     if (ent === null || typeof ent.entity_id !== 'string') return;
     if (ent.entity_type === 'note') return;
@@ -136,7 +134,7 @@ function rememberSummaryEntity(map: Map<string, Record<string, any>>, value: unk
     map.set(key, ent);
 }
 
-export function resolveSummaryChipEntity(label: unknown, lookup: ReadonlyMap<string, Record<string, any>>): Record<string, any> | null {
+export function resolveSummaryChipEntity(label: unknown, lookup: ReadonlyMap<string, Record<string, unknown>>): Record<string, unknown> | null {
     const key = normalizeSummaryEntityLabelKey(label);
     if (!key) return null;
     const found = lookup.get(key);
@@ -144,8 +142,8 @@ export function resolveSummaryChipEntity(label: unknown, lookup: ReadonlyMap<str
 }
 
 /** Lookup по имени для AI-сводки ежедневника: все связанные сущности по заметкам периода. */
-export function buildSummaryEntityLookupFromNoteBuckets(noteEntitiesByNoteId: unknown): Map<string, Record<string, any>> {
-    const map = new Map<string, Record<string, any>>();
+export function buildSummaryEntityLookupFromNoteBuckets(noteEntitiesByNoteId: unknown): Map<string, Record<string, unknown>> {
+    const map = new Map<string, Record<string, unknown>>();
     if (!noteEntitiesByNoteId || typeof noteEntitiesByNoteId !== 'object') return map;
     for (const list of Object.values(noteEntitiesByNoteId)) {
         if (!Array.isArray(list)) continue;
@@ -155,8 +153,8 @@ export function buildSummaryEntityLookupFromNoteBuckets(noteEntitiesByNoteId: un
 }
 
 /** Lookup для карточки заметки: связанные сущности из bulk-карточки. */
-export function buildSummaryEntityLookupFromRelated(relatedEntities: unknown): Map<string, Record<string, any>> {
-    const map = new Map<string, Record<string, any>>();
+export function buildSummaryEntityLookupFromRelated(relatedEntities: unknown): Map<string, Record<string, unknown>> {
+    const map = new Map<string, Record<string, unknown>>();
     if (!Array.isArray(relatedEntities)) return map;
     for (const ent of relatedEntities) rememberSummaryEntity(map, ent);
     return map;

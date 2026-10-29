@@ -30,7 +30,7 @@ pytestmark = pytest.mark.timeout(30)
 
 def test_scoring_fixtures_exist() -> None:
     assert POOL_RANKING_PATH.is_file(), (
-        "pool_ranking.json missing — run: uv run python scripts/generate_llm_scoring_fixtures.py"
+        "pool_ranking.json missing — run: uv run python -m scripts.generate.llm_scoring_fixtures"
     )
 
 

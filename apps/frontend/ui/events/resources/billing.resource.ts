@@ -10,6 +10,7 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const WS_TIMEOUT_MS = 8_000;
 
@@ -66,10 +67,14 @@ export const billingTopupOp = createAsyncOp({
             { i18n_key: 'frontend:topup_modal.toast_redirect' },
             { source: 'local' },
         );
-        if (!result || typeof (result as Record<string, any>).payment_url !== 'string' || (result as Record<string, any>).payment_url === '') {
+        if (!isPlainRecord(result)) {
             throw new Error('billingTopupOp: payment_url required in result');
         }
-        window.location.assign((result as Record<string, any>).payment_url);
+        const paymentUrl = result.payment_url;
+        if (typeof paymentUrl !== 'string' || paymentUrl === '') {
+            throw new Error('billingTopupOp: payment_url required in result');
+        }
+        window.location.assign(paymentUrl);
     },
 });
 

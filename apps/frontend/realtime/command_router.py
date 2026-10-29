@@ -10,17 +10,6 @@ from apps.frontend.models import (
     CustomProviderCreate,
     PlatformBillingBalanceGrantRequest,
 )
-from apps.frontend.realtime.agent_operations import (
-    AgentAuditListPayload,
-    AgentDeviceIdPayload,
-    AgentDevicePolicyUpdatePayload,
-    AgentDevicesListPayload,
-    op_agent_audit_list,
-    op_agent_devices_list,
-    op_agent_devices_policy_update,
-    op_agent_devices_revoke,
-    op_agent_pairing_create,
-)
 from apps.frontend.realtime.ai_providers_operations import (
     AIProvidersCapabilityIdPayload,
     AIProvidersCapabilityPayload,
@@ -373,17 +362,4 @@ FRONTEND_OPERATIONS: dict[str, RegisteredOperation[FrontendDi]] = {
     "frontend/embed_configs/remove_requested": Operation(payload_model=EmbedIdPayload, fn=op_embed_configs_remove),
     "frontend/embed_configs/code_requested": Operation(payload_model=EmbedCodePayload, fn=op_embed_configs_code),
     "frontend/lead_requests/list_requested": Operation(payload_model=LeadRequestsListPayload, fn=op_lead_requests_list),
-    "frontend/agent/pairing_create_requested": Operation(
-        payload_model=EmptyPayload, fn=op_agent_pairing_create
-    ),
-    "frontend/agent/devices_list_requested": Operation(
-        payload_model=AgentDevicesListPayload, fn=op_agent_devices_list
-    ),
-    "frontend/agent/device_revoke_requested": Operation(
-        payload_model=AgentDeviceIdPayload, fn=op_agent_devices_revoke
-    ),
-    "frontend/agent/device_policy_update_requested": Operation(
-        payload_model=AgentDevicePolicyUpdatePayload, fn=op_agent_devices_policy_update
-    ),
-    "frontend/agent/audit_list_requested": Operation(payload_model=AgentAuditListPayload, fn=op_agent_audit_list),
 }

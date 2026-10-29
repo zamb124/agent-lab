@@ -34,7 +34,7 @@ async def backfill_worktracker_authz(*, limit: int | None = None) -> int:
         authz = di.authz_service
     written = 0
 
-    company_rows = await WorkQueue.list_by_work_queue_id(limit=limit)
+    company_rows = await WorkQueue.list_by_work_queue_id_asc(limit=limit)
 
     for row in company_rows:
         work_queue_id = row.work_queue_id

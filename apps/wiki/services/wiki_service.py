@@ -33,7 +33,7 @@ from apps.wiki.content.markdown_parser import parse_markdown
 from apps.wiki.content.markdown_serializer import document_to_markdown
 from apps.wiki.content.prosemirror import ProseMirrorNode, empty_document
 from apps.wiki.content.public_media import collect_file_ids, platform_file_id_from_url
-from apps.wiki.content.schema import normalize_document
+from apps.wiki.content.schema import normalize_document_in_serialization_order
 from apps.wiki.events import (
     WIKI_COMMENT_CREATED,
     WIKI_COMMENT_RESOLVED,
@@ -143,7 +143,7 @@ class WikiService:
     async def list_tree(
         self, company_id: str, namespace: str, user_id: str
     ) -> list[WikiPageSummary]:
-        tree = await WikiPage.tree_summaries(company_id, namespace)
+        tree = await WikiPage.list_alive_summaries_by_depth_position_and_title_asc(company_id, namespace)
         allowed = set(
             await self._access.filter_viewable_page_ids(
                 [item.wiki_page_id for item in tree], user_id=user_id
@@ -158,7 +158,7 @@ class WikiService:
         namespace (`require_namespace` + `platform_namespace` viewer), не FGA
         per-page `can_view` — его после удаления не осталось ни у кого, включая владельца.
         """
-        pages = await WikiPage.list_deleted(company_id, namespace)
+        pages = await WikiPage.list_deleted_by_deleted_at_desc(company_id, namespace)
         return [self._to_summary(page, False) for page in pages]
 
     async def get_public_site_tree(self, raw_token: str) -> list[WikiPageSummary]:
@@ -171,7 +171,7 @@ class WikiService:
         root = await WikiPage.find_published_link(raw_token)
         if root is None:
             return []
-        return await WikiPage.published_subtree_summaries(
+        return await WikiPage.list_published_subtree_summaries_breadth_first(
             root.company_id, root.namespace, root.wiki_page_id
         )
 
@@ -186,7 +186,7 @@ class WikiService:
             return None
         if wiki_page_id == root.wiki_page_id:
             return root
-        published = await WikiPage.published_subtree_summaries(
+        published = await WikiPage.list_published_subtree_summaries_breadth_first(
             root.company_id, root.namespace, root.wiki_page_id
         )
         if all(item.wiki_page_id != wiki_page_id for item in published):
@@ -204,11 +204,11 @@ class WikiService:
             return False
         published_ids = {
             item.wiki_page_id
-            for item in await WikiPage.published_subtree_summaries(
+            for item in await WikiPage.list_published_subtree_summaries_breadth_first(
                 root.company_id, root.namespace, root.wiki_page_id
             )
         }
-        pages = await WikiPage.list_subtree(root.company_id, root.namespace, root.wiki_page_id)
+        pages = await WikiPage.list_unordered_subtree(root.company_id, root.namespace, root.wiki_page_id)
         for page in pages:
             if page.wiki_page_id not in published_ids:
                 continue
@@ -236,7 +236,7 @@ class WikiService:
                 company_id, namespace, parent_page_id, user_id
             )
 
-        document = normalize_document(content) if content is not None else empty_document()
+        document = normalize_document_in_serialization_order(content) if content is not None else empty_document()
         now = utcnow()
         wiki_page_id = _new_id("wpg")
         position = await WikiPage.next_position(company_id, namespace, parent_page_id)
@@ -300,7 +300,7 @@ class WikiService:
         if create_revision:
             await self._store_revision(page)
 
-        document = normalize_document(content)
+        document = normalize_document_in_serialization_order(content)
         page.content = document
         page.text_markdown = document_to_markdown(document)
         page.last_edited_by_user_id = user_id
@@ -441,7 +441,7 @@ class WikiService:
     ) -> WikiPage:
         """Перенести страницу внутри пространства."""
         page = await self.require_editable_page(company_id, namespace, wiki_page_id, user_id)
-        subtree = await WikiPage.list_subtree(company_id, namespace, wiki_page_id)
+        subtree = await WikiPage.list_unordered_subtree(company_id, namespace, wiki_page_id)
         subtree_ids = {item.wiki_page_id for item in subtree}
 
         if new_parent_page_id is not None:
@@ -509,7 +509,7 @@ class WikiService:
             raise ValueError("Target workspace is the same as the current one")
 
         page = await self.require_editable_page(company_id, namespace, wiki_page_id, user_id)
-        subtree = await WikiPage.list_subtree(company_id, namespace, wiki_page_id)
+        subtree = await WikiPage.list_unordered_subtree(company_id, namespace, wiki_page_id)
         subtree_ids = [item.wiki_page_id for item in subtree]
 
         target_parent: WikiPage | None = None
@@ -540,9 +540,9 @@ class WikiService:
             new_parent_page_id=new_parent_page_id,
         )
 
-        moved_subtree = await WikiPage.list_subtree(company_id, target_namespace, wiki_page_id)
+        moved_subtree = await WikiPage.list_unordered_subtree(company_id, target_namespace, wiki_page_id)
         await self._recalculate_company_visible(company_id, target_namespace, wiki_page_id)
-        refreshed = await WikiPage.list_subtree(company_id, target_namespace, wiki_page_id)
+        refreshed = await WikiPage.list_unordered_subtree(company_id, target_namespace, wiki_page_id)
         await self._rag.reindex_subtree(refreshed)
 
         stored = await self.require_page(company_id, target_namespace, wiki_page_id)
@@ -578,7 +578,7 @@ class WikiService:
                 error_code="forbidden",
             ) from exc
 
-        subtree = await WikiPage.list_subtree(company_id, namespace, wiki_page_id)
+        subtree = await WikiPage.list_unordered_subtree(company_id, namespace, wiki_page_id)
         page_ids = [item.wiki_page_id for item in subtree]
 
         for item in subtree:
@@ -652,7 +652,7 @@ class WikiService:
         self, company_id: str, namespace: str, user_id: str, wiki_page_id: str, limit: int = 50
     ) -> list[WikiRevisionSummary]:
         _ = await self.require_viewable_page(company_id, namespace, wiki_page_id, user_id)
-        rows = await WikiRevision.list_recent_for_page(
+        rows = await WikiRevision.list_for_page_by_created_at_desc(
             company_id,
             namespace,
             wiki_page_id,
@@ -701,7 +701,7 @@ class WikiService:
         self, company_id: str, namespace: str, user_id: str, wiki_page_id: str
     ) -> WikiPageAccess:
         page = await self.require_viewable_page(company_id, namespace, wiki_page_id, user_id)
-        tree = await WikiPage.tree_summaries(company_id, namespace)
+        tree = await WikiPage.list_alive_summaries_by_depth_position_and_title_asc(company_id, namespace)
         parents = {item.wiki_page_id: item.parent_page_id for item in tree}
         company_visible_by_id = {item.wiki_page_id: item.company_visible for item in tree}
         restriction_root = await self._access.inherited_restriction_root(
@@ -858,7 +858,7 @@ class WikiService:
         страницы переносятся между слоями индекса тем же вызовом — разошедшиеся
         ACL и индекс это утечка.
         """
-        subtree = await WikiPage.list_subtree(company_id, namespace, wiki_page_id)
+        subtree = await WikiPage.list_unordered_subtree(company_id, namespace, wiki_page_id)
         if not subtree:
             return
 
@@ -879,7 +879,7 @@ class WikiService:
             await WikiPage.update_company_visible(company_id, namespace, changed_to_false, False)
 
         changed_ids = set(changed_to_true) | set(changed_to_false)
-        refreshed = await WikiPage.list_subtree(company_id, namespace, wiki_page_id)
+        refreshed = await WikiPage.list_unordered_subtree(company_id, namespace, wiki_page_id)
         moved = [item for item in refreshed if item.wiki_page_id in changed_ids]
         await self._rag.reindex_subtree(moved)
 
@@ -977,16 +977,16 @@ class WikiService:
     async def search_pages(
         self, company_id: str, namespace: str, user_id: str, query: str, limit: int = 20
     ) -> list[WikiSearchHit]:
-        tree = await WikiPage.tree_summaries(company_id, namespace)
+        tree = await WikiPage.list_alive_summaries_by_depth_position_and_title_asc(company_id, namespace)
         allowed = await self._access.filter_viewable_page_ids(
             [item.wiki_page_id for item in tree], user_id=user_id
         )
         if not allowed:
             return []
-        return await WikiPage.list_search_hits(company_id, namespace, query, limit, allowed)
+        return await WikiPage.list_alive_search_hits_by_rank_desc_and_updated_at_desc(company_id, namespace, query, limit, allowed)
 
     async def accessible_page_ids(self, company_id: str, namespace: str, user_id: str) -> list[str]:
-        tree = await WikiPage.tree_summaries(company_id, namespace)
+        tree = await WikiPage.list_alive_summaries_by_depth_position_and_title_asc(company_id, namespace)
         return await self._access.filter_viewable_page_ids(
             [item.wiki_page_id for item in tree], user_id=user_id
         )
@@ -1008,7 +1008,7 @@ class WikiService:
         Кандидатный set всегда фильтруется через Authz (`filter_viewable_page_ids`).
         SQL `company_visible` — только RAG metadata / restricted namespace, не ACL.
         """
-        tree = await WikiPage.tree_summaries(company_id, namespace)
+        tree = await WikiPage.list_alive_summaries_by_depth_position_and_title_asc(company_id, namespace)
         tree_ids = [item.wiki_page_id for item in tree]
         allowed_ids = set(await self._access.filter_viewable_page_ids(tree_ids, user_id=user_id))
         if not allowed_ids:
@@ -1037,7 +1037,7 @@ class WikiService:
             )
             raise
 
-        results = await self._rag.search(
+        results = await self._rag.search_by_score_desc(
             namespace,
             query,
             limit,
@@ -1074,7 +1074,7 @@ class WikiService:
         self, company_id: str, namespace: str, user_id: str, wiki_page_id: str
     ) -> list[WikiComment]:
         _ = await self.require_viewable_page(company_id, namespace, wiki_page_id, user_id)
-        return await WikiComment.list_for_page(company_id, namespace, wiki_page_id)
+        return await WikiComment.list_for_page_by_created_at_asc(company_id, namespace, wiki_page_id)
 
     async def create_comment(
         self,
@@ -1142,14 +1142,14 @@ class WikiService:
         target_id: str,
         limit: int,
     ) -> list[WikiBacklink]:
-        links = await WikiPageLink.list_for_target(
+        links = await WikiPageLink.list_unordered_for_target(
             company_id,
             target_kind,
             target_id,
         )
         if len(links) == 0:
             return []
-        pages = await WikiPage.list_alive(
+        pages = await WikiPage.list_unordered_alive(
             company_id,
             [link.source_page_id for link in links],
         )

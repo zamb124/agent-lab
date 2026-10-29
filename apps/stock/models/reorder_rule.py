@@ -65,7 +65,7 @@ class StockReorderRule(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_by_rule_id(
+    async def list_by_rule_id_asc(
         cls,
         company_id: str,
         *,
@@ -73,7 +73,7 @@ class StockReorderRule(PlatformModel):
         active_only: bool = False,
         limit: int = 500,
     ) -> list[Self]:
-        """Окно правил пополнения, ORDER BY rule_id, limit по умолчанию 500, без offset. warehouse_id None не фильтрует. active_only False не сужает до активных."""
+        """Окно правил пополнения, ORDER BY rule_id ASC, limit по умолчанию 500, без offset. warehouse_id None не фильтрует. active_only False не сужает до активных."""
         q = cls.objects.filter(company_id=company_id)
         if warehouse_id is not None:
             q = q.filter(warehouse_id=warehouse_id)

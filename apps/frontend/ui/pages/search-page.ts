@@ -21,6 +21,7 @@ import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { ControllerFor, OpController } from '@platform/lib/base/use-resource.js';
+import type { RouterState } from '@platform/lib/events/reducers/router.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
 const SEARCH_MODES = Object.freeze([
@@ -33,6 +34,232 @@ const SEARCH_CHROME_SHOW_DELTA_PX = 14;
 const SEARCH_CHROME_TOP_VISIBLE_PX = 24;
 const MOBILE_SERP_MQ = '(max-width: 640px)';
 const ANSWER_COLLAPSE_THRESHOLD_PX = 340;
+
+type PublicSearchMode = 'quick' | 'deep' | 'research';
+
+interface PublicSearchResult {
+    title: string;
+    url: string;
+    snippet: string;
+    display_url: string;
+    provider: string;
+    provider_rank: number;
+    rank: number;
+    score: number;
+    published_at: string | null;
+    source_type: string;
+    site_name: string;
+    favicon_url: string;
+    preview_image_url: string;
+}
+
+interface PublicSearchProviderStatus {
+    ok: boolean;
+    results_count: number;
+}
+
+interface PublicSearchSuggestion {
+    text: string;
+}
+
+interface PublicSearchInsight {
+    url: string;
+    relevance_hint: string;
+}
+
+interface PublicSearchResearchStep {
+    phase: string;
+    count: number;
+    title: string;
+}
+
+interface PublicSearchResearchSource {
+    index: number;
+    url: string;
+    title: string;
+    snippet: string;
+}
+
+interface PublicSearchStream {
+    query: string;
+    mode: PublicSearchMode;
+    phase: string;
+    results: PublicSearchResult[];
+    providers: Record<string, PublicSearchProviderStatus>;
+    suggestions: PublicSearchSuggestion[];
+    followups: PublicSearchSuggestion[];
+    result_insights: PublicSearchInsight[];
+    answer: string;
+    completed: boolean;
+    serp_cache_key: string;
+    rank_stage: 'preview' | 'refined';
+    total_count: number;
+    has_more: boolean;
+    page_limit: number;
+    research_brief: string;
+    research_sub_questions: string[];
+    research_outline: string[];
+    research_steps: PublicSearchResearchStep[];
+    research_sources: PublicSearchResearchSource[];
+    report: string;
+}
+
+function searchRecord(value: unknown, label: string): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        throw new Error(`search-page: ${label} required`);
+    }
+    return value;
+}
+
+function searchString(value: unknown, label: string): string {
+    if (typeof value !== 'string') {
+        throw new Error(`search-page: ${label} must be a string`);
+    }
+    return value;
+}
+
+function searchNumber(value: unknown, label: string): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new Error(`search-page: ${label} must be a finite number`);
+    }
+    return value;
+}
+
+function searchBoolean(value: unknown, label: string): boolean {
+    if (value !== true && value !== false) {
+        throw new Error(`search-page: ${label} must be a boolean`);
+    }
+    return value;
+}
+
+function searchArray(value: unknown, label: string): unknown[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`search-page: ${label} must be an array`);
+    }
+    return value;
+}
+
+function isPublicSearchMode(value: unknown): value is PublicSearchMode {
+    return value === 'quick' || value === 'deep' || value === 'research';
+}
+
+function searchMode(value: unknown, label: string): PublicSearchMode {
+    if (!isPublicSearchMode(value)) {
+        throw new Error(`search-page: ${label} is invalid`);
+    }
+    return value;
+}
+
+function searchRankStage(value: unknown): 'preview' | 'refined' {
+    if (value === 'preview' || value === 'refined') {
+        return value;
+    }
+    throw new Error('search-page: rank_stage is invalid');
+}
+
+function searchNullableString(value: unknown, label: string): string | null {
+    if (value === null) {
+        return null;
+    }
+    return searchString(value, label);
+}
+
+function searchResult(value: unknown, index: number): PublicSearchResult {
+    const item = searchRecord(value, `results[${index}]`);
+    return {
+        title: searchString(item.title, `results[${index}].title`),
+        url: searchString(item.url, `results[${index}].url`),
+        snippet: searchString(item.snippet, `results[${index}].snippet`),
+        display_url: searchString(item.display_url, `results[${index}].display_url`),
+        provider: searchString(item.provider, `results[${index}].provider`),
+        provider_rank: searchNumber(item.provider_rank, `results[${index}].provider_rank`),
+        rank: searchNumber(item.rank, `results[${index}].rank`),
+        score: searchNumber(item.score, `results[${index}].score`),
+        published_at: searchNullableString(item.published_at, `results[${index}].published_at`),
+        source_type: searchString(item.source_type, `results[${index}].source_type`),
+        site_name: searchString(item.site_name, `results[${index}].site_name`),
+        favicon_url: searchString(item.favicon_url, `results[${index}].favicon_url`),
+        preview_image_url: searchString(item.preview_image_url, `results[${index}].preview_image_url`),
+    };
+}
+
+function searchProviders(value: unknown): Record<string, PublicSearchProviderStatus> {
+    const providers = searchRecord(value, 'stream.providers');
+    const statuses: Record<string, PublicSearchProviderStatus> = {};
+    for (const [name, raw] of Object.entries(providers)) {
+        const status = searchRecord(raw, `providers.${name}`);
+        statuses[name] = {
+            ok: searchBoolean(status.ok, `providers.${name}.ok`),
+            results_count: searchNumber(status.results_count, `providers.${name}.results_count`),
+        };
+    }
+    return statuses;
+}
+
+function searchSuggestions(value: unknown, label: string): PublicSearchSuggestion[] {
+    return searchArray(value, label).map((item, index) => {
+        const suggestion = searchRecord(item, `${label}[${index}]`);
+        return { text: searchString(suggestion.text, `${label}[${index}].text`) };
+    });
+}
+
+function searchInsight(value: unknown, index: number): PublicSearchInsight {
+    const item = searchRecord(value, `result_insights[${index}]`);
+    return {
+        url: searchString(item.url, `result_insights[${index}].url`),
+        relevance_hint: searchString(item.relevance_hint, `result_insights[${index}].relevance_hint`),
+    };
+}
+
+function searchStringArray(value: unknown, label: string): string[] {
+    return searchArray(value, label).map((item, index) => searchString(item, `${label}[${index}]`));
+}
+
+function searchResearchStep(value: unknown, index: number): PublicSearchResearchStep {
+    const item = searchRecord(value, `research_steps[${index}]`);
+    return {
+        phase: searchString(item.phase, `research_steps[${index}].phase`),
+        count: searchNumber(item.count, `research_steps[${index}].count`),
+        title: searchString(item.title, `research_steps[${index}].title`),
+    };
+}
+
+function searchResearchSource(value: unknown, index: number): PublicSearchResearchSource {
+    const item = searchRecord(value, `research_sources[${index}]`);
+    return {
+        index: searchNumber(item.index, `research_sources[${index}].index`),
+        url: searchString(item.url, `research_sources[${index}].url`),
+        title: searchString(item.title, `research_sources[${index}].title`),
+        snippet: searchString(item.snippet, `research_sources[${index}].snippet`),
+    };
+}
+
+function readPublicSearchStream(value: unknown): PublicSearchStream {
+    const stream = searchRecord(value, 'stream');
+    return {
+        query: searchString(stream.query, 'stream.query'),
+        mode: searchMode(stream.mode, 'stream.mode'),
+        phase: searchString(stream.phase, 'stream.phase'),
+        results: searchArray(stream.results, 'stream.results').map((item, index) => searchResult(item, index)),
+        providers: searchProviders(stream.providers),
+        suggestions: searchSuggestions(stream.suggestions, 'stream.suggestions'),
+        followups: searchSuggestions(stream.followups, 'stream.followups'),
+        result_insights: searchArray(stream.result_insights, 'stream.result_insights').map((item, index) => searchInsight(item, index)),
+        answer: searchString(stream.answer, 'stream.answer'),
+        completed: searchBoolean(stream.completed, 'stream.completed'),
+        serp_cache_key: searchString(stream.serp_cache_key, 'stream.serp_cache_key'),
+        rank_stage: searchRankStage(stream.rank_stage),
+        total_count: searchNumber(stream.total_count, 'stream.total_count'),
+        has_more: searchBoolean(stream.has_more, 'stream.has_more'),
+        page_limit: searchNumber(stream.page_limit, 'stream.page_limit'),
+        research_brief: searchString(stream.research_brief, 'stream.research_brief'),
+        research_sub_questions: searchStringArray(stream.research_sub_questions, 'stream.research_sub_questions'),
+        research_outline: searchStringArray(stream.research_outline, 'stream.research_outline'),
+        research_steps: searchArray(stream.research_steps, 'stream.research_steps').map((item, index) => searchResearchStep(item, index)),
+        research_sources: searchArray(stream.research_sources, 'stream.research_sources').map((item, index) => searchResearchSource(item, index)),
+        report: searchString(stream.report, 'stream.report'),
+    };
+}
 
 export class PublicSearchPage extends PlatformPage {
     static i18nNamespace = 'landing';
@@ -50,7 +277,7 @@ export class PublicSearchPage extends PlatformPage {
     }
     declare _query: string;
     declare _mode: string;
-    declare _selectedFiles: any[];
+    declare _selectedFiles: File[];
     declare _preparingFiles: boolean;
     declare _searchChromeHidden: boolean;
     declare _entryAnimation: string;
@@ -1968,7 +2195,7 @@ export class PublicSearchPage extends PlatformPage {
         this._serpMore = this.useOp('frontend/public_search_serp_more');
         this._serpClick = this.useOp('frontend/public_search_serp_click');
         this._sourceDescribe = this.useOp('frontend/public_search_source_describe');
-        this._route = this.select((state: Record<string, any>) => state.router);
+        this._route = this.select((state) => state.router);
         this._query = '';
         this._mode = 'quick';
         this._selectedFiles = [];
@@ -1999,20 +2226,20 @@ export class PublicSearchPage extends PlatformPage {
     private _serpMore: OpController;
     private _serpClick: OpController;
     private _sourceDescribe: OpController;
-    private _route: SelectController<any>;
+    private _route: SelectController<RouterState>;
     private _lastRouteSig: string;
     private _runSeq: number;
     private _lastScrollY: number;
     private _scrollAnchorY: number;
     private _scrollDirection: string;
     private _scrollFrame: number;
-    private _serpObserver: any;
-    private _serpObservedSentinel: any;
+    private _serpObserver: IntersectionObserver | null;
+    private _serpObservedSentinel: HTMLElement | null;
     private _serpLoadBlocked: boolean;
     private _lastSerpCacheKey: string;
     private _serpRects: Map<string, DOMRect>;
     private _serpOrderSignature: string | undefined;
-    private _releaseSearchInputViewport: any;
+    private _releaseSearchInputViewport: (() => void) | null;
 
 
     override firstUpdated(changedProperties: PropertyValues<this>): void {
@@ -2076,8 +2303,8 @@ export class PublicSearchPage extends PlatformPage {
         super.updated(changedProperties);
         this._syncFromRoute();
         const stream = this._searchStream();
-        if ((stream.serp_cache_key as string) !== this._lastSerpCacheKey) {
-            this._lastSerpCacheKey = (stream.serp_cache_key as string);
+        if (stream.serp_cache_key !== this._lastSerpCacheKey) {
+            this._lastSerpCacheKey = stream.serp_cache_key;
             this._serpLoadBlocked = false;
         }
         this._ensureSerpSentinelObserver();
@@ -2094,7 +2321,7 @@ export class PublicSearchPage extends PlatformPage {
     _animateSerpReorder() {
         const cards = this.renderRoot.querySelectorAll('.source-card[data-url]');
         const nextRects = new Map<string, DOMRect>();
-        const order: any[] = [];
+        const order: string[] = [];
         for (const el of cards) {
             const url = el.getAttribute('data-url');
             if (url === null) {
@@ -2234,23 +2461,16 @@ export class PublicSearchPage extends PlatformPage {
         }
     }
 
-    _searchStream(): Record<string, any> {
-        const stream = this._search.state.stream;
-        if (!isPlainRecord(stream)) {
-            throw new Error('search-page: stream required');
-        }
-        const row: Record<string, any> = {};
-        for (const [key, field] of Object.entries(stream)) {
-            row[key] = field;
-        }
-        return row;
+    _searchStream(): PublicSearchStream {
+        const stream: unknown = this._search.state.stream;
+        return readPublicSearchStream(stream);
     }
 
-    _isMode(value: unknown): value is 'quick' | 'deep' | 'research' {
-        return value === 'quick' || value === 'deep' || value === 'research';
+    _isMode(value: unknown): value is PublicSearchMode {
+        return isPublicSearchMode(value);
     }
 
-    _isStreamActive(stream: any) {
+    _isStreamActive(stream: PublicSearchStream) {
         return stream.phase !== 'idle' || this._search.busy || stream.results.length > 0;
     }
 
@@ -2318,7 +2538,7 @@ export class PublicSearchPage extends PlatformPage {
         }
     }
 
-    _fileErrorMessage(error: any) {
+    _fileErrorMessage(error: unknown) {
         if (error instanceof Error && typeof error.message === 'string' && error.message !== '') {
             return error.message;
         }
@@ -2359,7 +2579,7 @@ export class PublicSearchPage extends PlatformPage {
         this._selectedFiles = this._selectedFiles.filter((_, itemIndex) => itemIndex !== index);
     }
 
-    _displayUrl(result: Record<string, any>) {
+    _displayUrl(result: PublicSearchResult) {
         return result.display_url !== '' ? result.display_url : result.url;
     }
 
@@ -2367,7 +2587,7 @@ export class PublicSearchPage extends PlatformPage {
         return unsafeHTML(markdownToHtml(text));
     }
 
-    _answerTemplate(stream: Record<string, any>) {
+    _answerTemplate(stream: PublicSearchStream) {
         let out = markdownToHtml(stream.answer);
         if (stream.results.length > 0) {
             const results = stream.results;
@@ -2376,7 +2596,7 @@ export class PublicSearchPage extends PlatformPage {
                     return null;
                 }
                 const result = results[index - 1];
-                if (!/^https?:\/\//.test(result.url)) {
+                if (result === undefined || !/^https?:\/\//.test(result.url)) {
                     return null;
                 }
                 return { url: result.url, label: result.title };
@@ -2401,10 +2621,11 @@ export class PublicSearchPage extends PlatformPage {
             return;
         }
         const stream = this._searchStream();
-        if (rank > (stream.results.length as number)) {
+        const result = stream.results[rank - 1];
+        if (rank > stream.results.length || result === undefined) {
             return;
         }
-        this._reportSourceClick(stream, stream.results[rank - 1], rank - 1);
+        this._reportSourceClick(stream, result, rank - 1);
     }
 
     _onAnswerPointer(event: Event) {
@@ -2424,7 +2645,7 @@ export class PublicSearchPage extends PlatformPage {
         this._answerExpanded = !this._answerExpanded;
     }
 
-    _insightForUrl(stream: Record<string, any>, url: string) {
+    _insightForUrl(stream: PublicSearchStream, url: string) {
         for (const insight of stream.result_insights) {
             if (insight.url === url) {
                 return insight;
@@ -2442,7 +2663,7 @@ export class PublicSearchPage extends PlatformPage {
         this.navigate('search', {}, { search });
     }
 
-    _describeSource(stream: Record<string, any>, result: Record<string, any>) {
+    _describeSource(stream: PublicSearchStream, result: PublicSearchResult) {
         if (this._sourceDescribe.busy) {
             return;
         }
@@ -2470,7 +2691,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderSelectedFile(file: Record<string, any>, index: number) {
+    _renderSelectedFile(file: File, index: number) {
         return html`
             <div class="file-chip" role="listitem">
                 <platform-icon file-icon name=${resolveFileIconKey(file.name, file.type)} size="18"></platform-icon>
@@ -2629,7 +2850,11 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _renderSearchError() {
-        const kind = this._normalizeSearchErrorKind(this._search.state.error_kind as string);
+        const errorKind = this._search.state.error_kind;
+        if (typeof errorKind !== 'string') {
+            throw new Error('PublicSearchPage: search error_kind must be string');
+        }
+        const kind = this._normalizeSearchErrorKind(errorKind);
         const detail = this._searchErrorDetail();
         const isQuotaExhausted = kind === 'search_quota_exhausted';
         return html`
@@ -2668,7 +2893,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderAnswer(stream: Record<string, any>) {
+    _renderAnswer(stream: PublicSearchStream) {
         const error = this._search.error;
         if (typeof error === 'string' && error !== '') {
             return this._renderSearchError();
@@ -2704,10 +2929,10 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderSourceAiDescription(result: Record<string, any>) {
+    _renderSourceAiDescription(result: PublicSearchResult) {
         const descriptions = this._sourceDescribe.state.descriptions;
         const activeUrl = this._sourceDescribe.state.active_url;
-        if (!isPlainRecord(descriptions) || typeof result.url !== 'string') {
+        if (!isPlainRecord(descriptions)) {
             return nothing;
         }
         const description = descriptions[result.url];
@@ -2767,8 +2992,8 @@ export class PublicSearchPage extends PlatformPage {
     _ensureSerpSentinelObserver() {
         const stream = this._searchStream();
         const sentinel = this.renderRoot.querySelector('.source-scroll-sentinel');
-        const shouldObserve = (stream.has_more as boolean)
-            && (stream.serp_cache_key as string) !== ''
+        const shouldObserve = stream.has_more
+            && stream.serp_cache_key !== ''
             && !this._serpLoadBlocked
             && !this._serpMore.busy;
 
@@ -2802,21 +3027,24 @@ export class PublicSearchPage extends PlatformPage {
     async _loadMoreSerp() {
         const stream = this._searchStream();
         if (
-            !(stream.has_more as boolean)
+            !stream.has_more
             || this._serpMore.busy
-            || (stream.serp_cache_key as string) === ''
+            || stream.serp_cache_key === ''
             || this._serpLoadBlocked
         ) {
             return;
         }
-        const pageLimit = (stream.page_limit as number) > 0 ? (stream.page_limit as number) : 10;
+        if (stream.page_limit <= 0) {
+            throw new Error('search-page: page_limit must be positive');
+        }
+        const pageLimit = stream.page_limit;
         const mode = stream.mode;
         if (!this._isMode(mode)) {
             throw new Error(`Invalid search mode: ${String(mode)}`);
         }
         const result = await this._serpMore.run({
-            serp_cache_key: (stream.serp_cache_key as string),
-            offset: (stream.results.length as number),
+            serp_cache_key: stream.serp_cache_key,
+            offset: stream.results.length,
             limit: pageLimit,
             mode,
         });
@@ -2827,7 +3055,7 @@ export class PublicSearchPage extends PlatformPage {
         }
     }
 
-    _reportSourceClick(stream: any, result: any, index: number) {
+    _reportSourceClick(stream: PublicSearchStream, result: PublicSearchResult, index: number) {
         if (stream.query === '') {
             return;
         }
@@ -2843,7 +3071,7 @@ export class PublicSearchPage extends PlatformPage {
         });
     }
 
-    _renderSource(stream: any, result: any, index: number) {
+    _renderSource(stream: PublicSearchStream, result: PublicSearchResult, index: number) {
         const insight = this._insightForUrl(stream, result.url);
         const activeUrl = this._sourceDescribe.state.active_url;
         const describing = this._sourceDescribe.busy && activeUrl === result.url;
@@ -2914,7 +3142,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderSources(stream: Record<string, any>) {
+    _renderSources(stream: PublicSearchStream) {
         if (stream.results.length === 0 && this._search.busy) {
             return html`
                 <section class="sources-panel">
@@ -2954,7 +3182,7 @@ export class PublicSearchPage extends PlatformPage {
                 <div class="source-list">
                     ${repeat(
                         stream.results,
-                        (result: Record<string, any>) => result.url,
+                        (result: PublicSearchResult) => result.url,
                         (result, index) => this._renderSource(stream, result, index),
                     )}
                     ${stream.has_more && stream.serp_cache_key !== '' ? html`
@@ -2969,18 +3197,12 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderProviders(stream: Record<string, any>) {
-        if (!isPlainRecord(stream.providers)) {
-            return html``;
-        }
+    _renderProviders(stream: PublicSearchStream) {
         const providers: { name: string; ok: boolean; resultsCount: number }[] = [];
         for (const [name, status] of Object.entries(stream.providers)) {
-            if (!isPlainRecord(status) || typeof status.results_count !== 'number') {
-                throw new Error('search-page: provider status required');
-            }
             providers.push({
                 name,
-                ok: status.ok === true,
+                ok: status.ok,
                 resultsCount: status.results_count,
             });
         }
@@ -3003,7 +3225,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderSuggestions(stream: Record<string, any>) {
+    _renderSuggestions(stream: PublicSearchStream) {
         const suggestions = [...stream.followups, ...stream.suggestions];
         if (suggestions.length === 0) {
             return html``;
@@ -3022,7 +3244,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _researchReportTemplate(stream: Record<string, any>) {
+    _researchReportTemplate(stream: PublicSearchStream) {
         let out = markdownToHtml(stream.report);
         const sources = stream.research_sources;
         if (sources.length > 0) {
@@ -3030,7 +3252,7 @@ export class PublicSearchPage extends PlatformPage {
                 if (!Number.isInteger(index) || index < 1) {
                     return null;
                 }
-                const match = sources.find((item: Record<string, any>) => item.index === index);
+                const match = sources.find((item) => item.index === index);
                 if (match === undefined || !/^https?:\/\//.test(match.url)) {
                     return null;
                 }
@@ -3059,7 +3281,7 @@ export class PublicSearchPage extends PlatformPage {
         return 'search_page.research_phase_start';
     }
 
-    _renderResearchStep(step: any) {
+    _renderResearchStep(step: PublicSearchResearchStep) {
         if (step.phase === 'plan') {
             return this.t('search_page.research_step_plan', { count: String(step.count) });
         }
@@ -3075,7 +3297,7 @@ export class PublicSearchPage extends PlatformPage {
         return step.phase;
     }
 
-    _renderResearchTimeline(stream: Record<string, any>) {
+    _renderResearchTimeline(stream: PublicSearchStream) {
         const steps = stream.research_steps;
         return html`
             <section class="answer-panel">
@@ -3092,7 +3314,7 @@ export class PublicSearchPage extends PlatformPage {
                         : repeat(
                             steps,
                             (step, index) => `${step.phase}-${index}-${step.count}`,
-                            (step: Record<string, any>) => html`
+                            (step) => html`
                                 <div class="research-step">
                                     <platform-icon class="step-icon" name="check" size="14"></platform-icon>
                                     <span>${this._renderResearchStep(step)}</span>
@@ -3110,7 +3332,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _researchReportPendingKey(stream: Record<string, any>) {
+    _researchReportPendingKey(stream: PublicSearchStream) {
         if (stream.phase === 'synthesizing') {
             return 'search_page.research_report_synthesizing';
         }
@@ -3129,7 +3351,7 @@ export class PublicSearchPage extends PlatformPage {
         return 'search_page.research_report_pending';
     }
 
-    _renderResearchPlan(stream: Record<string, any>) {
+    _renderResearchPlan(stream: PublicSearchStream) {
         const subQuestions = stream.research_sub_questions;
         const outline = stream.research_outline;
         if (subQuestions.length === 0 && outline.length === 0) {
@@ -3161,7 +3383,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderResearchReport(stream: Record<string, any>) {
+    _renderResearchReport(stream: PublicSearchStream) {
         const error = this._search.error;
         if (typeof error === 'string' && error !== '') {
             return this._renderSearchError();
@@ -3188,18 +3410,14 @@ export class PublicSearchPage extends PlatformPage {
             return;
         }
         const stream = this._searchStream();
-        const sources = stream.research_sources;
-        if (!Array.isArray(sources)) {
-            return;
-        }
-        const match = sources.find((item) => isPlainRecord(item) && item.index === rank);
-        if (!isPlainRecord(match) || typeof match.url !== 'string' || match.url.length === 0) {
+        const match = stream.research_sources.find((item) => item.index === rank);
+        if (match === undefined || match.url.length === 0) {
             return;
         }
         window.open(match.url, '_blank', 'noopener');
     }
 
-    _renderResearchSources(stream: Record<string, any>) {
+    _renderResearchSources(stream: PublicSearchStream) {
         const sources = stream.research_sources;
         if (sources.length === 0 && !this._search.busy) {
             return nothing;
@@ -3219,7 +3437,7 @@ export class PublicSearchPage extends PlatformPage {
                     ${repeat(
                         sources,
                         (source) => source.url,
-                        (source: Record<string, any>) => html`
+                        (source) => html`
                             <article class="source-card">
                                 <div class="source-body">
                                     <div class="source-head">
@@ -3236,7 +3454,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderResearch(stream: Record<string, any>) {
+    _renderResearch(stream: PublicSearchStream) {
         return html`
             <main class="results-wrap">
                 <div class="primary-column">
@@ -3251,7 +3469,7 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
-    _renderBody(stream: any) {
+    _renderBody(stream: PublicSearchStream) {
         const active = this._isStreamActive(stream);
         if (!active) {
             return html`<div class="empty-shell">${this.t('search_page.empty_hint')}</div>`;

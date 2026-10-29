@@ -8,6 +8,8 @@
 
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { AuthState, AuthUser } from '@platform/lib/events/reducers/auth.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
@@ -128,7 +130,7 @@ export class SyncCallJoinPage extends PlatformPage {
     `;
     private _infoOp: OpController;
     private _acceptOp: OpController;
-    private _authSel: SelectController<Record<string, any> | undefined>;
+    private _authSel: SelectController<AuthState>;
     private _alignCompanyDispatched: boolean;
     private _alignTimerId: any;
 
@@ -141,7 +143,7 @@ export class SyncCallJoinPage extends PlatformPage {
         this._alignTimerId = null;
         this._infoOp = this.useOp('sync/call_join_info');
         this._acceptOp = this.useOp('sync/call_join_accept');
-        this._authSel = this.select((s) => s.auth as Record<string, any> | undefined);
+        this._authSel = this.select((s) => s.auth);
     }
 
     override disconnectedCallback(): void {
@@ -168,15 +170,15 @@ export class SyncCallJoinPage extends PlatformPage {
         this._scheduleAlignCompany();
     }
 
-    _matchedInfo(): Record<string, any> | null {
-        const r = this._infoOp.lastResult;
-        if (r === null || typeof r !== 'object') return null;
-        const rec = r as Record<string, any>;
-        if (typeof rec.link_token !== 'string' || rec.link_token !== this.linkToken) return null;
-        return rec;
+    _matchedInfo(): Record<string, unknown> | null {
+        const info = this._infoOp.lastResult;
+        if (!isPlainRecord(info)) return null;
+        const linkToken = info.link_token;
+        if (typeof linkToken !== 'string' || linkToken !== this.linkToken) return null;
+        return info;
     }
 
-    _targetCompanyId(info: Record<string, any> | null) {
+    _targetCompanyId(info: Record<string, unknown> | null) {
         if (typeof window !== 'undefined') {
             const raw = new URLSearchParams(window.location.search).get('company_id');
             if (typeof raw === 'string' && raw.trim() !== '') {
@@ -189,7 +191,7 @@ export class SyncCallJoinPage extends PlatformPage {
         return '';
     }
 
-    _companyAlignLoading(info: Record<string, any> | null, auth: Record<string, any> | null | undefined) {
+    _companyAlignLoading(info: Record<string, unknown> | null, auth: AuthState) {
         if (!this._isAuthenticated(auth)) return false;
         if (this._alignCompanySkipped) return false;
         const target = this._targetCompanyId(info);
@@ -222,22 +224,21 @@ export class SyncCallJoinPage extends PlatformPage {
         }, 8000);
     }
 
-    _authSessionReady(auth: Record<string, any> | null | undefined) {
-        if (auth === null || auth === undefined) return false;
+    _authSessionReady(auth: AuthState) {
         const st = auth.status;
         return st === 'authenticated' || st === 'unauthenticated' || st === 'error';
     }
 
-    _isAuthenticated(auth: Record<string, any> | null | undefined): auth is Record<string, any> {
-        if (auth === null || auth === undefined) return false;
+    _isAuthenticated(auth: AuthState) {
         if (auth.status !== 'authenticated') return false;
-        const u = auth.user;
-        if (u === null || u === undefined) return false;
-        return typeof u.user_id === 'string' && u.user_id !== '';
+        const user = auth.user;
+        if (user === null) return false;
+        const userId = user.user_id;
+        return typeof userId === 'string' && userId !== '';
     }
 
-    _userDisplayName(user: Record<string, any> | null | undefined) {
-        if (user === null || user === undefined) return '';
+    _userDisplayName(user: AuthUser | null) {
+        if (user === null) return '';
         if (typeof user.name === 'string' && user.name.trim() !== '') {
             return user.name.trim();
         }
@@ -247,23 +248,23 @@ export class SyncCallJoinPage extends PlatformPage {
         return '';
     }
 
-    _openOverlayFromAccepted(accepted: Record<string, any>) {
-        if (typeof accepted.call_id !== 'string' || accepted.call_id === '') return;
-        const callType = typeof accepted.call_type === 'string' && accepted.call_type !== ''
-            ? accepted.call_type
+    _openOverlayFromAccepted(accepted: Record<string, unknown>) {
+        const callId = accepted.call_id;
+        if (typeof callId !== 'string' || callId === '') return;
+        const callTypeValue = accepted.call_type;
+        const callType = typeof callTypeValue === 'string' && callTypeValue !== ''
+            ? callTypeValue
             : 'video';
-        const livekitToken = typeof accepted.livekit_token === 'string' ? accepted.livekit_token : '';
-        const livekitUrl = typeof accepted.livekit_url === 'string' ? accepted.livekit_url : '';
-        const participantNames = accepted.participant_names !== null
-            && accepted.participant_names !== undefined
-            && typeof accepted.participant_names === 'object'
-            ? accepted.participant_names
-            : {};
-        const participantIdentity = typeof accepted.participant_identity === 'string'
-            ? accepted.participant_identity
-            : '';
+        const livekitTokenValue = accepted.livekit_token;
+        const livekitToken = typeof livekitTokenValue === 'string' ? livekitTokenValue : '';
+        const livekitUrlValue = accepted.livekit_url;
+        const livekitUrl = typeof livekitUrlValue === 'string' ? livekitUrlValue : '';
+        const names = accepted.participant_names;
+        const participantNames = isPlainRecord(names) ? names : {};
+        const identity = accepted.participant_identity;
+        const participantIdentity = typeof identity === 'string' ? identity : '';
         this.openModal('sync.call_overlay', {
-            callId: accepted.call_id,
+            callId,
             callType,
             channelId: '',
             livekitToken,
@@ -278,8 +279,8 @@ export class SyncCallJoinPage extends PlatformPage {
             link_token: this.linkToken,
         });
         const accepted = this._acceptOp.lastResult;
-        if (accepted === null || typeof accepted !== 'object') return;
-        this._openOverlayFromAccepted(accepted as Record<string, any>);
+        if (!isPlainRecord(accepted)) return;
+        this._openOverlayFromAccepted(accepted);
     }
 
     async _onJoinGuest() {
@@ -290,8 +291,8 @@ export class SyncCallJoinPage extends PlatformPage {
             body: { guest_name: trimmed },
         });
         const accepted = this._acceptOp.lastResult;
-        if (accepted === null || typeof accepted !== 'object') return;
-        this._openOverlayFromAccepted(accepted as Record<string, any>);
+        if (!isPlainRecord(accepted)) return;
+        this._openOverlayFromAccepted(accepted);
     }
 
     _onOpenLoginModal() {
@@ -307,7 +308,7 @@ export class SyncCallJoinPage extends PlatformPage {
         }
     }
 
-    _heading(info: Record<string, any> | null) {
+    _heading(info: Record<string, unknown> | null) {
         if (info !== null && typeof info.channel_name === 'string' && info.channel_name !== '') {
             return info.channel_name;
         }
@@ -340,7 +341,7 @@ export class SyncCallJoinPage extends PlatformPage {
         `;
     }
 
-    _renderInfoBody(info: Record<string, any>, auth: Record<string, any> | null | undefined) {
+    _renderInfoBody(info: Record<string, unknown>, auth: AuthState) {
         const organizer = typeof info.creator_display_name === 'string' ? info.creator_display_name : '';
         const avatar =
             typeof info.creator_avatar_url === 'string' && info.creator_avatar_url !== ''

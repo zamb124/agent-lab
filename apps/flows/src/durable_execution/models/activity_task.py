@@ -136,7 +136,7 @@ class ActivityTask(PlatformModel):
                 _ = await ActivityTask.objects.create(instance=task)
                 _ = await ActivityAttempt.objects.create(instance=attempt)
         except IntegrityError:
-            record = await cls.activity_record(
+            record = await cls.any_activity_record(
                 company_id=company_id,
                 session_id=session_id,
                 execution_branch_id=execution_branch_id,
@@ -154,7 +154,7 @@ class ActivityTask(PlatformModel):
         return cls._activity_record(task, attempt, was_created=True)
 
     @classmethod
-    async def activity_record(
+    async def any_activity_record(
         cls,
         *,
         company_id: str,
@@ -163,6 +163,7 @@ class ActivityTask(PlatformModel):
         activity_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> ActivityRecord | None:
+        """Запись ветки по activity_id или idempotency_key. Задача через first без порядка: какая взята, не задано. Попытка — последняя по attempt DESC. Нет строки — None. Нет ни одного ключа — ValueError. Нет попытки — RuntimeError."""
         if activity_id is None and idempotency_key is None:
             raise ValueError("activity_id or idempotency_key is required")
         tasks = ActivityTask.objects.filter(
@@ -176,11 +177,7 @@ class ActivityTask(PlatformModel):
             task = await tasks.filter(activity_id=activity_id).first()
         if task is None:
             return None
-        attempt = await (
-            ActivityAttempt.objects.filter(activity_id=task.activity_id)
-            .order_by("-attempt")
-            .first()
-        )
+        attempt = await ActivityAttempt.latest_by_attempt_desc(task.activity_id, for_update=False)
         if attempt is None:
             raise RuntimeError(f"Activity has no attempts: {task.activity_id!r}")
         return cls._activity_record(task, attempt)
@@ -196,7 +193,7 @@ class ActivityTask(PlatformModel):
         idempotency_key: str | None = None,
         input_hash: str,
     ) -> JsonObject | None:
-        record = await cls.activity_record(
+        record = await cls.any_activity_record(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=execution_branch_id,
@@ -227,9 +224,7 @@ class ActivityTask(PlatformModel):
         task = await ActivityTask.objects.filter(activity_id=activity_id).first()
         if task is None:
             return None
-        latest = await (
-            ActivityAttempt.objects.filter(activity_id=activity_id).order_by("-attempt").first()
-        )
+        latest = await ActivityAttempt.latest_by_attempt_desc(activity_id, for_update=False)
         if latest is None or latest.status != ActivityStatus.started:
             return None
         updated_rows = await ActivityAttempt.objects.filter(
@@ -264,9 +259,7 @@ class ActivityTask(PlatformModel):
         task = await ActivityTask.objects.filter(activity_id=activity_id).first()
         if task is None:
             return None
-        latest = await (
-            ActivityAttempt.objects.filter(activity_id=activity_id).order_by("-attempt").first()
-        )
+        latest = await ActivityAttempt.latest_by_attempt_desc(activity_id, for_update=False)
         if latest is None or latest.status != ActivityStatus.scheduled:
             return None
         updated_rows = await ActivityAttempt.objects.filter(
@@ -299,12 +292,7 @@ class ActivityTask(PlatformModel):
             task = await ActivityTask.objects.filter(activity_id=activity_id).first()
             if task is None or task.side_effect_policy == SideEffectPolicy.non_idempotent:
                 return None
-            latest = await (
-                ActivityAttempt.objects.filter(activity_id=activity_id)
-                .order_by("-attempt")
-                .for_update()
-                .first()
-            )
+            latest = await ActivityAttempt.latest_by_attempt_desc(activity_id, for_update=True)
             if latest is None:
                 return None
             expired_attempt: ActivityAttempt | None = None

@@ -44,12 +44,12 @@ async def test_list_by_namespace_and_list_for_user_with_namespace_filter(
     await SyncChannelMember.ensure_member(ch1, "alice", company_id=company_id)
     await SyncChannelMember.ensure_member(ch2, "alice", company_id=company_id)
 
-    by_ns = await SyncChannel.list_by_name_in_namespace(
+    by_ns = await SyncChannel.list_by_name_in_namespace_asc(
         namespace, company_id=company_id, limit=100, offset=0
     )
     assert {c.channel_id for c in by_ns} == {ch1, ch2}
 
-    for_user = await SyncChannel.list_member_channels_by_type_and_name(
+    for_user = await SyncChannel.list_member_channels_by_type_and_name_asc(
         "alice",
         namespace=namespace,
         company_id=company_id,
@@ -78,7 +78,7 @@ async def test_ensure_member_row_and_list_user_ids_explicit_company(
     )
     _ = await SyncChannel.objects.create(instance=ch)
     await SyncChannelMember.ensure_member(ch_m, "bob", company_id=company_id)
-    ids = await SyncChannelMember.list_user_ids(ch_m, company_id=company_id)
+    ids = await SyncChannelMember.list_unordered_user_ids(ch_m, company_id=company_id)
     assert ids == ["bob"]
 
 
@@ -161,5 +161,5 @@ async def test_list_settings_user_ids(
     _ = await SyncChannel.objects.create(instance=ch)
     await SyncChannelMember.ensure_member(ch_mem, "a", company_id=company_id)
     await SyncChannelMember.ensure_member(ch_mem, "b", company_id=company_id)
-    ids = await SyncChannelMember.list_user_ids(ch_mem, company_id=company_id)
+    ids = await SyncChannelMember.list_unordered_user_ids(ch_mem, company_id=company_id)
     assert set(ids) == {"a", "b"}

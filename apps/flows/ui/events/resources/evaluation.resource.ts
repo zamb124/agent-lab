@@ -4,6 +4,7 @@
  */
 
 import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { EvaluationUiSlice } from '../editor.types.js';
 
 function requireRecord(value: unknown, label: string) {
@@ -336,8 +337,9 @@ export const evaluationRunsListOp = createAsyncOp({
         if (event.type !== 'flows/evaluation/event') {
             return false;
         }
-        const payload = event.payload && typeof event.payload === 'object' ? event.payload : null;
-        const runId = payload && typeof (payload as Record<string, any>).run_id === 'string' ? (payload as Record<string, any>).run_id : '';
+        const payload = isPlainRecord(event.payload) ? event.payload : null;
+        const runIdValue = payload === null ? undefined : payload.run_id;
+        const runId = typeof runIdValue === 'string' ? runIdValue : '';
         const ui = (ctx.getState() as any).flowsEvaluationUi;
         if (!ui || typeof ui !== 'object') {
             return true;

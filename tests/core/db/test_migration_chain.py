@@ -17,7 +17,7 @@ from core.db.migrations import apply_service_migrations, write_next_migration
 from core.db.postgres_service_databases import open_postgres_connection
 from core.db.service_registry import ServiceDBConfig
 from core.types import JsonObject
-from scripts.check_migration_files_canon import migration_chain_errors
+from scripts.gates.backend.migration_files import migration_chain_errors
 
 _CREATE_TABLE: JsonObject = {
     "type": "create_table",

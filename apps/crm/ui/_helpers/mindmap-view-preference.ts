@@ -5,6 +5,7 @@
 
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import { storageGet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function _segment(raw: string): string {
     return String(raw).trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_');
@@ -46,7 +47,7 @@ export function readMindmapView(rootEntityId: string, compact: boolean): { zoom:
     if (raw === null) {
         return null;
     }
-    let parsed;
+    let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
     } catch (e) {
@@ -54,7 +55,7 @@ export function readMindmapView(rootEntityId: string, compact: boolean): { zoom:
             `readMindmapView: invalid JSON for ${JSON.stringify(key)}: ${e instanceof Error ? e.message : String(e)}`,
         );
     }
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    if (!isPlainRecord(parsed)) {
         throw new Error(`readMindmapView: expected object at ${JSON.stringify(key)}`);
     }
     if (!Object.prototype.hasOwnProperty.call(parsed, 'zoom')) {
@@ -66,9 +67,9 @@ export function readMindmapView(rootEntityId: string, compact: boolean): { zoom:
     if (!Object.prototype.hasOwnProperty.call(parsed, 'panUy')) {
         throw new Error(`readMindmapView: missing panUy at ${JSON.stringify(key)}`);
     }
-    const zoom = (parsed as Record<string, unknown>).zoom;
-    const panUx = (parsed as Record<string, unknown>).panUx;
-    const panUy = (parsed as Record<string, unknown>).panUy;
+    const zoom = parsed.zoom;
+    const panUx = parsed.panUx;
+    const panUy = parsed.panUy;
     if (!_isFiniteNumber(zoom) || zoom < MIN_ZOOM || zoom > MAX_ZOOM) {
         throw new Error(`readMindmapView: zoom out of range at ${JSON.stringify(key)}`);
     }

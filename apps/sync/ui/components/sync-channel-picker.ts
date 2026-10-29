@@ -33,7 +33,7 @@ export class SyncChannelPicker extends PlatformElement {
     static override properties: PropertyDeclarations = {
         _tileAvatarFailed: { state: true },
     };
-    declare _tileAvatarFailed: unknown;
+    declare _tileAvatarFailed: Readonly<Record<string, boolean>>;
 
     static override styles: CSSResultGroup = css`
         :host {
@@ -124,7 +124,8 @@ export class SyncChannelPicker extends PlatformElement {
 
     constructor() {
         super();
-        this._tileAvatarFailed = Object.freeze({});
+        const failed: Record<string, boolean> = {};
+        this._tileAvatarFailed = Object.freeze(failed);
         this._channels = this.useResource('sync/channels', { autoload: true });
     }
 
@@ -134,7 +135,8 @@ export class SyncChannelPicker extends PlatformElement {
 
     _onTileAvatarError(channelId: unknown) {
         if (typeof channelId !== 'string' || channelId === '') return;
-        this._tileAvatarFailed = Object.freeze({ ...(this._tileAvatarFailed as Record<string, unknown>), [channelId]: true });
+        const failed: Record<string, boolean> = { ...this._tileAvatarFailed, [channelId]: true };
+        this._tileAvatarFailed = Object.freeze(failed);
     }
 
     _renderTileAvatar(channel: Record<string, any>) {
@@ -142,7 +144,7 @@ export class SyncChannelPicker extends PlatformElement {
         const hueVar = syncAvatarHueVar(seed);
         const name = typeof channel.name === 'string' && channel.name !== '' ? channel.name : '#';
         const cid = typeof channel.channel_id === 'string' ? channel.channel_id : '';
-        if (cid !== '' && (this._tileAvatarFailed as Record<string, unknown>)[cid] === true) {
+        if (cid !== '' && this._tileAvatarFailed[cid] === true) {
             return html`<span class="tile-avatar pastel-initials" style=${hueVar}>${initialsFromName(name)}</span>`;
         }
         const chUrl = typeof channel.avatar_url === 'string' && channel.avatar_url !== ''

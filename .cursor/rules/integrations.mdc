@@ -15,7 +15,7 @@ alwaysApply: false
 
 ## Модель
 
-- `IntegrationCredential` (`core/integrations/models.py`, таблица `integration_credentials`) — единственное хранилище внешних подключений; ключ `(company_id, user_id, provider, service)`; `provider` — вендор, `service` — область использования, токены — только здесь или в secrets. `list_by_created_at_for_user(company_id, user_id) -> list[IntegrationCredential]` — учётные данные пользователя компании, `ORDER BY created_at`, без предела. Пустые `company_id` и `user_id` — `ValueError`. `delete_count_by_mailbox_binding_and_service(company_id, mailbox_binding_id, service) -> int` — число удалённых учётных данных компании по ящику и `service`. Нет строк — `0`. Пустые `company_id`, `mailbox_binding_id` и `service` — `ValueError`.
+- `IntegrationCredential` (`core/integrations/models.py`, таблица `integration_credentials`) — единственное хранилище внешних подключений; ключ `(company_id, user_id, provider, service)`; `provider` — вендор, `service` — область использования, токены — только здесь или в secrets. `list_by_created_at_for_user_asc(company_id, user_id) -> list[IntegrationCredential]` — учётные данные пользователя компании, `ORDER BY created_at ASC`, без предела. Пустые `company_id` и `user_id` — `ValueError`. `delete_count_by_mailbox_binding_and_service(company_id, mailbox_binding_id, service) -> int` — число удалённых учётных данных компании по ящику и `service`. Нет строк — `0`. Пустые `company_id`, `mailbox_binding_id` и `service` — `ValueError`.
 - User OAuth — `user_id=<user>`; company service account — `user_id=COMPANY_INTEGRATION_USER_ID` (`__company__`), `token_type=service_account`, SA JSON (Fernet) в `access_token`, `metadata.impersonate_email`; `system` — seed из конфига через reconcile.
 - `OAuthService` (`core/integrations/oauth_service.py`: `build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token`) — поле `PlatformDi`; сценарий получает его constructor-аргументом (`CalendarService` → `mail.mdc`).
 
@@ -42,7 +42,7 @@ alwaysApply: false
 
 ## Запреты
 
-1. `httpx.AsyncClient()` напрямую — между сервисами и к внешним API.
+1. `httpx2.AsyncClient()` напрямую — между сервисами и к внешним API.
 2. Своя OAuth-логика в сервисе; per-vendor таблица подключений (`company_*_connections`).
 3. `remote_flow` по `flow_id` реестра; второй протокол внешних агентов.
 4. Скрытый глобальный резолвер credentials в tools вне `GoogleWorkspaceClient`.
@@ -55,5 +55,5 @@ alwaysApply: false
 
 ## Гейты
 
-- Запрет прямого `httpx.AsyncClient` в `apps/`/`core/` `[без гейта]`; аргумент `proxy=` — `ValueError` в `get_httpx_client`.
+- Запрет прямого `httpx2.AsyncClient` в `apps/`/`core/` `[без гейта]`; аргумент `proxy=` — `ValueError` в `get_httpx_client`.
 - `tests/core/api/test_integration_oauth_error_locale.py`, `tests/core/clients/test_google_workspace_scopes.py` — OAuth callback и scopes Workspace.

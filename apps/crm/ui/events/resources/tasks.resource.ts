@@ -26,6 +26,14 @@ import {
     reloadLastList,
 } from '@platform/lib/events/index.js';
 import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function anyRecord(value: unknown): Record<string, any> | null {
+    if (!isPlainRecord(value)) return null;
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
 
 const CRM_TASK_UPDATED = 'crm/task/updated';
 
@@ -35,14 +43,14 @@ const CRM_TASK_UPDATED = 'crm/task/updated';
  * @returns {string | null}
  */
 function _httpErrorDetailText(err: unknown): string | null {
-    if (!err || typeof err !== 'object') {
+    if (!isPlainRecord(err)) {
         return null;
     }
-    const body = (err as Record<string, unknown>).body;
-    if (!body || typeof body !== 'object') {
+    const body = err.body;
+    if (!isPlainRecord(body)) {
         return null;
     }
-    const detail = (body as Record<string, unknown>).detail;
+    const detail = body.detail;
     if (typeof detail === 'string' && detail.length > 0) {
         return detail;
     }
@@ -59,8 +67,7 @@ function _httpErrorDetailText(err: unknown): string | null {
  * @param {string} failedKey
  */
 function _toastOnActiveTaskConflict(ctx: EffectCtx, err: unknown, event: PlatformEvent, alreadyRunningKey: string, failedKey: string) {
-    const e = err as Record<string, any> | null;
-    const conflict = (e && e.status === 409) || (e && e.code === 'conflict');
+    const conflict = isPlainRecord(err) && (err.status === 409 || err.code === 'conflict');
     if (conflict) {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
@@ -110,12 +117,14 @@ function _mergeTaskIntoCollectionState<S extends { items: readonly any[]; byId: 
  * @param {object} event
  */
 function _dispatchLocalTaskUpdated(ctx: EffectCtx, result: unknown, event: PlatformEvent) {
-    if (!result || typeof result !== 'object' || typeof (result as Record<string, unknown>).task_id !== 'string') {
+    const task = anyRecord(result);
+    const taskId = task === null ? undefined : task.task_id;
+    if (typeof taskId !== 'string') {
         throw new Error('crm task mutation success: TaskResponse with task_id required');
     }
     ctx.dispatch(
         CRM_TASK_UPDATED,
-        { task: result },
+        { task },
         { causation_id: event.id, source: 'local' },
     );
 }
@@ -170,12 +179,12 @@ export const tasksResource = createResourceCollection({
         if (event.type !== CRM_TASK_UPDATED) {
             return state;
         }
-        const payload = (event.payload as Record<string, any>);
-        if (!payload || typeof payload !== 'object') {
+        const payload = anyRecord(event.payload);
+        if (payload === null) {
             throw new Error('crm/tasks extraReducer: push payload required');
         }
-        const task = payload.task;
-        if (!task || typeof task !== 'object' || typeof task.task_id !== 'string') {
+        const task = anyRecord(payload.task);
+        if (task === null || typeof task.task_id !== 'string') {
             throw new Error('crm/tasks extraReducer: payload.task with task_id required');
         }
         return _mergeTaskIntoCollectionState(state, task, 'task_id');
@@ -186,10 +195,14 @@ export const tasksResource = createResourceCollection({
         if (event.type !== CoreEvents.WS_CONNECTED) {
             return false;
         }
-        const slice = (ctx.getState() as Record<string, { items?: unknown } | undefined>)[tasksResource.sliceKey];
-        const hasActive = (slice && Array.isArray(slice.items) ? slice.items : []).some(
-            (task) => task && ACTIVE_TASK_STATUSES.has((task as Record<string, any>).status),
-        );
+        const root = anyRecord(ctx.getState());
+        const slice = root === null ? null : anyRecord(root[tasksResource.sliceKey]);
+        const items = slice !== null && Array.isArray(slice.items) ? slice.items : [];
+        const hasActive = items.some((task) => {
+            const row = anyRecord(task);
+            const status = row === null ? undefined : row.status;
+            return typeof status === 'string' && ACTIVE_TASK_STATUSES.has(status);
+        });
         if (hasActive) {
             reloadLastList(ctx, tasksResource);
         }

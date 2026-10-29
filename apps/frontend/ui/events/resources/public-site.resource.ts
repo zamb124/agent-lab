@@ -8,6 +8,7 @@
  */
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const publicSiteBundleOp = createAsyncOp({
     name: 'frontend/public_site_bundle',
@@ -38,10 +39,10 @@ export const publicBlogPostOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/frontend/api/public/blog/post' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
+        if (!isPlainRecord(payload)) {
             throw new Error('frontend/public_blog_post: payload required');
         }
-        const slug = (payload as Record<string, any>).slug;
+        const slug = payload.slug;
         if (typeof slug !== 'string' || slug === '') {
             throw new Error('frontend/public_blog_post: slug required');
         }

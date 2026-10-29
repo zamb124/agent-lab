@@ -3,6 +3,7 @@
  */
 
 import { createAsyncOp, createForm, createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const WS_TIMEOUT_MS = 20_000;
 
@@ -124,13 +125,17 @@ export const companyStorageMigrationSlice = createSlice({
             return state;
         }
         const payload = event.payload;
-        if (payload === null || typeof payload !== 'object') {
+        if (!isPlainRecord(payload)) {
             return state;
         }
-        if (typeof (payload as Record<string, any>).storage_migration_id !== 'string') {
+        if (typeof payload.storage_migration_id !== 'string') {
             return state;
         }
-        return { ...state, progress: payload };
+        const progress: Record<string, any> = {};
+        for (const [key, field] of Object.entries(payload)) {
+            progress[key] = field;
+        }
+        return { ...state, progress };
     },
 });
 

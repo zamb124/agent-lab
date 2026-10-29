@@ -5,7 +5,7 @@
 валидирует по нему контент и строит markdown; браузерная схема ProseMirror
 собирается из сгенерированного `wiki-schema.json`, поэтому расхождение между
 слоями невозможно без падения drift-гейта
-(`scripts/generate_wiki_prosemirror_schema.py --check`).
+(`scripts/generate/wiki_prosemirror_schema.py --check`).
 
 DOM-рендер (`toDOM`/`parseDOM`) живёт только в JS: он не влияет на данные,
 а его парность с этим реестром проверяется тестом схемы.
@@ -366,7 +366,7 @@ def _normalize_mark(mark: ProseMirrorMark) -> ProseMirrorMark:
     return ProseMirrorMark(type=mark.type, attrs=attrs)
 
 
-def normalize_document(node: ProseMirrorNode) -> ProseMirrorNode:
+def normalize_document_in_serialization_order(node: ProseMirrorNode) -> ProseMirrorNode:
     """Проверить документ по схеме и вернуть нормализованную копию.
 
     Нормализация приводит атрибуты к типам схемы, подставляет их значения по
@@ -418,7 +418,7 @@ def normalize_document(node: ProseMirrorNode) -> ProseMirrorNode:
     return ProseMirrorNode(
         type=node.type,
         attrs=attrs,
-        content=[normalize_document(child) for child in node.content],
+        content=[normalize_document_in_serialization_order(child) for child in node.content],
         marks=marks,
         text=node.text,
     )
@@ -504,6 +504,6 @@ __all__ = [
     "WikiNodeSpec",
     "WikiSchemaError",
     "WikiTableAlign",
-    "normalize_document",
+    "normalize_document_in_serialization_order",
     "schema_as_json",
 ]

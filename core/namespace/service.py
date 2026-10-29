@@ -97,7 +97,7 @@ class NamespaceService:
         if offset == 0 and await Namespace.by_name(_DEFAULT_NAMESPACE_NAME) is None:
             _ = await self.ensure_default()
         allowed = kinds if kinds is not None else _PRODUCT_LIST_KINDS
-        return await Namespace.list_by_kind(
+        return await Namespace.list_for_kinds_by_name_asc(
             list(allowed),
             limit=limit,
             offset=offset,

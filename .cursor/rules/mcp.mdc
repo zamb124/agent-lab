@@ -12,7 +12,7 @@ alwaysApply: false
 
 # MCP
 
-Внешние JSON-RPC 2.0 серверы (MCP, HTTP/SSE), чьи tools вызывают `llm_node` и MCP-нода. Конфигурация — в БД компании; runtime ходит на `upstream_url` напрямую. Flow как MCP-tools наружу → `humanitec_agent.mdc`.
+Внешние JSON-RPC 2.0 серверы (MCP, HTTP/SSE), чьи tools вызывают `llm_node` и MCP-нода. Конфигурация — в БД компании; runtime ходит на `upstream_url` напрямую.
 
 ## Модель
 
@@ -32,7 +32,7 @@ alwaysApply: false
 8. `MCPClient` сам выполняет `initialize`, резолвит `@var:` в headers через `VariablesService`, экземпляр кэшируется по `{company_id}:{server_id}`; каждый `tools/call` — значимая операция трейсинга → `tracing.mdc`.
 9. MCP-tool материализует `ToolRegistry.materialize` (`code_mode=mcp_tool` → `MCPTool`); вызов — только через tool, не `tool.coroutine`; tags — `["mcp", "mcp:<server_id>"]` → `tools.mdc`.
 10. Порядок во всех списках MCP — platform → allowlist (порядок yaml) → manual → прочий catalog (`mcp_server_display_order.py`); UI не пересортировывает.
-11. Branding: чтение — любой компании (`GET /flows/api/v1/mcp/branding`), запись — только `company_id=system`, файл `is_public=true` (png/webp/svg/jpeg); seed — git-бандл `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `_generic.svg`) через `scripts/mcp_branding_seed.py`.
+11. Branding: чтение — любой компании (`GET /flows/api/v1/mcp/branding`), запись — только `company_id=system`, файл `is_public=true` (png/webp/svg/jpeg); seed — git-бандл `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `_generic.svg`) через `scripts/tools/mcp_branding_seed.py`.
 
 ## Контракты
 
@@ -47,5 +47,5 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_mcp_branding_bundle.py` (`make check-events-canon`) — полнота бандла иконок.
+- `scripts/gates/flows/mcp_branding_bundle.py` (`make check-events-canon`) — полнота бандла иконок.
 - `tests/flows/integration/test_mcp_catalog_provisioner.py`, `tests/flows/integration/test_mcp_company_init.py`.

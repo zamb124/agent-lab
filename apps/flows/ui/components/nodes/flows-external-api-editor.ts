@@ -22,7 +22,7 @@ import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 const HTTP_METHODS = Object.freeze(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
 /** @type {Readonly<Record<string, string>>} */
-const HTTP_METHOD_TONES = Object.freeze({
+const HTTP_METHOD_TONES: Record<string, string> = Object.freeze({
     GET: 'success',
     POST: 'accent-secondary',
     PUT: 'warning',
@@ -36,7 +36,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -46,12 +46,12 @@ export class FlowsExternalApiEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
 ;
 
@@ -99,7 +99,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'external_api';
+        this.flowNodeType = 'external_api';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -107,7 +107,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
         this.embedded = false;
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
@@ -172,7 +172,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
         this._emitPatch({ headers });
     }
 
-    _onBodyTemplate(parsed: any) {
+    _onBodyTemplate(parsed: unknown) {
         if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
             throw new Error('flows-external-api-editor: body_template must be a JSON object');
         }
@@ -181,29 +181,32 @@ export class FlowsExternalApiEditor extends PlatformElement {
 
     override render(): TemplateResult {
         const cfg = asObject(this.nodeConfig);
-        const url = typeof (cfg as any).url === 'string' ? (cfg as any).url : '';
-        const method = HTTP_METHODS.includes((cfg as any).method) ? (cfg as any).method : 'POST';
-        const timeout = typeof (cfg as any).timeout === 'number' ? (cfg as any).timeout : 30.0;
-        const headers =
-            (cfg as any).headers && typeof (cfg as any).headers === 'object' && !Array.isArray((cfg as any).headers)
-                ? (cfg as any).headers
-                : {};
+        const url = typeof cfg.url === 'string' ? cfg.url : '';
+        const methodValue = cfg.method;
+        const method = typeof methodValue === 'string' && HTTP_METHODS.some((item) => item === methodValue) ? methodValue : 'POST';
+        const timeout = typeof cfg.timeout === 'number' && Number.isFinite(cfg.timeout) ? cfg.timeout : 30.0;
+        const headersValue = cfg.headers;
+        const headers = headersValue !== null && typeof headersValue === 'object' && !Array.isArray(headersValue)
+            ? headersValue
+            : {};
         const bodyTemplateStr =
-            typeof (cfg as any).body_template === 'string' && (cfg as any).body_template.length > 0
-                ? (cfg as any).body_template
+            typeof cfg.body_template === 'string' && cfg.body_template.length > 0
+                ? cfg.body_template
                 : '{}';
-        const methodItems = HTTP_METHODS.map((m) => ({
-            value: m,
-            label: m,
-            tone: (HTTP_METHOD_TONES as any)[m],
-        }));
+        const methodItems = HTTP_METHODS.map((m) => {
+            const tone = HTTP_METHOD_TONES[m];
+            if (typeof tone !== 'string' || tone.length === 0) {
+                throw new Error(`flows-external-api-editor: tone for ${m} required`);
+            }
+            return { value: m, label: m, tone };
+        });
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'external_api'}
+                .flowNodeType=${this.flowNodeType}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

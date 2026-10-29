@@ -21,6 +21,7 @@ import {
     rerunLastRequest,
     upsertItem,
 } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const NAMESPACE_UPDATE_SUCCEEDED = 'crm/namespace_update/succeeded';
 
@@ -42,8 +43,12 @@ export const namespacesResource = createResourceCollection({
         if (event.type !== NAMESPACE_UPDATE_SUCCEEDED) {
             return state;
         }
-        const namespace = (event.payload as Record<string, any>).result;
-        if (!namespace || typeof namespace.name !== 'string') {
+        const payload = event.payload;
+        if (!isPlainRecord(payload)) {
+            throw new Error('crm/namespaces: update payload must be an object');
+        }
+        const namespace = payload.result;
+        if (!isPlainRecord(namespace) || typeof namespace.name !== 'string') {
             return state;
         }
         return upsertItem(state, namespace, 'name');
@@ -61,8 +66,12 @@ export const namespaceUpdateOp = createAsyncOp({
     // allowed_type_ids меняют редактируемость: открытая editability перечитывается фабрикой.
     onSuccess: (ctx, result) => {
         rerunLastRequest(ctx, namespaceEditabilityOp, {
-            when: (request) => Boolean(request)
-                && (request as Record<string, unknown>).name === (result as Record<string, unknown>).name,
+            when: (request) => {
+                if (!isPlainRecord(request) || !isPlainRecord(result)) return false;
+                const requestName = request.name;
+                const resultName = result.name;
+                return typeof requestName === 'string' && requestName === resultName;
+            },
         });
     },
 });

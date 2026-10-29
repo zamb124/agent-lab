@@ -11,45 +11,67 @@ function _isPlainObject(value: unknown): value is Record<string, any> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function emptyStringMap(): Record<string, string> {
+    return {};
+}
+
+function emptyResultMap(): Record<string, unknown> {
+    return {};
+}
+
+function emptyErrorMap(): Record<string, string | null> {
+    return {};
+}
+
+const NO_NODE_ID: string | null = null;
+
 export const flowsRagNodeTestSlice = createSlice({
     name: 'flows/rag_node_test',
     extraInitial: {
-        queryByNodeId: {} as Record<string, any>,
-        resultByNodeId: {} as Record<string, any>,
-        errorByNodeId: {} as Record<string, any>,
-        lastNodeId: null as string | null,
+        queryByNodeId: emptyStringMap(),
+        resultByNodeId: emptyResultMap(),
+        errorByNodeId: emptyErrorMap(),
+        lastNodeId: NO_NODE_ID,
     },
     actions: {
         setQuery: 'query_set',
         bindSearch: 'search_bind',
     },
     extraReducer: (state: RagNodeTestSlice, event, events) => {
-        const s = state as Record<string, any>;
         if (event.type === events.QUERY_SET) {
             const payload = event.payload;
-            if (!_isPlainObject(payload) || typeof (payload as any).nodeId !== 'string' || (payload as any).nodeId.length === 0) {
+            if (!_isPlainObject(payload)) {
                 throw new Error('flows/rag_node_test: payload.nodeId required');
             }
-            if (typeof (payload as any).query !== 'string') {
+            const nodeId = payload.nodeId;
+            const query = payload.query;
+            if (typeof nodeId !== 'string' || nodeId.length === 0) {
+                throw new Error('flows/rag_node_test: payload.nodeId required');
+            }
+            if (typeof query !== 'string') {
                 throw new Error('flows/rag_node_test: payload.query string required');
             }
             return {
                 ...state,
-                queryByNodeId: { ...s.queryByNodeId, [(payload as any).nodeId]: (payload as any).query },
+                queryByNodeId: { ...state.queryByNodeId, [nodeId]: query },
             };
         }
         if (event.type === events.SEARCH_BIND) {
             const payload = event.payload;
-            if (!_isPlainObject(payload) || typeof (payload as any).nodeId !== 'string' || (payload as any).nodeId.length === 0) {
+            if (!_isPlainObject(payload)) {
+                throw new Error('flows/rag_node_test: bindSearch nodeId required');
+            }
+            const nodeId = payload.nodeId;
+            if (typeof nodeId !== 'string' || nodeId.length === 0) {
                 throw new Error('flows/rag_node_test: bindSearch nodeId required');
             }
             return {
                 ...state,
-                lastNodeId: (payload as any).nodeId,
-                errorByNodeId: { ...s.errorByNodeId, [(payload as any).nodeId]: null },
+                lastNodeId: nodeId,
+                errorByNodeId: { ...state.errorByNodeId, [nodeId]: null },
             };
         }
-        const nodeId = s.lastNodeId;
+        const nodeId = state.lastNodeId;
         if (typeof nodeId !== 'string' || nodeId.length === 0) {
             return state;
         }
@@ -59,17 +81,21 @@ export const flowsRagNodeTestSlice = createSlice({
             }
             return {
                 ...state,
-                resultByNodeId: { ...s.resultByNodeId, [nodeId]: event.payload.result },
-                errorByNodeId: { ...s.errorByNodeId, [nodeId]: null },
+                resultByNodeId: { ...state.resultByNodeId, [nodeId]: event.payload.result },
+                errorByNodeId: { ...state.errorByNodeId, [nodeId]: null },
             };
         }
         if (event.type === searchOp.events.FAILED) {
-            if (!event.payload || typeof (event.payload as Record<string, any>).message !== 'string') {
+            if (!_isPlainObject(event.payload)) {
+                throw new Error('flows/rag_node_test: search FAILED message required');
+            }
+            const message = event.payload.message;
+            if (typeof message !== 'string') {
                 throw new Error('flows/rag_node_test: search FAILED message required');
             }
             return {
                 ...state,
-                errorByNodeId: { ...s.errorByNodeId, [nodeId]: (event.payload as Record<string, any>).message },
+                errorByNodeId: { ...state.errorByNodeId, [nodeId]: message },
             };
         }
         return state;

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-import httpx
+import httpx2
 from playwright.async_api import Locator, Page, expect
 
 from tests.ui.e2e.flows_e2e_helpers import (
@@ -265,7 +265,7 @@ async def flows_eval_api_list_cases(
     auth_token: str,
     suite_id: str,
 ) -> list[dict[str, object]]:
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=origin,
         cookies={"auth_token": auth_token},
         timeout=60.0,
@@ -291,7 +291,7 @@ async def flows_eval_api_get_case(
     suite_id: str,
     case_id: str,
 ) -> dict[str, object]:
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=origin,
         cookies={"auth_token": auth_token},
         timeout=60.0,
@@ -311,7 +311,7 @@ async def flows_eval_api_list_suites(
     auth_token: str,
     flow_id: str,
 ) -> list[dict[str, object]]:
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=origin,
         cookies={"auth_token": auth_token},
         timeout=60.0,

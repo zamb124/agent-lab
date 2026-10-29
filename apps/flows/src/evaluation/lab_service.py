@@ -393,7 +393,7 @@ class EvaluationLabService:
         return await self._require_suite(suite_id)
 
     async def list_suites(self, flow_id: str) -> list[EvaluationSuite]:
-        return await EvaluationSuite.list_by_updated_at_and_suite_id(flow_id)
+        return await EvaluationSuite.list_by_updated_at_desc_and_suite_id_asc(flow_id)
 
     def list_builtin_evaluators(self) -> EvaluationBuiltinEvaluatorCatalog:
         return EvaluationBuiltinEvaluatorCatalog(
@@ -651,7 +651,7 @@ class EvaluationLabService:
 
     async def list_cases(self, suite_id: str) -> list[EvaluationCase]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationCase.list_by_sort_order_created_at_and_case_id(suite_id)
+        return await EvaluationCase.list_by_sort_order_created_at_and_case_id_asc(suite_id)
 
     async def import_cases(
         self,
@@ -830,7 +830,7 @@ class EvaluationLabService:
         return await self._require_rubric(rubric_id)
 
     async def list_rubrics(self, flow_id: str) -> list[EvaluationRubric]:
-        return await EvaluationRubric.list_by_updated_at_and_rubric_id(flow_id)
+        return await EvaluationRubric.list_by_updated_at_desc_and_rubric_id_asc(flow_id)
 
     async def create_rubric_version(
         self,
@@ -838,7 +838,7 @@ class EvaluationLabService:
         request: EvaluationRubricVersionCreateRequest,
     ) -> EvaluationRubricVersion:
         rubric = await self._require_rubric(rubric_id)
-        version_number = await EvaluationRubricVersion.next_version(rubric_id)
+        version_number = await EvaluationRubricVersion.next_after_latest_version_desc(rubric_id)
         version = EvaluationRubricVersion(
             rubric_version_id=_new_id(),
             rubric_id=rubric.rubric_id,
@@ -853,7 +853,7 @@ class EvaluationLabService:
 
     async def list_rubric_versions(self, rubric_id: str) -> list[EvaluationRubricVersion]:
         _ = await self._require_rubric(rubric_id)
-        return await EvaluationRubricVersion.list_for_rubric(rubric_id)
+        return await EvaluationRubricVersion.list_for_rubric_by_version_desc(rubric_id)
 
     async def create_run(self, request: EvaluationRunCreateRequest) -> EvaluationRunWithCases:
         suite = await self._require_suite(request.suite_id)
@@ -888,7 +888,7 @@ class EvaluationLabService:
                     "Gate policy must belong to the requested suite and branch"
                 )
 
-        version_number = await EvaluationSuiteVersion.next_version(suite.suite_id)
+        version_number = await EvaluationSuiteVersion.next_after_latest_version_desc(suite.suite_id)
         now = _utc_now()
         suite_version = EvaluationSuiteVersion(
             suite_version_id=_new_id(),
@@ -974,7 +974,7 @@ class EvaluationLabService:
         return job
 
     async def list_pending_run_jobs(self, limit: int) -> list[EvaluationRunJob]:
-        return await EvaluationRunJob.list_pending(limit)
+        return await EvaluationRunJob.list_pending_by_created_at_and_run_job_id_asc(limit)
 
     async def mark_run_job_enqueued(self, run_id: str) -> EvaluationRunJob:
         job = await self.get_run_job(run_id)
@@ -1126,7 +1126,7 @@ class EvaluationLabService:
         run = await EvaluationRun.get(run_id)
         if run is None:
             return None
-        case_runs = await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at(run_id)
+        case_runs = await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at_asc(run_id)
         gate_result = await EvaluationGateResult.for_run(run_id)
         return EvaluationRunWithCases(run=run, case_runs=case_runs, gate_result=gate_result)
 
@@ -1142,7 +1142,7 @@ class EvaluationLabService:
 
     async def list_events(self, run_id: str) -> list[EvaluationRunEvent]:
         _ = await self.get_run(run_id)
-        return await EvaluationRunEvent.list_by_sequence(run_id)
+        return await EvaluationRunEvent.list_by_sequence_asc(run_id)
 
     async def list_events_page(
         self,
@@ -1152,7 +1152,7 @@ class EvaluationLabService:
         limit: int,
     ) -> EvaluationRunEventsPage:
         _ = await self.get_run(run_id)
-        rows = await EvaluationRunEvent.list_after(
+        rows = await EvaluationRunEvent.list_after_sequence_by_sequence_asc(
             run_id,
             after_sequence=after_sequence,
             limit=limit + 1,
@@ -1168,7 +1168,7 @@ class EvaluationLabService:
 
     async def list_case_runs(self, run_id: str) -> list[EvaluationCaseRun]:
         _ = await self.get_run(run_id)
-        return await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at(run_id)
+        return await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at_asc(run_id)
 
     async def cancel_run(self, run_id: str) -> EvaluationRunWithCases:
         run_with_cases = await self.get_run(run_id)
@@ -1258,7 +1258,7 @@ class EvaluationLabService:
 
     async def list_annotations(self, run_id: str) -> list[EvaluationAnnotation]:
         _ = await self.get_run(run_id)
-        return await EvaluationAnnotation.list_by_created_at_and_annotation_id(run_id)
+        return await EvaluationAnnotation.list_by_created_at_and_annotation_id_asc(run_id)
 
     async def update_annotation(
         self,
@@ -1318,7 +1318,7 @@ class EvaluationLabService:
 
     async def list_baselines(self, suite_id: str) -> list[EvaluationBaseline]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationBaseline.list_by_branch_id(suite_id)
+        return await EvaluationBaseline.list_by_branch_id_asc(suite_id)
 
     async def create_gate_policy(
         self,
@@ -1386,7 +1386,7 @@ class EvaluationLabService:
 
     async def list_gate_policies(self, suite_id: str) -> list[EvaluationGatePolicy]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationGatePolicy.list_by_branch_id_and_name(suite_id)
+        return await EvaluationGatePolicy.list_by_branch_id_and_name_asc(suite_id)
 
     async def create_gate_policy_run(
         self,
@@ -1462,7 +1462,7 @@ class EvaluationLabService:
         limit: int,
     ) -> EvaluationResultsMatrix:
         _ = await self._require_suite(suite_id)
-        all_cases = await EvaluationCase.list_by_sort_order_created_at_and_case_id(suite_id)
+        all_cases = await EvaluationCase.list_by_sort_order_created_at_and_case_id_asc(suite_id)
         cases = [
             EvaluationMatrixCase(
                 case_id=case.case_id,
@@ -1499,7 +1499,7 @@ class EvaluationLabService:
         ]
         cells: list[EvaluationMatrixCell] = []
         for run in runs:
-            for case_run in await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at(run.run_id):
+            for case_run in await EvaluationCaseRun.list_by_case_id_trial_index_and_created_at_asc(run.run_id):
                 cells.append(
                     EvaluationMatrixCell(
                         run_id=run.run_id,
@@ -1530,7 +1530,7 @@ class EvaluationLabService:
         if case_run.trace_id is not None:
             spans = [
                 self._trace_span(span)
-                for span in await Span.list_for_trace(case_run.trace_id)
+                for span in await Span.list_for_trace_by_start_time_asc(case_run.trace_id)
             ]
         workflow_records, _ = await self._workflow_runtime.get_state_history(
             case_run.session_id,
@@ -1618,7 +1618,7 @@ class EvaluationLabService:
 
     async def list_monitors(self, suite_id: str) -> list[EvaluationMonitor]:
         _ = await self._require_suite(suite_id)
-        return await EvaluationMonitor.list_by_updated_at_and_monitor_id(suite_id)
+        return await EvaluationMonitor.list_by_updated_at_desc_and_monitor_id_asc(suite_id)
 
     async def get_monitor(self, monitor_id: str) -> EvaluationMonitor:
         return await self._require_monitor(monitor_id)
@@ -1632,7 +1632,7 @@ class EvaluationLabService:
         if monitor.state != EvaluationMonitorState.ACTIVE:
             raise EvaluationMonitorNotActive(str(monitor.state))
         limit = min(request.limit, monitor.max_traces_per_sample)
-        traces, _ = await Span.trace_group_page_and_span_count(
+        traces, _ = await Span.trace_group_page_by_start_time_desc_and_span_count(
             user_id=monitor.filter.user_id,
             session_id=monitor.filter.session_id,
             flow_id=monitor.flow_id,
@@ -1684,7 +1684,7 @@ class EvaluationLabService:
         trials: int,
         max_concurrency: int,
     ) -> list[EvaluationMonitorCycleResult]:
-        monitors = await EvaluationMonitor.list_active(500)
+        monitors = await EvaluationMonitor.list_active_by_updated_at_and_monitor_id_asc(500)
         cycles: list[EvaluationMonitorCycleResult] = []
         for monitor in monitors:
             try:
@@ -1709,7 +1709,7 @@ class EvaluationLabService:
         limit: int,
     ) -> list[EvaluationMonitorObservation]:
         _ = await self._require_monitor(monitor_id)
-        return await EvaluationMonitorObservation.list_for_monitor(monitor_id, limit)
+        return await EvaluationMonitorObservation.list_for_monitor_by_sampled_at_desc(monitor_id, limit)
 
     async def create_pairwise_judgment(
         self,
@@ -1771,7 +1771,7 @@ class EvaluationLabService:
         case_run_id: str,
     ) -> list[EvaluationPairwiseJudgment]:
         _ = await self._require_case_run(case_run_id)
-        return await EvaluationPairwiseJudgment.list_for_case_run(case_run_id)
+        return await EvaluationPairwiseJudgment.list_for_case_run_by_created_at_desc(case_run_id)
 
     async def _run_case(
         self,
@@ -2864,7 +2864,7 @@ class EvaluationLabService:
         branch_id: str,
         scope: EvaluationRunScope,
     ) -> list[EvaluationCase]:
-        cases = await EvaluationCase.list_by_sort_order_created_at_and_case_id(suite_id)
+        cases = await EvaluationCase.list_by_sort_order_created_at_and_case_id_asc(suite_id)
         matching_cases = [case for case in cases if self._case_matches_branch(case, branch_id)]
         if isinstance(scope, EvaluationRunSuiteScope):
             return [case for case in matching_cases if case.enabled]
@@ -3192,7 +3192,7 @@ class EvaluationLabService:
         return case_run
 
     async def _require_trace(self, trace_id: str) -> list[Span]:
-        spans = await Span.list_for_trace(trace_id)
+        spans = await Span.list_for_trace_by_start_time_asc(trace_id)
         if not spans:
             raise PlatformNotFoundError(f"Trace not found: {trace_id}")
         return spans

@@ -16,7 +16,7 @@ Agent Skill — запись каталога с progressive disclosure для `
 
 ## Модель
 
-- `AgentSkill` (`apps/flows/src/models/agent_skill.py`, таблица `agent_skills` базы flows, PK `agent_skill_row_id` = `{company_id}:{agent_skill_id}`. `AgentSkill.skill_row_id_for_active_company(agent_skill_id) -> str` — тот же ключ из активной компании. Пустой `agent_skill_id` или компания — `ValueError` с текстом `agent_skill_id is required`. `:` — `ValueError` с текстом `agent_skill_id and company_id must not contain ':'`.): body, `tool_refs`, `depends_on`, references и assets (`FileRef`); импорт — формат agentskills.io `SKILL.md`.
+- `AgentSkill` (`apps/flows/src/models/agent_skill.py`, таблица `agent_skills` базы flows, PK `agent_skill_row_id` = `{company_id}:{agent_skill_id}`. `AgentSkill.skill_row_id_for_active_company(agent_skill_id) -> str` — тот же ключ из активной компании. Пустой `agent_skill_id` или компания — `ValueError` с текстом `agent_skill_id is required`. `:` — `ValueError` с текстом `agent_skill_id and company_id must not contain ':'`. `AgentSkill.list_by_agent_skill_id_asc(*, limit, offset) -> list[AgentSkill]` — окно skills, `ORDER BY agent_skill_id ASC`. `limit < 1` и `offset < 0` — `ValueError`.): body, `tool_refs`, `depends_on`, references и assets (`FileRef`); импорт — формат agentskills.io `SKILL.md`.
 - Привязка — `NodeConfig.agent_skills: list[agent_skill_id]`; UI copy — «Skill», API/DB — `agent_skill_id`/`agent_skills`.
 - Seed платформы — `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` (`apps/flows/src/services/platform_assistant_skills.py`), для существующих компаний — идемпотентный `ensure-seed`.
 
@@ -27,7 +27,7 @@ Agent Skill — запись каталога с progressive disclosure для `
 3. `depends_on` — любая глубина, циклы допустимы, стоп безопасности на глубине ≥ 64.
 4. Скрипты skill — только через существующие tools и code-runner; FS в процессе нет.
 5. Skill ссылается только на существующие `tool_refs`; без tool контракта body ведёт по UI и не заявляет исполнение.
-6. Lara (`flow_id=lara`) — один ассистент SPA и LinnexAgent; каталог Tier-1 один на все branches; branches отличаются focus prompt и standing tools; standing tool — только `ask_user` (branch `linnex_agent` — плюс `device_tools_list`/`device_tools_call` → `humanitec_agent.mdc`); доменные tools появляются только после load.
+6. Lara (`flow_id=lara`) — один ассистент SPA; каталог Tier-1 один на все branches; branches отличаются focus prompt и standing tools; standing tool — только `ask_user`; доменные tools появляются только после load.
 7. Standing UI context Lara — только id и скаляры; тела нод и документов читаются tools после load.
 8. Общие leaves (`document-workspace`, `web-research`, `work-tracking`, `team-directory`, `agent-planning`, …) живут под `platform-workspace` и подключаются через `depends_on`; копия tool pack между service skills запрещена.
 
@@ -39,7 +39,7 @@ Agent Skill — запись каталога с progressive disclosure для `
 
 ## Запреты
 
-1. Skill как `BranchConfig`; alias `skill_id`; дубль `AgentToolkit`.
+1. Skill как `BranchConfig`; alias `skill_id`.
 2. Body всех skills в standing system prompt; standing dump всех capability tools на ноду.
 
 ## Гейты

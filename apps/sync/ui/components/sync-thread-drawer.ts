@@ -17,6 +17,7 @@ import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import './sync-message-list.js';
 import './sync-message-composer.js';
@@ -70,12 +71,21 @@ export class SyncThreadDrawer extends PlatformElement {
         }
     `;
 
-    private _threadsSel: SelectController<{ selectedThreadId?: unknown } | undefined>;
+    private _threadsSel: SelectController<Record<string, unknown> | undefined>;
 
     constructor() {
         super();
         this.channelId = '';
-        this._threadsSel = this.select((s) => s.syncThreads as { selectedThreadId?: unknown } | undefined);
+        this._threadsSel = this.select((s): Record<string, unknown> | undefined => {
+            const threads = s.syncThreads;
+            if (threads === undefined) {
+                return undefined;
+            }
+            if (!isPlainRecord(threads)) {
+                throw new Error('sync-thread-drawer: threads slice must be an object');
+            }
+            return threads;
+        });
     }
 
     _selectedThreadId() {

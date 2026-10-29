@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.worktracker.di import WorktrackerDi
 from core.di import require_di
@@ -26,13 +26,13 @@ from core.worktracker.models import (
     WorkQueue,
 )
 from core.worktracker.service import WorkItemService
-from tests.fixtures.service_processes import ServiceProcesses
 from tests.fixtures.platform_events import (
     PlatformEventsReceive,
 )
 from tests.fixtures.platform_events import (
     platform_events_listener as open_platform_events_stream,
 )
+from tests.fixtures.service_processes import ServiceProcesses
 
 API_PREFIX = "/worktracker/api/v1"
 

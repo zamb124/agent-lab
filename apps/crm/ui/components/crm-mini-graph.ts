@@ -40,9 +40,76 @@ import type {
     OpController,
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const API_MAX_DEPTH = 5;
 const MINI_NODE_REL_SIZE = 4;
+
+interface GraphSceneNode extends Record<string, unknown> {
+    id: string;
+    name: string;
+    color: string;
+    level: number;
+    size?: number;
+    graph_weight_subtitle?: string;
+    x?: number;
+    y?: number;
+    z?: number;
+    fx?: number;
+    fy?: number;
+    fz?: number;
+}
+
+interface GraphSceneLink {
+    source: string;
+    target: string;
+    directed: boolean;
+    relation_type: string;
+    weight: number;
+}
+
+interface GraphPoint {
+    x: number;
+    y: number;
+    z: number;
+}
+
+interface ForceGraphCamera {
+    position: { set(x: number, y: number, z: number): void };
+    lookAt(x: number, y: number, z: number): void;
+}
+
+interface ForceGraphControls {
+    enableRotate: boolean;
+}
+
+interface ForceGraphInstance {
+    graphData(data: { nodes: GraphSceneNode[]; links: GraphSceneLink[] }): ForceGraphInstance;
+    graphData(): { nodes?: GraphSceneNode[] };
+    width(value: number): void;
+    height(value: number): void;
+    camera(): ForceGraphCamera;
+    cameraPosition(): GraphPoint | null;
+    controls(): ForceGraphControls | null;
+    d3Force(name: string, force: () => void): void;
+    _destructor?: () => void;
+}
+
+function isGraphPoint(value: unknown): value is GraphPoint {
+    return isPlainRecord(value)
+        && typeof value.x === 'number'
+        && typeof value.y === 'number'
+        && typeof value.z === 'number';
+}
+
+function firstGraphId(values: readonly unknown[]): string | null {
+    for (const value of values) {
+        if (typeof value === 'string' && value.trim().length > 0) {
+            return value;
+        }
+    }
+    return null;
+}
 
 export class CRMMiniGraph extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -355,9 +422,9 @@ export class CRMMiniGraph extends PlatformElement {
     private _graphOp: OpController;
     private _entityTypes: ResourceController;
     private _relationshipTypes: ResourceController;
-    private _graphInstance: any;
-    private _resizeObserver: any;
-    private _graphPayload: Record<string, any> | null;
+    private _graphInstance: ForceGraphInstance | null;
+    private _resizeObserver: ResizeObserver | null;
+    private _graphPayload: Record<string, unknown> | null;
 
     constructor() {
         super();
@@ -449,7 +516,7 @@ export class CRMMiniGraph extends PlatformElement {
         this._destroyGraphState();
     }
 
-    _resolveNodeColor(node: Record<string, any>): string {
+    _resolveNodeColor(node: Record<string, unknown>): string {
         if (node.access === false) {
             return '#7f7f8f';
         }
@@ -465,7 +532,7 @@ export class CRMMiniGraph extends PlatformElement {
         return match.color.trim();
     }
 
-    _normalizeLevel(rawNode: Record<string, any>, rootEntityId: string, nodeId: string): number {
+    _normalizeLevel(rawNode: Record<string, unknown>, rootEntityId: string, nodeId: string): number {
         if (typeof rawNode.level === 'number' && Number.isFinite(rawNode.level)) {
             return Math.max(0, Math.floor(rawNode.level));
         }
@@ -475,7 +542,7 @@ export class CRMMiniGraph extends PlatformElement {
         return 1;
     }
 
-    _edgeDirected(edge: Record<string, any>): boolean {
+    _edgeDirected(edge: Record<string, unknown>): boolean {
         if (typeof edge.is_directed === 'boolean') {
             return edge.is_directed;
         }
@@ -620,18 +687,20 @@ export class CRMMiniGraph extends PlatformElement {
         const graphResult = await this._graphOp.run({
             entityId: id,
             params: { max_depth: this._getFetchDepth() },
-        }) as Record<string, any> | null;
+        });
         const current = this._trimEntityId();
         if (current !== id) {
             return;
         }
-        if (graphResult === null || typeof graphResult !== 'object') {
+        if (!isPlainRecord(graphResult)) {
             return;
         }
-        if (typeof graphResult.root_entity_id !== 'string' || graphResult.root_entity_id !== id) {
+        const rootId = graphResult.root_entity_id;
+        if (typeof rootId !== 'string' || rootId !== id) {
             return;
         }
-        const nodes = Array.isArray(graphResult.nodes) ? graphResult.nodes : [];
+        const rawNodes = graphResult.nodes;
+        const nodes = Array.isArray(rawNodes) ? rawNodes : [];
         if (nodes.length === 0) {
             return;
         }
@@ -659,63 +728,76 @@ export class CRMMiniGraph extends PlatformElement {
         if (root.length === 0) {
             throw new Error('CRMMiniGraph._normalizeSceneNodes: entityId required');
         }
-        return this._getFetchedNodes().map((raw: Record<string, any>) => {
-            const id = raw.entity_id || raw.id;
-            if (typeof id !== 'string' || id.trim().length === 0) {
+        return this._getFetchedNodes().map((raw) => {
+            if (!isPlainRecord(raw)) {
+                throw new Error('Graph node must be an object');
+            }
+            const id = firstGraphId([raw.entity_id, raw.id]);
+            if (id === null) {
                 throw new Error('Graph node must have entity_id or id');
             }
             const level = this._normalizeLevel(raw, root, id);
-            return {
-                ...raw,
+            const name = firstGraphId([raw.name, raw.label]);
+            const sceneNode: GraphSceneNode = {
                 id,
-                name: raw.name || raw.label || id,
+                name: name === null ? id : name,
                 color: this._resolveNodeColor(raw),
                 level,
             };
+            for (const [key, value] of Object.entries(raw)) {
+                if (key === 'id' || key === 'name' || key === 'color' || key === 'level') {
+                    continue;
+                }
+                sceneNode[key] = value;
+            }
+            return sceneNode;
         });
     }
 
-    _buildSceneData(displayDepth: number): { nodes: Record<string, any>[]; links: Record<string, any>[] } {
+    _buildSceneData(displayDepth: number): { nodes: GraphSceneNode[]; links: GraphSceneLink[] } {
         const allNodes = this._normalizeSceneNodes();
-        const visibleNodes = allNodes.filter((n) => n.level <= displayDepth);
-        const visibleIds = new Set(visibleNodes.map((n) => n.id));
+        const visibleNodes = allNodes.filter((node) => node.level <= displayDepth);
+        const visibleIds = new Set(visibleNodes.map((node) => node.id));
 
-        const sceneLinks: Record<string, any>[] = [];
+        const sceneLinks: GraphSceneLink[] = [];
         for (const edge of this._getFetchedEdges()) {
-            const source = edge.source_id || edge.source_entity_id || edge.source;
-            const target = edge.target_id || edge.target_entity_id || edge.target;
-            if (typeof source !== 'string' || typeof target !== 'string') {
+            if (!isPlainRecord(edge)) {
+                continue;
+            }
+            const source = firstGraphId([edge.source_id, edge.source_entity_id, edge.source]);
+            const target = firstGraphId([edge.target_id, edge.target_entity_id, edge.target]);
+            if (source === null || target === null) {
                 continue;
             }
             if (!visibleIds.has(source) || !visibleIds.has(target)) {
                 continue;
             }
             const directed = this._edgeDirected(edge);
-            const relationType = edge.relationship_type || edge.type || 'related';
+            const relationType = firstGraphId([edge.relationship_type, edge.type]);
             const edgeWeight = typeof edge.weight === 'number' && Number.isFinite(edge.weight) ? edge.weight : 1;
             sceneLinks.push({
                 source,
                 target,
                 directed,
-                relation_type: relationType,
+                relation_type: relationType === null ? 'related' : relationType,
                 weight: edgeWeight,
             });
         }
 
         const weightByNode = aggregateIncidentWeightsByNode(sceneLinks);
         const maxW = maxIncidentWeightOrOne(weightByNode);
-        const nodesWithSize = visibleNodes.map((n: Record<string, any>) => {
-            const storedWeight = weightByNode.get(n.id);
+        const nodesWithSize = visibleNodes.map((node) => {
+            const storedWeight = weightByNode.get(node.id);
             const total = storedWeight === undefined ? 0 : storedWeight;
-            const rawLevel = typeof n.level === 'number' && Number.isFinite(n.level) ? n.level : 1;
+            const rawLevel = typeof node.level === 'number' && Number.isFinite(node.level) ? node.level : 1;
             const sizingLevel = rawLevel === 0 ? 0 : 1;
             const size = computeGraphNodeDisplaySize(sizingLevel, total, maxW);
-            let graph_weight_subtitle = '';
+            let graphWeightSubtitle = '';
             if (total > 0) {
                 const value = total.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 });
-                graph_weight_subtitle = this.t('graph_page.incident_weight_subtitle', { value });
+                graphWeightSubtitle = this.t('graph_page.incident_weight_subtitle', { value });
             }
-            return { ...n, size, graph_weight_subtitle };
+            return { ...node, size, graph_weight_subtitle: graphWeightSubtitle };
         });
 
         return { nodes: nodesWithSize, links: sceneLinks };
@@ -799,10 +881,15 @@ export class CRMMiniGraph extends PlatformElement {
             .cooldownTicks(60)
             .warmupTicks(40)
             .nodeRelSize(MINI_NODE_REL_SIZE)
-            .nodeColor((n: any) => n.color)
-            .nodeVal((n: any) => n.size)
+            .nodeColor((node: GraphSceneNode) => node.color)
+            .nodeVal((node: GraphSceneNode) => {
+                if (typeof node.size !== 'number') {
+                    throw new Error('crm-mini-graph: node size required');
+                }
+                return node.size;
+            })
             .nodeLabel(() => '')
-            .nodeThreeObject((node: any) => {
+            .nodeThreeObject((node: GraphSceneNode) => {
                 const subtitleColor = getComputedStyle(document.documentElement)
                     .getPropertyValue('--text-secondary').trim() || '#d4dae8';
                 return createMatteSphereNodeGroup(node, {
@@ -813,35 +900,32 @@ export class CRMMiniGraph extends PlatformElement {
                 });
             })
             .nodeThreeObjectExtend(false)
-            .linkColor((link: any) => (link.directed ? linkDirectedColor : linkBaseColor))
-            .linkWidth((link: any) => (link.directed ? 0.9 : 0.6))
-            .linkOpacity((link: any) => (link.directed ? 0.75 : 0.45))
-            .linkDirectionalArrowLength((link: any) => (link.directed ? 7 : 0))
+            .linkColor((link: GraphSceneLink) => (link.directed ? linkDirectedColor : linkBaseColor))
+            .linkWidth((link: GraphSceneLink) => (link.directed ? 0.9 : 0.6))
+            .linkOpacity((link: GraphSceneLink) => (link.directed ? 0.75 : 0.45))
+            .linkDirectionalArrowLength((link: GraphSceneLink) => (link.directed ? 7 : 0))
             .linkDirectionalArrowRelPos(0.88)
-            .linkDirectionalArrowColor((link: any) => (link.directed ? linkDirectedColor : linkBaseColor))
-            .linkDirectionalParticles((link: any) => (link.directed ? 2 : 0))
+            .linkDirectionalArrowColor((link: GraphSceneLink) => (link.directed ? linkDirectedColor : linkBaseColor))
+            .linkDirectionalParticles((link: GraphSceneLink) => (link.directed ? 2 : 0))
             .linkDirectionalParticleWidth(1.2)
             .linkDirectionalParticleSpeed(0.006)
             .linkThreeObjectExtend(true)
-            .linkThreeObject((link: any) => {
-                const typeKey = link.relation_type || 'related';
-                const label = this._relationshipTypeLabel(typeKey);
+            .linkThreeObject((link: GraphSceneLink) => {
+                const label = this._relationshipTypeLabel(link.relation_type);
                 return createGraphLinkLabelPlane(label, linkLabelColor, 13, 26);
             })
-            .linkPositionUpdate((mesh: any, { start, end }: { start: any; end: any }) => {
-                if (!mesh || !start || !end) {
+            .linkPositionUpdate((mesh: unknown, coords: { start: unknown; end: unknown }) => {
+                if (!isGraphPoint(coords.start) || !isGraphPoint(coords.end)) {
                     return false;
                 }
-                const cam = this._graphInstance
-                    ? this._graphInstance.cameraPosition()
-                    : null;
-                return positionGraphLinkLabelMesh(mesh, start, end, cam);
+                const camera = this._graphInstance !== null ? this._graphInstance.cameraPosition() : null;
+                return positionGraphLinkLabelMesh(mesh, coords.start, coords.end, camera);
             })
             .enableNodeDrag(true)
-            .onNodeClick((node: any) => {
+            .onNodeClick((node: GraphSceneNode) => {
                 this.emit('entity-open', { entityId: node.id });
             })
-            .onNodeDragEnd((node: any) => {
+            .onNodeDragEnd((node: GraphSceneNode) => {
                 node.fx = node.x;
                 node.fy = node.y;
                 node.fz = 0;
@@ -854,16 +938,20 @@ export class CRMMiniGraph extends PlatformElement {
             })
             .graphData({ nodes: sceneNodes, links: sceneLinks });
 
-        this._graphInstance.d3Force('flatZ', () => {
-            const inst = this._graphInstance;
-            if (!inst) {
+        const graph = this._graphInstance;
+        if (graph === null) {
+            throw new Error('crm-mini-graph: graph instance required');
+        }
+        graph.d3Force('flatZ', () => {
+            if (this._graphInstance !== graph) {
                 return;
             }
-            const gd = inst.graphData();
-            if (!gd?.nodes) {
+            const gd = graph.graphData();
+            const nodes = gd.nodes;
+            if (nodes === undefined) {
                 return;
             }
-            gd.nodes.forEach((n: any) => { n.z = 0; n.fz = 0; });
+            nodes.forEach((node) => { node.z = 0; node.fz = 0; });
         });
 
         requestAnimationFrame(() => {
@@ -887,10 +975,11 @@ export class CRMMiniGraph extends PlatformElement {
             return;
         }
         const gd = this._graphInstance.graphData();
-        if (!gd?.nodes) {
+        const nodes = gd.nodes;
+        if (nodes === undefined) {
             return;
         }
-        gd.nodes.forEach((n: any) => { n.z = 0; n.fz = 0; });
+        nodes.forEach((node) => { node.z = 0; node.fz = 0; });
     }
 
     _teardownGraphResizeObserver() {
@@ -1019,8 +1108,13 @@ export class CRMMiniGraph extends PlatformElement {
     }
 
     _onMindmapNodeDblClick(e: CustomEvent<{ node?: unknown }>) {
-        const node = e.detail && e.detail.node as Record<string, any> | null;
-        if (!node || typeof node.id !== 'string' || node.id.length === 0) {
+        const detail = e.detail;
+        const node = isPlainRecord(detail) ? detail.node : null;
+        if (!isPlainRecord(node)) {
+            return;
+        }
+        const nodeId = node.id;
+        if (typeof nodeId !== 'string' || nodeId.length === 0) {
             return;
         }
         let entityType = '';
@@ -1028,12 +1122,12 @@ export class CRMMiniGraph extends PlatformElement {
         const nodes = payload && Array.isArray(payload.nodes) ? payload.nodes : [];
         const row = nodes.find((raw) => {
             const rid = raw && (raw.entity_id || raw.id);
-            return typeof rid === 'string' && rid === node.id;
+            return typeof rid === 'string' && rid === nodeId;
         });
         if (row && typeof row.entity_type === 'string' && row.entity_type.length > 0) {
             entityType = row.entity_type;
         }
-        this.emit('entity-open', { entityId: node.id, entity_type: entityType });
+        this.emit('entity-open', { entityId: nodeId, entity_type: entityType });
     }
 
     override render(): TemplateResult {

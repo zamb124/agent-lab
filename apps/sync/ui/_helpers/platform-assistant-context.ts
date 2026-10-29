@@ -2,6 +2,10 @@ function _nonEmptyString(value: unknown) {
     return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export function buildSyncAssistantContext(routeKey: unknown, params: Record<string, unknown>, channelsState: Record<string, unknown>, threadsState: Record<string, unknown>, callUiState: Record<string, unknown>) {
     if (typeof routeKey !== 'string' || routeKey.length === 0) {
         throw new Error('buildSyncAssistantContext: routeKey required');
@@ -35,8 +39,9 @@ export function buildSyncAssistantContext(routeKey: unknown, params: Record<stri
     if (threadId !== null) {
         context.thread_id = threadId;
     }
-    if (callUiState.activeCall && typeof callUiState.activeCall === 'object') {
-        const callId = _nonEmptyString((callUiState.activeCall as Record<string, unknown>).call_id);
+    const activeCall = callUiState.activeCall;
+    if (isPlainRecord(activeCall)) {
+        const callId = _nonEmptyString(activeCall.call_id);
         if (callId !== null) {
             context.call_id = callId;
         }

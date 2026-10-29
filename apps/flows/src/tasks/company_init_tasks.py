@@ -5,7 +5,6 @@ TaskIQ задачи для инициализации компаний и system
 from pathlib import Path
 
 from apps.flows.di import Di
-from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.services.demo_company_variables import seed_demo_company_variables
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from apps.flows.src.services.hitl_demo_queue import (
@@ -162,12 +161,6 @@ async def init_company_resources(
             company_id=company_id,
             filter_public=(company_id != "system")
         )
-
-        toolkits_loaded = await AgentToolkit.bootstrap_agent_toolkits_from_registry(
-            registry_path,
-            filter_public=(company_id != "system"),
-        )
-        stats["agent_toolkits"] = toolkits_loaded
 
         seeded_variables = await seed_demo_company_variables(
             di.variables_service,

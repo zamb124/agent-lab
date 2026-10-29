@@ -17,13 +17,16 @@ const INTERNAL_HREF_TO_ROUTE = Object.freeze({
     '/products/crm':       'product-crm',
     '/products/sync':      'product-sync',
     '/products/documents': 'product-documents',
-    '/agent':              'agent-download',
     '/support':            'support',
     '/dashboard':          'dashboard',
     '/blog':               'blog',
     '/about':              'about',
     '/roadmap':            'roadmap',
 });
+
+function hasOwnKey<T extends object>(catalog: T, key: string): key is Extract<keyof T, string> {
+    return Object.prototype.hasOwnProperty.call(catalog, key);
+}
 
 export class LandingHeader extends PlatformElement {
     static i18nNamespace = 'landing';
@@ -597,6 +600,7 @@ export class LandingHeader extends PlatformElement {
     }
     declare mobileMenuOpen: boolean;
     declare productsDropdownOpen: boolean;
+    private _headerResizeObserver: ResizeObserver | null = null;
 ;
 
     constructor() {
@@ -688,12 +692,12 @@ export class LandingHeader extends PlatformElement {
         return host;
     }
 
-    _scrollToLandingSection(sectionId: Record<string, any>) {
+    _scrollToLandingSection(sectionId: string) {
         const page = this._resolveLandingPage();
         if (!page) {
             return;
         }
-        const target = page.shadowRoot?.getElementById(String(sectionId));
+        const target = page.shadowRoot?.getElementById(sectionId);
         if (!target) {
             return;
         }
@@ -701,8 +705,12 @@ export class LandingHeader extends PlatformElement {
     }
 
     _handleNavClick(e: Event) {
-        const href = (e.currentTarget as Record<string, any>).getAttribute('href');
-        if (href?.startsWith('#')) {
+        const target = e.currentTarget;
+        if (!(target instanceof Element)) {
+            throw new Error('landing-header: nav click target required');
+        }
+        const href = target.getAttribute('href');
+        if (typeof href === 'string' && href.startsWith('#')) {
             e.preventDefault();
             const sectionId = href.slice(1);
             if (this._resolveLandingPage()) {
@@ -711,12 +719,9 @@ export class LandingHeader extends PlatformElement {
                 storePendingLandingSectionTarget(sectionId);
                 this.navigate('landing');
             }
-        } else {
-            const routeKey = (INTERNAL_HREF_TO_ROUTE as Record<string, string>)[href];
-            if (routeKey) {
-                e.preventDefault();
-                this._navigateRoute(routeKey);
-            }
+        } else if (typeof href === 'string' && hasOwnKey(INTERNAL_HREF_TO_ROUTE, href)) {
+            e.preventDefault();
+            this._navigateRoute(INTERNAL_HREF_TO_ROUTE[href]);
         }
         this._closeMobileMenu();
         this._closeProductsDropdown();
@@ -740,17 +745,18 @@ export class LandingHeader extends PlatformElement {
     }
 
     override firstUpdated() {
-        (this as Record<string, any>)._headerResizeObserver = new ResizeObserver(() => {
+        this._headerResizeObserver = new ResizeObserver(() => {
             this._syncLandingHeaderHeight();
         });
-        (this as Record<string, any>)._headerResizeObserver.observe(this);
+        this._headerResizeObserver.observe(this);
         this._syncLandingHeaderHeight();
     }
 
     override disconnectedCallback(): void {
         document.removeEventListener('click', this._handleOutsideClick);
-        if ((this as Record<string, any>)._headerResizeObserver !== undefined) {
-            (this as Record<string, any>)._headerResizeObserver.disconnect();
+        if (this._headerResizeObserver !== null) {
+            this._headerResizeObserver.disconnect();
+            this._headerResizeObserver = null;
         }
         super.disconnectedCallback();
     }
@@ -846,15 +852,6 @@ export class LandingHeader extends PlatformElement {
                                     <span class="nav-dropdown-item-desc">${h('product_documents_desc')}</span>
                                 </div>
                             </a>
-                            <a href="/agent" class="nav-dropdown-item" @click=${this._handleNavClick}>
-                                <div class="nav-dropdown-item-icon">
-                                    <img src="/static/core/assets/service_logos/humanitec_agent_logo.svg" alt=${h('product_humanitec_agent_title')} />
-                                </div>
-                                <div class="nav-dropdown-item-content">
-                                    <span class="nav-dropdown-item-title">${h('product_humanitec_agent_title')}</span>
-                                    <span class="nav-dropdown-item-desc">${h('product_humanitec_agent_desc')}</span>
-                                </div>
-                            </a>
                         </div>
                     </div>
                     <a href="/documentation" class="nav-link">${h('docs')}</a>
@@ -944,12 +941,6 @@ export class LandingHeader extends PlatformElement {
                             <img src="/static/core/assets/service_logos/documents_logo.svg" alt=${h('product_documents_title')} />
                         </div>
                         ${h('product_documents_title')}
-                    </a>
-                    <a href="/agent" class="mobile-product-link" @click=${this._handleNavClick}>
-                        <div class="mobile-product-icon">
-                            <img src="/static/core/assets/service_logos/humanitec_agent_logo.svg" alt=${h('product_humanitec_agent_title')} />
-                        </div>
-                        ${h('product_humanitec_agent_title')}
                     </a>
                 </div>
                 

@@ -56,7 +56,7 @@ class SyncChannel(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_by_name_in_namespace(
+    async def list_by_name_in_namespace_asc(
         cls,
         namespace: str,
         *,
@@ -64,14 +64,14 @@ class SyncChannel(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
-        """Каналы компании в namespace, ORDER BY name, окно limit и offset."""
+        """Каналы компании в namespace, ORDER BY name ASC, окно limit и offset."""
         return await cls.objects.filter(
             company_id=company_id,
             namespace=namespace,
         ).order_by("name").limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_member_channels_by_type_and_name(
+    async def list_member_channels_by_type_and_name_asc(
         cls,
         user_id: str,
         *,
@@ -80,7 +80,7 @@ class SyncChannel(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
-        """Каналы компании, где user_id участник, ORDER BY type, name, окно limit и offset. namespace None не фильтрует. Нет участия — []."""
+        """Каналы компании, где user_id участник, ORDER BY type, name ASC, окно limit и offset. namespace None не фильтрует. Нет участия — []."""
         member_rows = await SyncChannelMember.objects.filter(
             company_id=company_id,
             user_id=user_id,
@@ -97,7 +97,7 @@ class SyncChannel(PlatformModel):
         return await rows.order_by("type", "name").limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_for_both_members(
+    async def list_for_both_members_by_type_and_name_asc(
         cls,
         user_id_a: str,
         user_id_b: str,
@@ -106,7 +106,7 @@ class SyncChannel(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
-        """Каналы компании, где оба user_id есть среди участников. Порядок — type, затем name. Окно limit и offset. Нет общего канала — []."""
+        """Каналы компании, где оба user_id есть среди участников, ORDER BY type, name ASC. Окно limit и offset. Списки участников без порядка. Нет общего канала — []. limit и offset в теле не проверяются."""
         rows_a = await SyncChannelMember.objects.filter(
             company_id=company_id,
             user_id=user_id_a,
@@ -125,14 +125,14 @@ class SyncChannel(PlatformModel):
         ).order_by("type", "name").limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_by_name(
+    async def list_by_name_asc(
         cls,
         company_id: str,
         query: str,
         *,
         limit: int,
     ) -> list[Self]:
-        """Каналы компании по порядку name, не больше limit. Пустой query не фильтрует имя."""
+        """Каналы компании, ORDER BY name ASC, не больше limit. Пустой query не фильтрует имя."""
         rows = cls.objects.filter(company_id=company_id)
         if query != "":
             rows = rows.filter(name__icontains=query)
@@ -160,8 +160,8 @@ class SyncChannel(PlatformModel):
         ).update(using="sync", pinned_message_ids=message_ids)
 
     @classmethod
-    async def list_all_by_channel_id(cls, *, limit: int | None) -> list[Self]:
-        """Все каналы, ORDER BY channel_id. limit is None не ограничивает."""
+    async def list_all_by_channel_id_asc(cls, *, limit: int | None) -> list[Self]:
+        """Все каналы, ORDER BY channel_id ASC. limit is None не ограничивает."""
         ordered = cls.objects.order_by("channel_id")
         if limit is None:
             return await ordered.all()

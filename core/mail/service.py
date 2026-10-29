@@ -463,7 +463,7 @@ class MailService:
     async def list_my_bindings(self, company_id: str | None = None) -> list[MailboxBinding]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
         user_id = self._active_user_id()
-        candidates = await MailboxBinding.list_by_email_address_for_company(resolved_company_id)
+        candidates = await MailboxBinding.list_for_company_by_email_address_asc(resolved_company_id)
         if not candidates:
             return []
         checks = [
@@ -484,7 +484,7 @@ class MailService:
 
     async def list_bindings(self, company_id: str | None = None) -> list[MailboxBinding]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        return await MailboxBinding.list_by_email_address_for_company(resolved_company_id)
+        return await MailboxBinding.list_for_company_by_email_address_asc(resolved_company_id)
 
     async def get_or_create_user_binding(
         self,
@@ -497,7 +497,7 @@ class MailService:
         if not user_id.strip():
             raise ValueError("user_id is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        existing_list = await MailboxBinding.list_user_kind_by_default_and_email(
+        existing_list = await MailboxBinding.list_user_kind_by_default_desc_and_email_asc(
             resolved_company_id, user_id
         )
         if existing_list:
@@ -551,7 +551,7 @@ class MailService:
         updated = binding.model_copy(
             update={"is_default": True, "updated_at": utcnow()}
         )
-        return await MailboxBinding.upsert_by_email(updated)
+        return await MailboxBinding.upsert_by_company_and_email(updated)
 
     async def patch_binding(
         self,
@@ -681,7 +681,7 @@ class MailService:
                 "updated_at": utcnow(),
             }
         )
-        stored = await MailboxBinding.upsert_by_email(updated)
+        stored = await MailboxBinding.upsert_by_company_and_email(updated)
         if (
             payload.user_id is not None
             and stored.kind == MailboxBindingKind.USER
@@ -696,7 +696,7 @@ class MailService:
                     company_id=resolved_company_id,
                 )
             except Exception:
-                _ = await MailboxBinding.upsert_by_email(binding)
+                _ = await MailboxBinding.upsert_by_company_and_email(binding)
                 if previous_owner_user_id is not None:
                     await self._clear_binding_tuples(stored.mailbox_binding_id)
                     await self._write_binding_owner(
@@ -710,7 +710,7 @@ class MailService:
             and stored.kind == MailboxBindingKind.USER
             and stored.user_id is not None
         ):
-            existing_for_user = await MailboxBinding.list_user_kind_by_default_and_email(
+            existing_for_user = await MailboxBinding.list_user_kind_by_default_desc_and_email_asc(
                 resolved_company_id, stored.user_id
             )
             if len(existing_for_user) == 1 and not stored.is_default:
@@ -747,7 +747,7 @@ class MailService:
             detail = health.detail if health.detail is not None else "imap/smtp login failed"
             raise MailConfigError(f"personal mailbox healthcheck failed: {detail}")
 
-        existing = await MailboxBinding.by_email(
+        existing = await MailboxBinding.by_company_and_email(
             resolved_company_id, email_address
         )
         now = utcnow()
@@ -787,7 +787,7 @@ class MailService:
                     "updated_at": now,
                 }
             )
-            stored = await MailboxBinding.upsert_by_email(updated)
+            stored = await MailboxBinding.upsert_by_company_and_email(updated)
             _ = await self.refresh_folders_from_imap(
                 stored.mailbox_binding_id,
                 company_id=resolved_company_id,
@@ -825,7 +825,7 @@ class MailService:
         )
         _ = await CompanyMailConnection.upsert_by_company_mail_connection_id(connection)
 
-        existing_for_user = await MailboxBinding.list_user_kind_by_default_and_email(
+        existing_for_user = await MailboxBinding.list_user_kind_by_default_desc_and_email_asc(
             resolved_company_id, acting_user_id
         )
         is_default = len(existing_for_user) == 0
@@ -855,7 +855,7 @@ class MailService:
                 acting_user_id,
                 except_binding_id=binding.mailbox_binding_id,
             )
-        stored = await MailboxBinding.upsert_by_email(binding)
+        stored = await MailboxBinding.upsert_by_company_and_email(binding)
         try:
             await self._write_binding_owner(
                 stored.mailbox_binding_id,
@@ -863,7 +863,7 @@ class MailService:
                 company_id=resolved_company_id,
             )
         except Exception:
-            _ = await MailboxBinding.delete_in_company(
+            _ = await MailboxBinding.delete_by_company_and_binding(
                 resolved_company_id, stored.mailbox_binding_id
             )
             raise
@@ -1026,7 +1026,7 @@ class MailService:
                 "updated_at": utcnow(),
             }
         )
-        return await MailboxBinding.upsert_by_email(updated)
+        return await MailboxBinding.upsert_by_company_and_email(updated)
 
     async def _autolink_company_mailbox_calendar(
         self,
@@ -1248,7 +1248,7 @@ class MailService:
             raise ValueError(f"Invalid local_part={local_part!r}")
 
         email_address = f"{local_part}@{connection.mail_domain}"
-        existing = await MailboxBinding.by_email(resolved_company_id, email_address)
+        existing = await MailboxBinding.by_company_and_email(resolved_company_id, email_address)
         target_user_id = (
             payload.user_id if payload.kind == MailboxBindingKind.USER else None
         )
@@ -1303,7 +1303,7 @@ class MailService:
                         "updated_at": utcnow(),
                     }
                 )
-                stored_repaired = await MailboxBinding.upsert_by_email(repaired)
+                stored_repaired = await MailboxBinding.upsert_by_company_and_email(repaired)
                 return await self._autolink_company_mailbox_calendar(
                     binding=stored_repaired,
                     connection=connection,
@@ -1364,7 +1364,7 @@ class MailService:
             elif payload.is_default is False:
                 is_default = False
             else:
-                siblings = await MailboxBinding.list_user_kind_by_default_and_email(
+                siblings = await MailboxBinding.list_user_kind_by_default_desc_and_email_asc(
                     resolved_company_id, target_user_id
                 )
                 sibling_ids = {item.mailbox_binding_id for item in siblings}
@@ -1401,7 +1401,7 @@ class MailService:
             created_at=existing.created_at if existing is not None else now,
             updated_at=now,
         )
-        stored = await MailboxBinding.upsert_by_email(binding)
+        stored = await MailboxBinding.upsert_by_company_and_email(binding)
         owner_user_id = (
             stored.user_id if stored.user_id is not None else self._active_user_id()
         )
@@ -1413,7 +1413,7 @@ class MailService:
             )
         except Exception:
             if existing is None:
-                _ = await MailboxBinding.delete_in_company(
+                _ = await MailboxBinding.delete_by_company_and_binding(
                     resolved_company_id, stored.mailbox_binding_id
                 )
             raise
@@ -1422,7 +1422,7 @@ class MailService:
             and previous_was_default
             and previous_user_id != target_user_id
         ):
-            remaining = await MailboxBinding.list_user_kind_by_default_and_email(
+            remaining = await MailboxBinding.list_user_kind_by_default_desc_and_email_asc(
                 resolved_company_id, previous_user_id
             )
             if remaining and not any(item.is_default for item in remaining):
@@ -1468,7 +1468,7 @@ class MailService:
                 raise MailPermissionError(
                     f"admin required to unbind mailbox_binding_id={mailbox_binding_id}"
                 )
-        deleted = await MailboxBinding.delete_in_company(resolved_company_id, mailbox_binding_id)
+        deleted = await MailboxBinding.delete_by_company_and_binding(resolved_company_id, mailbox_binding_id)
         if not deleted:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._clear_binding_tuples(mailbox_binding_id)
@@ -1482,7 +1482,7 @@ class MailService:
             and binding.user_id is not None
             and binding.is_default
         ):
-            remaining = await MailboxBinding.list_user_kind_by_default_and_email(
+            remaining = await MailboxBinding.list_user_kind_by_default_desc_and_email_asc(
                 resolved_company_id, binding.user_id
             )
             if remaining:
@@ -1501,7 +1501,7 @@ class MailService:
         if not user_id.strip():
             raise ValueError("user_id is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        bindings = await MailboxBinding.list_user_kind_by_default_and_email(resolved_company_id, user_id)
+        bindings = await MailboxBinding.list_user_kind_by_default_desc_and_email_asc(resolved_company_id, user_id)
         for binding in bindings:
             connection = await self._connection_for_binding(binding)
             if connection is not None and connection.scope == MailConnectionScope.PERSONAL:
@@ -1530,7 +1530,7 @@ class MailService:
         before_uid: int | None = None
         if payload.cursor is not None and payload.cursor.strip():
             before_date, before_uid = decode_mail_list_cursor(payload.cursor)
-        page = await StoredMailMessage.list_folder_page(
+        page = await StoredMailMessage.list_for_folder_by_date_at_and_uid_desc_over_limit(
             payload.mailbox_binding_id,
             folder=payload.folder,
             limit=payload.limit,
@@ -1573,7 +1573,7 @@ class MailService:
         before_uid: int | None = None
         if payload.cursor is not None and payload.cursor.strip():
             before_date, before_uid = decode_mail_list_cursor(payload.cursor)
-        page = await StoredMailMessage.list_query_page(
+        page = await StoredMailMessage.list_query_matches_by_date_at_and_uid_desc_over_limit(
             payload.mailbox_binding_id,
             q=payload.q,
             folder=payload.folder,
@@ -1632,7 +1632,7 @@ class MailService:
         folders_result: MailFolderListResult,
     ) -> None:
         now = utcnow()
-        existing = await StoredMailboxFolder.list_for_binding(binding.mailbox_binding_id)
+        existing = await StoredMailboxFolder.list_for_binding_by_sort_index_and_folder_name_asc(binding.mailbox_binding_id)
         existing_index = {item.folder_name: item.sort_index for item in existing}
         is_bootstrap = len(existing) == 0
         if is_bootstrap:
@@ -1707,7 +1707,7 @@ class MailService:
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         await self._require_binding_access(binding, company_id=resolved_company_id)
-        stored = await StoredMailboxFolder.list_for_binding(mailbox_binding_id)
+        stored = await StoredMailboxFolder.list_for_binding_by_sort_index_and_folder_name_asc(mailbox_binding_id)
         if not stored:
             return MailFolderListResult(folders=[], stale=True, needs_sync=True)
         return self._folder_list_from_stored(stored, stale=False)
@@ -1837,7 +1837,7 @@ class MailService:
         )
         if anchor is None:
             raise MailMessageNotFoundError(payload.mailbox_binding_id, payload.uid)
-        thread_rows = await StoredMailMessage.list_by_date_at_and_uid(
+        thread_rows = await StoredMailMessage.list_for_thread_by_date_at_and_uid_asc(
             payload.mailbox_binding_id,
             thread_id=anchor.thread_id,
         )
@@ -2324,7 +2324,7 @@ class MailService:
             message_id=append_result.message_id,
         )
 
-    async def list_binding_members(
+    async def list_binding_members_by_user_id_asc(
         self,
         mailbox_binding_id: str,
         *,
@@ -2763,7 +2763,7 @@ class MailService:
                 raise MailConfigError(
                     f"mail.local_dev.mailbox_passwords[{email!r}] must be non-empty"
                 )
-            binding = await MailboxBinding.by_email(SYSTEM_COMPANY_ID, email)
+            binding = await MailboxBinding.by_company_and_email(SYSTEM_COMPANY_ID, email)
             if binding is None:
                 continue
             updated = binding.model_copy(
@@ -2772,7 +2772,7 @@ class MailService:
                     "updated_at": utcnow(),
                 }
             )
-            _ = await MailboxBinding.upsert_by_email(updated)
+            _ = await MailboxBinding.upsert_by_company_and_email(updated)
             applied += 1
         if applied > 0:
             logger.info(
@@ -2821,7 +2821,7 @@ class MailService:
         limit: int,
         auth_error_cooldown_seconds: int,
     ) -> list[MailboxBinding]:
-        return await MailboxBinding.list_sync_candidates(
+        return await MailboxBinding.list_sync_ready_by_last_synced_at_asc(
             limit=limit,
             auth_error_cooldown_seconds=auth_error_cooldown_seconds,
             folder=INBOX_FOLDER,
@@ -2980,7 +2980,7 @@ class MailService:
             if folder_bootstrap:
                 if is_inbox:
                     inbox_bootstrap = True
-                _ = await StoredMailMessage.delete_folder(
+                _ = await StoredMailMessage.delete_by_binding_and_folder(
                     binding.mailbox_binding_id, folder=folder_name
                 )
                 recent = await port.fetch_messages(
@@ -3048,7 +3048,7 @@ class MailService:
                 if is_inbox:
                     inbox_notify.extend(new_messages)
 
-            local_rows = await StoredMailMessage.list_folder(
+            local_rows = await StoredMailMessage.list_for_folder_by_date_at_and_uid_desc(
                 binding.mailbox_binding_id,
                 folder=folder_name,
                 limit=500,
@@ -3184,7 +3184,7 @@ class MailService:
                 criteria=MailUidSearchCriteria(all_messages=True),
             )
         }
-        local_uids = await StoredMailMessage.list_uids(
+        local_uids = await StoredMailMessage.list_unordered_uids_for_folder(
             binding.mailbox_binding_id, folder=folder
         )
         orphans = [uid for uid in local_uids if uid not in remote_uids and uid > 0]
@@ -3691,7 +3691,7 @@ class MailService:
                 raise MailConfigError("mail.system.role_mailboxes contains empty local_part")
             email_address = f"{local_part}@{connection.mail_domain}"
             if inventory:
-                existing = await MailboxBinding.by_email(
+                existing = await MailboxBinding.by_company_and_email(
                     SYSTEM_COMPANY_ID, email_address
                 )
                 if existing is not None:
@@ -3724,7 +3724,7 @@ class MailService:
         missing_password: list[str] = []
         inventory = self._local_dev_requires_known_password()
         for user_id in company.members:
-            existing = await MailboxBinding.preferred_for_user(SYSTEM_COMPANY_ID, user_id)
+            existing = await MailboxBinding.find_default_or_first_by_email_for_user(SYSTEM_COMPANY_ID, user_id)
             if existing is not None:
                 ensured.append(existing.email_address)
                 continue
@@ -3746,7 +3746,7 @@ class MailService:
                 company_id=SYSTEM_COMPANY_ID,
             )
             ensured.append(binding.email_address)
-        listed = await MailboxBinding.list_by_email_address_for_company(SYSTEM_COMPANY_ID)
+        listed = await MailboxBinding.list_for_company_by_email_address_asc(SYSTEM_COMPANY_ID)
         for binding in listed:
             if binding.kind != MailboxBindingKind.USER:
                 continue

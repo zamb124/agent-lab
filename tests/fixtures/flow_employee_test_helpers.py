@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from apps.flows.di import FlowsDi
-
 from apps.flows.src.models import Edge, FlowConfig, FlowEmployeeConfig
 from core.identity.flow_employee import (
     deactivate_flow_employee,

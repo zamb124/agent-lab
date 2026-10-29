@@ -6,24 +6,42 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-function stringValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+interface EvaluationTemplate {
+    id: string;
+    category: string;
+    icon: string;
+    name: string;
+    description: string;
+}
+
+function isEvaluationTemplate(value: unknown): value is EvaluationTemplate {
+    return isPlainRecord(value)
+        && typeof value.id === 'string'
+        && typeof value.category === 'string'
+        && typeof value.icon === 'string'
+        && typeof value.name === 'string'
+        && typeof value.description === 'string';
+}
+
+function stringValue(record: unknown, field: string) {
+    if (!isPlainRecord(record)) {
         return '';
     }
     const value = record[field];
     return typeof value === 'string' ? value : '';
 }
 
-function numberValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function numberValue(record: unknown, field: string) {
+    if (!isPlainRecord(record)) {
         return 0;
     }
     const value = record[field];
     return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function isRunning(run: any) {
+function isRunning(run: unknown) {
     const state = stringValue(run, 'state');
     return state === 'queued' || state === 'running';
 }
@@ -44,10 +62,10 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
         _templatesOpen: { state: true },
     }
     declare branchId: string;
-    declare selectedSuite: Record<string, any> | null;
-    declare selectedCase: Record<string, any> | null;
-    declare selectedRun: Record<string, any> | null;
-    declare caseTemplates: any[];
+    declare selectedSuite: Record<string, unknown> | null;
+    declare selectedCase: Record<string, unknown> | null;
+    declare selectedRun: Record<string, unknown> | null;
+    declare caseTemplates: unknown[];
     declare runScope: string;
     declare trials: number;
     declare maxConcurrency: number;
@@ -366,11 +384,14 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
         this._templatesOpen = false;
     }
 
-    _setScope(scope: any) {
+    _setScope(scope: unknown) {
+        if (typeof scope !== 'string' || scope.length === 0) {
+            throw new Error('flows-evaluation-run-toolbar: scope required');
+        }
         this.emit('scope-change', { scope });
     }
 
-    _scopeItems(caseScopeDisabled: any) {
+    _scopeItems(caseScopeDisabled: boolean) {
         return [
             {
                 value: 'suite',
@@ -386,12 +407,12 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
         ];
     }
 
-    _stepTrials(delta: any) {
+    _stepTrials(delta: number) {
         const next = Math.max(1, Math.trunc(this.trials) + delta);
         this.emit('options-change', { trials: next, max_concurrency: this.maxConcurrency });
     }
 
-    _stepConcurrency(delta: any) {
+    _stepConcurrency(delta: number) {
         const next = Math.max(1, Math.trunc(this.maxConcurrency) + delta);
         this.emit('options-change', { trials: this.trials, max_concurrency: next });
     }
@@ -420,7 +441,7 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
         this._templatesOpen = false;
     }
 
-    _createFromTemplate(templateId: any) {
+    _createFromTemplate(templateId: string) {
         this._templatesOpen = false;
         this.emit('template-create-request', { template_id: templateId });
     }
@@ -531,8 +552,8 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
     }
 
     _renderTemplatesMenu() {
-        const templates = Array.isArray(this.caseTemplates) ? this.caseTemplates : [];
-        const groups = [
+        const templates = this.caseTemplates.filter(isEvaluationTemplate);
+        const groups: Array<[string, string]> = [
             ['deterministic', this.t('evaluation.templates.group_deterministic')],
             ['quality', this.t('evaluation.templates.group_quality')],
             ['safety', this.t('evaluation.templates.group_safety')],
@@ -557,13 +578,13 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                         <platform-icon name="close" size="12"></platform-icon>
                     </platform-button>
                 </div>
-                ${groups.map(([groupId, label]) => this._renderTemplateGroup(groupId as string, label, templates))}
+                ${groups.map(([groupId, label]) => this._renderTemplateGroup(groupId, label, templates))}
             </div>
         `;
     }
 
-    _renderTemplateGroup(groupId: any, label: any, templates: any) {
-        const items = templates.filter((template: any) => template.category === groupId);
+    _renderTemplateGroup(groupId: string, label: string, templates: readonly EvaluationTemplate[]) {
+        const items = templates.filter((template) => template.category === groupId);
         if (items.length === 0) {
             return '';
         }
@@ -573,19 +594,19 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                     <platform-icon name="list" size="12"></platform-icon>
                     ${label}
                 </div>
-                ${items.map((template: any) => this._renderTemplateItem(template))}
+                ${items.map((template) => this._renderTemplateItem(template))}
             </section>
         `;
     }
 
-    _onSelectableKeydown(e: KeyboardEvent, handler: any) {
+    _onSelectableKeydown(e: KeyboardEvent, handler: () => void) {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             handler.call(this);
         }
     }
 
-    _renderTemplateItem(template: any) {
+    _renderTemplateItem(template: EvaluationTemplate) {
         return html`
             <article
                 class="template-item"
@@ -603,7 +624,7 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
         `;
     }
 
-    _renderStepper(label: string, value: unknown, increment: any, decrement: any) {
+    _renderStepper(label: string, value: unknown, increment: () => void, decrement: () => void) {
         return html`
             <div class="stepper">
                 <span class="step-copy">

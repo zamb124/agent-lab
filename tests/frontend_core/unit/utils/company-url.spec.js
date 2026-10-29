@@ -20,7 +20,6 @@ const LINNEX_BRAND = {
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
     apexOrigin: 'https://linnex.io/',
     supportedDomains: ['linnex.io', 'humanitec.ru'],
-    agentProductName: 'LinnexAgent',
     modelsProductName: 'Linnex Models',
     voiceProductName: 'Linnex Voice',
     llmsDisplayLabel: 'Linnex LLMs',

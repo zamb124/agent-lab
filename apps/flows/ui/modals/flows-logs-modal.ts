@@ -29,7 +29,7 @@ function arrayField(value: unknown, field: string): unknown[] {
  * @param {unknown[]} roots
  * @returns {string}
  */
-function _traceIdFromFirstRoot(roots: any) {
+function _traceIdFromFirstRoot(roots: unknown): string {
     if (!Array.isArray(roots) || roots.length === 0) {
         return '';
     }
@@ -49,7 +49,7 @@ function _traceIdFromFirstRoot(roots: any) {
  * @param {unknown[]} roots
  * @returns {string}
  */
-function _traceIdFromLatestRoot(roots: any) {
+function _traceIdFromLatestRoot(roots: unknown): string {
     if (!Array.isArray(roots) || roots.length === 0) {
         return '';
     }
@@ -85,7 +85,7 @@ function _traceIdFromLatestRoot(roots: any) {
  * @param {string} taskId
  * @returns {string}
  */
-function _traceIdFromTreeMatchingTask(roots: any, taskId: any) {
+function _traceIdFromTreeMatchingTask(roots: unknown, taskId: string): string {
     if (!Array.isArray(roots) || roots.length === 0) {
         return '';
     }
@@ -121,7 +121,7 @@ function _traceIdFromTreeMatchingTask(roots: any, taskId: any) {
  * @param {string} preferredTaskId
  * @returns {string}
  */
-function _traceIdFromSessionTreeForLogs(roots: any, preferredTaskId: any) {
+function _traceIdFromSessionTreeForLogs(roots: unknown, preferredTaskId: string): string {
     const byTask = _traceIdFromTreeMatchingTask(roots, preferredTaskId);
     if (byTask.length > 0) {
         return byTask;
@@ -223,7 +223,7 @@ export class FlowsLogsModal extends PlatformModal {
     private _bySessionTraces: OpController;
     private _guestLogs: OpController;
     private _lastLogsLoadKey: string;
-    private _pollTimer: any;
+    private _pollTimer: ReturnType<typeof setTimeout> | null;
 
     constructor() {
         super();
@@ -408,7 +408,7 @@ export class FlowsLogsModal extends PlatformModal {
             if (flowId.length === 0 || nodeId.length === 0) {
                 throw new Error('flows-logs-modal: flowId and nodeId required for guest_runtime');
             }
-            const payload: any = { flow_id: flowId, node_id: nodeId };
+            const payload: Record<string, string> = { flow_id: flowId, node_id: nodeId };
             const taskId = typeof this.taskId === 'string' ? this.taskId : '';
             if (taskId.length > 0) {
                 payload.task_id = taskId;
@@ -499,7 +499,15 @@ export class FlowsLogsModal extends PlatformModal {
         hasUser,
         resolving,
         traceTitle,
-    }: any) {
+    }: {
+        hasSession: boolean;
+        hasTraceResolver: boolean;
+        hasRequest: boolean;
+        hasSpan: boolean;
+        hasUser: boolean;
+        resolving: boolean;
+        traceTitle: string;
+    }) {
         return [
             {
                 value: 'session',
@@ -531,8 +539,8 @@ export class FlowsLogsModal extends PlatformModal {
         ];
     }
 
-    _mapGuestLogEntries(data: any) {
-        if (data === null || typeof data !== 'object') {
+    _mapGuestLogEntries(data: unknown) {
+        if (!isPlainRecord(data)) {
             throw new Error('flows-logs-modal: guest logs payload required');
         }
         const items = data.items;
@@ -727,7 +735,7 @@ export class FlowsLogsModal extends PlatformModal {
         this._restartPolling();
     }
 
-    _waitingForLogs(entries: any, busy: any, resolving: any) {
+    _waitingForLogs(entries: readonly unknown[], busy: boolean, resolving: boolean) {
         if (entries.length > 0 || !this._hasLoadTarget()) {
             return false;
         }

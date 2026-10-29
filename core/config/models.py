@@ -2219,49 +2219,6 @@ class GuestRuntimeFarmConfig(BaseModel):
         return self
 
 
-class AgentReleaseSettings(BaseModel):
-    """Источник артефактов LinnexAgent для download redirect."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    github_owner: str = Field(default="zamb124", description="GitHub org/user releases")
-    github_repo: str = Field(default="agent-lab", description="GitHub repo с артефактами")
-    github_api_base_url: str | None = Field(
-        default=None,
-        description="Override GitHub API base; default https://api.github.com",
-    )
-    github_token: str | None = Field(
-        default=None,
-        description="PAT для GitHub Releases API; обязателен для private repo",
-    )
-    source: str = Field(
-        default="",
-        description="github — GitHub Releases API; local — dist/ артефакт; пусто — local при testing, иначе github",
-    )
-
-
-class AgentSettings(BaseModel):
-    """Настройки LinnexAgent (pairing, tunnel, releases)."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    releases: AgentReleaseSettings = Field(default_factory=AgentReleaseSettings)
-    pairing_ttl_seconds: int = Field(default=600, ge=60, le=3600)
-    tunnel_online_ttl_seconds: int = Field(default=120, ge=30, le=3600)
-    pairing_rate_limit_per_hour: int = Field(default=20, ge=1, le=200)
-    register_rate_limit_per_hour: int = Field(default=60, ge=1, le=500)
-    session_ttl_seconds: int = Field(
-        default=86400,
-        ge=300,
-        le=2592000,
-        description="TTL sticky A2A context_id Platform MCP сессии (MCP-сессия + flow), сек",
-    )
-    llm_proxy_use_mock_auto: bool = Field(
-        default=False,
-        description="E2E: модель auto в LLM proxy резолвится в mock, а не в humanitec",
-    )
-
-
 class CodeRunnerSettings(BaseModel):
     """Пул и каталоги кэша code runner. Пустые пути — `<repo>/.cache`."""
 
@@ -2411,7 +2368,7 @@ class SpeechToChatConfig(BaseModel):
     segment_http_download_timeout_seconds: float = Field(
         default=120.0,
         ge=10.0,
-        description="Таймаут httpx при скачивании байт сегмента по URL (не S3 SDK).",
+        description="Таймаут httpx2 при скачивании байт сегмента по URL (не S3 SDK).",
     )
     s3_segment_list_page_size: int = Field(
         default=128,
@@ -2537,7 +2494,6 @@ class PlatformBrandConfig(BaseModel):
 
     platform_name: str
     support_email: str
-    agent_product_name: str
     models_product_name: str
     voice_product_name: str
     llms_display_label: str
@@ -2556,7 +2512,6 @@ def _default_humanitec_platform_brand() -> PlatformBrandConfig:
     return PlatformBrandConfig(
         platform_name="Humanitec",
         support_email="helpme@humanitec.ru",
-        agent_product_name="HumanitecAgent",
         models_product_name="Humanitec Models",
         voice_product_name="Humanitec Voice",
         llms_display_label="Humanitec LLMs",
@@ -2573,7 +2528,6 @@ def _default_linnex_platform_brand() -> PlatformBrandConfig:
     return PlatformBrandConfig(
         platform_name="Linnex",
         support_email="info@linnex.io",
-        agent_product_name="LinnexAgent",
         models_product_name="Linnex Models",
         voice_product_name="Linnex Voice",
         llms_display_label="Linnex LLMs",

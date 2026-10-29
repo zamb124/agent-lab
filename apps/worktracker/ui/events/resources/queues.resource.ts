@@ -24,12 +24,41 @@ import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import { isJsonObject } from '@platform/lib/utils/json-object.js';
 
-interface MembersListPayload {
-    result?: unknown;
-    request?: { work_queue_id?: unknown; member?: WorkQueueActor };
-    [key: string]: unknown;
-}
 const WORK_QUEUE_MEMBER_REMOVE_SUCCEEDED = 'worktracker/work_queue_member_remove/succeeded';
+
+function isWorkQueueMember(value: unknown): value is WorkQueueMember {
+    return isJsonObject(value);
+}
+
+function isWorkQueueActor(value: unknown): value is WorkQueueActor {
+    return isJsonObject(value);
+}
+
+function memberList(value: unknown): WorkQueueMember[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const rows: WorkQueueMember[] = [];
+    for (const item of value) {
+        if (!isWorkQueueMember(item)) {
+            throw new Error('workQueueMembersListOp: member list item must be an object');
+        }
+        rows.push(item);
+    }
+    return rows;
+}
+
+function listedQueueId(state: AsyncOpSlice): unknown {
+    const lastRequest = state.lastRequest;
+    if (lastRequest === null) {
+        return null;
+    }
+    const requestPayload = lastRequest.payload;
+    if (!isJsonObject(requestPayload)) {
+        return null;
+    }
+    return requestPayload.work_queue_id;
+}
 
 function _sameActor(left: WorkQueueActor | undefined, right: WorkQueueActor | undefined): boolean {
     if (!left || !right || left.actor_kind !== right.actor_kind) {
@@ -54,33 +83,36 @@ export const workQueueMembersListOp = createAsyncOp({
         if (!isJsonObject(event.payload)) {
             throw new Error(`workQueueMembersListOp: ${event.type} payload object required`);
         }
-        const payload = event.payload as MembersListPayload;
-        const items = Array.isArray(state.items) ? state.items as WorkQueueMember[] : [];
-        const lastRequest = state.lastRequest as { payload?: { work_queue_id?: unknown } } | undefined;
+        const payload = event.payload;
+        const items = memberList(state.items);
+        const queueId = listedQueueId(state);
         if (event.type === events.SUCCEEDED) {
-            const result = payload.result as { items?: unknown } | undefined;
-            if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
+            const result = payload.result;
+            if (!isJsonObject(result) || !Array.isArray(result.items)) {
                 throw new Error('workQueueMembersListOp: expected {items: member[]}');
             }
-            return { ...state, items: result.items as WorkQueueMember[] };
+            return { ...state, items: memberList(result.items) };
         }
-        const listedQueueId = lastRequest && lastRequest.payload
-            ? lastRequest.payload.work_queue_id
-            : null;
         if (event.type === WORK_QUEUE_MEMBER_ADD_SUCCEEDED) {
-            const member = payload.result as WorkQueueMember | undefined;
-            if (!member || member.work_queue_id !== listedQueueId) {
+            const member = payload.result;
+            if (!isWorkQueueMember(member) || member.work_queue_id !== queueId) {
                 return state;
             }
-            const rest = items.filter((item) => !_sameActor(item.member, member.member));
+            const added = member.member;
+            const actor = isWorkQueueActor(added) ? added : undefined;
+            const rest = items.filter((item) => !_sameActor(item.member, actor));
             return { ...state, items: [...rest, member] };
         }
         if (event.type === WORK_QUEUE_MEMBER_REMOVE_SUCCEEDED) {
             const request = payload.request;
-            if (!request || request.work_queue_id !== listedQueueId || !request.member) {
+            if (!isJsonObject(request) || request.work_queue_id !== queueId) {
                 return state;
             }
-            return { ...state, items: items.filter((item) => !_sameActor(item.member, request.member)) };
+            const removed = request.member;
+            if (!isWorkQueueActor(removed)) {
+                return state;
+            }
+            return { ...state, items: items.filter((item) => !_sameActor(item.member, removed)) };
         }
         return state;
     },

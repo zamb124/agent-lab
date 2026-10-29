@@ -55,7 +55,11 @@ export class FrontendEditApiKeyModal extends PlatformFormModal {
         super.willUpdate(changed);
         this.title = this.t('api_key_edit_modal.header');
         if (changed.has('item') && this.item) {
-            this._name = (this.item as Record<string, any>).name as string;
+            const name = this.item.name;
+            if (typeof name !== 'string') {
+                throw new Error('api key edit: name required');
+            }
+            this._name = name;
         }
     }
 
@@ -68,7 +72,11 @@ export class FrontendEditApiKeyModal extends PlatformFormModal {
     override async handleSubmit() {
         if (!this.item) return;
         const next = this._name.trim();
-        if (!next || next === (this.item as Record<string, any>).name) {
+        const currentName = this.item.name;
+        if (typeof currentName !== 'string') {
+            throw new Error('api key edit: name required');
+        }
+        if (!next || next === currentName) {
             this.closeAfterSave();
             return;
         }

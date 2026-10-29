@@ -24,7 +24,7 @@ function isPlatformBrandApiPayload(value: unknown): value is PlatformBrandApiPay
     if (!isPlainRecord(value)) return false;
     if (typeof value.base_domain !== 'string' || typeof value.platform_name !== 'string') return false;
     if (typeof value.support_email !== 'string' || typeof value.logo_path !== 'string') return false;
-    if (typeof value.apex_origin !== 'string' || typeof value.agent_product_name !== 'string') return false;
+    if (typeof value.apex_origin !== 'string') return false;
     if (typeof value.models_product_name !== 'string' || typeof value.voice_product_name !== 'string') return false;
     if (typeof value.llms_display_label !== 'string' || typeof value.flows_product_label !== 'string') return false;
     return isStringList(value.supported_domains);

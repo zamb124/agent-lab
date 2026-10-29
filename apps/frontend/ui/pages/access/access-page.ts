@@ -16,6 +16,8 @@ import '../../components/sheets/access-why-sheet.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { OpController, ResourceController, SliceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import type { RouterState } from '@platform/lib/events/reducers/router.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const OBJECT_TYPES = Object.freeze([
@@ -30,7 +32,6 @@ const OBJECT_TYPES = Object.freeze([
     'work_queue',
     'mailbox_binding',
     'platform_namespace',
-    'agent_device',
 ]);
 
 const TYPE_ICONS = Object.freeze({
@@ -45,7 +46,6 @@ const TYPE_ICONS = Object.freeze({
     work_queue: 'clock',
     mailbox_binding: 'mail',
     platform_namespace: 'folder',
-    agent_device: 'cpu',
     flow_ui_share: 'chat',
     flow_branch: 'workflow',
 });
@@ -105,6 +105,14 @@ function readExplorerUi(value: unknown): ExplorerUiState {
         whyObjectKey: requireUiString(value.whyObjectKey, 'whyObjectKey'),
         mobilePane: requireUiString(value.mobilePane, 'mobilePane'),
     };
+}
+
+function requireRowString(row: Record<string, unknown>, field: string): string {
+    const value = row[field];
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`access page: ${field} required`);
+    }
+    return value;
 }
 
 function resultItems(value: unknown): Record<string, unknown>[] | null {
@@ -332,8 +340,8 @@ export class FrontendAccessPage extends PlatformPage {
         this._why = this.useOp('frontend/authz_explorer_why');
         this._objects = this.useOp('frontend/authz_explorer_objects');
         this._revokeOp = this.useOp('frontend/authz_explorer_revoke');
-        this._authSel = this.select((s: Record<string, any>) => s.auth && s.auth.user);
-        this._routeSel = this.select((s: Record<string, any>) => s.router);
+        this._authSel = this.select((state) => state.auth.user);
+        this._routeSel = this.select((state) => state.router);
         this._lastRouteSig = '';
         this._lastObjectsSig = '';
         this._objectsSearchTimer = 0;
@@ -345,8 +353,8 @@ export class FrontendAccessPage extends PlatformPage {
     private _why: OpController;
     private _objects: OpController;
     private _revokeOp: OpController;
-    private _authSel: SelectController<any>;
-    private _routeSel: SelectController<any>;
+    private _authSel: SelectController<AuthUser | null>;
+    private _routeSel: SelectController<RouterState>;
     private _lastRouteSig: string;
     private _lastObjectsSig: string;
     private _objectsSearchTimer: number;
@@ -440,7 +448,10 @@ export class FrontendAccessPage extends PlatformPage {
         this.navigate('access', {}, { search });
     }
 
-    _selectUser(userId: any) {
+    _selectUser(userId: unknown) {
+        if (typeof userId !== 'string' || userId.length === 0) {
+            throw new Error('access page: user_id required');
+        }
         this._writeUrl(`?user_id=${encodeURIComponent(userId)}`);
     }
 
@@ -501,7 +512,7 @@ export class FrontendAccessPage extends PlatformPage {
         return this._byObject.busy && !this._byObject.lastResult;
     }
 
-    _whyEnabled(row: Record<string, any>) {
+    _whyEnabled(row: Record<string, unknown>) {
         const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'objects' && row.subject_kind !== 'user') {
             return false;
@@ -509,7 +520,7 @@ export class FrontendAccessPage extends PlatformPage {
         return true;
     }
 
-    _openWhy(row: Record<string, any>) {
+    _openWhy(row: Record<string, unknown>) {
         if (!this._whyEnabled(row)) {
             return;
         }
@@ -537,7 +548,7 @@ export class FrontendAccessPage extends PlatformPage {
         });
     }
 
-    async _revoke(row: Record<string, any>) {
+    async _revoke(row: Record<string, unknown>) {
         if (row.can_revoke !== true) {
             return;
         }
@@ -724,7 +735,7 @@ export class FrontendAccessPage extends PlatformPage {
         `;
     }
 
-    _roleLabel(member: Record<string, any>) {
+    _roleLabel(member: Record<string, unknown>) {
         const roles = Array.isArray(member.roles) ? member.roles : [];
         if (roles.length === 0) {
             return '';
@@ -787,20 +798,24 @@ export class FrontendAccessPage extends PlatformPage {
                         `
                         : html`
                             <div class="picker-list">
-                                ${items.map((hit: Record<string, any>) => html`
+                                ${items.map((hit) => {
+                                    const objectType = requireRowString(hit, 'object_type');
+                                    const objectKey = requireRowString(hit, 'object_key');
+                                    return html`
                                     <button
                                         type="button"
                                         class="picker-item"
-                                        aria-current=${ui.objectKey === hit.object_key ? 'true' : 'false'}
-                                        @click=${() => this._selectObject(hit.object_type, hit.object_key)}
+                                        aria-current=${ui.objectKey === objectKey ? 'true' : 'false'}
+                                        @click=${() => this._selectObject(objectType, objectKey)}
                                     >
-                                        <platform-icon name=${this._typeIcon(hit.object_type)} size="18"></platform-icon>
+                                        <platform-icon name=${this._typeIcon(objectType)} size="18"></platform-icon>
                                         <span>
                                             <div>${this._hitTitle(hit)}</div>
-                                            <div class="picker-meta">${this.t(`access_page.type_${hit.object_type}`)}</div>
+                                            <div class="picker-meta">${this.t(`access_page.type_${objectType}`)}</div>
                                         </span>
                                     </button>
-                                `)}
+                                `;
+                                })}
                             </div>
                         `}
         `;
@@ -830,8 +845,6 @@ export class FrontendAccessPage extends PlatformPage {
                 return TYPE_ICONS.mailbox_binding;
             case 'platform_namespace':
                 return TYPE_ICONS.platform_namespace;
-            case 'agent_device':
-                return TYPE_ICONS.agent_device;
             case 'flow_ui_share':
                 return TYPE_ICONS.flow_ui_share;
             case 'flow_branch':
@@ -978,20 +991,23 @@ export class FrontendAccessPage extends PlatformPage {
             return html`<div class="empty">${this.t('access_page.load_error')}</div>`;
         }
         const rows = this._currentRows();
-        if (!payload) {
+        if (payload === null || payload === undefined) {
             return nothing;
+        }
+        if (!isPlainRecord(payload)) {
+            throw new Error('access page: grant payload must be an object');
         }
         if (rows.length === 0) {
             return this._renderEmptyGrants(payload);
         }
         return html`
             <div class="grant-list">
-                ${rows.map((row: Record<string, any>) => this._renderGrantRow(row))}
+                ${rows.map((row: Record<string, unknown>) => this._renderGrantRow(row))}
             </div>
         `;
     }
 
-    _renderEmptyGrants(payload: Record<string, any>) {
+    _renderEmptyGrants(payload: Record<string, unknown>) {
         const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'people') {
             return html`
@@ -1022,9 +1038,11 @@ export class FrontendAccessPage extends PlatformPage {
         `;
     }
 
-    _renderGrantRow(row: Record<string, any>) {
+    _renderGrantRow(row: Record<string, unknown>) {
         const ui = readExplorerUi(this._ui.value);
-        const icon = this._typeIcon(row.object_type);
+        const objectType = requireRowString(row, 'object_type');
+        const objectKey = requireRowString(row, 'object_key');
+        const icon = this._typeIcon(objectType);
         const whyEnabled = this._whyEnabled(row);
         const href = typeof row.href === 'string' ? row.href : '';
         const manageHref = typeof row.manage_href === 'string' ? row.manage_href : '';
@@ -1073,7 +1091,7 @@ export class FrontendAccessPage extends PlatformPage {
                         <platform-button
                             variant="ghost"
                             density="dense"
-                            @click=${() => this._selectObject(row.object_type, row.object_key)}
+                            @click=${() => this._selectObject(objectType, objectKey)}
                         >${this.t('access_page.action_inspect_object')}</platform-button>
                     ` : row.subject_kind === 'user' ? html`
                         <platform-button

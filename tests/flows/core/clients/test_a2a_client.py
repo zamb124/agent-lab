@@ -236,11 +236,11 @@ class TestA2AClient:
             "state": "TASK_STATE_FAILED",
             "message": {
                 "parts": [
-                    {"text": "httpx.ReadTimeout"},
+                    {"text": "httpx2.ReadTimeout"},
                 ],
             },
         }
-        assert _extract_task_status_message(require_json_object(status, "status")) == "httpx.ReadTimeout"
+        assert _extract_task_status_message(require_json_object(status, "status")) == "httpx2.ReadTimeout"
 
     def test_parse_a2a_response_failed_uses_nested_message(self):
         client = A2AClient()

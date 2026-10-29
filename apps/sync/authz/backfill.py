@@ -35,8 +35,8 @@ async def backfill_sync_authz(*, limit: int | None = None) -> int:
     ) as di:
         authz = di.authz_service
         written = 0
-        company_rows = await SyncChannel.list_all_by_channel_id(limit=limit)
-        member_rows = await SyncChannelMember.list_all_by_channel_id_and_user_id(limit=limit)
+        company_rows = await SyncChannel.list_all_by_channel_id_asc(limit=limit)
+        member_rows = await SyncChannelMember.list_all_by_channel_id_and_user_id_asc(limit=limit)
 
         owners_by_channel: dict[str, str] = {}
         for row in company_rows:

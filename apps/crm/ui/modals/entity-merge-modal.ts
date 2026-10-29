@@ -28,6 +28,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import type {
@@ -364,15 +365,18 @@ export class CRMEntityMergeModal extends PlatformModal {
         }
 
         this.useEvent(this._entities.resource.events.ITEM_LOADED, (event) => {
-            const p = (event && event.payload) as Record<string, any> | null;
-            const id = p && p.item && p.item.entity_id;
+            if (!isPlainRecord(event.payload)) return;
+            const item = event.payload.item;
+            if (!isPlainRecord(item)) return;
+            const id = item.entity_id;
             if (typeof id === 'string') this._loadedIds.add(id);
         });
         this.useEvent(this._mergeOp.op.events.SUCCEEDED, () => this.close());
         this.useEvent(this._mergeOp.op.events.FAILED, (event) => {
-            const p = (event && event.payload) as Record<string, any> | null;
-            const message = p && typeof p.message === 'string'
-                ? p.message
+            const payload = event.payload;
+            const failedMessage = isPlainRecord(payload) ? payload.message : undefined;
+            const message = typeof failedMessage === 'string'
+                ? failedMessage
                 : this.t('entity_merge_modal.submit_failed');
             this._submitFailedMessage = message;
         });
@@ -382,9 +386,9 @@ export class CRMEntityMergeModal extends PlatformModal {
         if (this._entityTypes.items.length === 0) this._entityTypes.load(null);
     }
 
-    _entityById(id: string): Record<string, any> | null {
-        const item = this._entities.byId[id] as Record<string, any> | undefined;
-        return item === undefined ? null : item;
+    _entityById(id: string): Record<string, unknown> | null {
+        const item = this._entities.byId[id];
+        return isPlainRecord(item) ? item : null;
     }
 
     _survivorId() { return this._swapped ? this.entityIdB : this.entityIdA; }
@@ -676,8 +680,12 @@ export class CRMEntityMergeModal extends PlatformModal {
             if (isConflict) conflictRows.push(html_row); else ok_rows.push(html_row);
         }
 
-        const sa = survivorEntity.attributes && typeof survivorEntity.attributes === 'object' ? survivorEntity.attributes : {};
-        const sb = sourceEntity.attributes && typeof sourceEntity.attributes === 'object' ? sourceEntity.attributes : {};
+        const sa: Record<string, unknown> = isPlainRecord(survivorEntity.attributes)
+            ? survivorEntity.attributes
+            : {};
+        const sb: Record<string, unknown> = isPlainRecord(sourceEntity.attributes)
+            ? sourceEntity.attributes
+            : {};
         const allAttrKeys = Array.from(new Set([...Object.keys(sa), ...Object.keys(sb)])).sort();
         const attrConflictRows: TemplateResult[] = [];
         const attrOkRows: TemplateResult[] = [];

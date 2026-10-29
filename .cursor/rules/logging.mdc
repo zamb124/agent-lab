@@ -37,15 +37,15 @@ alwaysApply: false
 
 1. `logging.getLogger`, `print`, `loguru`, файловые хендлеры в `apps/**` и `core/**`.
 2. Голый `asyncio.create_task`; прямые `.kiq(`, `find_task(`, `AsyncKicker(`, `create_broker(` вне whitelist (постановка — `core.tasks.enqueue` → `taskiq.mdc`).
-3. `setup_logging` в `apps/*_worker/broker.py` и `apps/sync/realtime/broker.py`.
+3. `setup_logging` в `apps/worker_manifest.py`.
 4. Скоуп и `bind_log_context` в `apps/**`.
 
 ## Исключения
 
-- Исключение: `logging.getLogger` в `core/logging/setup.py`, `core/logging/processors.py`, `core/logging/__init__.py`, `core/tracing/tracer.py`; allowlist `scripts/check_logging_canon.sh`.
+- Исключение: `logging.getLogger` в `core/logging/setup.py`, `core/logging/processors.py`, `core/logging/__init__.py`, `core/tracing/tracer.py`; allowlist `scripts/gates/backend/logging_canon.sh`.
 - Исключение: TaskIQ-запись без labels (старый stream) — `pre_execute` восстанавливает контекст `build_log_labels(background_kind='taskiq_recover')` + WARN `task.execute_log_labels_recovered`. `[без гейта]`
 
 ## Гейты
 
-- `scripts/check_logging_canon.sh` (`make check-logging`, в `make lint-ts`) — `getLogger`, удалённый `core.logging.logger`, файловые хендлеры, `print` (AST), эмодзи, `setup_logging` в broker, `create_task`, f-string логи, `enter_request_scope` вне точек входа, `clear_log_context`, `.kiq(`, `bind_log_context` в `apps/`.
-- `scripts/check_ratchet_counts.py` (`make lint`) — `logger_fstring` = 0, `logger_percent`, `logger_sentence` не растут.
+- `scripts/gates/backend/logging_canon.sh` (`make check-logging`, в `make lint-ts`) — `getLogger`, удалённый `core.logging.logger`, файловые хендлеры, `print` (AST), эмодзи, `setup_logging` в broker, `create_task`, f-string логи, `enter_request_scope` вне точек входа, `clear_log_context`, `.kiq(`, `bind_log_context` в `apps/`.
+- `scripts/gates/backend/ratchet_counts.py` (`make lint`) — `logger_fstring` = 0, `logger_percent`, `logger_sentence` не растут.

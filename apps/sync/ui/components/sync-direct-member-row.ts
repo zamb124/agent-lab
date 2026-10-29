@@ -14,6 +14,8 @@ import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
@@ -134,21 +136,19 @@ export class SyncDirectMemberRow extends PlatformElement {
     }
 
     _closeSidebarMobile() {
-        const shell = this.closest('platform-service-sidebar') as { closeMobile?: () => void } | null;
-        if (shell && typeof shell.closeMobile === 'function') {
-            shell.closeMobile();
-        }
+        const shell = this.closest('platform-service-sidebar');
+        if (!(shell instanceof PlatformServiceSidebar)) return;
+        shell.closeMobile();
     }
 
     _onChannelsCreated(e: PlatformEvent) {
         if (this._pendingOpenDmPeerId === null) return;
-        const p = e.payload as Record<string, unknown> | null;
-        if (!p || typeof p !== 'object') return;
-        const item = p.item as Record<string, any> | null | undefined;
-        if (!item || typeof item !== 'object') return;
+        if (!isPlainRecord(e.payload)) return;
+        const item = e.payload.item;
+        if (!isPlainRecord(item)) return;
         if (item.type !== 'direct') return;
         const peer = item.peer;
-        const peerId = peer && typeof peer.user_id === 'string' ? peer.user_id : '';
+        const peerId = isPlainRecord(peer) && typeof peer.user_id === 'string' ? peer.user_id : '';
         if (peerId === '' || peerId !== this._pendingOpenDmPeerId) return;
         this._pendingOpenDmPeerId = null;
         const channelId = item.channel_id;
@@ -176,9 +176,11 @@ export class SyncDirectMemberRow extends PlatformElement {
     _findDirectChannel() {
         if (!this.member) return null;
         const member = this.member;
-        return this._channels.items.find((c) => c.type === 'direct'
-            && member !== null
-            && (c.peer as Record<string, unknown> | undefined)?.user_id === member.user_id);
+        return this._channels.items.find((c) => {
+            if (c.type !== 'direct' || member === null) return false;
+            const peer = c.peer;
+            return isPlainRecord(peer) && peer.user_id === member.user_id;
+        });
     }
 
     _onClick() {

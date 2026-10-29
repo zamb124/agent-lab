@@ -95,7 +95,7 @@ _TEST_SERVICE_ENV: dict[str, str] = {
 def ensure_local_no_proxy() -> None:
     """Добавляет localhost/127.0.0.1/::1 в NO_PROXY текущего процесса.
 
-    urllib (readiness-пробы) и httpx (клиенты фикстур) честно ходят через
+    urllib (readiness-пробы) и httpx2 (клиенты фикстур) честно ходят через
     HTTP(S)_PROXY шелла: без bypass локальные адреса уезжают на внешний прокси,
     который не видит localhost пользователя. Внешний egress при этом продолжает
     идти через прокси — NO_PROXY только расширяет список обхода.

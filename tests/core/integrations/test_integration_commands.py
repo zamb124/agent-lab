@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.di import FlowsDi
 from core.config import get_settings

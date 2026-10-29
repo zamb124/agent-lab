@@ -1,6 +1,6 @@
 """ServiceClientError: статус и detail peer-ответа для проброса 4xx."""
 
-import httpx
+import httpx2
 import pytest
 from aiohttp import web
 
@@ -41,7 +41,7 @@ def test_http_detail_falls_back_to_raw_text() -> None:
     assert error.http_detail() == "not-json"
 
 
-def _raise_blank_exception(_request: httpx.Request) -> httpx.Response:
+def _raise_blank_exception(_request: httpx2.Request) -> httpx2.Response:
     raise Exception()
 
 

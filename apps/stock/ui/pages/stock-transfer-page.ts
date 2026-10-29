@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface TransferDetail {
     transfer?: { name?: unknown; state?: unknown };
@@ -15,6 +16,10 @@ interface TransferDetail {
         quantity?: unknown;
         done_quantity?: unknown;
     }[];
+}
+
+function isTransferDetail(value: unknown): value is TransferDetail {
+    return isPlainRecord(value);
 }
 import '@platform/lib/components/platform-button.js';
 
@@ -69,7 +74,8 @@ export class StockTransferPage extends PlatformPage {
 
     private async _reload(): Promise<void> {
         if (this.transferId === '') return;
-        this._detail = await this._item.run({ transfer_id: this.transferId }) as TransferDetail | null;
+        const detail = await this._item.run({ transfer_id: this.transferId });
+        this._detail = isTransferDetail(detail) ? detail : null;
     }
 
     private async _act(op: OpController, event: Event): Promise<void> {

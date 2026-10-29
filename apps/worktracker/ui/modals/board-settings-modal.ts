@@ -13,6 +13,7 @@ import { reorderByInsertIndex } from '@platform/lib/utils/reorder-by-insert-inde
 import type { CSSResultGroup, PropertyValues, TemplateResult } from 'lit';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
@@ -42,6 +43,10 @@ interface BoardRecord {
     name?: string;
     columns?: BoardColumnRecord[];
     [key: string]: unknown;
+}
+
+function isBoardRecord(value: unknown): value is BoardRecord {
+    return isPlainRecord(value);
 }
 
 interface BoardColumnDraft {
@@ -200,9 +205,9 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
     override connectedCallback() {
         super.connectedCallback();
         this.useEvent(this._boards.resource.events.ITEM_LOADED, (event: PlatformEvent) => {
-            const payload = event.payload as { item?: BoardRecord } | null;
-            const item = payload && payload.item;
-            if (!item || typeof item !== 'object' || item.board_id !== this.boardId) {
+            const payload = event.payload;
+            const item = isPlainRecord(payload) ? payload.item : null;
+            if (!isBoardRecord(item) || item.board_id !== this.boardId) {
                 return;
             }
             this._applyBoard(item);

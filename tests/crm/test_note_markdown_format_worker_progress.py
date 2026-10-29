@@ -8,9 +8,9 @@ import pytest
 import pytest_asyncio
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
+from apps.crm.di import CrmDi
 from apps.crm.models.crm_entity import CRMEntity
-from apps.crm_worker.di import CrmWorkerDi
-from apps.crm_worker.tasks.note_markdown_tasks import format_note_description_markdown_task
+from apps.crm.tasks.note_markdown_tasks import format_note_description_markdown_task
 from core.utils.tokens import get_token_service
 from tests.fixtures.service_processes import ServiceProcesses
 
@@ -18,8 +18,8 @@ _COMPANY_ID = "system"
 
 
 @pytest_asyncio.fixture
-async def di(service_processes: ServiceProcesses) -> CrmWorkerDi:
-    return await service_processes.di(CrmWorkerDi)
+async def di(service_processes: ServiceProcesses) -> CrmDi:
+    return await service_processes.di(CrmDi)
 
 
 async def _seed_note(unique_id: str, description: str) -> CRMEntity:
@@ -40,7 +40,7 @@ async def _seed_note(unique_id: str, description: str) -> CRMEntity:
 
 @pytest.mark.asyncio
 async def test_note_markdown_format_replaces_description_with_one_transform_call(
-    di: CrmWorkerDi,
+    di: CrmDi,
     mock_llm_redis,
     mock_llm_capture,
     unique_id: str,

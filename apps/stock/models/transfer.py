@@ -583,7 +583,7 @@ class StockTransfer(PlatformModel):
             transfer = await cls._require_locked(company_id, transfer_id)
             for decision in decisions:
                 _ = await StockDecision.objects.create(instance=decision)
-            moves = await StockMove.list_for_transfer(company_id, transfer_id)
+            moves = await StockMove.list_for_transfer_by_created_at_asc(company_id, transfer_id)
             for listed in moves:
                 move = await StockMove.by_id_locked(company_id, listed.move_id)
                 if move is None:
@@ -643,7 +643,7 @@ class StockTransfer(PlatformModel):
             transfer = await cls._require_locked(company_id, transfer_id)
             for decision in decisions:
                 _ = await StockDecision.objects.create(instance=decision)
-            moves = await StockMove.list_for_transfer(company_id, transfer_id)
+            moves = await StockMove.list_for_transfer_by_created_at_asc(company_id, transfer_id)
             for listed in moves:
                 move = await StockMove.by_id_locked(company_id, listed.move_id)
                 if move is None or move.state in {
@@ -717,7 +717,7 @@ class StockTransfer(PlatformModel):
             transfer = await cls._require_locked(company_id, transfer_id)
             for decision in decisions:
                 _ = await StockDecision.objects.create(instance=decision)
-            moves = await StockMove.list_for_transfer(company_id, transfer_id)
+            moves = await StockMove.list_for_transfer_by_created_at_asc(company_id, transfer_id)
             posted_moves: list[PostedMove] = []
             for listed in moves:
                 if listed.state not in {
@@ -862,7 +862,7 @@ class StockTransfer(PlatformModel):
 
         async def body(_scope: LaneScope) -> LaneOutcome[Self]:
             _ = await cls._require_locked(company_id, transfer_id)
-            moves = await StockMove.list_for_transfer(company_id, transfer_id)
+            moves = await StockMove.list_for_transfer_by_created_at_asc(company_id, transfer_id)
             for listed in moves:
                 if listed.state == StockMoveState.DONE:
                     raise PlatformConflictError(
@@ -973,7 +973,7 @@ class StockTransfer(PlatformModel):
 
         async def body(scope: LaneScope) -> LaneOutcome[Self]:
             source = await cls._require_locked(company_id, transfer_id)
-            moves = await StockMove.list_for_transfer(company_id, transfer_id)
+            moves = await StockMove.list_for_transfer_by_created_at_asc(company_id, transfer_id)
             done_moves = [
                 move for move in moves if move.state == StockMoveState.DONE
             ]
@@ -1012,7 +1012,7 @@ class StockTransfer(PlatformModel):
                 delivered = sum(
                     (
                         line.done_quantity
-                        for line in await StockMoveLine.list_all_for_move(
+                        for line in await StockMoveLine.list_for_move_by_created_at_asc(
                             company_id, move.move_id
                         )
                         if line.state == StockMoveLineState.DONE
@@ -1028,7 +1028,7 @@ class StockTransfer(PlatformModel):
                     already_returned += sum(
                         (
                             line.done_quantity
-                            for line in await StockMoveLine.list_all_for_move(
+                            for line in await StockMoveLine.list_for_move_by_created_at_asc(
                                 company_id, ret.move_id
                             )
                             if line.state == StockMoveLineState.DONE
@@ -1178,7 +1178,7 @@ class StockTransfer(PlatformModel):
         Возвращает False, когда зеркалить нечего (нет проведённых
         строк с партиями) — тогда идём обычным ``reserve_step``.
         """
-        origin_lines = await StockMoveLine.list_all_for_move(
+        origin_lines = await StockMoveLine.list_for_move_by_created_at_asc(
             company_id, origin_move.move_id
         )
         done_lines = [

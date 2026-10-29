@@ -39,7 +39,7 @@ class SyncChannelMember(PlatformModel):
     notifications_muted: bool = DbField(default=False)
 
     @classmethod
-    async def list_user_ids(
+    async def list_unordered_user_ids(
         cls,
         channel_id: str,
         *,
@@ -201,8 +201,8 @@ class SyncChannelMember(PlatformModel):
         return rows[0].last_read_at
 
     @classmethod
-    async def list_all_by_channel_id_and_user_id(cls, *, limit: int | None) -> list[Self]:
-        """Все строки участников, ORDER BY channel_id, user_id. limit is None не ограничивает."""
+    async def list_all_by_channel_id_and_user_id_asc(cls, *, limit: int | None) -> list[Self]:
+        """Все строки участников, ORDER BY channel_id, user_id ASC. limit is None не ограничивает."""
         ordered = cls.objects.order_by("channel_id", "user_id")
         if limit is None:
             return await ordered.all()

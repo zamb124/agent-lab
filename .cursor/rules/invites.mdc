@@ -35,7 +35,7 @@ alwaysApply: false
 ## Контракты
 
 - Команда `frontend/invites/generate_requested` (`FRONTEND_OPERATIONS`, `apps/frontend/realtime/command_router.py`), REST `POST /frontend/api/invites/generate`; фабрика `frontend/team_invite` (`inviteGenerateOp`, `apps/frontend/ui/events/resources/team.resource.ts`).
-- Протокольные хендлеры до сессии из `PROTOCOL_HANDLERS` (`scripts/check_rest_handlers_call_ops.py`): `accept_invite`, `preview_invite` (`apps/frontend/api/invites.py`); HTTP-фабрики из `COMMAND_WS_HTTP_ALLOWLIST` (`scripts/check_command_rest_mirror.py`): `frontend/invite_preview`, `frontend/invite_accept` (`apps/frontend/ui/events/resources/invites.resource.ts`).
+- Протокольные хендлеры до сессии из `PROTOCOL_HANDLERS` (`scripts/gates/backend/rest_handlers_call_ops.py`): `accept_invite`, `preview_invite` (`apps/frontend/api/invites.py`); HTTP-фабрики из `COMMAND_WS_HTTP_ALLOWLIST` (`scripts/gates/backend/command_rest_mirror.py`): `frontend/invite_preview`, `frontend/invite_accept` (`apps/frontend/ui/events/resources/invites.resource.ts`).
 - Маршрут `/l/{code}` — `apps/frontend/main.py`; страница `/join?c=…` — `apps/frontend/ui/pages/join-page.ts`.
 - Route config (`core/middleware/auth/route_config.py`): `/join`, `/l/*`, `/api/invites/preview`, `/frontend/api/invites/preview` — anonymous; `/api/invites/accept`, `/frontend/api/invites/accept` — auth; все они в `NO_SUBDOMAIN_ALLOWED_PATHS`, `/l/` — в `SPA_FALLBACK_EXCLUDED_PREFIXES`. `CompanyResolver` (`core/middleware/auth/company_resolver.py`) не требует членства в компании субдомена только для `POST` accept.
 
@@ -50,5 +50,5 @@ alwaysApply: false
 
 - `tests/frontend/api/test_invites_api.py` — generate, preview, accept: одноразовость SET NX, идемпотентность участника, коды 410/403/404.
 - `tests/core/test_short_links_integration.py` — `ShortLinkService` и `PlatformShortLink` против shared PostgreSQL.
-- `scripts/check_rest_handlers_call_ops.py`, `scripts/check_command_rest_mirror.py` (`make lint`) — accept и preview только в allowlist протокольных хендлеров и HTTP-фабрик.
-- `scripts/check_authz_dual_write.py` (`make lint`) — dual-write членства компании (`core/identity/company_membership.py`).
+- `scripts/gates/backend/rest_handlers_call_ops.py`, `scripts/gates/backend/command_rest_mirror.py` (`make lint`) — accept и preview только в allowlist протокольных хендлеров и HTTP-фабрик.
+- `scripts/gates/authz/dual_write.py` (`make lint`) — dual-write членства компании (`core/identity/company_membership.py`).

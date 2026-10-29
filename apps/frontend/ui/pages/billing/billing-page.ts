@@ -23,10 +23,11 @@ import { FrontendTopupModal } from '../../modals/topup-modal.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const PLAN_KEYS = Object.freeze(['free', 'basic', 'premium', 'enterprise']);
 
-function _planTranslationKey(plan: Record<string, any>) {
+function _planTranslationKey(plan: unknown) {
     const p = typeof plan === 'string' && plan !== '' ? plan : 'free';
     return `tariff_plans.${p.toLowerCase()}.name`;
 }
@@ -35,6 +36,67 @@ function shownCount(value: unknown): number | string {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string' && value.length > 0) return value;
     return 0;
+}
+
+function usageRows(value: unknown): Array<[string, Record<string, unknown>]> {
+    if (value == null) return [];
+    if (!isPlainRecord(value)) {
+        throw new Error('billing-page: usage map must be an object');
+    }
+    const rows: Array<[string, Record<string, unknown>]> = [];
+    for (const [key, field] of Object.entries(value)) {
+        if (!isPlainRecord(field)) {
+            throw new Error('billing-page: usage row must be an object');
+        }
+        rows.push([key, field]);
+    }
+    return rows;
+}
+
+function historyCreatedAt(value: unknown): string {
+    if (value == null || value === '') return '—';
+    if (typeof value !== 'string' && typeof value !== 'number') {
+        throw new Error('billing-page: history created_at must be a string or number');
+    }
+    return new Date(value).toLocaleString();
+}
+
+function historyItems(value: unknown): Record<string, unknown>[] {
+    if (value == null) return [];
+    if (!isPlainRecord(value) || !Array.isArray(value.items)) {
+        throw new Error('billing-page: history items required');
+    }
+    const items: Record<string, unknown>[] = [];
+    for (const row of value.items) {
+        if (!isPlainRecord(row)) {
+            throw new Error('billing-page: history item must be an object');
+        }
+        const item: Record<string, unknown> = {};
+        for (const [key, field] of Object.entries(row)) item[key] = field;
+        items.push(item);
+    }
+    return items;
+}
+
+function positiveAmount(value: number | string | null | undefined): boolean {
+    if (value === undefined || value === null || value === '') return false;
+    const amount = Number(value);
+    return Number.isFinite(amount) && amount > 0;
+}
+
+function moneyField(value: unknown): number | string | null | undefined {
+    if (value === undefined || value === null || typeof value === 'number' || typeof value === 'string') {
+        return value;
+    }
+    throw new Error('billing-page: amount must be a number or string');
+}
+
+function periodLabel(value: unknown): string {
+    if (value === undefined || value === null || value === '') return '—';
+    if (typeof value !== 'string' && typeof value !== 'number') {
+        throw new Error('billing-page: billing_period_start must be a string or number');
+    }
+    return new Date(value).toLocaleDateString();
 }
 
 function _percent(spent: number | string | null | undefined, budget: number | string | null | undefined): number | null {
@@ -139,18 +201,24 @@ export class FrontendBillingPage extends PlatformPage {
         this._usage = this.useOp('frontend/billing_usage');
         this._history = this.useOp('frontend/billing_history');
         this._planChange = this.useOp('frontend/billing_plan_change');
-        this._locale = this.select((s: Record<string, any>) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
-        this._routerSearch = this.select((s: Record<string, any>) => s.router.search);
-        this._i18nReady = this.select((s: Record<string, any>) => isI18nBundleReady(s.i18n));
+        this._locale = this.select((s) => {
+            const locale = s.i18n.locale;
+            if (locale.length === 0) {
+                throw new Error('billing-page: locale required');
+            }
+            return locale;
+        });
+        this._routerSearch = this.select((s) => s.router.search);
+        this._i18nReady = this.select((s) => isI18nBundleReady(s.i18n));
         this._loaded = false;
     }
     private _subscription: OpController;
     private _usage: OpController;
     private _history: OpController;
     private _planChange: OpController;
-    private _locale: SelectController<any>;
-    private _routerSearch: SelectController<any>;
-    private _i18nReady: SelectController<any>;
+    private _locale: SelectController<string>;
+    private _routerSearch: SelectController<string>;
+    private _i18nReady: SelectController<boolean>;
     private _loaded: boolean;
 
 
@@ -214,15 +282,16 @@ export class FrontendBillingPage extends PlatformPage {
         this._planChange.run({ plan });
     }
 
-    _renderSubscription(subscription: any) {
-        const plan = subscription && subscription.plan;
-        const balance = subscription && subscription.balance;
-        const budget = subscription && subscription.monthly_budget;
-        const spent = subscription && subscription.current_month_spent;
-        const periodStart = subscription && subscription.billing_period_start;
+    _renderSubscription(subscription: unknown) {
+        const record = isPlainRecord(subscription) ? subscription : null;
+        const plan = record === null ? undefined : record.plan;
+        const balance = record === null ? undefined : record.balance;
+        const budget = moneyField(record === null ? undefined : record.monthly_budget);
+        const spent = moneyField(record === null ? undefined : record.current_month_spent);
+        const periodStart = record === null ? undefined : record.billing_period_start;
         const rawPct = _percent(spent, budget);
         const pct = rawPct === null ? 0 : rawPct;
-        const planName = plan ? this.t(_planTranslationKey(plan)) : '—';
+        const planName = typeof plan === 'string' && plan !== '' ? this.t(_planTranslationKey(plan)) : '—';
         return html`
             <div class="grid">
                 <glass-card><div class="stat">
@@ -238,7 +307,7 @@ export class FrontendBillingPage extends PlatformPage {
                 <glass-card><div class="stat">
                     <div class="stat-label">${this.t('budget_usage.spent_this_month')}</div>
                     <div class="stat-value">${this._formatCurrency(spent)} ${this.t('frontend_console.currency_rub')}</div>
-                    ${budget && budget > 0
+                    ${positiveAmount(budget)
                         ? html`
                             <div class="progress ${pct >= 100 ? 'over' : ''}">
                                 <div style="width: ${pct}%"></div>
@@ -253,7 +322,7 @@ export class FrontendBillingPage extends PlatformPage {
 
                 <glass-card><div class="stat">
                     <div class="stat-label">${this.t('budget_usage.billing_period')}</div>
-                    <div class="stat-value">${periodStart ? new Date(periodStart).toLocaleDateString() : '—'}</div>
+                    <div class="stat-value">${periodLabel(periodStart)}</div>
                 </div></glass-card>
             </div>
 
@@ -271,12 +340,10 @@ export class FrontendBillingPage extends PlatformPage {
         `;
     }
 
-    _renderUsage(usage: any) {
-        if (!usage) return '';
-        const byResource = usage.by_resource && typeof usage.by_resource === 'object' ? usage.by_resource : {};
-        const byUser = usage.by_user && typeof usage.by_user === 'object' ? usage.by_user : {};
-        const resourceRows = Object.entries(byResource) as [string, Record<string, any>][];
-        const userRows = Object.entries(byUser) as [string, Record<string, any>][];
+    _renderUsage(usage: unknown) {
+        if (!isPlainRecord(usage)) return '';
+        const resourceRows = usageRows(usage.by_resource);
+        const userRows = usageRows(usage.by_user);
         return html`
             <section>
                 <h3>${this.t('usage_stats.title')}</h3>
@@ -344,7 +411,7 @@ export class FrontendBillingPage extends PlatformPage {
         `;
     }
 
-    _historyProviderLabel(p: Record<string, any>) {
+    _historyProviderLabel(p: Record<string, unknown>) {
         const key = p.payment_provider;
         if (typeof key !== 'string' || key === '') {
             throw new Error('payment_provider is required');
@@ -361,9 +428,9 @@ export class FrontendBillingPage extends PlatformPage {
         throw new Error(`unknown payment_provider: ${key}`);
     }
 
-    _historyNote(p: Record<string, any>) {
+    _historyNote(p: Record<string, unknown>) {
         const m = p.metadata;
-        if (!m || typeof m !== 'object') {
+        if (!isPlainRecord(m)) {
             return '';
         }
         const n = m.note;
@@ -373,7 +440,7 @@ export class FrontendBillingPage extends PlatformPage {
         return n;
     }
 
-    _renderHistory(history: Record<string, any>) {
+    _renderHistory(history: Record<string, unknown>[]) {
         if (history.length === 0) {
             return html`
                 <section>
@@ -397,14 +464,14 @@ export class FrontendBillingPage extends PlatformPage {
                         <th>${this.t('history_table.status')}</th>
                     </tr></thead>
                     <tbody>
-                        ${history.map((p: Record<string, any>) => {
+                        ${history.map((p) => {
                             const st = p.status;
                             const status = typeof st === 'string' && st !== '' ? st.toLowerCase() : 'error';
                             const statusLabel = this.t(`status.${status}`);
                             const note = this._historyNote(p);
                             return html`
                                 <tr>
-                                    <td>${p.created_at ? new Date(p.created_at).toLocaleString() : '—'}</td>
+                                    <td>${historyCreatedAt(p.created_at)}</td>
                                     <td class="num">${this._formatCurrency(p.amount)}</td>
                                     <td>${this._historyProviderLabel(p)}</td>
                                     <td>${note === '' ? '—' : note}</td>
@@ -422,7 +489,7 @@ export class FrontendBillingPage extends PlatformPage {
         const subscription = this._subscription.lastResult;
         const usage = this._usage.lastResult;
         const historyResult = this._history.lastResult;
-        const history = historyResult && Array.isArray((historyResult as Record<string, any>).items) ? (historyResult as Record<string, any>).items : [];
+        const history = historyItems(historyResult);
         const loading = this._subscription.busy && !subscription;
         return html`
             <page-header

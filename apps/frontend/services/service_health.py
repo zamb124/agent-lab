@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-import httpx
+import httpx2
 
 from apps.frontend.models import ServiceHealthTarget, ServiceStatus
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -25,9 +25,9 @@ SERVICE_HEALTH_TARGETS: tuple[ServiceHealthTarget, ...] = (
     ServiceHealthTarget(name="provider_litserve", health_url="/litserve/health"),
 )
 _NETWORK_ERRORS = (
-    httpx.ConnectError,
-    httpx.TimeoutException,
-    httpx.HTTPStatusError,
+    httpx2.ConnectError,
+    httpx2.TimeoutException,
+    httpx2.HTTPStatusError,
     ConnectionError,
     OSError,
     ServiceClientError,

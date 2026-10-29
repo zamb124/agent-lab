@@ -21,7 +21,7 @@ from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
 
 if TYPE_CHECKING:
-    from httpx import AsyncClient
+    from httpx2 import AsyncClient
 
 
 CRAWL_STRICT_ENRICHMENT_MODEL = "auto"
@@ -115,7 +115,7 @@ async def seed_strict_sites(
         seeds,
         next_crawl_after=datetime.now(UTC),
     )
-    domain_page = await CrawlDomain.page_by_domain(
+    domain_page = await CrawlDomain.page_by_domain_asc(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=50,
@@ -149,7 +149,7 @@ async def queue_crawl_fetch_for_all_domains(
     search_di,
     crawl_profile_id: str,
 ) -> None:
-    domain_page = await CrawlDomain.page_by_domain(
+    domain_page = await CrawlDomain.page_by_domain_asc(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=50,
@@ -188,12 +188,12 @@ async def poll_indexed_url_count(
     last_total = 0
     ticks_sent = 0
     while time.monotonic() < deadline:
-        status_counts = await CrawlUrl.count_by_status_for_profile(
+        status_counts = await CrawlUrl.status_counts_for_profile(
             crawl_profile_id
         )
         last_total = _indexed_count_from_status_counts(status_counts)
         if last_total >= min_indexed:
-            page = await CrawlUrl.list_page_for_profile(
+            page = await CrawlUrl.page_for_profile_by_updated_at_desc(
                 crawl_profile_id=crawl_profile_id,
                 crawl_status="indexed",
                 domain=None,
@@ -223,7 +223,7 @@ async def poll_indexed_url_count(
             )
             ticks_sent += 1
         await asyncio.sleep(2.0)
-    status_summary = await CrawlUrl.count_by_status_for_profile(
+    status_summary = await CrawlUrl.status_counts_for_profile(
         crawl_profile_id
     )
     raise AssertionError(

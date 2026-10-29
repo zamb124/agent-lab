@@ -9,7 +9,7 @@ import base64
 import math
 from datetime import datetime, timezone
 
-import httpx
+import httpx2
 
 from core.logging import get_logger
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
@@ -251,9 +251,9 @@ class TempoClient:
             raise ValueError("TempoClient.get_trace: trace_id is required")
         url = f"{self._base_url}/api/traces/{trace_id}"
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx2.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.get(url, headers={"Accept": "application/json"})
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             raise TempoClientError(
                 f"Tempo GET /api/traces/{trace_id} request error: {type(exc).__name__}"
             ) from exc
@@ -283,9 +283,9 @@ class TempoClient:
         url = f"{self._base_url}/api/search"
         params = {"tags": f"{attr_name}={attr_value}", "limit": limit}
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx2.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.get(url, params=params)
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             raise TempoClientError(
                 f"Tempo GET /api/search request error: {type(exc).__name__}"
             ) from exc

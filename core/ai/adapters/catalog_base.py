@@ -6,7 +6,7 @@ from abc import ABC
 from typing import override
 from urllib.parse import quote
 
-import httpx
+import httpx2
 
 from core.ai.adapters.base import AIProviderAdapter
 from core.ai.models import AIModelRecord, AIRuntimeEndpoint
@@ -101,7 +101,7 @@ class AIProviderAdapterError(RuntimeError):
 
     HTTP-ответ провайдера тоже приходит сюда: транспортная деталь не должна
     утекать в сервисы, поэтому статус ответа сохраняется полем, а не типом
-    исключения httpx.
+    исключения httpx2.
     """
 
     def __init__(self, message: str, *, status_code: int | None = None) -> None:
@@ -510,7 +510,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         response_label: str,
         params: dict[str, str] | None = None,
     ) -> JsonValue:
-        response: httpx.Response | None = None
+        response: httpx2.Response | None = None
         for attempt_index in range(3):
             response = await request_with_strategy(
                 "GET",
@@ -534,7 +534,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             raise AIProviderAdapterError(f"{self.provider} models response was not received")
         try:
             _ = response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             raise AIProviderAdapterError(
                 f"{self.provider} models response: HTTP {exc.response.status_code}",
                 status_code=exc.response.status_code,
@@ -671,7 +671,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 direct_attempts=1,
                 proxy_attempts=2,
             )
-        except (httpx.HTTPError, OSError, ValueError) as exc:
+        except (httpx2.HTTPError, OSError, ValueError) as exc:
             logger.info(
                 "model_catalog.embedding_probe_failed",
                 provider=self.provider,
@@ -710,7 +710,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 direct_attempts=1,
                 proxy_attempts=2,
             )
-        except (httpx.HTTPError, OSError, ValueError) as exc:
+        except (httpx2.HTTPError, OSError, ValueError) as exc:
             logger.info(
                 "model_catalog.embedding_probe_failed",
                 provider="huggingface",

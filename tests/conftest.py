@@ -21,7 +21,7 @@ from typing import Any, List
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV, ensure_local_no_proxy
 
@@ -47,15 +47,12 @@ pytest_plugins = [
     "tests.fixtures.search_platform",
     "tests.fixtures.capability_gateway",
     "tests.fixtures.openfga",
-    "tests.agent.fixtures.local_releases",
-    "tests.agent.fixtures.e2e",
     "tests.profiling.plugin",
     "tests.core.files.conftest",
     "tests.core.mail.live.personal_conftest",
 ]
 
 os.environ["TESTING"] = "true"
-os.environ.setdefault("AGENT__RELEASES__SOURCE", "local")
 if sys.platform == "darwin":
     _brew_path = "/opt/homebrew/bin"
     if _brew_path not in os.environ.get("PATH", ""):
@@ -135,10 +132,10 @@ from core.logging.setup import setup_logging  # noqa: E402
 setup_logging("pytest", get_settings().logging)
 
 from apps.worker_manifest import wire_brokers  # noqa: E402
+from core.tasks.registry import queue_broker  # noqa: E402
 
 wire_brokers()
 
-import apps.flows_worker.broker as platform_broker_module  # noqa: E402
 from apps.flows.main import (  # noqa: E402 — импорт задаёт settings процесса тестов (flows)
     app as fastapi_app,  # noqa: F401
 )
@@ -150,9 +147,10 @@ from core.models.identity_models import Company  # noqa: E402
 from core.tracing.provider import shutdown_tracing  # noqa: E402
 from tests.fixtures.ai_provider_defaults import make_test_company  # noqa: E402
 
-if id(process_flow_task.broker) != id(platform_broker_module.broker):
+_flows_worker_broker = queue_broker("flows_worker")
+if _flows_worker_broker is None or id(process_flow_task.broker) != id(_flows_worker_broker):
     raise RuntimeError(
-        "process_flow_task привязан к другому broker, чем apps.flows_worker.broker: "
+        "process_flow_task привязан к другому broker, чем очередь flows_worker: "
         "TaskIQ worker не сможет выполнять enqueue из HTTP."
     )
 
@@ -239,7 +237,7 @@ async def setup_database_before_tests():
     """
     Быстрая проверка актуальности миграций: Alembic head (файлы) == current (БД).
 
-    Миграции применяет make test-up (scripts.test_migrate) до старта pytest;
+    Миграции применяет make test-up (scripts.testing.migrate) до старта pytest;
     фикстура ничего не мигрирует и не держит локов.
     """
     from core.db.migration_manifest import bootstrap_migration_registry
@@ -348,7 +346,7 @@ def _is_files_s3_test(nodeid: str) -> bool:
         return True
     # Тот же purge_expired_batch через idle_worker tick: под -n10 >5s.
     if (
-        nodeid.startswith("tests/idle_worker/test_idle_worker_tasks.py")
+        nodeid.startswith("tests/idle/test_idle_worker_tasks.py")
         and "file_retention_purge" in nodeid
     ):
         return True
@@ -641,7 +639,7 @@ def _inject_test_scope_header(
     platform_test_scope: str,
 ) -> None:
     """
-    Все httpx-клиенты тестового процесса несут заголовок ``X-Test-Scope``.
+    Все httpx2-клиенты тестового процесса несут заголовок ``X-Test-Scope``.
 
     Патчится ``build_request`` — единая точка сборки запроса для ASGI и
     реального HTTP транспорта. Сервисы читают заголовок в AccessLogMiddleware
@@ -650,7 +648,7 @@ def _inject_test_scope_header(
     if request.node.get_closest_marker("no_test_doubles"):
         return
 
-    import httpx
+    import httpx2
 
     from core.test_scope import TEST_SCOPE_HEADER
 
@@ -658,23 +656,23 @@ def _inject_test_scope_header(
     if not isinstance(monkeypatch, pytest.MonkeyPatch):
         raise TypeError("monkeypatch fixture must be pytest.MonkeyPatch")
 
-    original_async_build_request = httpx.AsyncClient.build_request
-    original_sync_build_request = httpx.Client.build_request
+    original_async_build_request = httpx2.AsyncClient.build_request
+    original_sync_build_request = httpx2.Client.build_request
 
-    def async_build_request_with_scope(self, *args: Any, **kwargs: Any) -> httpx.Request:
+    def async_build_request_with_scope(self, *args: Any, **kwargs: Any) -> httpx2.Request:
         http_request = original_async_build_request(self, *args, **kwargs)
         if TEST_SCOPE_HEADER not in http_request.headers:
             http_request.headers[TEST_SCOPE_HEADER] = platform_test_scope
         return http_request
 
-    def sync_build_request_with_scope(self, *args: Any, **kwargs: Any) -> httpx.Request:
+    def sync_build_request_with_scope(self, *args: Any, **kwargs: Any) -> httpx2.Request:
         http_request = original_sync_build_request(self, *args, **kwargs)
         if TEST_SCOPE_HEADER not in http_request.headers:
             http_request.headers[TEST_SCOPE_HEADER] = platform_test_scope
         return http_request
 
-    monkeypatch.setattr(httpx.AsyncClient, "build_request", async_build_request_with_scope)
-    monkeypatch.setattr(httpx.Client, "build_request", sync_build_request_with_scope)
+    monkeypatch.setattr(httpx2.AsyncClient, "build_request", async_build_request_with_scope)
+    monkeypatch.setattr(httpx2.Client, "build_request", sync_build_request_with_scope)
 
 
 @pytest.fixture
@@ -884,12 +882,12 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
         raise TypeError("monkeypatch fixture must be pytest.MonkeyPatch")
     import apps.crm.services.entity_service as crm_entity_service_module
     import apps.crm.services.task_service as crm_task_service_module
-    import apps.crm_worker.tasks.analysis_tasks as crm_analysis_tasks
-    import apps.crm_worker.tasks.daily_summary_tasks as crm_daily_summary_tasks
-    import apps.crm_worker.tasks.draft_repair_tasks as crm_draft_repair_tasks
-    import apps.crm_worker.tasks.knowledge_import_tasks as crm_knowledge_import_tasks
-    import apps.crm_worker.tasks.namespace_integration_tasks as crm_namespace_integration_tasks
-    import apps.crm_worker.tasks.note_markdown_tasks as crm_note_markdown_tasks
+    import apps.crm.tasks.analysis_tasks as crm_analysis_tasks
+    import apps.crm.tasks.daily_summary_tasks as crm_daily_summary_tasks
+    import apps.crm.tasks.draft_repair_tasks as crm_draft_repair_tasks
+    import apps.crm.tasks.knowledge_import_tasks as crm_knowledge_import_tasks
+    import apps.crm.tasks.namespace_integration_tasks as crm_namespace_integration_tasks
+    import apps.crm.tasks.note_markdown_tasks as crm_note_markdown_tasks
     import apps.flows.realtime.company_operations as flows_company_module
     import apps.flows.src.api.v1.tasks as flows_tasks_api_module
     import apps.flows.src.channels.a2a as flows_a2a_channel_module
@@ -898,9 +896,9 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
     import apps.flows.src.services.handoff_orchestrator_service as flows_handoff_orchestrator_module
     import apps.flows.src.services.hitl_work_item_service as flows_hitl_work_item_module
     import apps.flows.src.triggers.executor as flows_trigger_executor_module
-    import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
+    import apps.idle.tasks.push_notification_tasks as push_notification_tasks
     import apps.rag.realtime.operations as rag_operations_module
-    import apps.rag_worker.tasks.indexing_tasks as rag_indexing_tasks
+    import apps.rag.tasks.indexing_tasks as rag_indexing_tasks
     import apps.sync.realtime.handlers as sync_handlers_module
     import apps.sync.realtime.notification_tasks as sync_notification_tasks
     import apps.sync.realtime.tasks as sync_realtime_tasks
@@ -908,7 +906,7 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
     import apps.sync.services.recording_service as sync_recording_service_module
     import core.mail.enqueue as mail_enqueue_module
     import core.tasks.kicker as task_kicker_module
-    from apps.crm_worker.tasks.task_names import (
+    from apps.crm.tasks.task_names import (
         CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN,
         CRM_PROCESS_NOTE,
         CRM_REBUILD_DAILY_SUMMARY,
@@ -933,7 +931,7 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
         TASK_INVOKE_LLM,
         TASK_PROCESS_FLOW,
     )
-    from apps.idle_worker.tasks.task_names import (
+    from apps.idle.tasks.task_names import (
         TASK_PUSH_CONFIG_DELETE,
         TASK_PUSH_CONFIG_GET,
         TASK_PUSH_CONFIG_LIST,
@@ -944,7 +942,7 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
         TASK_SEND_TASK_INPUT_REQUIRED,
         TASK_SEND_TASK_UPDATE,
     )
-    from apps.rag_worker.tasks.task_names import RAG_INDEX_DOCUMENT_S3
+    from apps.rag.tasks.task_names import RAG_INDEX_DOCUMENT_S3
     from apps.sync.realtime.task_names import (
         DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
         DELIVER_SYNC_MENTION_NOTIFICATION,
@@ -1101,7 +1099,7 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
             sync_notification_tasks.deliver_sync_mention_notification
         ),
         RAG_INDEX_DOCUMENT_S3: rag_indexing_tasks.index_rag_document_s3_task,
-        # Mail worker tasks требуют IdleWorkerDi и IMAP port теста.
+        # Mail worker tasks требуют IdleDi и IMAP port теста.
         # Offline-тесты бьют MailService напрямую; worker path — в
         # test_mail_complete_client_taskiq.
         # Здесь только ack, чтобы enqueue не падал на «неизвестный task».
@@ -1199,10 +1197,10 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
 
 def _code_runner_available() -> bool:
     """Проверяет доступность code_runner_python через HTTP health-check."""
-    import httpx
+    import httpx2
 
     try:
-        response = httpx.get(
+        response = httpx2.get(
             "http://127.0.0.1:9017/health",
             timeout=1.0,
         )
@@ -1292,18 +1290,18 @@ async def crm_di(openfga_settings, service_processes):
 
 @pytest_asyncio.fixture(scope="session")
 async def rag_worker_di(service_processes):
-    """RagWorkerDi процесса rag_worker (``service_processes``)."""
-    from apps.rag_worker.di import RagWorkerDi
+    """RagDi процесса rag_worker (``service_processes``)."""
+    from apps.rag.di import RagDi
 
-    return await service_processes.di(RagWorkerDi)
+    return await service_processes.di(RagDi)
 
 
 @pytest_asyncio.fixture(scope="session")
 async def idle_worker_di(service_processes):
-    """IdleWorkerDi процесса idle_worker (``service_processes``)."""
-    from apps.idle_worker.di import IdleWorkerDi
+    """IdleDi процесса idle_worker (``service_processes``)."""
+    from apps.idle.di import IdleDi
 
-    return await service_processes.di(IdleWorkerDi)
+    return await service_processes.di(IdleDi)
 
 
 @pytest.fixture(scope="session")

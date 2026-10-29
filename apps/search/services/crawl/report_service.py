@@ -29,7 +29,7 @@ class CrawlReportService:
         self._rag_client: RagClient = rag_client
 
     async def list_profiles(self, *, limit: int, offset: int) -> OffsetPage[CrawlProfileWithIndex]:
-        return await CrawlProfile.with_index_page_by_crawl_profile_id(limit=limit, offset=offset)
+        return await CrawlProfile.with_index_page_by_crawl_profile_id_asc(limit=limit, offset=offset)
 
     async def list_domains(
         self,
@@ -40,7 +40,7 @@ class CrawlReportService:
         offset: int,
     ) -> OffsetPage[CrawlDomain]:
         _ = await CrawlProfile.require_with_index(crawl_profile_id)
-        return await CrawlDomain.page_by_domain(
+        return await CrawlDomain.page_by_domain_asc(
             crawl_profile_id=crawl_profile_id,
             status=status,
             limit=limit,
@@ -50,14 +50,14 @@ class CrawlReportService:
     async def get_profile_summary(self, crawl_profile_id: str) -> CrawlProfileSummary:
         profile = await CrawlProfile.require_with_index(crawl_profile_id)
         now = datetime.now(UTC)
-        domain_counts = await CrawlDomain.count_by_status(crawl_profile_id)
-        url_counts = await CrawlUrl.count_by_status_for_profile(crawl_profile_id)
+        domain_counts = await CrawlDomain.status_counts(crawl_profile_id)
+        url_counts = await CrawlUrl.status_counts_for_profile(crawl_profile_id)
         domains_total = await CrawlDomain.count_for_profile(crawl_profile_id)
         domains_due = await CrawlDomain.count_due(crawl_profile_id, now=now)
-        running_job = await CrawlJob.active_for_profile(crawl_profile_id)
-        latest_job = await CrawlJob.latest_for_profile(crawl_profile_id)
-        content_type_counts = await CrawlUrl.count_by_enrichment_content_type(crawl_profile_id)
-        primary_topic_counts = await CrawlUrl.count_by_enrichment_primary_topic(crawl_profile_id)
+        running_job = await CrawlJob.active_for_profile_by_started_at_desc(crawl_profile_id)
+        latest_job = await CrawlJob.latest_for_profile_by_started_at_desc(crawl_profile_id)
+        content_type_counts = await CrawlUrl.content_type_counts_by_count_desc(crawl_profile_id)
+        primary_topic_counts = await CrawlUrl.primary_topic_counts_by_count_desc(crawl_profile_id)
         urls_enriched_total = await CrawlUrl.count_enriched_for_profile(crawl_profile_id)
         urls_enrichment_pending = await CrawlUrl.count_enrichment_pending_for_profile(
             crawl_profile_id,
@@ -106,7 +106,7 @@ class CrawlReportService:
         offset: int,
     ) -> OffsetPage[CrawlUrlListItem]:
         _ = await CrawlProfile.require_with_index(crawl_profile_id)
-        return await CrawlUrl.list_page_for_profile(
+        return await CrawlUrl.page_for_profile_by_updated_at_desc(
             crawl_profile_id=crawl_profile_id,
             crawl_status=crawl_status,
             domain=domain,

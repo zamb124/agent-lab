@@ -21,7 +21,7 @@ from core.mail.exceptions import (
 from core.mail.imap_folders import (
     STANDARD_ENSURE_ROLES,
     ImapResponseLine,
-    build_mail_folder_list_result,
+    build_mail_folder_list_result_by_role_and_name_asc,
     is_imap_already_exists_response,
     parse_imap_list_lines,
     parse_namespace_personal_prefix,
@@ -590,7 +590,7 @@ class ImapSmtpTransport:
             list_percent = await sdk.list('""', "%")
             if list_percent.result == "OK":
                 entries = parse_imap_list_lines(list(list_percent.lines))
-        base = build_mail_folder_list_result(
+        base = build_mail_folder_list_result_by_role_and_name_asc(
             list_entries=entries,
             namespace_prefix=namespace_prefix,
             namespace_delimiter=namespace_delimiter,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.crm.services.integration_auto_sync_service import validate_cron_for_timezone
 

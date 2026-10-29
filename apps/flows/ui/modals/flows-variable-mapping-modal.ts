@@ -14,7 +14,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
-import { asArray, asObject } from '../_helpers/flows-resolvers.js';
+import { asArray, asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
 export class FlowsVariableMappingModal extends PlatformModal {
@@ -160,17 +160,20 @@ export class FlowsVariableMappingModal extends PlatformModal {
     }
 
     _targetDataflowNode() {
-        const nodes = (this._editor.state as Record<string, any>)?.dataflow?.nodes;
-        if (!nodes || typeof nodes !== 'object') return null;
+        const dataflow = this._editor.state.dataflow;
+        if (!isPlainObject(dataflow)) return null;
+        const nodes = dataflow.nodes;
+        if (!isPlainObject(nodes)) return null;
         const info = nodes[this.targetNodeId];
-        return info && typeof info === 'object' ? info : null;
+        return isPlainObject(info) ? info : null;
     }
 
     _paramSuggestions() {
         const info = this._targetDataflowNode();
         const out = [];
         const seen = new Set();
-        const required = info && Array.isArray(info.required_inputs) ? info.required_inputs : [];
+        const requiredInputs = info === null ? null : info.required_inputs;
+        const required = Array.isArray(requiredInputs) ? requiredInputs : [];
         for (const req of required) {
             const name = req && typeof req.name === 'string' ? req.name : '';
             if (name && !seen.has(name)) {
@@ -213,7 +216,13 @@ export class FlowsVariableMappingModal extends PlatformModal {
                                     role="button"
                                     tabindex="0"
                                     @click=${() => { this._targetParam = name; }}
-                                    @keydown=${(e: CustomEvent) => { if ((e as Record<string, any>).key === 'Enter' || (e as Record<string, any>).key === ' ') { e.preventDefault(); this._targetParam = name; } }}
+                                    @keydown=${(e: Event) => {
+                                        if (!(e instanceof KeyboardEvent)) return;
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            this._targetParam = name;
+                                        }
+                                    }}
                                 >${name}</article>
                             `)}
                         </div>
@@ -259,19 +268,19 @@ export class FlowsVariableMappingModal extends PlatformModal {
             this.close();
             return;
         }
-        const nodes = { ...asObject((data as Record<string, any>).nodes) };
+        const nodes = { ...asObject(data.nodes) };
         const target = nodes[this.targetNodeId];
-        if (!target) {
+        if (!isPlainObject(target)) {
             this.close();
             return;
         }
         const existingMapping = asObject(target.input_mapping);
         const inputMapping = { ...existingMapping, [param]: `@state:${this.sourcePath}` };
         nodes[this.targetNodeId] = { ...target, input_mapping: inputMapping };
-        let edges = asArray((data as Record<string, any>).edges);
+        let edges = asArray(data.edges);
         if (!this.pathExists && this._createEdge) {
             const exists = edges.some(
-                (edge) => edge && edge.from_node === this.fromNodeId && edge.to_node === this.targetNodeId,
+                (edge) => isPlainObject(edge) && edge.from_node === this.fromNodeId && edge.to_node === this.targetNodeId,
             );
             if (!exists) {
                 edges = [...edges, { from_node: this.fromNodeId, to_node: this.targetNodeId }];

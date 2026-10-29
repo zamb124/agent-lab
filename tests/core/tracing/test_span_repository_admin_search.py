@@ -63,7 +63,7 @@ async def test_admin_span_page_and_cursor_ilike_company(di, unique_id: str):
             company_id="prefix_acme_suffix",
         )
     )
-    rows, _ = await Span.admin_span_page_and_cursor(
+    rows, _ = await Span.admin_span_page_and_cursor_by_start_time_and_span_id_desc(
         company_id_query="acme",
         limit=20,
     )
@@ -85,7 +85,7 @@ async def test_admin_facet_company_requires_min_len_for_ilike_branch(di, unique_
         )
     )
     with pytest.raises(ValueError, match="company_id_query"):
-        await Span.admin_span_page_and_cursor(company_id_query="z", limit=10)
+        await Span.admin_span_page_and_cursor_by_start_time_and_span_id_desc(company_id_query="z", limit=10)
 
 
 @pytest.mark.asyncio
@@ -195,12 +195,12 @@ async def test_admin_span_page_and_cursor_namespace_and_service_ilike(di, unique
             namespace=f"ns_{unique_id}_x",
         )
     )
-    rows_ns, _ = await Span.admin_span_page_and_cursor(
+    rows_ns, _ = await Span.admin_span_page_and_cursor_by_start_time_and_span_id_desc(
         namespace_query=unique_id,
         limit=20,
     )
     assert any(r.span_id == f"{unique_id}_ns" for r in rows_ns)
-    rows_svc, _ = await Span.admin_span_page_and_cursor(
+    rows_svc, _ = await Span.admin_span_page_and_cursor_by_start_time_and_span_id_desc(
         service_name_query=unique_id,
         limit=20,
     )

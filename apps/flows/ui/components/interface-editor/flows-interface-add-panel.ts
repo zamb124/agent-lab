@@ -62,8 +62,12 @@ export class FlowsInterfaceAddPanel extends PlatformElement {
     }
 
     _onDragStart(event: DragEvent, item: any) {
-        (event as Record<string, any>).dataTransfer.setData(BLOCK_TYPE_MIME, JSON.stringify({ type: item.type, columns: item.columns }));
-        (event as Record<string, any>).dataTransfer.effectAllowed = 'copy';
+        const transfer = event.dataTransfer;
+        if (transfer === null) {
+            throw new Error('flows-interface-add-panel: dataTransfer required');
+        }
+        transfer.setData(BLOCK_TYPE_MIME, JSON.stringify({ type: item.type, columns: item.columns }));
+        transfer.effectAllowed = 'copy';
     }
 
     override render(): TemplateResult {

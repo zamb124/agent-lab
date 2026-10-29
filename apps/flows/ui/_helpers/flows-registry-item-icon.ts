@@ -6,11 +6,12 @@ import { html } from 'lit';
 import { getNodeTypeMeta } from './node-icons.js';
 import { inferToolRefLanguage } from './flows-tool-visual.js';
 import { renderMcpServerIcon } from './mcp-server-icon.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {TemplateResult} from 'lit';
 
 const MCP_CODE_MODE = 'mcp_tool';
 
-const TAG_GROUP_ICONS = Object.freeze({
+const TAG_GROUP_ICONS: Record<string, string> = Object.freeze({
     crm: 'users',
     documents: 'file-text',
     files: 'folder',
@@ -34,7 +35,14 @@ const TAG_GROUP_ICONS = Object.freeze({
  * @param {Record<string, unknown>} item
  * @returns {boolean}
  */
-function _hasInlineCode(item: any) {
+function requireRegistryItem(item: unknown): Record<string, unknown> {
+    if (!isPlainRecord(item)) {
+        throw new Error('flows-registry-item-icon: item required');
+    }
+    return item;
+}
+
+function _hasInlineCode(item: Record<string, unknown>) {
     return typeof item.code === 'string' && item.code.trim().length > 0;
 }
 
@@ -42,7 +50,7 @@ function _hasInlineCode(item: any) {
  * @param {Record<string, unknown>} item
  * @returns {boolean}
  */
-function _isMcpItem(item: any) {
+function _isMcpItem(item: Record<string, unknown>) {
     const mcpId = item.mcp_server_id;
     if (typeof mcpId === 'string' && mcpId.length > 0) {
         return true;
@@ -58,17 +66,15 @@ function _isMcpItem(item: any) {
  * @param {Record<string, unknown>} item — элемент из /tools или /tools/all
  * @returns {'flow' | 'mcp' | 'code' | 'tool'}
  */
-export function registryItemVisualKind(item: any) {
-    if (!item || typeof item !== 'object') {
-        throw new Error('flows-registry-item-icon: item required');
-    }
-    if (item.item_type === 'flow') {
+export function registryItemVisualKind(item: unknown): 'flow' | 'mcp' | 'code' | 'tool' {
+    const record = requireRegistryItem(item);
+    if (record.item_type === 'flow') {
         return 'flow';
     }
-    if (_isMcpItem(item)) {
+    if (_isMcpItem(record)) {
         return 'mcp';
     }
-    if (_hasInlineCode(item)) {
+    if (_hasInlineCode(record)) {
         return 'code';
     }
     return 'tool';
@@ -79,22 +85,26 @@ export function registryItemVisualKind(item: any) {
  * @param {Record<string, unknown>} item
  * @returns {string}
  */
-export function registryItemLanguage(item: any) {
+export function registryItemLanguage(item: unknown): string {
     if (registryItemVisualKind(item) !== 'code') {
         return '';
     }
-    return inferToolRefLanguage(item);
+    const language = inferToolRefLanguage(item);
+    if (typeof language !== 'string') {
+        throw new Error('flows-registry-item-icon: code language must be a string');
+    }
+    return language;
 }
 
 /**
  * @param {string} tag
  * @returns {string} имя иконки для platform-icon
  */
-export function tagGroupIconName(tag: any) {
+export function tagGroupIconName(tag: unknown) {
     if (typeof tag !== 'string' || tag.length === 0) {
         throw new Error('flows-registry-item-icon: tag required');
     }
-    const mapped = (TAG_GROUP_ICONS as any)[tag];
+    const mapped = TAG_GROUP_ICONS[tag];
     if (typeof mapped === 'string' && mapped.length > 0) {
         return mapped;
     }
@@ -106,15 +116,17 @@ export function tagGroupIconName(tag: any) {
  * @param {Record<string, unknown>} item
  * @returns {string}
  */
-export function registryItemPrimaryTagIcon(item: any) {
-    if (!item || typeof item !== 'object') {
-        throw new Error('flows-registry-item-icon: item required');
-    }
-    const tags = item.tags;
+export function registryItemPrimaryTagIcon(item: unknown) {
+    const record = requireRegistryItem(item);
+    const tags = record.tags;
     if (Array.isArray(tags)) {
         for (const tag of tags) {
-            if (typeof tag === 'string' && tag.length > 0 && (TAG_GROUP_ICONS as any)[tag]) {
-                return (TAG_GROUP_ICONS as any)[tag];
+            if (typeof tag !== 'string' || tag.length === 0) {
+                continue;
+            }
+            const mapped = TAG_GROUP_ICONS[tag];
+            if (typeof mapped === 'string' && mapped.length > 0) {
+                return mapped;
             }
         }
     }
@@ -125,7 +137,7 @@ export function registryItemPrimaryTagIcon(item: any) {
  * @param {Record<string, unknown>} item — элемент из /tools или /tools/all
  * @returns {string} имя иконки для platform-icon
  */
-export function registryItemIconName(item: any) {
+export function registryItemIconName(item: unknown) {
     const kind = registryItemVisualKind(item);
     if (kind === 'flow') {
         return getNodeTypeMeta('flow').icon;
@@ -144,15 +156,13 @@ export function registryItemIconName(item: any) {
  * @param {Record<string, unknown>} item
  * @returns {string}
  */
-export function registryItemTitle(item: any) {
-    if (!item || typeof item !== 'object') {
-        throw new Error('flows-registry-item-icon: item required');
-    }
-    const title = item.title;
+export function registryItemTitle(item: unknown) {
+    const record = requireRegistryItem(item);
+    const title = record.title;
     if (typeof title === 'string' && title.length > 0) {
         return title;
     }
-    const id = item.tool_id;
+    const id = record.tool_id;
     if (typeof id === 'string' && id.length > 0) {
         return id;
     }
@@ -166,19 +176,26 @@ export function registryItemTitle(item: any) {
  * @param {{ size?: number, server?: Record<string, unknown> | null }} [options]
  * @returns {import('lit').TemplateResult}
  */
-export function renderRegistryItemCardIcon(item: any, options = {}) {
+export function renderRegistryItemCardIcon(
+    item: unknown,
+    options: { size?: unknown; server?: unknown } = {},
+) {
     const kind = registryItemVisualKind(item);
-    const size = typeof (options as Record<string, any>).size === 'number' && (options as Record<string, any>).size > 0 ? (options as Record<string, any>).size : 22;
+    const sizeValue = options.size;
+    const size = typeof sizeValue === 'number' && sizeValue > 0 ? sizeValue : 22;
     const language = registryItemLanguage(item);
     let inner;
     if (kind === 'mcp') {
-        const server = (options as Record<string, any>).server;
-        if (server && typeof server === 'object') {
+        const server = options.server;
+        if (server != null && typeof server === 'object' && !isPlainRecord(server)) {
+            throw new Error('flows-registry-item-icon: server must be an object');
+        }
+        if (isPlainRecord(server)) {
             inner = renderMcpServerIcon(server, size);
         } else {
             inner = html`<platform-icon name=${registryItemIconName(item)} size=${size}></platform-icon>`;
         }
-    } else if (kind === 'code' && (language as any).length > 0) {
+    } else if (kind === 'code' && language.length > 0) {
         inner = html`<flows-code-language-icon language=${language} size=${size}></flows-code-language-icon>`;
     } else {
         inner = html`<platform-icon name=${registryItemIconName(item)} size=${size}></platform-icon>`;

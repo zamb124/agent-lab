@@ -14,6 +14,18 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/glass-spinner.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function embedIdMap(value: unknown): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        throw new Error('embed-code-modal: map must be an object');
+    }
+    const row: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(value)) {
+        row[key] = field;
+    }
+    return row;
+}
 
 export class FrontendEmbedCodeModal extends PlatformModal {
     static modalKind = 'frontend.embed_code';
@@ -120,17 +132,20 @@ export class FrontendEmbedCodeModal extends PlatformModal {
         }
     }
 
-    _entry() {
+    _entry(): Record<string, unknown> | null {
         if (typeof this.embedId !== 'string' || this.embedId.length === 0) return null;
-        const map = this._code.state.codeByEmbedId;
-        if ((map as Record<string, any>)[this.embedId] === undefined) return null;
-        return (map as Record<string, any>)[this.embedId];
+        const entry = embedIdMap(this._code.state.codeByEmbedId)[this.embedId];
+        if (entry === undefined) return null;
+        if (!isPlainRecord(entry)) {
+            throw new Error('embed-code-modal: entry must be an object');
+        }
+        return entry;
     }
 
     _isLoading() {
         if (typeof this.embedId !== 'string' || this.embedId.length === 0) return false;
-        const map = this._code.state.codeLoadingById;
-        return Boolean((map as Record<string, any>)[this.embedId]);
+        const loading = embedIdMap(this._code.state.codeLoadingById)[this.embedId];
+        return Boolean(loading);
     }
 
     _copy(text: string, successKey: string) {
@@ -145,14 +160,14 @@ export class FrontendEmbedCodeModal extends PlatformModal {
     }
 
     override renderBody() {
-        if (this._isLoading() || !this._entry()) {
+        const entry = this._entry();
+        if (this._isLoading() || entry === null) {
             return html`<div class="loading"><glass-spinner></glass-spinner></div>`;
         }
-        const entry = this._entry();
-        const html_code = entry.html_code;
+        const html_code = typeof entry.html_code === 'string' ? entry.html_code : '';
         const page_url = typeof entry.page_url === 'string' ? entry.page_url : '';
         const presentation = entry.presentation === 'page' ? 'page' : 'drawer';
-        const token_endpoint = entry.token_endpoint;
+        const token_endpoint = typeof entry.token_endpoint === 'string' ? entry.token_endpoint : '';
         const backendExample = typeof entry.backend_proxy_code === 'string' ? entry.backend_proxy_code : '';
         const clientExample = typeof entry.browser_to_host_backend_code === 'string' ? entry.browser_to_host_backend_code : '';
         const origins = Array.isArray(entry.allowed_origins) ? entry.allowed_origins : [];

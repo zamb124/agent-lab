@@ -229,12 +229,6 @@
     ],
     "onlyoffice_port": 8088
   },
-  "agent": {
-    "releases": {
-      "github_owner": "zamb124",
-      "github_repo": "agent-lab"
-    }
-  },
   "services": {
     "office": {
       "office": {

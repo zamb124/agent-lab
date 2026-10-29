@@ -84,10 +84,10 @@ class TestReadIsolation:
             company_id=env_a.company_id, transfer_id=tid
         )
         move = (
-            await StockMove.list_for_transfer(env_a.company_id, tid)
+            await StockMove.list_for_transfer_by_created_at_asc(env_a.company_id, tid)
         )[0]
         line = (
-            await StockMoveLine.list_for_move(env_a.company_id, move.move_id)
+            await StockMoveLine.list_open_for_move_by_created_at_asc(env_a.company_id, move.move_id)
         )[0]
         quant = await StockQuant.by_key(
             company_id=env_a.company_id,
@@ -143,7 +143,7 @@ class TestReadIsolation:
         env_a = await _env(stock_di, unique_id, "a")
         env_b = await _env(stock_di, unique_id, "b")
         _ = await _receipt(env_a, Decimal("5"), Decimal("7"))
-        layers_b = await StockValueLayer.list_by_entry_no(
+        layers_b = await StockValueLayer.list_by_entry_no_asc(
             env_b.company_id,
             product_id=None,
             warehouse_id=None,
@@ -154,7 +154,7 @@ class TestReadIsolation:
             layer.company_id == env_b.company_id for layer in layers_b
         )
         # Контроль: у A слой реально записан (иначе тест пустой).
-        layers_a = await StockValueLayer.list_by_entry_no(
+        layers_a = await StockValueLayer.list_by_entry_no_asc(
             env_a.company_id,
             product_id=None,
             warehouse_id=None,
@@ -259,10 +259,10 @@ class TestMutationIsolation:
             company_id=env_a.company_id, transfer_id=tid
         )
         move = (
-            await StockMove.list_for_transfer(env_a.company_id, tid)
+            await StockMove.list_for_transfer_by_created_at_asc(env_a.company_id, tid)
         )[0]
         line = (
-            await StockMoveLine.list_for_move(env_a.company_id, move.move_id)
+            await StockMoveLine.list_open_for_move_by_created_at_asc(env_a.company_id, move.move_id)
         )[0]
         with pytest.raises(PlatformNotFoundError) as exc:
             _ = await env_b.di.task_service.claim(
@@ -284,7 +284,7 @@ class TestMutationIsolation:
             company_id=env_a.company_id, transfer_id=tid
         )
         move = (
-            await StockMove.list_for_transfer(env_a.company_id, tid)
+            await StockMove.list_for_transfer_by_created_at_asc(env_a.company_id, tid)
         )[0]
         from apps.stock.models.scan import (
             ScanContext,
@@ -418,10 +418,10 @@ class TestMutationIsolation:
             company_id=env_a.company_id, transfer_id=tid
         )
         move = (
-            await StockMove.list_for_transfer(env_a.company_id, tid)
+            await StockMove.list_for_transfer_by_created_at_asc(env_a.company_id, tid)
         )[0]
         line = (
-            await StockMoveLine.list_for_move(env_a.company_id, move.move_id)
+            await StockMoveLine.list_open_for_move_by_created_at_asc(env_a.company_id, move.move_id)
         )[0]
         with pytest.raises(PlatformNotFoundError) as exc:
             _ = await env_b.di.wave_service.create(

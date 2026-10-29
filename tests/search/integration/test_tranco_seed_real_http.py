@@ -53,7 +53,7 @@ async def test_tranco_import_real_http_inserts_ru_domains(
     domain_count = await CrawlDomain.count_for_profile(crawl_profile_id)
     assert domain_count == result.imported
 
-    page = await CrawlDomain.page_by_domain(
+    page = await CrawlDomain.page_by_domain_asc(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=50,

@@ -371,7 +371,7 @@ async def _provider_model_options() -> dict[str, dict[str, list[JsonObject]]]:
         for spec in platform_provider_specs_for_capability(cap):
             if spec.kind != "platform":
                 continue
-            rows = await AIModelRecord.list_by_provider_capability(
+            rows = await AIModelRecord.list_unordered_by_provider_and_capability(
                 spec.provider,
                 cap,
             )
@@ -396,7 +396,7 @@ async def _embedding_model_options() -> dict[str, list[JsonObject]]:
     options: dict[str, list[JsonObject]] = {}
     for spec in platform_provider_specs_for_capability(AICapability.EMBEDDING):
         provider_options: list[JsonObject] = []
-        rows = await AIModelRecord.list_by_provider_capability(
+        rows = await AIModelRecord.list_unordered_by_provider_and_capability(
             spec.provider,
             AICapability.EMBEDDING,
         )

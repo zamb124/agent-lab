@@ -36,7 +36,7 @@ describe('trace-view-model', () => {
         expect(n[0].subtitle).to.include('flows');
         expect(n[0].subtitle).to.include('react.iteration');
         expect(n[0].durationMs).to.equal(1000);
-        expect(n[0].raw).to.equal(roots[0]);
+        expect(n[0].raw).to.deep.equal(roots[0]);
     });
 
     it('inferUiKind: gen_ai.operation.name chat -> generation', () => {

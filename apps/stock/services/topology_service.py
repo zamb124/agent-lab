@@ -241,7 +241,7 @@ class TopologyService:
     async def list_locations(
         self, *, company_id: str, warehouse_id: str | None
     ) -> list[StockLocation]:
-        rows = await StockLocation.list_by_usage_and_name(company_id)
+        rows = await StockLocation.list_by_usage_and_name_asc(company_id)
         if warehouse_id is not None:
             rows = [r for r in rows if r.warehouse_id == warehouse_id]
         return rows
@@ -259,7 +259,7 @@ class TopologyService:
     async def list_storage_types(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockStorageType]:
-        return await StockStorageType.list_by_name_for_warehouse(company_id, warehouse_id)
+        return await StockStorageType.list_for_warehouse_by_name_asc(company_id, warehouse_id)
 
     async def create_storage_type(
         self,
@@ -321,7 +321,7 @@ class TopologyService:
     async def list_container_types(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockContainerType]:
-        return await StockContainerType.list_by_name_for_warehouse(company_id, warehouse_id)
+        return await StockContainerType.list_for_warehouse_by_name_asc(company_id, warehouse_id)
 
     async def create_container_type(
         self,
@@ -377,7 +377,7 @@ class TopologyService:
     async def list_resource_types(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockResourceType]:
-        return await StockResourceType.list_by_name_for_warehouse(company_id, warehouse_id)
+        return await StockResourceType.list_for_warehouse_by_name_asc(company_id, warehouse_id)
 
     async def create_resource_type(
         self,
@@ -423,7 +423,7 @@ class TopologyService:
     async def list_resources(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockResource]:
-        return await StockResource.list_by_code_for_warehouse(company_id, warehouse_id)
+        return await StockResource.list_for_warehouse_by_code_asc(company_id, warehouse_id)
 
     async def create_resource(
         self,
@@ -527,7 +527,7 @@ class TopologyService:
         warehouse_id: str | None,
         parent_location_id: str | None,
     ) -> list[StockLocation]:
-        return await StockLocation.list_containers(
+        return await StockLocation.list_active_containers_by_complete_name_asc(
             company_id,
             warehouse_id=warehouse_id,
             parent_location_id=parent_location_id,
@@ -606,8 +606,8 @@ class TopologyService:
         container = await StockLocation.by_id(company_id, container_id)
         if container is None or container.usage != StockLocationUsage.CONTAINER:
             raise _not_found("Container not found", "container_not_found")
-        quants = await StockQuant.list_for_locations(company_id, [container_id])
-        children = await StockLocation.list_containers(
+        quants = await StockQuant.list_unordered_for_locations(company_id, [container_id])
+        children = await StockLocation.list_active_containers_by_complete_name_asc(
             company_id, parent_location_id=container_id
         )
         return StockContainerContents(

@@ -308,7 +308,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -325,7 +325,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'llm_node', name: 'A', structured_output: true };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -346,7 +346,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -366,7 +366,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -471,7 +471,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -499,7 +499,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -565,7 +565,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -601,7 +601,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -630,7 +630,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
         const el = await fixture(html`
             <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+                .nodeConfig=${node} .flowNodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
         await elementUpdated(el);
@@ -1015,7 +1015,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1053,7 +1053,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1075,7 +1075,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1130,7 +1130,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1181,7 +1181,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1202,7 +1202,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1241,7 +1241,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1268,7 +1268,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1302,7 +1302,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'datasource'} .flowVariables=${{}}>
             </flows-datasource-node-editor>
         `);
         await elementUpdated(el);
@@ -1598,7 +1598,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'code', name: 'A' };
         const el = await fixture(html`
             <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'code'}>
+                .nodeConfig=${node} .flowNodeType=${'code'}>
             </flows-base-node-editor>
         `);
         await elementUpdated(el);
@@ -1610,7 +1610,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'code', name: 'A' };
         const el = await fixture(html`
             <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'code'}>
+                .nodeConfig=${node} .flowNodeType=${'code'}>
             </flows-base-node-editor>
         `);
         await elementUpdated(el);

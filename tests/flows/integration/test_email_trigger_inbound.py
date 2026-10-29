@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.triggers.email_filter import (

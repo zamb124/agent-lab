@@ -93,7 +93,7 @@ class ToolTagGroupService:
     ) -> dict[str, list[str]]:
         if len(tools_by_tag) == 0:
             return {}
-        flows = await FlowConfig.list_current(limit=_FLOW_SCAN_LIMIT, offset=0)
+        flows = await FlowConfig.list_current_by_created_at_desc(limit=_FLOW_SCAN_LIMIT, offset=0)
         tool_to_tags: dict[str, set[str]] = defaultdict(set)
         for tag, tool_pairs in tools_by_tag.items():
             for tool_id, _ in tool_pairs:

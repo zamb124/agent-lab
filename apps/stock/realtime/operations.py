@@ -1470,7 +1470,7 @@ async def _scan_expected(
         raise PlatformNotFoundError(
             "Move not found", error_code="move_not_found"
         )
-    lines = await StockMoveLine.list_for_move(company_id, move_id)
+    lines = await StockMoveLine.list_open_for_move_by_created_at_asc(company_id, move_id)
     if not lines:
         return None
     first = lines[0]

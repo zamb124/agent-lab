@@ -167,7 +167,8 @@ class AgentSkill(CompanyScopedModel):
         )
 
     @classmethod
-    async def list_skills(cls, *, limit: int, offset: int) -> list[Self]:
+    async def list_by_agent_skill_id_asc(cls, *, limit: int, offset: int) -> list[Self]:
+        """Окно skills, ORDER BY agent_skill_id ASC. limit < 1 и offset < 0 — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if offset < 0:

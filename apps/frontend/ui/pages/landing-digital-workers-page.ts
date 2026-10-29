@@ -13,6 +13,7 @@ import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 /** Изолированный toggle: не пересекается с Lara (`platform-lara-open`). */
 const LANDING_DEMO_DRAWER_TOGGLE_EVENT = 'landing-demo-flow-ui-toggle';
@@ -161,10 +162,14 @@ export class LandingDigitalWorkersPage extends PlatformPage {
             }
             return {};
         }
-        if (typeof (result as Record<string, any>).token !== 'string' || (result as Record<string, any>).token === '') {
+        if (!isPlainRecord(result)) {
             throw new Error('landing_digital_workers: session token missing');
         }
-        return { Authorization: `Bearer ${(result as Record<string, any>).token}` };
+        const token = result.token;
+        if (typeof token !== 'string' || token === '') {
+            throw new Error('landing_digital_workers: session token missing');
+        }
+        return { Authorization: `Bearer ${token}` };
     };
 
     _tryAgent(card: Record<string, any>) {
@@ -222,7 +227,10 @@ export class LandingDigitalWorkersPage extends PlatformPage {
         if (raw === null || typeof raw !== 'object') {
             return [];
         }
-        const items = (raw as Record<string, any>).items;
+        if (!isPlainRecord(raw)) {
+            throw new Error('landing_digital_workers: items must be array');
+        }
+        const items = raw.items;
         if (!Array.isArray(items)) {
             throw new Error('landing_digital_workers: items must be array');
         }

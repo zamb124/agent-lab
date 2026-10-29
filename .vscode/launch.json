@@ -20,7 +20,7 @@
             "consoleTitle": "run.py: all 🔁",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "all"
             ],
@@ -37,7 +37,7 @@
             "consoleTitle": "run.py: flows 🔀",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "flows"
             ],
@@ -54,7 +54,7 @@
             "consoleTitle": "run.py: frontend 🌐",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "frontend"
             ],
@@ -71,7 +71,7 @@
             "consoleTitle": "run.py: crm 💼",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "crm"
             ],
@@ -88,7 +88,7 @@
             "consoleTitle": "run.py: rag 📚",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "rag"
             ],
@@ -105,7 +105,7 @@
             "consoleTitle": "run.py: sync 💬",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "sync"
             ],
@@ -122,7 +122,7 @@
             "consoleTitle": "run.py: worktracker ✅",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "worktracker"
             ],
@@ -139,7 +139,7 @@
             "consoleTitle": "run.py: secrets 🔐",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "secrets"
             ],
@@ -156,7 +156,7 @@
             "consoleTitle": "run.py: wiki 📖",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "wiki"
             ],
@@ -173,7 +173,7 @@
             "consoleTitle": "run.py: guest_runtime",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "guest_runtime"
             ],
@@ -190,7 +190,7 @@
             "consoleTitle": "run.py: office 📄",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "office"
             ],
@@ -207,7 +207,7 @@
             "consoleTitle": "run.py: scheduler-api 📆",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "scheduler-api"
             ],
@@ -224,7 +224,7 @@
             "consoleTitle": "run.py: browser 🌍",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "browser"
             ],
@@ -241,7 +241,7 @@
             "consoleTitle": "run.py: provider_litserve 🤖",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "provider_litserve"
             ],
@@ -258,7 +258,7 @@
             "consoleTitle": "run.py: voice 🎙️",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "voice"
             ],
@@ -275,7 +275,7 @@
             "consoleTitle": "run.py: capability_gateway 🔌",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "capability_gateway"
             ],
@@ -292,7 +292,7 @@
             "consoleTitle": "run.py: code_runner_python 🐍",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "code_runner_python"
             ],
@@ -309,7 +309,7 @@
             "consoleTitle": "run.py: code_runner_node 🟨",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "code_runner_node"
             ],
@@ -326,7 +326,7 @@
             "consoleTitle": "run.py: code_runner_go 🐹",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "code_runner_go"
             ],
@@ -343,7 +343,7 @@
             "consoleTitle": "run.py: code_runner_csharp 📘",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "code_runner_csharp"
             ],
@@ -360,7 +360,7 @@
             "consoleTitle": "run.py: flows_worker ⚙️",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "flows_worker"
             ],
@@ -377,7 +377,7 @@
             "consoleTitle": "run.py: rag_worker 🗄️",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "rag_worker"
             ],
@@ -394,7 +394,7 @@
             "consoleTitle": "run.py: sync_worker 📡",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "sync_worker"
             ],
@@ -411,7 +411,7 @@
             "consoleTitle": "run.py: crm_worker 📦",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "crm_worker"
             ],
@@ -428,7 +428,7 @@
             "consoleTitle": "run.py: idle_worker ☁️",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "idle_worker"
             ],
@@ -445,7 +445,7 @@
             "consoleTitle": "run.py: scheduler ⏰",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "scheduler"
             ],
@@ -462,7 +462,7 @@
             "consoleTitle": "run.py: search 🔍",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "search"
             ],
@@ -479,7 +479,7 @@
             "consoleTitle": "run.py: search_worker 🔎",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
+            "program": "${workspaceFolder}/scripts/dev/run.py",
             "args": [
                 "search_worker"
             ],

@@ -155,7 +155,7 @@ class WikiRagIndexService:
         )
         self._ensured_restricted_namespaces.add(restricted_id)
 
-    async def search(
+    async def search_by_score_desc(
         self,
         namespace: str,
         query: str,

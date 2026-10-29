@@ -200,7 +200,7 @@ export class FlowsCanvasContextMenu extends PlatformElement {
                 : html`
                     <div
                         class="item"
-                        ?data-danger=${(item as Record<string, any>).danger === true}
+                        ?data-danger=${'danger' in item && item.danger === true}
                         @click=${() => this._activate(item)}
                     >
                         <platform-icon name=${item.icon} size="14"></platform-icon>

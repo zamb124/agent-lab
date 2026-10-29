@@ -67,7 +67,7 @@ def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
 async def download_audio_from_url(*, url: str) -> tuple[bytes, str, str]:
     """Скачивает аудиодорожку по URL (YouTube и другие платформы, поддерживаемые yt-dlp).
 
-    Для прямых ссылок на медиафайлы использует httpx вместо yt-dlp.
+    Для прямых ссылок на медиафайлы использует httpx2 вместо yt-dlp.
 
     Аргументы:
         url: URL видео или аудио
@@ -104,7 +104,7 @@ def _looks_like_video_platform_url(url: str) -> bool:
 
 
 async def _download_direct_media(url: str) -> tuple[bytes, str, str]:
-    """Скачивает медиафайл по прямой ссылке через httpx."""
+    """Скачивает медиафайл по прямой ссылке через httpx2."""
     async with get_httpx_client(timeout=120.0) as client:
         response = await client.get(url)
     _ = response.raise_for_status()

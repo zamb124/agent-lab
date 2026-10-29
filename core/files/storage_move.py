@@ -57,7 +57,7 @@ async def run_storage_migration_batch(storage_migration_id: str) -> StorageMigra
         raise PlatformNotFoundError(f"storage migration not found: {storage_migration_id}")
     if migration.state != StorageMigrationState.RUNNING.value:
         return migration
-    rows = await FileRecord.list_for_storage_after(
+    rows = await FileRecord.list_alive_for_storage_by_file_id_after_asc(
         migration.source_storage_id,
         after_file_id=None,
         limit=_BATCH,

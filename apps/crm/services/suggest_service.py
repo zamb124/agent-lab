@@ -38,14 +38,15 @@ class SuggestService:
         self._rag: BaseRAGProvider = rag
         self._rerank_score_cache: RerankScoreCache = rerank_score_cache
 
-    async def list_suggests(
+    async def list_suggests_by_created_at_desc(
         self,
         namespace: str,
         status: str | None = "pending",
         limit: int = 50,
         offset: int = 0,
     ) -> OffsetPage[CRMSuggest]:
-        rows = CRMSuggest.in_company_namespace(self._company_id(), namespace)
+        """Страница подсказок, ORDER BY created_at DESC. Пустой status не фильтрует."""
+        rows = CRMSuggest.query_in_company_namespace(self._company_id(), namespace)
         if status is not None and status != "":
             rows = rows.filter(status=status)
         total = await rows.count()
@@ -53,7 +54,7 @@ class SuggestService:
         return OffsetPage[CRMSuggest](items=items, total=total, limit=limit, offset=offset)
 
     async def get_suggest(self, suggest_id: str, *, namespace: str) -> CRMSuggest | None:
-        return await CRMSuggest.in_company_namespace(
+        return await CRMSuggest.query_in_company_namespace(
             self._company_id(), namespace
         ).filter(suggest_id=suggest_id).get_or_none()
 
@@ -137,7 +138,7 @@ class SuggestService:
         (50 × (search + N × find_by_targets + N × get_by_type_id)); теперь —
         ~52 (50 search + 1 find_by_targets_batch + 1 get_by_type_ids).
         """
-        page = await CRMEntity.cursor_page(
+        page = await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
             namespace=namespace,
             limit=_SUGGEST_SCAN_LIMIT,
             company_id=company_id,
@@ -248,7 +249,7 @@ class SuggestService:
         company_id: str,
         namespace: str,
     ) -> int:
-        notes = await CRMEntity.list_notes_with_analysis_draft_not_applied(
+        notes = await CRMEntity.list_notes_with_analysis_draft_not_applied_by_updated_at_and_entity_id_desc(
             namespace=namespace,
             limit=_SUGGEST_SCAN_LIMIT,
             company_id=company_id,
@@ -333,7 +334,7 @@ class SuggestService:
         if len(statuses) == 0:
             raise ValueError("statuses are required")
         return await (
-            CRMSuggest.in_company_namespace(self._company_id(), namespace)
+            CRMSuggest.query_in_company_namespace(self._company_id(), namespace)
             .filter(
                 suggest_type=suggest_type,
                 target_entity_ids=normalized,
@@ -364,7 +365,7 @@ class SuggestService:
         if len(normalized_batches) == 0:
             return {}
         rows = await (
-            CRMSuggest.in_company_namespace(self._company_id(), namespace)
+            CRMSuggest.query_in_company_namespace(self._company_id(), namespace)
             .filter(
                 suggest_type=suggest_type,
                 target_entity_ids__in=normalized_batches,

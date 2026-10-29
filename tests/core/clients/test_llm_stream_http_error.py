@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 from a2a.helpers.proto_helpers import new_text_message
 from a2a.types import Role
@@ -22,7 +22,7 @@ async def test_stream_unread_http_400_raises_http_status_error_with_body(
         b'is too large to be loaded"}}'
     )
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         return unread_json_response(request, 400, error_body)
 
     install_mock_httpx_client(monkeypatch, handler)
@@ -37,7 +37,7 @@ async def test_stream_unread_http_400_raises_http_status_error_with_body(
         first_token_timeout=5.0,
     )
 
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+    with pytest.raises(httpx2.HTTPStatusError) as exc_info:
         async for _event in stream_once(
             client,
             [new_text_message("ping", role=Role.ROLE_USER)],

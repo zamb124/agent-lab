@@ -82,16 +82,18 @@ class AIModelRecord(PlatformModel):
         return "image" in self.output_modalities
 
     @classmethod
-    async def list_by_provider(cls, provider: str) -> list[Self]:
+    async def list_unordered_by_provider(cls, provider: str) -> list[Self]:
+        """Строки одного provider. Порядка и предела нет."""
         return await cls.objects.filter(provider=provider).all()
 
     @classmethod
-    async def list_by_provider_capability(
+    async def list_unordered_by_provider_and_capability(
         cls,
         provider: str,
         capability: AICapability,
     ) -> list[Self]:
-        rows = await cls.list_by_provider(provider)
+        """Строки одного provider с этой capability. Порядок списка провайдера не меняется. Предела нет."""
+        rows = await cls.list_unordered_by_provider(provider)
         return [row for row in rows if capability in row.capabilities]
 
     @classmethod

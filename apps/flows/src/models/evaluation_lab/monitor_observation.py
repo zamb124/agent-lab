@@ -62,7 +62,8 @@ class EvaluationMonitorObservation(CompanyScopedModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_monitor(cls, monitor_id: str, limit: int) -> list[Self]:
+    async def list_for_monitor_by_sampled_at_desc(cls, monitor_id: str, limit: int) -> list[Self]:
+        """Наблюдения монитора, ORDER BY sampled_at DESC, observation_id DESC, не больше limit. Пустой monitor_id — ValueError monitor_id is required. limit < 1 — ValueError limit must be >= 1."""
         if monitor_id == "":
             raise ValueError("monitor_id is required")
         if limit < 1:

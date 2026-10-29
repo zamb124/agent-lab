@@ -15,7 +15,7 @@ import {
     effectiveFlowNodesMap,
     flowBodyWithNode,
 } from '../_helpers/evaluation-flow-nodes.js';
-import { asObject, isPlainObject, asString } from '../_helpers/flows-resolvers.js';
+import { isPlainObject, asString } from '../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import {
     normalizeToolRef,
@@ -47,18 +47,18 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         _flowSnapshot: { state: true },
         _editorNodeId: { state: true },
     }
-    declare onSave: Record<string, any> | null;
-    declare onSaved: any;
-    declare toolRef: Record<string, any> | null;
+    declare onSave: ((toolRef: Record<string, unknown>) => void) | null;
+    declare onSaved: ((saved: { flow_id: string; node_id: string }) => void) | null;
+    declare toolRef: Record<string, unknown> | null;
     declare nodeId: string;
     declare hostNodeId: string;
     declare flowId: string;
     declare branchId: string;
     declare focusMode: boolean;
-    declare _node: Record<string, any> | null;
+    declare _node: Record<string, unknown> | null;
     declare _loadPhase: string;
-    declare _registryToolId: any;
-    declare _flowSnapshot: any;
+    declare _registryToolId: string | null;
+    declare _flowSnapshot: Record<string, unknown> | null;
     declare _editorNodeId: string;
 ;
 
@@ -131,7 +131,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             if (!isPlainObject(p)) {
                 return;
             }
-            const id = (p as any).tool_id;
+            const id = p.tool_id;
             if (typeof id !== 'string' || id.length === 0) {
                 return;
             }
@@ -150,6 +150,23 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         return asString(this.nodeId).trim().length > 0;
     }
 
+    _graphNodeRow(id: string, node: unknown): { id: string; name: string; type: string } {
+        if (!isPlainObject(node)) {
+            throw new Error(`flows-embedded-tool-config-modal: graph node required: ${id}`);
+        }
+        const name = node.name;
+        return {
+            id,
+            name: typeof name === 'string' && name.length > 0 ? name : id,
+            type: asString(node.type),
+        };
+    }
+
+    _editorBranchData(): Record<string, unknown> | null {
+        const branchData = this._editor.state.branchData;
+        return isPlainObject(branchData) ? branchData : null;
+    }
+
     _graphNodesList() {
         if (this._isFlowNodeMode()) {
             const flow = isPlainObject(this._flowSnapshot) ? this._flowSnapshot : null;
@@ -157,20 +174,14 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
                 return [];
             }
             const nodes = effectiveFlowNodesMap(flow, asString(this.branchId));
-            return Object.entries(nodes).map(([id, n]) => ({
-                id,
-                name: typeof (n as any).name === 'string' && (n as any).name.length > 0 ? (n as any).name : id,
-                type: asString((n as any).type),
-            }));
+            return Object.entries(nodes).map(([id, node]) => this._graphNodeRow(id, node));
         }
-        const st = asObject(this._editor.state);
-        const skillsData = isPlainObject((st as any).branchData) ? (st as any).branchData : {};
-        const raw = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
-        return Object.entries(raw).map(([id, n]) => ({
-            id,
-            name: typeof (n as any).name === 'string' && (n as any).name.length > 0 ? (n as any).name : id,
-            type: asString((n as any).type),
-        }));
+        const branchData = this._editorBranchData();
+        if (branchData === null) {
+            return [];
+        }
+        const raw = isPlainObject(branchData.nodes) ? branchData.nodes : {};
+        return Object.entries(raw).map(([id, node]) => this._graphNodeRow(id, node));
     }
 
     _flowVariables() {
@@ -179,11 +190,14 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             if (flow === null) {
                 return {};
             }
-            return isPlainObject((flow as Record<string, any>).variables) ? (flow as Record<string, any>).variables : {};
+            const variables = flow.variables;
+            return isPlainObject(variables) ? variables : {};
         }
-        const st = asObject(this._editor.state);
-        const skillsData = isPlainObject((st as any).branchData) ? (st as any).branchData : {};
-        return isPlainObject(skillsData.variables) ? skillsData.variables : {};
+        const branchData = this._editorBranchData();
+        if (branchData === null) {
+            return {};
+        }
+        return isPlainObject(branchData.variables) ? branchData.variables : {};
     }
 
     override willUpdate(c: PropertyValues<this>): void {
@@ -220,9 +234,8 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             return;
         }
         const { tool_id: toolId, raw } = normalizeToolRef(this.toolRef);
-        const st = asObject(this._editor.state);
-        const skillsData = isPlainObject((st as any).branchData) ? (st as any).branchData : {};
-        const graphNodes = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
+        const branchData = this._editorBranchData();
+        const graphNodes = branchData !== null && isPlainObject(branchData.nodes) ? branchData.nodes : {};
         if (graphNodes[toolId] !== undefined) {
             this._loadPhase = 'error';
             return;
@@ -273,10 +286,11 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             const item = byId && isPlainObject(byId) ? byId[this._registryToolId] : null;
             if (item) {
                 const base = registryToolItemToNode(item);
-                // Сохраняем mapping с текущего toolRef (llm_node.tools), иначе registry
-                // затирает input/output/state_mapping при повторном открытии.
+                if (!isPlainObject(base)) {
+                    throw new Error('flows-embedded-tool-config-modal: registry tool node required');
+                }
+                const merged: Record<string, unknown> = { ...base };
                 const raw = isPlainObject(this.toolRef) ? this.toolRef : null;
-                const merged: any = { ...base };
                 if (raw !== null) {
                     if (isPlainObject(raw.input_mapping)) {
                         merged.input_mapping = raw.input_mapping;
@@ -300,16 +314,18 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         if (!e.detail) return;
         const patch = e.detail.patch;
         if (!isPlainObject(patch)) return;
-        const n = asObject(this._node);
-        if (n === null) return;
-        const normalizedPatch: any = { ...patch };
+        const node = this._node;
+        if (!isPlainObject(node)) {
+            return;
+        }
+        const normalizedPatch: Record<string, unknown> = { ...patch };
         if (Object.prototype.hasOwnProperty.call(normalizedPatch, 'llm_override')) {
             if (!Object.prototype.hasOwnProperty.call(normalizedPatch, 'llm')) {
                 normalizedPatch.llm = normalizedPatch.llm_override;
             }
             delete normalizedPatch.llm_override;
         }
-        const nextNode: any = { ...n, ...normalizedPatch };
+        const nextNode: Record<string, unknown> = { ...node, ...normalizedPatch };
         if (
             !Object.prototype.hasOwnProperty.call(normalizedPatch, 'llm')
             && isPlainObject(nextNode.llm_override)
@@ -326,13 +342,13 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
     }
 
     _persistableFlowNodeConfig() {
-        const node = asObject(this._node);
-        if (node === null) {
+        const node = this._node;
+        if (!isPlainObject(node)) {
             throw new Error('flows-embedded-tool-config-modal: node draft required');
         }
         const persist = { ...node };
-        delete (persist as Record<string, any>).node_id;
-        delete (persist as Record<string, any>).llm_override;
+        delete persist.node_id;
+        delete persist.llm_override;
         return persist;
     }
 
@@ -365,13 +381,12 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         this.closeAfterSave();
     }
 
-    _commitToolRefToHostNode(ref: any) {
+    _commitToolRefToHostNode(ref: Record<string, unknown>) {
         const hostNodeId = asString(this.hostNodeId).trim();
         if (hostNodeId.length === 0) {
             throw new Error('flows-embedded-tool-config-modal: hostNodeId required');
         }
-        const editorState = asObject(this._editor.state);
-        const branchData = isPlainObject((editorState as any).branchData) ? (editorState as any).branchData : null;
+        const branchData = this._editorBranchData();
         if (branchData === null || !isPlainObject(branchData.nodes)) {
             throw new Error('flows-embedded-tool-config-modal: editor branchData.nodes required');
         }
@@ -385,9 +400,9 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             [hostNodeId]: { ...hostNode, tools: nextTools },
         };
         const nextData = { ...branchData, nodes };
-        (this._editor.updateBranchData({ data: nextData }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.pushHistory({ snapshot: nextData }) as any);
+        this._editor.updateBranchData({ data: nextData });
+        this._editor.setDirty({ dirty: true });
+        this._editor.pushHistory({ snapshot: nextData });
     }
 
     /**
@@ -395,15 +410,14 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
      * перед Save забираем mapping напрямую из редактора.
      */
     _flushMappingEditorsIntoNode() {
-        const root = this.renderRoot || this;
-        const editors: any[] = [];
-        const collect = (node: any) => {
-            if (!node || typeof node.querySelectorAll !== 'function') {
-                return;
-            }
-            node.querySelectorAll('flows-state-mapping-editor').forEach((el: any) => editors.push(el));
-            node.querySelectorAll('*').forEach((el: any) => {
-                if (el.shadowRoot) {
+        const root = this.renderRoot;
+        const editors: Element[] = [];
+        const collect = (node: ParentNode) => {
+            node.querySelectorAll('flows-state-mapping-editor').forEach((el) => {
+                editors.push(el);
+            });
+            node.querySelectorAll('*').forEach((el) => {
+                if (el.shadowRoot !== null) {
                     collect(el.shadowRoot);
                 }
             });
@@ -412,23 +426,24 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         if (editors.length === 0) {
             return;
         }
-        const n = asObject(this._node);
-        if (n === null) {
+        const node = this._node;
+        if (!isPlainObject(node)) {
             return;
         }
-        let next = { ...n };
+        let next: Record<string, unknown> = { ...node };
         let changed = false;
         for (const editor of editors) {
-            if (typeof editor.getMapping !== 'function') {
+            if (!('getMapping' in editor) || typeof editor.getMapping !== 'function') {
                 continue;
             }
             const mapping = editor.getMapping();
             if (!isPlainObject(mapping)) {
                 continue;
             }
-            const kind = asString(editor.kind);
+            const kind = 'kind' in editor && typeof editor.kind === 'string' ? editor.kind : '';
             if (kind === 'output') {
-                const field = asString((next as Record<string, any>).type) === 'mcp' || asString((next as Record<string, any>).type) === 'external_api'
+                const nodeType = asString(next.type);
+                const field = nodeType === 'mcp' || nodeType === 'external_api'
                     ? 'state_mapping'
                     : 'output_mapping';
                 next = { ...next, [field]: mapping };
@@ -448,9 +463,11 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         if (this._node === null) return;
         this._flushMappingEditorsIntoNode();
         const ref = nodeConfigToToolRef(this._node);
+        if (!isPlainObject(ref)) {
+            throw new Error('flows-embedded-tool-config-modal: tool ref required');
+        }
         const hostNodeId = asString(this.hostNodeId).trim();
         if (hostNodeId.length > 0) {
-            // Прямой commit в editor state — не зависит от detached onSave родителя.
             this._commitToolRefToHostNode(ref);
         } else if (typeof this.onSave === 'function') {
             this.onSave(ref);
@@ -488,9 +505,12 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
 
     override renderHeader() {
         if (this._isFlowNodeMode()) {
-            const node = asObject(this._node);
-            if (node !== null && typeof (node as Record<string, any>).name === 'string' && (node as Record<string, any>).name.length > 0) {
-                return (node as Record<string, any>).name;
+            const node = this._node;
+            const name = node !== null && typeof node.name === 'string' && node.name.length > 0
+                ? node.name
+                : '';
+            if (typeof name === 'string' && name.length > 0) {
+                return name;
             }
             return this.t('embedded_tool_config.title_flow_node');
         }
@@ -501,11 +521,10 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         if (this._loadPhase === 'loading' || this._loadPhase === 'idle') {
             return html`<div class="body-wrap graph-modal-body"><glass-spinner></glass-spinner></div>`;
         }
-        if (this._loadPhase === 'error' || this._node === null) {
+        const node = this._node;
+        if (this._loadPhase === 'error' || node === null) {
             return html`<div class="body-wrap graph-modal-body">${this.t('embedded_tool_config.error')}</div>`;
         }
-        const st = asObject(this._editor.state);
-        const node = asObject(this._node);
         const id = asString(this._editorNodeId);
         const ed = renderFlowsNodeEditorSurface({
             node,
@@ -514,7 +533,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             branchId: this.branchId,
             flowVariables: this._flowVariables(),
             graphNodes: this._graphNodesList(),
-            previewExecutionState: this._isFlowNodeMode() ? null : (st as any).previewExecutionState,
+            previewExecutionState: this._isFlowNodeMode() ? null : this._editor.state.previewExecutionState,
             embedded: true,
             focusMode: this.focusMode === true,
             focusSection: 'prompt',

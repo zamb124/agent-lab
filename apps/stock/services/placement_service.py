@@ -11,7 +11,7 @@
 * **Removal** (выход) — резолвер стратегии отбора по цепочке
   «товар → тип хранения зоны → склад» (FEFO/FIFO/…): чтение
   справочников до входа в полосу, сам порядок кандидатов — чистая
-  функция ``order_candidates`` внутри lane-транзакции.
+  функция ``order_candidates_by_strategy_asc`` внутри lane-транзакции.
 * **Quants** — «ведомость запасов»: какой товар в какой ячейке
   физически лежит и сколько зарезервировано.
 """
@@ -146,7 +146,7 @@ class PlacementService:
         ``reserved_quantity`` обещано накладными,
         ``available = quantity - reserved`` реально можно брать.
         """
-        rows = await StockQuant.list_by_product_and_location(
+        rows = await StockQuant.list_by_product_and_location_asc(
             company_id,
             location_id=location_id,
             product_id=product_id,
@@ -195,10 +195,10 @@ class PlacementService:
         """Кандидаты + множество id, пришедших из правил размещения."""
         product = await StockProduct.by_id(company_id, move.product_id)
         category = product.category if product is not None else ""
-        subtree = await StockLocation.list_subtree_ids(
+        subtree = await StockLocation.list_subtree_ids_by_parent_path_asc(
             company_id, warehouse.view_location_id
         )
-        rules = await StockPutawayRule.candidates_for(
+        rules = await StockPutawayRule.list_active_matched_by_sequence_asc_and_specificity_desc(
             company_id=company_id,
             warehouse_id=warehouse.warehouse_id,
             product_id=move.product_id,
@@ -219,7 +219,7 @@ class PlacementService:
             ordered.append(move.location_dest_id)
         return ordered, rule_ids
 
-    async def suggest(
+    async def suggest_by_allowed_group_rank_and_pick_sequence_asc(
         self,
         *,
         company_id: str,
@@ -263,8 +263,8 @@ class PlacementService:
                 {loc.storage_type_id for loc in bins if loc.storage_type_id}
             ),
         )
-        quants = await StockQuant.list_for_locations(company_id, bin_ids)
-        children = await StockLocation.list_child_containers(company_id, bin_ids)
+        quants = await StockQuant.list_unordered_for_locations(company_id, bin_ids)
+        children = await StockLocation.unordered_child_containers_by_parent(company_id, bin_ids)
         quants_by_loc: dict[str, list[StockQuant]] = {}
         for quant in quants:
             quants_by_loc.setdefault(quant.location_id, []).append(quant)
@@ -427,7 +427,7 @@ class PlacementService:
         chosen: str | None = None
         status = StockDecisionStatus.APPLIED
         if mode == ReflexMode.RULE:
-            suggestions = await self.suggest(
+            suggestions = await self.suggest_by_allowed_group_rank_and_pick_sequence_asc(
                 company_id=company_id,
                 warehouse=warehouse,
                 move=move,

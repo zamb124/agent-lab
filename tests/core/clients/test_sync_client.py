@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from typing import cast
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.clients.service_client import ServiceClientError
 from core.clients.sync_client import SyncClient

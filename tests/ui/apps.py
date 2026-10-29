@@ -1,4 +1,4 @@
-"""Реестр Lit-SPA сервисов для E2E: порты совпадают со стеком scripts/test_stack.py."""
+"""Реестр Lit-SPA сервисов для E2E: порты совпадают со стеком scripts/testing/stack.py."""
 
 from __future__ import annotations
 

@@ -15,6 +15,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
@@ -46,9 +47,6 @@ interface WikiSidebarMenuItem {
     danger?: boolean;
 }
 
-interface AuthSliceUser {
-    user?: { company_id?: unknown } | null;
-}
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import {
     getPlatformNamespaceSidebarSelection,
@@ -69,6 +67,34 @@ import '@platform/lib/components/platform-user.js';
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
     return String(value);
+}
+
+function isWikiPageItem(value: unknown): value is WikiPageItem {
+    return isPlainRecord(value);
+}
+
+function recentCollapsed(stored: string): boolean {
+    const parsed: unknown = JSON.parse(stored);
+    if (!isPlainRecord(parsed)) {
+        throw new Error(`wiki-sidebar: битое состояние recent ${stored}`);
+    }
+    const collapsed = parsed.collapsed;
+    if (typeof collapsed !== 'boolean') {
+        throw new Error(`wiki-sidebar: битое состояние recent ${stored}`);
+    }
+    return collapsed;
+}
+
+function createdPageId(value: unknown): string | null {
+    if (!isPlainRecord(value)) {
+        return null;
+    }
+    const page = value.page;
+    if (!isPlainRecord(page)) {
+        return null;
+    }
+    const pageId = page.wiki_page_id;
+    return typeof pageId === 'string' && pageId !== '' ? pageId : null;
 }
 
 
@@ -264,7 +290,7 @@ export class WikiSidebar extends PlatformElement {
         this._createPage = this.useOp('wiki/page_create');
         this._movePage = this.useOp('wiki/page_move');
         this._deletePage = this.useOp('wiki/page_delete');
-        this._authSelect = this.select((state) => (state.auth as AuthSliceUser).user);
+        this._authSelect = this.select((state) => state.auth.user);
         this._namespaces = this.useResource('wiki/namespaces', { autoload: true });
         this._treeMenuItems = this._treeMenuItems.bind(this);
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
@@ -277,11 +303,8 @@ export class WikiSidebar extends PlatformElement {
         if (stored === null) {
             return false;
         }
-        const parsed = JSON.parse(stored) as { collapsed?: unknown };
-        if (typeof parsed.collapsed !== 'boolean') {
-            throw new Error(`wiki-sidebar: битое состояние recent ${stored}`);
-        }
-        return parsed.collapsed;
+        const parsedCollapsed = recentCollapsed(stored);
+        return parsedCollapsed;
     }
 
     private _persistRecentCollapsed() {
@@ -300,7 +323,13 @@ export class WikiSidebar extends PlatformElement {
 
     /** Страницы пространства как узлы дерева. */
     private _nodes(): WikiTreeNode[] {
-        const pages = this._pages.items as WikiPageItem[];
+        const pages: WikiPageItem[] = [];
+        for (const item of this._pages.items) {
+            if (!isWikiPageItem(item)) {
+                throw new Error('wiki-sidebar: page item must be an object');
+            }
+            pages.push(item);
+        }
         const visible = this._filter.trim() === '' ? pages : this._filteredPages(pages);
         return visible.map((page: WikiPageItem) => ({
             id: page.wiki_page_id,
@@ -388,12 +417,15 @@ export class WikiSidebar extends PlatformElement {
     }
 
     private _onFilterInput(event: Event) {
-        this._filter = (event.target as HTMLInputElement).value;
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('wiki-sidebar: filter input required');
+        }
+        this._filter = target.value;
     }
 
     private async _createRootPage(): Promise<void> {
-        const created = await this._createPage.run({ title: '' }) as { page?: { wiki_page_id?: string } } | null;
-        const pageId = created && created.page && created.page.wiki_page_id;
+        const pageId = createdPageId(await this._createPage.run({ title: '' }));
         if (typeof pageId !== 'string' || pageId === '') {
             return;
         }
@@ -402,8 +434,7 @@ export class WikiSidebar extends PlatformElement {
     }
 
     private async _createChildPage(parentPageId: string): Promise<void> {
-        const created = await this._createPage.run({ title: '', parent_page_id: parentPageId }) as { page?: { wiki_page_id?: string } } | null;
-        const pageId = created && created.page && created.page.wiki_page_id;
+        const pageId = createdPageId(await this._createPage.run({ title: '', parent_page_id: parentPageId }));
         if (typeof pageId !== 'string' || pageId === '') {
             return;
         }

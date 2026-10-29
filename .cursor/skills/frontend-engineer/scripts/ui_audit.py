@@ -4,7 +4,7 @@
 Секции отчёта:
   1. tsc         — ошибки `npx tsc -p tsconfig.json`.
   2. Конвейер    — tsc в обязательном пути, сборка UI в dev/test, fail-closed раздача ui-dist.
-  3. Сигнатуры   — правила `scripts/ui_canon_rules.py` (hard и soft) по зонам и топ файлов.
+  3. Сигнатуры   — правила `scripts/gates/frontend/ui_canon_rules.py` (hard и soft) по зонам и топ файлов.
   4. Скрытое     — находки, которые прячут исключения правил (embed closure, pragma `ui-canon: allow`).
   5. Слепота     — пути и маски `.js` в гейтах, конфигах, правилах и скилах при `.ts` на диске;
                    наборы суффиксов с `.js` без `.ts`: такой гейт TS-файлы не видит.
@@ -26,8 +26,8 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
-from scripts.report_ui_kostyli import scope_of
-from scripts.ui_canon_rules import RULES, iter_findings
+from scripts.tools.report_ui_kostyli import scope_of
+from scripts.gates.frontend.ui_canon_rules import RULES, iter_findings
 
 REPO = Path(__file__).resolve().parents[4]
 SELF = Path(__file__).resolve()
@@ -165,7 +165,7 @@ def section_pipeline() -> dict[str, bool]:
     lint_file = require_block(lint_mk, r"^lint-file:.*?(?=^\S|\Z)", "mk/lint.mk")
     ui_builder = require_block(require_file(REPO / "Dockerfile"), r"AS ui-builder.*?(?=^FROM |\Z)", "Dockerfile")
     serve = require_block(require_file(REPO / "core/app/spa.py"), r"^def resolve_ui_static_dir\(.*?(?=^def |\Z)", "core/app/spa.py")
-    run_py = require_file(REPO / "scripts/run.py")
+    run_py = require_file(REPO / "scripts/dev/run.py")
     helm = [require_file(REPO / path) for path in GRANIAN_HELM_FILES]
     return {
         "tsc в lint-ts (make lint)": bool(re.search(r"ui-typecheck|\btsc\b|typecheck:ui", lint_ts)),
@@ -318,7 +318,7 @@ def main() -> int:
     print("\n== Конвейер")
     for label, ok in pipeline.items():
         print(f"  {'OK  ' if ok else 'FAIL'} {label}")
-    print("\n== Сигнатуры канона (scripts/ui_canon_rules.py)")
+    print("\n== Сигнатуры канона (scripts/gates/frontend/ui_canon_rules.py)")
     for rule_id, summary in signatures.items():
         zones = ", ".join(f"{zone}={n}" for zone, n in list(summary.zones.items())[:6])
         print(f"  [{summary.severity}] {rule_id}: {summary.count}  ({zones})")

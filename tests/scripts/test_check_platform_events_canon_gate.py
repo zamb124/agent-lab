@@ -1,10 +1,10 @@
-"""Unit tests for scripts/check_platform_events_canon gate honesty."""
+"""Unit tests for scripts/gates/backend/platform_events gate honesty."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import scripts.check_platform_events_canon as gate
+import scripts.gates.backend.platform_events as gate
 
 
 def test_local_command_reply_allows_succeeded_not_domain_updated() -> None:

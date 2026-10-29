@@ -184,7 +184,7 @@ async def op_platform_billing_companies_overview(
 ) -> PlatformBillingCompaniesOverviewResponse:
     _ = user
     _ = await require_system_admin(di.authz_service)
-    companies, has_more = await Company.page_named_after_system(
+    companies, has_more = await Company.page_named_after_system_by_name_and_company_id_asc(
         limit=payload.limit,
         offset=payload.offset,
     )
@@ -403,7 +403,7 @@ async def op_platform_billing_usage_report(
     """Строки usage всех компаний с company_name и настроечными полями settlement из metadata."""
     _ = user
     _ = await require_system_admin(di.authz_service)
-    page = await UsageRecord.admin_search_usage_records(
+    page = await UsageRecord.admin_search_by_timestamp_desc(
         company_id=payload.company_id,
         usage_type=payload.usage_type,
         resource_name=payload.resource_name,

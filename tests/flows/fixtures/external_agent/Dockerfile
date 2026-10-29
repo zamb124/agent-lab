@@ -9,7 +9,7 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 RUN uv python install 3.14t && uv venv --python 3.14t "${VIRTUAL_ENV}"
 
-RUN uv pip install --python "${VIRTUAL_ENV}/bin/python" fastapi granian>=2.7.4 pydantic
+RUN uv pip install --python "${VIRTUAL_ENV}/bin/python" fastapi granian>=2.8.6 pydantic
 
 COPY main.py .
 

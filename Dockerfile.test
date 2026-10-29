@@ -8,7 +8,7 @@ FROM ${BASE_IMAGE} AS rag-worker
 
 COPY core/ ./core/
 COPY apps/rag/ ./apps/rag/
-COPY apps/rag_worker/ ./apps/rag_worker/
+COPY apps/worker_manifest.py ./apps/worker_manifest.py
 COPY apps/__init__.py ./apps/
 
 ENV PYTHONPATH=/app
@@ -16,7 +16,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV TESTING=true
 
-CMD ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "1"]
+CMD ["taskiq", "worker", "apps.rag.worker:worker_app", "--workers", "1"]
 
 FROM ${TEST_BASE_IMAGE} AS default
 

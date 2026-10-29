@@ -1,10 +1,9 @@
 """
 Конфигурация для Sync Service.
 
-SyncSettings — тот же BaseSettings, что и у остальных сервисов. Процесс sync (HTTP
-или TaskIQ worker) должен один раз выставить глобальные настройки через
-set_settings(SyncSettings(**load_merged_config(service_name="sync"))): так делает
-create_service_app в main и загрузчик apps.sync_worker.worker.
+SyncSettings — тот же BaseSettings, что и у остальных сервисов. HTTP выставляет
+его через create_service_app (слой ``services.sync``), TaskIQ — в
+``apps/sync/worker.py`` (слой ``services.sync_worker``).
 """
 
 from pydantic import Field

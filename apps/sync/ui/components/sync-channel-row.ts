@@ -2,7 +2,7 @@
  * sync-channel-row — строка канала / DM в sidebar.
  *
  * Источники:
- *   useResource('sync/channels') as ControllerFor<'sync/channels'>      — выбранный канал, для подсветки.
+ *   select syncChannels — выбранный канал, для подсветки.
  *   select syncPresence                — typing preview.
  *   useResource('sync/company_members') — online-dot DM.
  *   select syncCallUi.activeCallChannels — pill «Войти» (как баннер свёрнутого звонка).
@@ -18,6 +18,10 @@ import type { ResourceController, ControllerFor } from '@platform/lib/base/use-r
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import type { ModalStackItem } from '@platform/lib/events/reducers/modals.js';
 import '@platform/lib/components/platform-icon.js';
 import { channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
@@ -25,6 +29,18 @@ import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-place
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { findCompanyMember, isOnline } from '../_helpers/sync-presence.js';
 import { getTypingIndicatorLine } from '../_helpers/sync-typing.js';
+
+function isSyncPresenceSlice(value: unknown): value is SyncPresenceSlice {
+    return isPlainRecord(value);
+}
+
+function isSyncCallUiSlice(value: unknown): value is SyncCallUiSlice {
+    return isPlainRecord(value);
+}
+
+function isSyncChannelsSlice(value: unknown): value is SyncChannelsSlice {
+    return isPlainRecord(value);
+}
 
 export class SyncChannelRow extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -288,9 +304,9 @@ export class SyncChannelRow extends PlatformElement {
     private _presenceSel: SelectController<SyncPresenceSlice | undefined>;
     private _callUiSel: SelectController<SyncCallUiSlice | undefined>;
     private _callUi: ControllerFor<'sync/call_ui'>;
-    private _modalsSel: SelectController<readonly Record<string, any>[] | undefined>;
+    private _modalsSel: SelectController<readonly ModalStackItem[]>;
     private _channelsSel: SelectController<SyncChannelsSlice | undefined>;
-    private _authSel: SelectController<Record<string, any> | null>;
+    private _authSel: SelectController<AuthUser | null>;
     private _members: ResourceController;
     private _avatarRowSig: string;
 
@@ -300,16 +316,12 @@ export class SyncChannelRow extends PlatformElement {
         this.pickMode = false;
         this._avatarImgFailed = false;
         this._avatarRowSig = '';
-        this._presenceSel = this.select((s) => s.syncPresence as SyncPresenceSlice | undefined);
-        this._callUiSel = this.select((s) => s.syncCallUi as SyncCallUiSlice | undefined);
+        this._presenceSel = this.select((s) => isSyncPresenceSlice(s.syncPresence) ? s.syncPresence : undefined);
+        this._callUiSel = this.select((s) => isSyncCallUiSlice(s.syncCallUi) ? s.syncCallUi : undefined);
         this._callUi = this.useSlice('sync/call_ui');
-        this._modalsSel = this.select((s) => (s.modals as { stack?: readonly Record<string, any>[] } | undefined)?.stack);
-        this._channelsSel = this.select((s) => s.syncChannels as SyncChannelsSlice | undefined);
-        this._authSel = this.select((s) => {
-            const auth = s.auth as { user?: Record<string, any> | null } | undefined;
-            if (!auth) return null;
-            return auth.user === undefined ? null : auth.user;
-        });
+        this._modalsSel = this.select((s) => s.modals.stack);
+        this._channelsSel = this.select((s) => isSyncChannelsSlice(s.syncChannels) ? s.syncChannels : undefined);
+        this._authSel = this.select((s) => s.auth.user);
         this._members = this.useResource('sync/company_members');
     }
 
@@ -346,10 +358,11 @@ export class SyncChannelRow extends PlatformElement {
     }
 
     _closeSidebarMobile() {
-        const shell = this.closest('platform-service-sidebar') as { closeMobile?: () => void } | null;
-        if (shell && typeof shell.closeMobile === 'function') {
-            shell.closeMobile();
+        const shell = this.closest('platform-service-sidebar');
+        if (!(shell instanceof PlatformServiceSidebar)) {
+            return;
         }
+        shell.closeMobile();
     }
 
     _onClick() {
@@ -366,8 +379,7 @@ export class SyncChannelRow extends PlatformElement {
             return;
         }
         const stack = this._modalsSel.value;
-        const list = Array.isArray(stack) ? stack : [];
-        const hasOverlay = list.some(
+        const hasOverlay = stack.some(
             (m) => m.kind === 'sync.call_overlay'
                 && m.props
                 && typeof m.props.callId === 'string'

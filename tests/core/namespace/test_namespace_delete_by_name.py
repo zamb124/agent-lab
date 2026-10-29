@@ -78,14 +78,14 @@ async def test_list_by_kind_orders_and_pages(unique_id: str) -> None:
         await _put(company_id, f"beta_{unique_id}", NamespaceKind.COMPANY_WORKSPACE)
         await _put(company_id, f"alpha_{unique_id}", NamespaceKind.COMPANY_WORKSPACE)
         await _put(company_id, f"office-catalog-{unique_id}", NamespaceKind.TECHNICAL)
-        workspaces = await Namespace.list_by_kind(
+        workspaces = await Namespace.list_for_kinds_by_name_asc(
             [NamespaceKind.COMPANY_WORKSPACE],
             limit=10,
             offset=0,
         )
         names = [row.name for row in workspaces]
         assert names == [f"alpha_{unique_id}", f"beta_{unique_id}"]
-        page = await Namespace.list_by_kind(
+        page = await Namespace.list_for_kinds_by_name_asc(
             [NamespaceKind.COMPANY_WORKSPACE],
             limit=1,
             offset=1,
@@ -93,10 +93,10 @@ async def test_list_by_kind_orders_and_pages(unique_id: str) -> None:
         assert [row.name for row in page] == [f"beta_{unique_id}"]
         assert await Namespace.count_by_kind([NamespaceKind.COMPANY_WORKSPACE]) == 2
         assert await Namespace.count_by_kind([NamespaceKind.TECHNICAL]) == 1
-        assert await Namespace.list_by_kind([], limit=10, offset=0) == []
+        assert await Namespace.list_for_kinds_by_name_asc([], limit=10, offset=0) == []
         assert await Namespace.count_by_kind([]) == 0
         _bind(other_company_id, unique_id)
-        assert await Namespace.list_by_kind(
+        assert await Namespace.list_for_kinds_by_name_asc(
             [NamespaceKind.COMPANY_WORKSPACE],
             limit=10,
             offset=0,

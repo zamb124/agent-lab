@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.src.models.flow_config import Edge, FlowConfig
 from core.clients.flow_ui_client import task_state, task_text, task_ui_events

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Нарушения ratchet-метрик по файлам.
 
-Метрики, корни и регэкспы берутся из `scripts/check_ratchet_counts.py` (`METRICS`),
-лимиты — из `scripts/ratchet_baseline.json`. Без аргументов печатает сводку
+Метрики, корни и регэкспы берутся из `scripts/gates/backend/ratchet_counts.py` (`METRICS`),
+лимиты — из `scripts/gates/backend/ratchet_baseline.json`. Без аргументов печатает сводку
 «метрика: текущее / baseline» и топ файлов; с именем метрики — все `файл:строка`.
 
 Запуск: `uv run python .cursor/skills/refactor-engineer/scripts/ratchet_list.py [<metric>] [--top N]`.
@@ -19,8 +19,8 @@ from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[4]
-GATE = REPO / "scripts" / "check_ratchet_counts.py"
-BASELINE = REPO / "scripts" / "ratchet_baseline.json"
+GATE = REPO / "scripts" / "gates" / "backend" / "ratchet_counts.py"
+BASELINE = REPO / "scripts" / "gates" / "backend" / "ratchet_baseline.json"
 
 
 def load_gate():

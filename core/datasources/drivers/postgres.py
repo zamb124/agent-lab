@@ -22,6 +22,16 @@ from core.datasources.sql_policy import bind_named_params
 from core.types import JsonObject, JsonValue
 
 
+def _columns_sql_by_table_and_position_asc() -> str:
+    """Колонки схем вне каталога, ORDER BY table_schema ASC, table_name ASC, ordinal_position ASC."""
+    return (
+        "SELECT table_schema, table_name, column_name, data_type "
+        "FROM information_schema.columns "
+        "WHERE table_schema NOT IN ('pg_catalog', 'information_schema') "
+        "ORDER BY table_schema, table_name, ordinal_position"
+    )
+
+
 class PostgresDatasourceDriver:
     async def test(self, connection: DatasourceConnection, password: str) -> DatasourceTestResult:
         started = perf_counter()
@@ -40,14 +50,7 @@ class PostgresDatasourceDriver:
     ) -> DatasourceSchemaSnapshot:
         conn = await self._connect(connection, password)
         try:
-            rows = await conn.fetch(
-                """
-                SELECT table_schema, table_name, column_name, data_type
-                FROM information_schema.columns
-                WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-                ORDER BY table_schema, table_name, ordinal_position
-                """
-            )
+            rows = await conn.fetch(_columns_sql_by_table_and_position_asc())
         finally:
             await conn.close()
         return _schema_from_information_schema(rows)

@@ -35,7 +35,7 @@ storageClassName: microk8s-hostpath
 
 postgres:
   nodeName: master
-  image: pgvector/pgvector:pg17
+  image: pgvector/pgvector:0.8.7-pg18
   storage: 50Gi
   resources:
     requests:
@@ -50,7 +50,7 @@ postgres:
 openfga:
   enabled: true
   nodeName: master
-  image: openfga/openfga:v1.18.1
+  image: openfga/openfga:v1.22.1
   replicas: 1
   # Pin ids: CI/`make k8s-deploy` → openfga_bootstrap_cluster.sh → Secret openfga-ids + --set.
   # Пока storeId/authorizationModelId пусты, OPENFGA__ENABLED у apps = false (server всё равно поднимается).
@@ -85,7 +85,7 @@ openfga:
 
 redis:
   nodeName: master
-  image: redis:7-alpine
+  image: redis:8.8.4-alpine
   storage: 10Gi
   resources:
     # RDB на диске ~1.9–2.5 Gi; при старте пик RSS + AOF rewrite. 2Gi limits → OOMKilled (exit 137).
@@ -98,7 +98,7 @@ redis:
 
 seaweedfs:
   nodeName: master
-  image: chrislusf/seaweedfs:4.45
+  image: chrislusf/seaweedfs:4.51
   storage: 50Gi
   resources:
     requests:
@@ -799,7 +799,7 @@ workers:
       [
         "taskiq",
         "worker",
-        "apps.flows_worker.worker:worker_app",
+        "apps.flows.worker:worker_app",
         "--workers",
         "4",
       ]
@@ -831,7 +831,7 @@ workers:
       [
         "taskiq",
         "worker",
-        "apps.rag_worker.worker:worker_app",
+        "apps.rag.worker:worker_app",
         "--workers",
         "2",
       ]
@@ -851,7 +851,7 @@ workers:
       [
         "taskiq",
         "worker",
-        "apps.sync_worker.worker:worker_app",
+        "apps.sync.worker:worker_app",
         "--workers",
         "2",
       ]
@@ -870,7 +870,7 @@ workers:
       [
         "taskiq",
         "worker",
-        "apps.crm_worker.worker:worker_app",
+        "apps.crm.worker:worker_app",
         "--workers",
         "2",
       ]
@@ -889,7 +889,7 @@ workers:
       [
         "taskiq",
         "worker",
-        "apps.crm_worker.summary_worker:worker_app",
+        "apps.crm.worker_summary:worker_app",
         "--workers",
         "2",
       ]
@@ -908,7 +908,7 @@ workers:
       [
         "taskiq",
         "worker",
-        "apps.idle_worker.worker:worker_app",
+        "apps.idle.worker:worker_app",
         "--workers",
         "2",
       ]
@@ -927,7 +927,7 @@ workers:
       [
         "taskiq",
         "worker",
-        "apps.idle_worker.a2a_push_worker:worker_app",
+        "apps.idle.worker_a2a_push:worker_app",
         "--workers",
         "1",
       ]
@@ -947,7 +947,7 @@ workers:
       [
         "taskiq",
         "worker",
-        "apps.search_worker.worker:worker_app",
+        "apps.search.worker:worker_app",
         "--workers",
         "1",
       ]
@@ -999,12 +999,12 @@ litserve:
 nvidiaDevicePlugin:
   enabled: true
   image: nvcr.io/nvidia/k8s-device-plugin
-  tag: v0.19.1
+  tag: v0.20.1
 
 centrifugo:
   enabled: true
   nodeName: master
-  image: centrifugo/centrifugo:v6.9.3
+  image: centrifugo/centrifugo:v6.10.2
   imagePullPolicy: IfNotPresent
   replicas: 2
   resources:
@@ -1016,7 +1016,7 @@ centrifugo:
       memory: 512Mi
   redis:
     nodeName: master
-    image: redis:7-alpine
+    image: redis:8.8.4-alpine
     maxmemory: 512mb
     storage: 5Gi
     resources:
@@ -1030,7 +1030,7 @@ centrifugo:
 livekit:
   enabled: true
   nodeName: master
-  image: livekit/livekit-server:v1.11.0
+  image: livekit/livekit-server:v1.13.11
   imagePullPolicy: IfNotPresent
   apiKey: devkey
   publicUrl: wss://livekit.linnex.io
@@ -1045,7 +1045,7 @@ livekit:
 livekitEgress:
   enabled: true
   nodeName: master
-  image: livekit/egress:v1.12.0
+  image: livekit/egress:v1.15.0
   imagePullPolicy: IfNotPresent
   resources:
     requests:
@@ -1058,7 +1058,7 @@ livekitEgress:
 coturn:
   enabled: true
   nodeName: master
-  image: coturn/coturn:4.10.0
+  image: coturn/coturn:4.18.0
   realm: agentlab
   minPort: 49152
   maxPort: 65535
@@ -1073,13 +1073,13 @@ coturn:
 onlyoffice:
   enabled: true
   nodeName: master
-  image: onlyoffice/documentserver:9.3.1
+  image: onlyoffice/documentserver:10.0.0.1
   publicUrl: https://onlyoffice.linnex.io
   # Platform OpenAI-compatible LLM proxy (browser → flows). Addon v1 добавляет плагин.
   ai:
     enabled: true
-    llmApiBaseUrl: https://linnex.io/flows/api/v1/agent/llm
-    proxyUrl: https://linnex.io/flows/api/v1/agent/llm/v1/proxy
+    llmApiBaseUrl: https://linnex.io/flows/api/v1/llm
+    proxyUrl: https://linnex.io/flows/api/v1/llm/v1/proxy
     providerDisplayName: Linnex LLMs
   resources:
     requests:
@@ -1093,21 +1093,21 @@ observability:
   loki:
     enabled: true
     nodeName: master
-    image: grafana/loki:3.7.1
+    image: grafana/loki:3.7.9
     storage: 100Gi
   tempo:
     enabled: true
     nodeName: master
-    image: grafana/tempo:2.9.2
+    image: grafana/tempo:2.10.10
     storage: 50Gi
   grafana:
     enabled: true
     nodeName: master
-    image: grafana/grafana:13.0.1
+    image: grafana/grafana:13.3.0
     publicUrl: https://grafana.linnex.io
   alloy:
     enabled: true
-    image: grafana/alloy:v1.16.0
+    image: grafana/alloy:v1.21.3
 
 ingress:
   enabled: true
@@ -1204,7 +1204,6 @@ platformSecrets:
   searchLinkupApiKey: ""
   searchSerperApiKey: ""
   searchTavilyApiKey: ""
-  agentReleasesGithubToken: ""
   mailSystemIspmanagerAuthinfoPassword: ""
 
 platformSecretName: platform-secrets

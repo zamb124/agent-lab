@@ -38,7 +38,7 @@ import '../modals/flows-raw-json-modal.js';
 import '../modals/flows-state-modal.js';
 import '../modals/flows-node-run-result-modal.js';
 import { getNodeTypeMeta, getCategoryToken } from '../_helpers/node-icons.js';
-import { asArray, asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 import {
     EDITOR_LAYOUT_AGENT,
     isAgentFocusEligible,
@@ -59,6 +59,11 @@ import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResul
 
 function isInterfaceUi(value: unknown): value is InterfaceEditorUiSlice {
     return isPlainObject(value);
+}
+
+function editorState(value: unknown): Record<string, unknown> {
+    if (!isPlainObject(value)) throw new Error('flow-editor-page: editor state required');
+    return value;
 }
 
 function requireInterfaceUi(value: unknown): InterfaceEditorUiSlice {
@@ -206,7 +211,7 @@ export class FlowEditorPage extends PlatformPage {
     private _dataflowInspectOp: OpController;
     private _interfaceUi: ControllerFor<'flows/interface_editor'>;
     private _assistOp: OpController;
-    private _dataflowTimer: any;
+    private _dataflowTimer: ReturnType<typeof setTimeout> | null;
     private _lastDataflowKey: string;
     private _pendingDataflowKey: string;
     private _dataflowSeq: number;
@@ -281,8 +286,8 @@ export class FlowEditorPage extends PlatformPage {
         this._flows.get(this.flowId);
     }
 
-    async _applyFlow(flow: any) {
-        (this._editor.setFlow as any)({
+    async _applyFlow(flow: unknown) {
+        (this._editor.setFlow)({
             flow,
             branchId: this.branchId,
             previewExecutionState: null,
@@ -293,12 +298,12 @@ export class FlowEditorPage extends PlatformPage {
             branch_id: apiBranch,
         });
         if (previewExecutionState !== null) {
-            (this._editor.setPreviewExecutionState({ snapshot: previewExecutionState }) as any);
+            (this._editor.setPreviewExecutionState({ snapshot: previewExecutionState }));
         }
-        this._scheduleDataflowRefresh(asObject(this._editor.state));
+        this._scheduleDataflowRefresh(editorState(this._editor.state));
     }
 
-    _buildDataflowPayload(state: any) {
+    _buildDataflowPayload(state: Record<string, unknown>) {
         const branchData = isPlainObject(state.branchData) ? state.branchData : null;
         if (!branchData || !isPlainObject(branchData.nodes)) return null;
         const apiBranch = (typeof this.branchId !== 'string' || this.branchId.length === 0 || this.branchId === 'base')
@@ -314,17 +319,17 @@ export class FlowEditorPage extends PlatformPage {
             nodes: branchData.nodes,
             edges: Array.isArray(branchData.edges) ? branchData.edges : [],
             variables: isPlainObject(branchData.variables) ? branchData.variables : {},
-            triggers: isPlainObject(state.flowConfig?.triggers) ? state.flowConfig.triggers : {},
+            triggers: isPlainObject(state.flowConfig) && isPlainObject(state.flowConfig.triggers) ? state.flowConfig.triggers : {},
             interface: isPlainObject(interfaceConfig) ? interfaceConfig : null,
             sample_state: isPlainObject(state.previewExecutionState) ? state.previewExecutionState : null,
             observed_runs: isPlainObject(state.dataflowObservations) ? state.dataflowObservations : {},
         };
     }
 
-    _scheduleDataflowRefresh(state: any) {
+    _scheduleDataflowRefresh(state: Record<string, unknown>) {
         const payload = this._buildDataflowPayload(state);
         if (!payload) {
-            if (state.dataflow) (this._editor.setDataflow({ dataflow: null }) as any);
+            if (state.dataflow) (this._editor.setDataflow({ dataflow: null }));
             return;
         }
         const key = stableStringify(payload);
@@ -337,7 +342,7 @@ export class FlowEditorPage extends PlatformPage {
         }, 220);
     }
 
-    async _refreshDataflow(key: string, payload: any) {
+    async _refreshDataflow(key: string, payload: Record<string, unknown>) {
         const seq = ++this._dataflowSeq;
         const dataflow = await this._dataflowInspectOp.run(payload);
         if (seq !== this._dataflowSeq || key !== this._pendingDataflowKey) return;
@@ -347,17 +352,15 @@ export class FlowEditorPage extends PlatformPage {
         }
         this._lastDataflowKey = key;
         this._pendingDataflowKey = '';
-        (this._editor.setDataflow({ dataflow }) as any);
+        (this._editor.setDataflow({ dataflow }));
     }
 
-    _panelHeaderForNode(nodeId: string, state: any) {
+    _panelHeaderForNode(nodeId: string, state: Record<string, unknown>) {
         const branchData = isPlainObject(state.branchData) ? state.branchData : null;
         const nodes = branchData && isPlainObject(branchData.nodes) ? branchData.nodes : null;
-        const node = nodes ? nodes[nodeId] : null;
-        if (!node) {
-            return null;
-        }
-        const meta = getNodeTypeMeta(node.type);
+        const node = nodes === null ? null : nodes[nodeId];
+        if (!isPlainObject(node)) return null;
+        const meta = getNodeTypeMeta(typeof node.type === 'string' ? node.type : '');
         const title = typeof node.name === 'string' && node.name.length > 0 ? node.name : nodeId;
         return {
             icon: meta.icon,
@@ -367,17 +370,20 @@ export class FlowEditorPage extends PlatformPage {
     }
 
     _panelHeader() {
-        const state = asObject(this._editor.state);
-        if ((state as any).selectedNodeId) {
-            return this._panelHeaderForNode((state as any).selectedNodeId, state);
+        const state = editorState(this._editor.state);
+        const selectedNodeId = state.selectedNodeId;
+        if (typeof selectedNodeId === 'string' && selectedNodeId.length > 0) {
+            return this._panelHeaderForNode(selectedNodeId, state);
         }
-        if ((state as any).selectedResourceId) {
-            const branchData = isPlainObject((state as any).branchData) ? (state as any).branchData : null;
-            const resources = branchData && isPlainObject(branchData.resources) ? branchData.resources : null;
-            const resource = resources ? resources[(state as any).selectedResourceId] : null;
-            const title = resource && typeof resource.name === 'string' && resource.name.length > 0
-                ? resource.name
-                : (state as any).selectedResourceId;
+        const selectedResourceId = state.selectedResourceId;
+        if (typeof selectedResourceId === 'string' && selectedResourceId.length > 0) {
+            const branchData = isPlainObject(state.branchData) ? state.branchData : null;
+            const resources = branchData !== null && isPlainObject(branchData.resources) ? branchData.resources : null;
+            const resource = resources === null ? null : resources[selectedResourceId];
+            const resourceRecord = isPlainObject(resource) ? resource : null;
+            const title = resourceRecord !== null && typeof resourceRecord.name === 'string' && resourceRecord.name.length > 0
+                ? resourceRecord.name
+                : selectedResourceId;
             return {
                 icon: 'box',
                 title,
@@ -392,8 +398,8 @@ export class FlowEditorPage extends PlatformPage {
     }
 
     _onToggleNodeAiHelper() {
-        const state = asObject(this._editor.state);
-        if (!(state as any).selectedNodeId) {
+        const state = editorState(this._editor.state);
+        if (!(state).selectedNodeId) {
             return;
         }
         this._nodeAiHelperOpen = !this._nodeAiHelperOpen;
@@ -401,14 +407,14 @@ export class FlowEditorPage extends PlatformPage {
 
     _onCloseFloatingPanel(nodeId?: string) {
         if (typeof nodeId === 'string' && nodeId.length > 0) {
-            if (this._nodeAiHelperOpen && (asObject(this._editor.state) as any).selectedNodeId === nodeId) {
+            if (this._nodeAiHelperOpen && (editorState(this._editor.state)).selectedNodeId === nodeId) {
                 this._nodeAiHelperOpen = false;
             }
-            (this._editor.closePanel({ nodeId }) as any);
+            (this._editor.closePanel({ nodeId }));
             return;
         }
         this._nodeAiHelperOpen = false;
-        (this._editor.closePanel({}) as any);
+        (this._editor.closePanel({}));
     }
 
     _onPanelLayoutChange(nodeId: string, e: CustomEvent) {
@@ -416,14 +422,14 @@ export class FlowEditorPage extends PlatformPage {
         if (!layout || typeof layout !== 'object') {
             return;
         }
-        (this._editor.setPropertyPanelLayout({ nodeId, layout }) as any);
+        (this._editor.setPropertyPanelLayout({ nodeId, layout }));
     }
 
     _onPanelActivate(nodeId: string) {
-        (this._editor.selectNode({ nodeId }) as any);
+        (this._editor.selectNode({ nodeId }));
     }
 
-    _renderNodeFloatingPanels(state: any) {
+    _renderNodeFloatingPanels(state: Record<string, unknown>) {
         const openIds = Array.isArray(state.openNodePanelIds) ? state.openNodePanelIds : [];
         if (openIds.length === 0) {
             return '';
@@ -479,7 +485,7 @@ export class FlowEditorPage extends PlatformPage {
         });
     }
 
-    _renderResourceFloatingPanel(state: any) {
+    _renderResourceFloatingPanel(state: Record<string, unknown>) {
         const header = this._panelHeader();
         if (!header || !state.selectedResourceId) {
             return '';
@@ -499,7 +505,7 @@ export class FlowEditorPage extends PlatformPage {
     }
 
     _renderPropertyPanel() {
-        const state = asObject(this._editor.state);
+        const state = editorState(this._editor.state);
         return html`
             ${this._renderNodeFloatingPanels(state)}
             ${this._renderResourceFloatingPanel(state)}
@@ -519,11 +525,13 @@ export class FlowEditorPage extends PlatformPage {
         if (this.branchId === 'base') {
             return this.t('branches_tabs.base');
         }
-        const flow = this._flows.byId && this._flows.byId[this.flowId]
+        const listed = asArray(this._flows.items).find((item) => isPlainObject(item) && item.flow_id === this.flowId);
+        const flow = this._flows.byId && isPlainObject(this._flows.byId[this.flowId])
             ? this._flows.byId[this.flowId]
-            : asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
-        const branch = flow && flow.branches && flow.branches[this.branchId] ? flow.branches[this.branchId] : null;
-        if (branch && typeof branch.name === 'string' && branch.name.length > 0) {
+            : listed;
+        const branches = isPlainObject(flow) && isPlainObject(flow.branches) ? flow.branches : null;
+        const branch = branches === null ? null : branches[this.branchId];
+        if (isPlainObject(branch) && typeof branch.name === 'string' && branch.name.length > 0) {
             return branch.name;
         }
         if (typeof this.branchId === 'string' && this.branchId.length > 0) {
@@ -532,7 +540,7 @@ export class FlowEditorPage extends PlatformPage {
         return '';
     }
 
-    _isAgentLayoutActive(state: any) {
+    _isAgentLayoutActive(state: Record<string, unknown>) {
         const branchData = isPlainObject(state.branchData) ? state.branchData : null;
         if (branchData === null || !isAgentFocusEligible(branchData)) {
             return false;
@@ -545,10 +553,10 @@ export class FlowEditorPage extends PlatformPage {
             throw new Error('FlowEditorPage: flowId is required to switch to agent layout');
         }
         writeEditorLayoutPreference(this.flowId, EDITOR_LAYOUT_AGENT);
-        (this._editor.setEditorLayout({ layout: EDITOR_LAYOUT_AGENT }) as any);
+        (this._editor.setEditorLayout({ layout: EDITOR_LAYOUT_AGENT }));
     }
 
-    _renderCanvasLayoutToggle(state: any) {
+    _renderCanvasLayoutToggle(state: Record<string, unknown>) {
         const branchData = isPlainObject(state.branchData) ? state.branchData : null;
         if (branchData === null || !isAgentFocusEligible(branchData)) {
             return '';
@@ -571,11 +579,13 @@ export class FlowEditorPage extends PlatformPage {
         `;
     }
 
-    _resolvedInterfaceConfig(state: any) {
+    _resolvedInterfaceConfig(state: Record<string, unknown>) {
         const flow = isPlainObject(state.flowConfig) ? state.flowConfig : null;
         if (!flow || !isPlainObject(flow.interface)) return null;
         if (!this.branchId || this.branchId === 'base') return flow.interface;
-        const branch = isPlainObject(flow.branches?.[this.branchId]) ? flow.branches[this.branchId] : null;
+        const branches = isPlainObject(flow.branches) ? flow.branches : null;
+        const branchValue = branches === null ? null : branches[this.branchId];
+        const branch = isPlainObject(branchValue) ? branchValue : null;
         return branch !== null && isPlainObject(branch.interface) ? branch.interface : flow.interface;
     }
 
@@ -598,26 +608,28 @@ export class FlowEditorPage extends PlatformPage {
     _interfaceDraftDirty() {
         const history = interfaceHistory(requireInterfaceUi(this._interfaceUi.value));
         if (history === null) return false;
-        const published = this._resolvedInterfaceConfig(asObject(this._editor.state));
+        const published = this._resolvedInterfaceConfig(editorState(this._editor.state));
         return stableStringify(history.present) !== stableStringify(published);
     }
 
-    _patchInterfaceConfig(config: any) {
-        const state = asObject(this._editor.state);
+    _patchInterfaceConfig(config: unknown) {
+        const state = editorState(this._editor.state);
         if (!isPlainObject(config)) {
             throw new Error('flow-editor-page: interface config must be a plain object');
         }
-        if (!isPlainObject((state as any).flowConfig)) {
+        const flowConfig = state.flowConfig;
+        if (!isPlainObject(flowConfig)) {
             throw new Error('flow-editor-page: interface patch requires loaded flowConfig');
         }
         if (!this.branchId || this.branchId === 'base') {
-            (this._editor.patchFlowConfig({ patch: { interface: config } }) as any);
+            this._editor.patchFlowConfig({ patch: { interface: config } });
         } else {
-            const branches = isPlainObject((state as any).flowConfig.branches) ? (state as any).flowConfig.branches : {};
-            const branch = isPlainObject(branches[this.branchId]) ? branches[this.branchId] : { name: this.branchId };
-            (this._editor.patchFlowConfig({ patch: { branches: { ...branches, [this.branchId]: { ...branch, interface: config } } } }) as any);
+            const branches = isPlainObject(flowConfig.branches) ? flowConfig.branches : {};
+            const currentBranch = branches[this.branchId];
+            const branch = isPlainObject(currentBranch) ? currentBranch : { name: this.branchId };
+            (this._editor.patchFlowConfig({ patch: { branches: { ...branches, [this.branchId]: { ...branch, interface: config } } } }));
         }
-        this._scheduleDataflowRefresh(asObject(this._editor.state));
+        this._scheduleDataflowRefresh(editorState(this._editor.state));
     }
 
     /** Коммит UI-черновика в flowConfig без PUT. */
@@ -635,9 +647,10 @@ export class FlowEditorPage extends PlatformPage {
         if (history === null) return true;
         if (!this._interfaceDraftDirty()) return true;
         const problems = ui.problems;
+        if (problems === undefined) throw new Error('flow-editor-page: interface problems required');
         if (hasBlockingProblems(problems)) {
             this.toast('interface_editor.publish_blocked', { type: 'error' });
-            (this._editor.setWorkspace({ workspace: 'interface' }) as any);
+            (this._editor.setWorkspace({ workspace: 'interface' }));
             return false;
         }
         this._patchInterfaceConfig(structuredClone(history.present));
@@ -665,8 +678,8 @@ export class FlowEditorPage extends PlatformPage {
     _onInterfaceProblemSelect(event: CustomEvent) {
         const pageId = event.detail && event.detail.pageId;
         const blockId = event.detail && event.detail.blockId;
-        if (typeof pageId === 'string' && pageId.length > 0) (this._interfaceUi.selectPage({ pageId }) as any);
-        if (typeof blockId === 'string' && blockId.length > 0) (this._interfaceUi.selectBlock({ blockId }) as any);
+        if (typeof pageId === 'string' && pageId.length > 0) (this._interfaceUi.selectPage({ pageId }));
+        if (typeof blockId === 'string' && blockId.length > 0) (this._interfaceUi.selectBlock({ blockId }));
     }
 
     _renderInterfaceToolbar() {
@@ -694,7 +707,11 @@ export class FlowEditorPage extends PlatformPage {
                 @editor-undo=${() => host().undo()}
                 @editor-redo=${() => host().redo()}
                 @editor-viewport=${(event: Event) => host().setViewport(editorDetail(event, 'viewport').viewport)}
-                @editor-preview=${(event: Event) => { void host().setCanvasPreview(editorDetail(event, 'preview').preview); }}
+                @editor-preview=${(event: Event) => {
+                    const preview = editorDetail(event, 'preview').preview;
+                    if (typeof preview !== 'boolean') throw new Error('flow-editor-page: preview must be boolean');
+                    void host().setCanvasPreview(preview);
+                }}
                 @editor-templates=${() => host().openTemplates()}
                 @editor-assist=${(event: Event) => {
                     const detail = editorDetail(event, 'assist');
@@ -704,7 +721,7 @@ export class FlowEditorPage extends PlatformPage {
         `;
     }
 
-    _renderWorkspaceShell(state: any) {
+    _renderWorkspaceShell(state: Record<string, unknown>) {
         const workspace = state.workspace;
         if (workspace !== 'logic' && workspace !== 'interface' && workspace !== 'run') {
             throw new Error(`flow-editor-page: unsupported workspace ${String(workspace)}`);
@@ -758,9 +775,9 @@ export class FlowEditorPage extends PlatformPage {
     }
 
     override render(): TemplateResult {
-        this._scheduleDataflowRefresh(asObject(this._editor.state));
+        this._scheduleDataflowRefresh(editorState(this._editor.state));
         const dismissSafe = this._flowSettingsOpen ? 'flow-settings-dismiss-safe' : '';
-        const state = asObject(this._editor.state);
+        const state = editorState(this._editor.state);
         return html`
             ${this._flowSettingsOpen
                 ? html`<div class="flow-settings-dismiss-layer" @click=${() => this._onDismissFlowSettingsBackdrop()}></div>`
@@ -778,7 +795,7 @@ export class FlowEditorPage extends PlatformPage {
                         .interfaceProblems=${requireInterfaceUi(this._interfaceUi.value).problems}
                         @editor-save=${this._onEditorSave}
                         @interface-problem-select=${this._onInterfaceProblemSelect}
-                    >${(state as any).workspace === 'interface' ? this._renderInterfaceToolbar() : nothing}</flows-editor-header>
+                    >${(state).workspace === 'interface' ? this._renderInterfaceToolbar() : nothing}</flows-editor-header>
                 </div>
             </div>
             <div class="editor-shell">

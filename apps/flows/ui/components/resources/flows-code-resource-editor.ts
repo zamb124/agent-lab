@@ -12,7 +12,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-resource-editor.js';
 import '../editors/flows-code-workbench.js';
-import { asString } from '../../_helpers/flows-resolvers.js';
+import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { normalizeFlowCodeLanguage } from '../../_helpers/flows-code-languages.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
@@ -75,9 +75,12 @@ export class FlowsCodeResourceEditor extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
-        const language = normalizeFlowCodeLanguage((cfg as Record<string, any>).language);
-        const code = typeof (cfg as Record<string, any>).code === 'string' ? (cfg as Record<string, any>).code : '';
+        const config: Record<string, unknown> = this.resource && isPlainObject(this.resource.config)
+            ? this.resource.config
+            : {};
+        const language = normalizeFlowCodeLanguage(config.language);
+        const codeValue = config.code;
+        const code = typeof codeValue === 'string' ? codeValue : '';
         return html`
             <flows-base-resource-editor
                 .resourceId=${this.resourceId}

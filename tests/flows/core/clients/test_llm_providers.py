@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from apps.flows.di import FlowsDi
@@ -619,7 +619,7 @@ class TestLLMModelsServiceRealAPI:
 
         try:
             models = await service.fetch_models_by_provider("bothub")
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403):
                 raise AssertionError(
                     "BotHub API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
@@ -655,7 +655,7 @@ class TestLLMModelsServiceRealAPI:
 
         try:
             models = await service.fetch_models_by_provider("openrouter")
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403):
                 pytest.skip(
                     "OpenRouter API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
@@ -740,7 +740,7 @@ class TestLLMModelsServiceRealAPI:
             try:
                 probe_service = di.llm_models_service
                 await probe_service.fetch_models_by_provider("openrouter")
-            except httpx.HTTPStatusError as exc:
+            except httpx2.HTTPStatusError as exc:
                 if exc.response.status_code in (401, 403):
                     pytest.skip(
                         "OpenRouter API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
@@ -755,7 +755,7 @@ class TestLLMModelsServiceRealAPI:
         assert count > 0, f"Должны синхронизироваться модели от {provider}"
 
         # Проверяем что модели сохранились в БД
-        saved_models = await AIModelRecord.list_by_provider(provider)
+        saved_models = await AIModelRecord.list_unordered_by_provider(provider)
 
         assert len(saved_models) > 0
         for model in saved_models:
@@ -800,7 +800,7 @@ class TestLLMModelsServiceRealAPI:
         # Репозиторий только upsert; записи снятые с API не удаляются — в БД может быть больше строк.
         for provider, count in results.items():
             if count > 0:
-                models = await AIModelRecord.list_by_provider(provider)
+                models = await AIModelRecord.list_unordered_by_provider(provider)
                 assert len(models) >= count, (
                     f"В БД должно быть не меньше моделей {provider}, чем синхронизировано"
                 )

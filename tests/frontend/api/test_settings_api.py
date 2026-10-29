@@ -7,7 +7,7 @@ Integration тесты для API настроек.
 
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.models.identity_models import Company
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401

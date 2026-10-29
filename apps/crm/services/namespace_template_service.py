@@ -20,7 +20,7 @@ from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_CORE_NOTE_TASK,
     REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS,
 )
-from apps.crm_worker.tasks.task_names import CRM_GENERATE_NAMESPACE_SUGGESTS
+from apps.crm.tasks.task_names import CRM_GENERATE_NAMESPACE_SUGGESTS
 from core.clients.scheduler_client import SchedulerClient
 from core.context import get_context
 from core.errors.boundary import PlatformNotFoundError
@@ -50,11 +50,11 @@ class NamespaceTemplateService:
         return context.active_company.company_id
 
     async def _load_company_types(self) -> list[EntityType]:
-        return await EntityType.catalog()
+        return await EntityType.catalog_by_is_system_desc_and_type_id_asc()
 
     async def _ensure_template_db_core_note_task_rows(self, template_key: str) -> None:
         """Идемпотентно добавляет в шаблон строки note и task, если их ещё нет."""
-        existing = await NamespaceTemplateType.list_for_template(template_key)
+        existing = await NamespaceTemplateType.list_for_template_by_type_id_asc(template_key)
         present = {t.type_id for t in existing}
         for row in NAMESPACE_TEMPLATE_CORE_NOTE_TASK:
             tid = row["type_id"]
@@ -80,7 +80,7 @@ class NamespaceTemplateService:
                 is_context_anchor=bool(row.get("is_context_anchor", False)),
                 is_voice_target=bool(row.get("is_voice_target", False)),
             )
-        final_ids = {t.type_id for t in await NamespaceTemplateType.list_for_template(template_key)}
+        final_ids = {t.type_id for t in await NamespaceTemplateType.list_for_template_by_type_id_asc(template_key)}
         missing = REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS - final_ids
         if missing:
             raise ValueError(
@@ -95,7 +95,7 @@ class NamespaceTemplateService:
         item: NamespaceTemplateType,
         is_system: bool,
     ) -> EntityType:
-        row = await EntityType.by_company_namespace_and_type_id(
+        row = await EntityType.query_by_company_namespace_and_type_id(
             company_id=company_id,
             namespace=target_namespace,
             type_id=item.type_id,
@@ -123,7 +123,7 @@ class NamespaceTemplateService:
             try:
                 return await EntityType.create(entity_type)
             except UniqueViolationError:
-                raced = await EntityType.by_company_namespace_and_type_id(
+                raced = await EntityType.query_by_company_namespace_and_type_id(
                     company_id=company_id,
                     namespace=target_namespace,
                     type_id=item.type_id,
@@ -152,7 +152,7 @@ class NamespaceTemplateService:
                 "is_voice_target": item.is_voice_target,
             },
         )
-        refreshed = await EntityType.by_company_namespace_and_type_id(
+        refreshed = await EntityType.query_by_company_namespace_and_type_id(
             company_id=company_id,
             namespace=target_namespace,
             type_id=item.type_id,
@@ -172,7 +172,7 @@ class NamespaceTemplateService:
             raise ValueError("namespace_name is required")
         company_id = self._get_company_id()
         for tid in (NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID):
-            row = await EntityType.by_company_namespace_and_type_id(
+            row = await EntityType.query_by_company_namespace_and_type_id(
                 company_id=company_id,
                 namespace=name,
                 type_id=tid,
@@ -192,7 +192,7 @@ class NamespaceTemplateService:
         target_namespace: str,
         company_id: str,
     ) -> None:
-        row = await EntityType.by_company_namespace_and_type_id(
+        row = await EntityType.query_by_company_namespace_and_type_id(
             company_id=company_id,
             namespace=target_namespace,
             type_id=type_id,
@@ -228,7 +228,7 @@ class NamespaceTemplateService:
         if target_namespace == "default":
             return
         for tid in sorted(ENTITY_TYPES_CLONED_INTO_NEW_NAMESPACE):
-            existing = await EntityType.by_company_namespace_and_type_id(
+            existing = await EntityType.query_by_company_namespace_and_type_id(
                 company_id=company_id,
                 namespace=target_namespace,
                 type_id=tid,
@@ -266,7 +266,7 @@ class NamespaceTemplateService:
 
         await self._ensure_template_db_core_note_task_rows(template.template_key)
 
-        template_types = await NamespaceTemplateType.list_for_template(template.template_key)
+        template_types = await NamespaceTemplateType.list_for_template_by_type_id_asc(template.template_key)
         if not template_types:
             raise ValueError(f"Template {template_id} has no types")
 
@@ -300,7 +300,7 @@ class NamespaceTemplateService:
         return namespace
 
     async def get_namespace_editability(self, namespace_name: str) -> NamespaceEditabilityResponse:
-        types_here = await EntityType.catalog(
+        types_here = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
             namespace=namespace_name
         )
         current_allowed_type_ids = sorted({t.type_id for t in types_here})

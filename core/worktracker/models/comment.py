@@ -44,7 +44,8 @@ class WorkItemComment(PlatformModel):
         return await cls.objects.create(instance=comment)
 
     @classmethod
-    async def list_for_work_item(cls, company_id: str, work_item_id: str) -> list[Self]:
+    async def list_for_work_item_by_created_at_asc(cls, company_id: str, work_item_id: str) -> list[Self]:
+        """Комментарии задачи компании, ORDER BY created_at ASC. Предела нет. Пустые поля не проверяются."""
         return await (
             cls.objects.filter(company_id=company_id, work_item_id=work_item_id)
             .order_by("created_at")

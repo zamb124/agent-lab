@@ -19,7 +19,46 @@ import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import { buildSyncChannelAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
+
+function memberRows(result: unknown): Record<string, unknown>[] {
+    let list: unknown = result;
+    if (isPlainRecord(result)) {
+        list = result.items;
+        if (list === undefined) return [];
+    }
+    if (!Array.isArray(list)) {
+        throw new Error('sync-channel-edit-modal: members must be an array');
+    }
+    const rows: Record<string, unknown>[] = [];
+    for (const row of list) {
+        if (!isPlainRecord(row)) {
+            throw new Error('sync-channel-edit-modal: member must be an object');
+        }
+        rows.push(row);
+    }
+    return rows;
+}
+
+function memberUserId(member: Record<string, unknown>): string {
+    const userId = member.user_id;
+    if (typeof userId !== 'string' || userId === '') {
+        throw new Error('sync-channel-edit-modal: member user_id required');
+    }
+    return userId;
+}
+
+function uploadedFileId(result: unknown): string {
+    if (!isPlainRecord(result)) {
+        throw new Error('sync channel avatar: platform/file_create must return result.file_id');
+    }
+    const fileId = result.file_id;
+    if (typeof fileId !== 'string' || fileId === '') {
+        throw new Error('sync channel avatar: platform/file_create must return result.file_id');
+    }
+    return fileId;
+}
 import { compressImageFileToJpeg } from '../_helpers/sync-avatar-image-compress.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
 import { resolveChannelTitle } from '../_helpers/sync-id-resolvers.js';
@@ -51,7 +90,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
     declare _transcribe: boolean;
     declare _speechToChat: boolean;
     declare _hydrated: boolean;
-    declare _members: Record<string, any>[];
+    declare _members: Record<string, unknown>[];
     declare _placeholderVariantNonce: number;
 
     static override styles: CSSResultGroup = [
@@ -241,6 +280,13 @@ export class SyncChannelEditModal extends PlatformFormModal {
         this._fileUpload = this.useOp('platform/file_create');
     }
 
+    _currentChannel() {
+        for (const item of this._channels.items) {
+            if (item.channel_id === this.channelId) return item;
+        }
+        return undefined;
+    }
+
     override async updated(changed: PropertyValues<this>) {
         super.updated?.(changed);
         if (changed.has('channelId')) {
@@ -252,7 +298,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
             this._placeholderVariantNonce = 0;
         }
         if (!this._hydrated && this.channelId) {
-            const item = this._channels.items.find((c: Record<string, any>) => c.channel_id === this.channelId);
+            const item = this._currentChannel();
             if (item) {
                 this._name = typeof item.name === 'string' ? item.name : '';
                 if (typeof item.avatar_url === 'string' && item.avatar_url !== '') {
@@ -268,9 +314,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 this._speechToChat = item.speech_to_chat_enabled === true;
                 this._hydrated = true;
                 await this._membersOp.run({ channel_id: this.channelId });
-                const result = this._membersOp.lastResult;
-                if (result && Array.isArray((result as { items?: unknown }).items)) this._members = (result as { items: Record<string, any>[] }).items;
-                else if (Array.isArray(result)) this._members = result as Record<string, any>[];
+                this._members = memberRows(this._membersOp.lastResult);
             }
         }
     }
@@ -313,7 +357,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
         target.value = '';
         if (!files || files.length === 0) return;
         const file = files[0];
-        const item = this._channels.items.find((c: Record<string, any>) => c.channel_id === this.channelId);
+        const item = this._currentChannel();
         if (!item || item.type === 'direct') return;
         const compressed = await compressImageFileToJpeg(file);
         const spec = buildSyncChannelAssetFileCreateSpecJson({
@@ -327,22 +371,14 @@ export class SyncChannelEditModal extends PlatformFormModal {
         if (this._fileUpload.error !== null) {
             throw new Error(`sync channel avatar upload failed: ${this._fileUpload.error}`);
         }
-        if (
-            result === null
-            || typeof result !== 'object'
-            || typeof (result as Record<string, unknown>).file_id !== 'string'
-            || (result as Record<string, string>).file_id === ''
-        ) {
-            throw new Error('sync channel avatar: platform/file_create must return result.file_id');
-        }
-        const url = buildPlatformFileDownloadUrl((result as { file_id: string }).file_id);
+        const url = buildPlatformFileDownloadUrl(uploadedFileId(result));
         this._avatarDraftUrl = url;
         this._avatarIntent = 'replaced';
         this.isDirty = true;
     }
 
     _clearAvatar() {
-        const item = this._channels.items.find((c: Record<string, any>) => c.channel_id === this.channelId);
+        const item = this._currentChannel();
         if (!item || item.type === 'direct') return;
         this._avatarDraftUrl = '';
         this._avatarIntent = 'removed';
@@ -355,7 +391,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
      */
     _refreshPlaceholderAvatar(e: Event) {
         e.stopPropagation();
-        const item = this._channels.items.find((c: Record<string, any>) => c.channel_id === this.channelId);
+        const item = this._currentChannel();
         if (!item || item.type === 'direct') return;
         if (this._avatarPreviewResolve(item).kind !== 'placeholder') return;
         this._placeholderVariantNonce += 1;
@@ -366,7 +402,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
     }
 
     override renderBody() {
-        const item = this._channels.items.find((c: Record<string, any>) => c.channel_id === this.channelId);
+        const item = this._currentChannel();
         const showAvatar = item !== undefined && item.type !== 'direct';
         const busyAvatar = this._fileUpload.busy;
         const showRemoveAvatar = item !== undefined && this._avatarPreviewResolve(item).kind === 'remote';
@@ -510,9 +546,9 @@ export class SyncChannelEditModal extends PlatformFormModal {
                     ? html`<div class="form-hint"><glass-spinner></glass-spinner></div>`
                     : html`<div class="members-list">
                           ${this._members.map(
-                              (m: Record<string, any>) => html`
+                              (member) => html`
                                   <div class="member-row">
-                                      <platform-user-chip user-id=${m.user_id} size="sm"></platform-user-chip>
+                                      <platform-user-chip user-id=${memberUserId(member)} size="sm"></platform-user-chip>
                                   </div>
                               `,
                           )}
@@ -559,7 +595,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
 
     override async _onSubmit() {
         if (!this.channelId) return;
-        const item = this._channels.items.find((c: Record<string, any>) => c.channel_id === this.channelId);
+        const item = this._currentChannel();
         if (!item) {
             this.toast('sync:channel_settings.err_no_channel', { type: 'error' });
             return;

@@ -6,6 +6,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface RagProviderItem {
     name?: unknown;
@@ -79,9 +80,20 @@ export class ProviderSelector extends PlatformElement {
     }
 
     override render() {
-        const state = this._providers.state as Record<string, unknown>;
-        const items = Array.isArray(state.items) ? state.items as RagProviderItem[] : [];
-        const current = state.current;
+        const rawItems = this._providers.state.items;
+        const items: RagProviderItem[] = [];
+        if (rawItems != null) {
+            if (!Array.isArray(rawItems)) {
+                throw new Error('provider-selector: items must be an array');
+            }
+            for (const row of rawItems) {
+                if (!isPlainRecord(row)) {
+                    throw new Error('provider-selector: provider must be an object');
+                }
+                items.push(row);
+            }
+        }
+        const current = this._providers.state.current;
 
         if (this._providers.busy && items.length === 0) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;

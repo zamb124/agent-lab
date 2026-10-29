@@ -12,7 +12,7 @@ import json
 import time
 from typing import Literal, NotRequired, Required, TypedDict
 
-import httpx
+import httpx2
 import jwt
 from jwt import PyJWTError
 
@@ -91,12 +91,12 @@ class FcmPushService:
         # Переиспользуемый async HTTP-клиент: FCM поддерживает keepalive,
         # и для push-нагрузки это критично — иначе на каждый алерт идёт
         # полный TLS-handshake к fcm.googleapis.com.
-        self._http_client: httpx.AsyncClient | None = None
+        self._http_client: httpx2.AsyncClient | None = None
 
-    def _get_http_client(self) -> httpx.AsyncClient:
+    def _get_http_client(self) -> httpx2.AsyncClient:
         client = self._http_client
         if client is None:
-            client = httpx.AsyncClient(timeout=30.0)
+            client = httpx2.AsyncClient(timeout=30.0)
             self._http_client = client
         return client
 

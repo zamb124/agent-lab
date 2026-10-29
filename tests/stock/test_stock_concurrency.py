@@ -162,7 +162,7 @@ class TestConcurrentValidation:
         assert quant is not None
         assert quant.quantity == 0
         for tid in (t1, t2):
-            moves = await StockMove.list_for_transfer(env.company_id, tid)
+            moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, tid)
             assert any(m.state == StockMoveState.DONE for m in moves)
 
     async def test_double_validate_same_transfer_is_safe(
@@ -202,7 +202,7 @@ class TestConcurrentValidation:
         assert quant is not None
         # отгрузка 4 списана ровно один раз
         assert quant.quantity == Decimal("6")
-        moves = await StockMove.list_for_transfer(env.company_id, tid)
+        moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, tid)
         assert sum(
             m.product_uom_qty
             for m in moves

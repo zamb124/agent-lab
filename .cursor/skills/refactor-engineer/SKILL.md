@@ -42,7 +42,7 @@ description: "Автономный рефакторинг Платформы п�
 
 Приоритет (первый непустой):
 
-1. **P0 — сломанный контроль.** Гейт не падает на нарушении, регресс ratchet относительно `scripts/ratchet_baseline.json`, красный шаг `make lint`, дрейф правил, вводящий агента в заблуждение.
+1. **P0 — сломанный контроль.** Гейт не падает на нарушении, регресс ratchet относительно `scripts/gates/backend/ratchet_baseline.json`, красный шаг `make lint`, дрейф правил, вводящий агента в заблуждение.
 2. **P1 — безопасность и деньги.** Check и dual-write OpenFGA, billing span, изоляция `company_id`, секреты.
 3. **P2 — слои.** Логика в `op_*`, `objects`/`execute_raw`/`atomic` в сервисе, бизнес в модели, таблица вне `models/<entity>.py`, `apps/<svc>/db/`.
 4. **P3 — контракты.** Twin-модели, мапперы, glue, клиенты вне `core/clients/`, копипаста между сервисами, дубль `core` ↔ `apps`.
@@ -66,7 +66,7 @@ description: "Автономный рефакторинг Платформы п�
 
 - Гейт есть — запустить, зафиксировать N.
 - Гейта нет — добавить проверку в существующий скрипт `scripts/` того же канона; новый скрипт — только если подходящего нет, тогда он регистрируется в `mk/lint.mk` (`_lint-py`) или в `check-events-canon` (`Makefile`). Детектор обязан упасть на текущем коде в границе среза — иначе он ничего не ловит.
-- Долг больше одного среза — ratchet-метрика в `scripts/check_ratchet_counts.py` (`METRICS`) с текущим числом в `scripts/ratchet_baseline.json`; срез снижает число.
+- Долг больше одного среза — ratchet-метрика в `scripts/gates/backend/ratchet_counts.py` (`METRICS`) с текущим числом в `scripts/gates/backend/ratchet_baseline.json`; срез снижает число.
 - Allowlist — только принципиальные исключения, каждое оформлено `Исключение:` в правиле-владельце.
 - В правиле-владельце снять метку `[без гейта]` и вписать гейт в раздел «Гейты».
 
@@ -84,7 +84,7 @@ description: "Автономный рефакторинг Платформы п�
 
 - Детектор среза: 0 в границе. Повторный discovery границы не находит старое имя или путь.
 - `uv run python .cursor/skills/refactor-engineer/scripts/gates_report.py /tmp/refactor_gates_after` — новых падений относительно baseline нет; `make lint` зелёный, если baseline был зелёным.
-- Ratchet снизился — `uv run python scripts/check_ratchet_counts.py --update` (только вниз).
+- Ratchet снизился — `uv run python -m scripts.gates.backend.ratchet_counts --update` (только вниз).
 - Тесты: `make test-up` один раз, затем `uv run pytest tests/<домен>/ -q` и архитектурные тесты (`tests/core/di/test_service_kit.py`, `tests/core/realtime/test_command_owners.py`, `tests/realtime/test_<svc>_commands.py`); UI — `make ui`.
 - Красное из-за среза чинится до зелёного. Красное не из-за среза показывается отдельно с доказательством из baseline.
 

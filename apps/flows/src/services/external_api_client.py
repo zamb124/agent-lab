@@ -2,7 +2,7 @@
 
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.external_api import (
@@ -114,7 +114,7 @@ class ExternalAPIClient:
         headers: dict[str, str],
         json_body: JsonObject | None = None,
         data_body: JsonObject | None = None,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """
         Выполняет запрос: сначала без прокси, при 401/403 - с прокси.
         Для локальных хостов прокси не используется.
@@ -192,7 +192,7 @@ class ExternalAPIClient:
     def _parse_response(
         self,
         config: ExternalAPIConfig,
-        response: httpx.Response,
+        response: httpx2.Response,
     ) -> JsonObject:
         """Парсит ответ согласно response_schema."""
         schema = config.response_schema

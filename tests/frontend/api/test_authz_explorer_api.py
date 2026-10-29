@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.authz.types import AuthzObjectType
 from core.utils.tokens import get_token_service

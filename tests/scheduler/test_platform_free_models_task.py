@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-import apps.idle_worker.tasks.platform_free_models_tasks as task_module
+import apps.idle.tasks.platform_free_models_tasks as task_module
 
 
 class _TaskDi:

@@ -50,24 +50,38 @@ export class FlowsLlmContextResourceEditor extends PlatformElement {
 
     _parentResolved() {
         const result = this._llmContextParent.lastResult;
-        if (!isPlainObject(result) || !isPlainObject((result as any).resolved)) {
+        if (!isPlainObject(result)) {
             return {};
         }
-        return (result as any).resolved;
+        const resolved = result.resolved;
+        if (!isPlainObject(resolved)) {
+            return {};
+        }
+        return resolved;
     }
 
     _parentProfiles() {
         const result = this._llmContextParent.lastResult;
-        return Array.isArray((result as Record<string, any>)?.profiles) ? (result as Record<string, any>).profiles : [];
+        if (!isPlainObject(result)) {
+            return [];
+        }
+        const profiles = result.profiles;
+        return Array.isArray(profiles) ? profiles : [];
     }
 
     _parentBudgets() {
         const result = this._llmContextParent.lastResult;
-        return Array.isArray((result as Record<string, any>)?.budgets) ? (result as Record<string, any>).budgets : [];
+        if (!isPlainObject(result)) {
+            return [];
+        }
+        const budgets = result.budgets;
+        return Array.isArray(budgets) ? budgets : [];
     }
 
     override render(): TemplateResult {
-        const cfg = isPlainObject(this.resource?.config) ? (this.resource as Record<string, any>).config : {};
+        const resource = this.resource;
+        const rawConfig = isPlainObject(resource) ? resource.config : undefined;
+        const cfg = isPlainObject(rawConfig) ? rawConfig : {};
         return html`
             <flows-base-resource-editor
                 .resourceId=${this.resourceId}

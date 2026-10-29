@@ -32,7 +32,7 @@ SCHEMA_PATH = (
 
 def test_generated_schema_file_matches_python_source():
     result = subprocess.run(
-        [sys.executable, "scripts/generate_wiki_prosemirror_schema.py", "--check"],
+        [sys.executable, "scripts/generate/wiki_prosemirror_schema.py", "--check"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

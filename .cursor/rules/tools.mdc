@@ -14,9 +14,9 @@ Builtin tools — trusted Python в `apps/flows/tools/<tag>/` (подпакет 
 
 ## Модель
 
-- `ToolReference` — редактируемый контракт tool в ноде; `parameters_schema` — единственный JSON Schema аргументов (`CallParameter`/`args_schema` запрещены). `ToolReference.list_tool_index(*, mcp="all", exclude_tool_ids=None) -> list[ToolListIndexItem]` — индекс tools, `ORDER BY tool_id`, без предела. `mcp="all"` и пустой `exclude_tool_ids` не фильтруют. `ToolReference.row_id_for_active_company(tool_id) -> str` — ключ строки из активной компании и `tool_id`. Нет компании — `ValueError` с текстом `tool_id requires an active company`. Пустой `tool_id` или `:` в `company_id` — `ValueError` с текстом `tool_id is required and company_id must not contain ':'`.
+- `ToolReference` — редактируемый контракт tool в ноде; `parameters_schema` — единственный JSON Schema аргументов (`CallParameter`/`args_schema` запрещены). `ToolReference.list_tool_index_items_by_tool_id_asc(*, mcp="all", exclude_tool_ids=None) -> list[ToolListIndexItem]` — элементы индекса tools, `ORDER BY tool_id ASC`, без предела. `mcp="all"` и пустой `exclude_tool_ids` не фильтруют. `ToolReference.list_by_tool_id_asc(*, limit, offset=0) -> list[ToolReference]` — окно tools, `ORDER BY tool_id ASC`. `limit < 1` и `offset < 0` — `ValueError`. `ToolReference.row_id_for_active_company(tool_id) -> str` — ключ строки из активной компании и `tool_id`. Нет компании — `ValueError` с текстом `tool_id requires an active company`. Пустой `tool_id` или `:` в `company_id` — `ValueError` с текстом `tool_id is required and company_id must not contain ':'`. `ToolReference.found_unique_by_tool_ids(tool_ids) -> dict[str, ToolReference]` — найденные tools компании по `tool_id`. Пустой список — `{}`. Пустой `tool_id` — `ValueError` с текстом `tool_id is required`. Две строки с одним `tool_id` — `RuntimeError`. Отсутствующие id не входят. Порядка нет.
 - `ToolDefinition`, `ToolRevision`, `ToolGrantClaims`, `ToolResultEnvelope` (`apps/flows/src/models/tool_contracts.py`) — контракт для preview и `GET /flows/api/v1/tools/{tool_id}/contract` (`build_tool_definition_from_base_tool`).
-- `ToolTagGroup` (таблица `tool_tag_groups`, PK `tag`, `description_ru`/`description_en`, `content_hash`) — описания групп picker.
+- `ToolTagGroup` (таблица `tool_tag_groups`, PK `tag`, `description_ru`/`description_en`, `content_hash`) — описания групп picker. `ToolTagGroup.list_by_tag_asc(*, limit=200, offset=0) -> list[ToolTagGroup]` — окно групп, после чтения сортировка по `tag` ASC. `limit < 1` и `offset < 0` — `ValueError`.
 - `ToolApprovalStore` (`apps/flows/src/services/tool_approval.py`) — pending approvals в Redis (`ToolApprovalRecord`: `approval_id`, actor, `tool_id`, `definition_version`, `argument_hash`, `expires_at`, `status`).
 
 ## Инварианты
@@ -26,7 +26,7 @@ Builtin tools — trusted Python в `apps/flows/tools/<tag>/` (подпакет 
 3. Один домен — один класс клиента с одним именем; подкласс `core.clients.*Client` под тем же именем в `apps/flows` запрещён.
 4. `CodeTool` и `CodeNode` — один entrypoint-контракт: `entrypoint` или первая функция source, вызов `(args, state)`; импорт `apps.*`/`core.*` в коде пользователя — `ValueError` (`reject_forbidden_platform_imports`).
 5. Доступ при вызове — constructor-injected `ToolAuthorizationService` в `BaseTool.run()`: пустой `permission` — членство в компании, иначе группа через OpenFGA; tool grants и tag groups не PDP.
-6. Tag: один primary tag из whitelist `crm`, `datasources`, `device`, `documents`, `files`, `flows`, `google_docs`, `google_sheets`, `knowledge`, `misc`, `scheduling`, `stock`, `sync`, `tables`, `text`, `viz`, `web`, `wiki`, `worktracker` (`TOOL_TAG_WHITELIST`); два — только `{crm, worktracker}`; facet-теги запрещены; MCP-tools — `["mcp", "mcp:<server_id>"]`, flow-as-tool — `flow`.
+6. Tag: один primary tag из whitelist `crm`, `datasources`, `documents`, `files`, `flows`, `google_docs`, `google_sheets`, `knowledge`, `misc`, `scheduling`, `stock`, `sync`, `tables`, `text`, `viz`, `web`, `wiki`, `worktracker` (`TOOL_TAG_WHITELIST`); два — только `{crm, worktracker}`; facet-теги запрещены; MCP-tools — `["mcp", "mcp:<server_id>"]`, flow-as-tool — `flow`.
 7. Picker `GET /flows/api/v1/tools/all`: каталог компании (`list_index`, MCP — SQL-предикат) ∪ listed platform tools, видимость — `page_viewable_tool_ids`/`page_viewable_flow_ids` (`batch_check` окна страницы), `total` — размер каталога; tool без tuple не виден; FGA с `builtin_tool_ids()` не снимается.
 8. Параметры builtin — JSON Schema с object root и `additionalProperties: false`; строгая схема для провайдера — `compile_openai_strict_parameters` (`apps/flows/src/tools/provider_schema.py`).
 9. Write-tools объявляют `effects` и `confirmation_floor` в `@tool()`; `POST /flows/api/v1/tools/preview` отдаёт `model_view` (что видит LLM) и `execution_plan` (эффекты, маскированные аргументы, `requires_approval` при `confirmation_floor ∈ {preview, approval}`).
@@ -43,6 +43,6 @@ Builtin tools — trusted Python в `apps/flows/tools/<tag>/` (подпакет 
 
 ## Гейты
 
-- `scripts/check_tool_contracts.py` (`make lint`) — схема параметров builtin, запрещённые импорты и имена в `apps/flows/tools/**`.
-- `scripts/check_tool_tags.py` (`make lint`) — whitelist и число тегов.
+- `scripts/gates/flows/tool_contracts.py` (`make lint`) — схема параметров builtin, запрещённые импорты и имена в `apps/flows/tools/**`.
+- `scripts/gates/flows/tool_tags.py` (`make lint`) — whitelist и число тегов.
 - `tests/flows/evals/test_tool_eval_dataset_schema.py` — схема датасета выбора tool.

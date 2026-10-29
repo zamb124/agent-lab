@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 from playwright.async_api import Locator, Page, expect
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from sqlalchemy import text
@@ -50,8 +50,8 @@ def flows_doc_flow_id(prefix: str, unique_id: str) -> str:
     return f"{prefix}_{safe}"
 
 
-def _flows_client(origin: str, auth_token: str) -> httpx.AsyncClient:
-    return httpx.AsyncClient(
+def _flows_client(origin: str, auth_token: str) -> httpx2.AsyncClient:
+    return httpx2.AsyncClient(
         base_url=origin,
         cookies={"auth_token": auth_token},
         timeout=60.0,

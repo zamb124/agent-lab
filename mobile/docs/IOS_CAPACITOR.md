@@ -118,7 +118,7 @@ npx cap open ios
 ```bash
 cd /path/to/agent-lab
 uv sync
-uv run python scripts/generate_linnex_pwa_icons.py
+uv run python -m scripts.generate.pwa_icons
 ```
 
 Зависимость генератора: **`skia-python`** (группа **`dev`** в `pyproject.toml`). После обновления **`AppIcon`** — снова **`npx cap sync ios`** при необходимости.

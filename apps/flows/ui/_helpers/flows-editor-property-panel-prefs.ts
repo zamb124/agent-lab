@@ -20,15 +20,27 @@ export const ASSISTANT_COL_WIDTH_DEFAULT = 380;
 export const ASSISTANT_COL_WIDTH_MIN = 280;
 export const ASSISTANT_COL_WIDTH_MAX = 640;
 
-/** @typedef {{ left: number, top: number, width: number, height: number, collapsed: boolean, expandedWidth?: number, expandedHeight?: number }} PropertyPanelRectPref */
+export interface PropertyPanelRectPref {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    collapsed: boolean;
+    expandedWidth?: number;
+    expandedHeight?: number;
+}
+
+interface PendingRectPref {
+    panelId: string;
+    rect: PropertyPanelRectPref;
+}
 
 const PERSIST_DEBOUNCE_MS = 300;
 
 /** @type {ReturnType<typeof setTimeout> | null} */
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** @type {{ panelId: string, rect: PropertyPanelRectPref } | null} */
-let pendingRectPref: Record<string, any> | null = null;
+let pendingRectPref: PendingRectPref | null = null;
 
 /** @type {ReturnType<typeof setTimeout> | null} */
 let assistantWidthPersistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -36,7 +48,7 @@ let assistantWidthPersistTimer: ReturnType<typeof setTimeout> | null = null;
 /** @type {number | null} */
 let pendingAssistantWidth: number | null = null;
 
-function _isPlainObject(value: unknown) {
+function _isPlainObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -55,7 +67,7 @@ export function normalizeAssistantWidth(value: unknown) {
 /**
  * @returns {{ property_panels?: Record<string, unknown>, property_panel?: Record<string, unknown>, assistant_width?: unknown }}
  */
-function _readRoot() {
+function _readRoot(): Record<string, unknown> {
     const raw = storageGet(FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY);
     if (raw === null) {
         return {};
@@ -80,7 +92,7 @@ function _readRoot() {
 /**
  * @param {{ property_panels?: Record<string, unknown>, assistant_width?: number }} root
  */
-function _writeRoot(root: any) {
+function _writeRoot(root: Record<string, unknown>) {
     storageSetJson(FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY, root);
 }
 
@@ -88,7 +100,7 @@ function _writeRoot(root: any) {
  * @param {unknown} entry
  * @returns {PropertyPanelRectPref | null}
  */
-function _normalizePropertyPanelRect(entry: any) {
+function _normalizePropertyPanelRect(entry: unknown): PropertyPanelRectPref | null {
     if (!_isPlainObject(entry)) {
         return null;
     }
@@ -102,7 +114,7 @@ function _normalizePropertyPanelRect(entry: any) {
     if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
         return null;
     }
-    const normalized: any = {
+    const normalized: PropertyPanelRectPref = {
         left,
         top,
         width,
@@ -124,7 +136,7 @@ function _normalizePropertyPanelRect(entry: any) {
  * @param {string} panelId
  * @returns {PropertyPanelRectPref | null}
  */
-export function readPropertyPanelRectPref(panelId: any) {
+export function readPropertyPanelRectPref(panelId: unknown): PropertyPanelRectPref | null {
     if (typeof panelId !== 'string' || panelId.length === 0) {
         throw new Error('readPropertyPanelRectPref: panelId is required');
     }
@@ -153,7 +165,7 @@ export function readAssistantWidthPref() {
 /**
  * @param {number} width
  */
-function _flushAssistantWidthPref(width: any) {
+function _flushAssistantWidthPref(width: unknown) {
     const normalized = normalizeAssistantWidth(width);
     if (normalized === null) {
         throw new Error('writeAssistantWidthPref: width must be a finite number');
@@ -166,7 +178,7 @@ function _flushAssistantWidthPref(width: any) {
 /**
  * @param {number} width
  */
-export function scheduleAssistantWidthPersist(width: any) {
+export function scheduleAssistantWidthPersist(width: unknown) {
     const normalized = normalizeAssistantWidth(width);
     if (normalized === null) {
         throw new Error('scheduleAssistantWidthPersist: width must be a finite number');
@@ -189,7 +201,7 @@ export function scheduleAssistantWidthPersist(width: any) {
 /**
  * @param {number} width
  */
-export function writeAssistantWidthPref(width: any) {
+export function writeAssistantWidthPref(width: unknown) {
     if (assistantWidthPersistTimer !== null) {
         clearTimeout(assistantWidthPersistTimer);
         assistantWidthPersistTimer = null;
@@ -202,10 +214,10 @@ export function writeAssistantWidthPref(width: any) {
  * @param {string} panelId
  * @param {PropertyPanelRectPref} rect
  */
-function _flushPropertyPanelRectPref(panelId: any, rect: any) {
+function _flushPropertyPanelRectPref(panelId: string, rect: PropertyPanelRectPref) {
     const root = _readRoot();
-    const panels = _isPlainObject(root.property_panels) ? { ...root.property_panels } : {};
-    panels[panelId] = {
+    const panels: Record<string, unknown> = _isPlainObject(root.property_panels) ? { ...root.property_panels } : {};
+    const stored: PropertyPanelRectPref = {
         left: rect.left,
         top: rect.top,
         width: rect.width,
@@ -213,11 +225,12 @@ function _flushPropertyPanelRectPref(panelId: any, rect: any) {
         collapsed: rect.collapsed,
     };
     if (typeof rect.expandedWidth === 'number' && Number.isFinite(rect.expandedWidth)) {
-        panels[panelId].expandedWidth = rect.expandedWidth;
+        stored.expandedWidth = rect.expandedWidth;
     }
     if (typeof rect.expandedHeight === 'number' && Number.isFinite(rect.expandedHeight)) {
-        panels[panelId].expandedHeight = rect.expandedHeight;
+        stored.expandedHeight = rect.expandedHeight;
     }
+    panels[panelId] = stored;
     root.property_panels = panels;
     _writeRoot(root);
 }
@@ -226,7 +239,7 @@ function _flushPropertyPanelRectPref(panelId: any, rect: any) {
  * @param {string} panelId
  * @param {PropertyPanelRectPref} rect
  */
-export function schedulePropertyPanelRectPersist(panelId: any, rect: any) {
+export function schedulePropertyPanelRectPersist(panelId: unknown, rect: unknown) {
     if (typeof panelId !== 'string' || panelId.length === 0) {
         throw new Error('schedulePropertyPanelRectPersist: panelId is required');
     }
@@ -270,7 +283,7 @@ export function schedulePropertyPanelRectPersist(panelId: any, rect: any) {
  * @param {string} panelId
  * @param {PropertyPanelRectPref} rect
  */
-export function writePropertyPanelRectPref(panelId: any, rect: any) {
+export function writePropertyPanelRectPref(panelId: unknown, rect: unknown) {
     if (typeof panelId !== 'string' || panelId.length === 0) {
         throw new Error('writePropertyPanelRectPref: panelId is required');
     }

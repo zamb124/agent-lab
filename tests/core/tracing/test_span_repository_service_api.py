@@ -125,7 +125,7 @@ class TestSpanRepositoryServiceQuery:
                     start_time=base + timedelta(microseconds=i),
                 )
             )
-        rows, _ = await Span.span_page_and_cursor_for_service(
+        rows, _ = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
             service_name=svc,
             operation_name="sync.pull",
             limit=10,
@@ -151,7 +151,7 @@ class TestSpanRepositoryServiceQuery:
                     event_type=et,
                 )
             )
-        rows, _ = await Span.span_page_and_cursor_for_service(
+        rows, _ = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
             service_name=svc,
             event_type="embed.started",
             limit=10,
@@ -188,7 +188,7 @@ class TestSpanRepositoryServiceQuery:
                 namespace="ns1",
             )
         )
-        a_only, _ = await Span.span_page_and_cursor_for_service(
+        a_only, _ = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
             service_name=svc,
             company_id="company_a",
             limit=10,
@@ -196,7 +196,7 @@ class TestSpanRepositoryServiceQuery:
         assert len(a_only) == 1
         assert a_only[0].company_id == "company_a"
 
-        ns_only, _ = await Span.span_page_and_cursor_for_service(
+        ns_only, _ = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
             service_name=svc,
             company_id="company_b",
             namespace="ns1",
@@ -228,7 +228,7 @@ class TestSpanRepositoryServiceQuery:
         seen: set[str] = set()
         pages = 0
         while True:
-            rows, next_c = await Span.span_page_and_cursor_for_service(
+            rows, next_c = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
                 service_name=svc,
                 limit=page_size,
                 cursor=cursor,
@@ -245,7 +245,7 @@ class TestSpanRepositoryServiceQuery:
 
     async def test_span_page_and_cursor_for_service_invalid_cursor_raises(self, di, unique_id: str):
         with pytest.raises(ValueError, match="cursor"):
-            await Span.span_page_and_cursor_for_service(
+            await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
                 service_name=f"x_{unique_id}",
                 limit=5,
                 cursor="not-valid-base64!!!",
@@ -253,7 +253,7 @@ class TestSpanRepositoryServiceQuery:
 
     async def test_span_page_and_cursor_for_service_limit_below_one_raises(self, di, unique_id: str):
         with pytest.raises(ValueError, match="limit"):
-            await Span.span_page_and_cursor_for_service(
+            await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
                 service_name=f"x_{unique_id}",
                 limit=0,
             )
@@ -282,8 +282,8 @@ class TestSpanRepositoryServiceQuery:
                 start_time=base,
             )
         )
-        crm_rows, _ = await Span.span_page_and_cursor_for_service(service_name=f"crm_{unique_id}", limit=20)
-        sync_rows, _ = await Span.span_page_and_cursor_for_service(service_name=f"sync_{unique_id}", limit=20)
+        crm_rows, _ = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(service_name=f"crm_{unique_id}", limit=20)
+        sync_rows, _ = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(service_name=f"sync_{unique_id}", limit=20)
         assert len(crm_rows) == 1
         assert len(sync_rows) == 1
         assert crm_rows[0].operation_name == "entity.save"
@@ -323,9 +323,9 @@ async def test_list_for_trace_orders_by_start_time(di: object, unique_id: str) -
             start_time=earlier,
         )
     )
-    spans = await Span.list_for_trace(trace_id)
+    spans = await Span.list_for_trace_by_start_time_asc(trace_id)
     assert [span.span_id for span in spans] == [f"{unique_id}_early", f"{unique_id}_late"]
-    assert await Span.list_for_trace(f"{unique_id}_missing") == []
+    assert await Span.list_for_trace_by_start_time_asc(f"{unique_id}_missing") == []
 
 
 @pytest.mark.asyncio

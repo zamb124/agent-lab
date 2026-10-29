@@ -25,23 +25,46 @@ function asArray(value: unknown) {
     return Array.isArray(value) ? value : [];
 }
 
-function stringValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function listItems(result: unknown) {
+    if (!isPlainRecord(result)) {
+        return [];
+    }
+    const items = result.items;
+    return Array.isArray(items) ? items : [];
+}
+
+function codeEditorSource(event: Event): string {
+    if (!(event instanceof CustomEvent) || !isPlainRecord(event.detail)) {
+        throw new Error('FlowsEvaluationCaseEditor: code editor change requires a string value');
+    }
+    const value = event.detail.value;
+    if (typeof value !== 'string') {
+        throw new Error('FlowsEvaluationCaseEditor: code editor change requires a string value');
+    }
+    return value;
+}
+
+function stringValue(record: unknown, field: string) {
+    if (!isPlainRecord(record)) {
         return '';
     }
     const value = record[field];
     return typeof value === 'string' ? value : '';
 }
 
-function numberValue(record: any, field: any, standard: any) {
-    if (!record || typeof record !== 'object') {
+function numberValue(record: unknown, field: string, standard: number) {
+    if (!isPlainRecord(record)) {
         return standard;
     }
     const value = record[field];
     return typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : standard;
 }
 
-function tagsText(tags: any) {
+function tagsText(tags: unknown) {
     return asArray(tags).filter((item) => typeof item === 'string' && item.length > 0).join(', ');
 }
 
@@ -92,13 +115,15 @@ function emptyTurnDraft() {
     };
 }
 
-function hydrateTurnFromCase(turn: any) {
+type TurnDraft = ReturnType<typeof emptyTurnDraft>;
+
+function hydrateTurnFromCase(turn: unknown): TurnDraft {
     const draft = emptyTurnDraft();
-    if (!turn || typeof turn !== 'object') {
+    if (!isPlainRecord(turn)) {
         return draft;
     }
     const input = turn.input;
-    if (input && typeof input === 'object') {
+    if (isPlainRecord(input)) {
         const inputType = stringValue(input, 'type');
         if (inputType === 'text' || inputType === 'inline_code' || inputType === 'node') {
             draft.inputType = inputType;
@@ -114,7 +139,7 @@ function hydrateTurnFromCase(turn: any) {
     }
     const checks = asArray(turn.checks);
     const check = checks.length > 0 ? checks[0] : null;
-    if (!check || typeof check !== 'object') {
+    if (!isPlainRecord(check)) {
         return draft;
     }
     const checkType = stringValue(check, 'type');
@@ -168,9 +193,9 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         _showRubricCreate: { state: true },
         _nodeBusy: { state: true },
     }
-    declare suite: Record<string, any> | null;
-    declare testCase: Record<string, any> | null;
-    declare catalog: any[];
+    declare suite: Record<string, unknown> | null;
+    declare testCase: Record<string, unknown> | null;
+    declare catalog: unknown[];
     declare busy: boolean;
     declare flowId: string;
     declare branchId: string;
@@ -178,10 +203,10 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
     declare _name: string;
     declare _description: string;
     declare _tags: string;
-    declare _turns: any[];
+    declare _turns: TurnDraft[];
     declare _activeTurnIndex: number;
-    declare _rubrics: any[];
-    declare _rubricVersions: any[];
+    declare _rubrics: unknown[];
+    declare _rubricVersions: unknown[];
     declare _rubricDraftName: string;
     declare _rubricDraftPrompt: string;
     declare _rubricDraftThreshold: string;
@@ -410,7 +435,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
             return;
         }
         const result = await this._rubricsList.run({ flow_id: this.flowId });
-        this._rubrics = asArray(result && (result as Record<string, any>).items);
+        this._rubrics = listItems(result);
         const turn = this._activeTurn();
         if (turn.rubricVersionId.length > 0 && turn.rubricId.length === 0) {
             await this._resolveRubricIdForVersion(turn.rubricVersionId);
@@ -419,14 +444,14 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         }
     }
 
-    async _resolveRubricIdForVersion(rubricVersionId: any) {
-        for (const rubric of (this._rubrics as any)) {
+    async _resolveRubricIdForVersion(rubricVersionId: string) {
+        for (const rubric of (this._rubrics)) {
             const rubricId = stringValue(rubric, 'rubric_id');
             if (rubricId.length === 0) {
                 continue;
             }
             const versionsResult = await this._rubricVersionsList.run({ rubric_id: rubricId });
-            const versions = asArray(versionsResult && (versionsResult as Record<string, any>).items);
+            const versions = listItems(versionsResult);
             const found = versions.find((item) => stringValue(item, 'rubric_version_id') === rubricVersionId);
             if (found) {
                 this._patchActiveTurn({ rubricId });
@@ -436,13 +461,13 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         }
     }
 
-    async _loadRubricVersions(rubricId: any) {
+    async _loadRubricVersions(rubricId: string) {
         if (rubricId.length === 0) {
             this._rubricVersions = [];
             return;
         }
         const result = await this._rubricVersionsList.run({ rubric_id: rubricId });
-        this._rubricVersions = asArray(result && (result as Record<string, any>).items);
+        this._rubricVersions = listItems(result);
     }
 
     _branchId() {
@@ -488,15 +513,17 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         void this._loadRubrics();
     }
 
-    _activeTurn() {
-        if ((this._activeTurnIndex as any) < 0 || (this._activeTurnIndex as any) >= (this._turns.length as any)) {
+    _activeTurn(): TurnDraft {
+        const index = this._activeTurnIndex;
+        const turn = this._turns[index];
+        if (index < 0 || turn === undefined) {
             throw new Error('FlowsEvaluationCaseEditor: active turn index out of range');
         }
-        return (this._turns as any)[this._activeTurnIndex];
+        return turn;
     }
 
-    _patchActiveTurn(patch: any) {
-        const next = (this._turns.map as any)((turn: any, index: number) => {
+    _patchActiveTurn(patch: Partial<TurnDraft>) {
+        const next = this._turns.map((turn, index) => {
             if (index !== this._activeTurnIndex) {
                 return turn;
             }
@@ -510,11 +537,11 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         return detail && typeof detail.value === 'string' ? detail.value : '';
     }
 
-    _setCheckType(checkType: any) {
+    _setCheckType(checkType: string) {
         this._patchActiveTurn({ checkType });
     }
 
-    _setInputType(inputType: any) {
+    _setInputType(inputType: string) {
         this._patchActiveTurn({ inputType });
     }
 
@@ -542,7 +569,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
     }
 
     _turnItems() {
-        return (this._turns.map as any)((_: any, index: number) => ({
+        return this._turns.map((_, index) => ({
             value: String(index),
             label: this.t('evaluation.case_editor.turn_n', { n: index + 1 }),
         }));
@@ -556,8 +583,8 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         ];
     }
 
-    _builtinMetricItems(metrics: any) {
-        return metrics.map((item: any) => {
+    _builtinMetricItems(metrics: readonly unknown[]) {
+        return metrics.map((item) => {
             const metricId = stringValue(item, 'evaluator_id');
             return {
                 value: metricId,
@@ -574,7 +601,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         }));
     }
 
-    _llmNodeEnumConfig(preferRole: any) {
+    _llmNodeEnumConfig(preferRole: string) {
         const nodes = this._llmNodes();
         const preferred = preferRole
             ? nodes.filter((node) => node.evaluation_role === preferRole)
@@ -596,7 +623,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
     }
 
     _rubricEnumConfig() {
-        const values = (this._rubrics.map as any)((rubric: any) => ({
+        const values = this._rubrics.map((rubric) => ({
             value: stringValue(rubric, 'rubric_id'),
             label: stringValue(rubric, 'name'),
         }));
@@ -612,9 +639,9 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
     }
 
     _rubricVersionEnumConfig() {
-        const values = (this._rubricVersions.map as any)((version: any) => {
+        const values = this._rubricVersions.map((version) => {
             const versionId = stringValue(version, 'rubric_version_id');
-            const versionNumber = version && typeof version.version === 'number'
+            const versionNumber = isPlainRecord(version) && typeof version.version === 'number'
                 ? String(version.version)
                 : stringValue(version, 'version');
             return {
@@ -638,7 +665,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
     }
 
     _optionalInt(value: unknown, labelKey: string) {
-        const text = (value as any).trim();
+        const text = typeof value === 'string' ? value.trim() : '';
         if (text.length === 0) {
             return null;
         }
@@ -652,19 +679,19 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
 
     _addTurn() {
         this._turns = [...this._turns, emptyTurnDraft()];
-        this._activeTurnIndex = (this._turns.length as any) - 1;
+        this._activeTurnIndex = (this._turns.length) - 1;
     }
 
     _removeActiveTurn() {
-        if ((this._turns.length as any) <= 1) {
+        if ((this._turns.length) <= 1) {
             return;
         }
-        const next = (this._turns.filter as any)((_: any, index: number) => index !== this._activeTurnIndex);
+        const next = this._turns.filter((_, index) => index !== this._activeTurnIndex);
         this._turns = next;
         this._activeTurnIndex = Math.min(this._activeTurnIndex, next.length - 1);
     }
 
-    _nextEvaluationNodeName(evaluationRole: any) {
+    _nextEvaluationNodeName(evaluationRole: string) {
         const role = requireEvaluationRole(evaluationRole);
         const base = role === 'judge'
             ? this.t('evaluation.case_editor.judge_node_default_name')
@@ -729,7 +756,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         }
     }
 
-    _openLlmNodeEditor(nodeId: string, evaluationRole: any) {
+    _openLlmNodeEditor(nodeId: string, evaluationRole: string) {
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             this.toast('evaluation.toast.flow_required', { type: 'error' });
             return;
@@ -758,7 +785,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         });
     }
 
-    async _deleteFlowNode(nodeId: string, evaluationRole: any) {
+    async _deleteFlowNode(nodeId: string, evaluationRole: string) {
         const role = requireEvaluationRole(evaluationRole);
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             this.toast('evaluation.toast.flow_required', { type: 'error' });
@@ -805,7 +832,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
             const body = flowBodyWithoutNode(current, this._branchId(), nodeId);
             await this._flowUpdate.run({ ...body, flow_id: this.flowId });
             await this._flows.fetchItem(this.flowId);
-            this._turns = (this._turns.map as any)((turn: any) => {
+            this._turns = this._turns.map((turn) => {
                 if (role === 'judge') {
                     if (turn.judgeNodeId !== nodeId) {
                         return turn;
@@ -829,11 +856,11 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         }
     }
 
-    async _onRubricSelected(rubricId: any) {
+    async _onRubricSelected(rubricId: string) {
         this._patchActiveTurn({ rubricId, rubricVersionId: '' });
         await this._loadRubricVersions(rubricId);
-        if ((this._rubricVersions.length as any) > 0) {
-            const latest = (this._rubricVersions as any)[(this._rubricVersions.length as any) - 1];
+        if ((this._rubricVersions.length) > 0) {
+            const latest = (this._rubricVersions)[(this._rubricVersions.length) - 1];
             this._patchActiveTurn({
                 rubricVersionId: stringValue(latest, 'rubric_version_id'),
             });
@@ -845,8 +872,8 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
             this.toast('evaluation.toast.flow_required', { type: 'error' });
             return;
         }
-        const name = (this._rubricDraftName.trim() as any);
-        const prompt = (this._rubricDraftPrompt.trim() as any);
+        const name = (this._rubricDraftName.trim());
+        const prompt = (this._rubricDraftPrompt.trim());
         const threshold = Number(this._rubricDraftThreshold);
         if (name.length === 0 || prompt.length === 0 || !Number.isFinite(threshold)) {
             this.toast('evaluation.toast.rubric_create_required', { type: 'error' });
@@ -860,12 +887,12 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
             description: '',
             tags: [],
         });
-        if (!created || typeof created !== 'object') {
+        if (!isPlainRecord(created)) {
             throw new Error('FlowsEvaluationCaseEditor: rubric create returned empty payload');
         }
-        const rubric = (created as Record<string, any>).rubric;
-        const version = (created as Record<string, any>).version;
-        if (!rubric || typeof rubric !== 'object' || !version || typeof version !== 'object') {
+        const rubric = created.rubric;
+        const version = created.version;
+        if (!isPlainRecord(rubric) || !isPlainRecord(version)) {
             throw new Error('FlowsEvaluationCaseEditor: rubric create missing rubric/version');
         }
         this._showRubricCreate = false;
@@ -881,14 +908,17 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
     }
 
     _submit() {
-        const name = (this._name.trim() as any);
+        const name = (this._name.trim());
         if (name.length === 0) {
             this.toast('evaluation.toast.case_required', { type: 'error' });
             return;
         }
         const turns = [];
-        for (let index = 0; index < (this._turns.length as any); index += 1) {
-            const turn = (this._turns as any)[index];
+        for (let index = 0; index < (this._turns.length); index += 1) {
+            const turn = this._turns[index];
+            if (turn === undefined) {
+                throw new Error('FlowsEvaluationCaseEditor: turn missing');
+            }
             const input = this._buildInput(turn);
             if (input === null) {
                 this._activeTurnIndex = index;
@@ -901,7 +931,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
             }
             turns.push({ input, checks: [check] });
         }
-        const tags = (this._tags.split(',') as any).map((item: string) => item.trim()).filter((item: string) => item.length > 0);
+        const tags = (this._tags.split(',')).map((item: string) => item.trim()).filter((item: string) => item.length > 0);
         const body = {
             name,
             description: this._description,
@@ -923,7 +953,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         this.emit('case-create', { body });
     }
 
-    _buildInput(turn: any) {
+    _buildInput(turn: TurnDraft) {
         if (turn.inputType === 'text') {
             const content = turn.content.trim();
             if (content.length === 0) {
@@ -956,7 +986,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         throw new Error(`FlowsEvaluationCaseEditor: unsupported input type ${turn.inputType}`);
     }
 
-    _buildCheck(turn: any) {
+    _buildCheck(turn: TurnDraft) {
         if (turn.checkType === 'contains') {
             const values = turn.contains.split(',').map((item: string) => item.trim()).filter((item: string) => item.length > 0);
             if (values.length === 0) {
@@ -1144,7 +1174,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                         <platform-button
                             variant="secondary"
                             density="compact"
-                            ?disabled=${(this._turns.length as any) <= 1}
+                            ?disabled=${(this._turns.length) <= 1}
                             @click=${this._removeActiveTurn}
                         >
                             <platform-icon name="trash" size="14"></platform-icon>
@@ -1202,7 +1232,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         `;
     }
 
-    _renderInputEditor(turn: any) {
+    _renderInputEditor(turn: TurnDraft) {
         if (turn.inputType === 'text') {
             return html`
                 <platform-field
@@ -1231,9 +1261,8 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                     .value=${turn.inputCodeSource}
                     .language=${turn.inputCodeLanguage}
                     @change=${(event: Event) => {
-                        const target = event.target;
                         this._patchActiveTurn({
-                            inputCodeSource: target && typeof (target as Record<string, any>).value === 'string' ? (target as Record<string, any>).value : '',
+                            inputCodeSource: codeEditorSource(event),
                         });
                     }}
                 ></flows-code-editor>
@@ -1292,7 +1321,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         `;
     }
 
-    _renderCheckEditor(turn: any) {
+    _renderCheckEditor(turn: TurnDraft) {
         if (turn.checkType === 'contains') {
             return html`
                 <platform-field
@@ -1477,9 +1506,8 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                     .value=${turn.checkCodeSource}
                     .language=${turn.checkCodeLanguage}
                     @change=${(event: Event) => {
-                        const target = event.target;
                         this._patchActiveTurn({
-                            checkCodeSource: target && typeof (target as Record<string, any>).value === 'string' ? (target as Record<string, any>).value : '',
+                            checkCodeSource: codeEditorSource(event),
                         });
                     }}
                 ></flows-code-editor>
@@ -1488,7 +1516,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         throw new Error(`FlowsEvaluationCaseEditor: unsupported render check type ${turn.checkType}`);
     }
 
-    _renderJudgeEditor(turn: any) {
+    _renderJudgeEditor(turn: TurnDraft) {
         return html`
             <div class="grid">
                 <platform-field

@@ -140,6 +140,10 @@ class FlowSettings(BaseSettings):
             "Максимум итераций внешнего цикла графа за один Flow.run; верхняя граница NodeConfig.max_visits_per_run"
         ),
     )
+    llm_proxy_use_mock_auto: bool = Field(
+        default=False,
+        description="E2E: модель auto в LLM proxy резолвится в mock, а не в humanitec_llm",
+    )
 
     @model_validator(mode="after")
     def _default_flow_timeout_within_cap(self) -> Self:

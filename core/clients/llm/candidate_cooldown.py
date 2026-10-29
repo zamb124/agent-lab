@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
-import httpx
+import httpx2
 
 from core.ai.llm_config import LLMCallConfig
 from core.ai.provider_error import (
@@ -43,7 +43,7 @@ def _redis() -> RedisClient:
     return _cooldown_redis
 
 
-def retry_after_ttl_seconds(response: httpx.Response) -> int | None:
+def retry_after_ttl_seconds(response: httpx2.Response) -> int | None:
     raw = http_header_text(response.headers, "retry-after")
     if raw is None:
         return None
@@ -60,7 +60,7 @@ def retry_after_ttl_seconds(response: httpx.Response) -> int | None:
 
 
 def cooldown_ttl_from_error(error: BaseException | None, default_seconds: float) -> int | None:
-    if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == RATE_LIMIT_HTTP_STATUS:
+    if isinstance(error, httpx2.HTTPStatusError) and error.response.status_code == RATE_LIMIT_HTTP_STATUS:
         retry_after = retry_after_ttl_seconds(error.response)
         if retry_after is not None:
             return retry_after

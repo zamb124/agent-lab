@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.crm.constants_graph import TASK_ROOT_ENTITY_TYPE_ID
 from apps.crm.models.relationship_type import RelationshipType
@@ -325,7 +325,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
                 ns_name
             )
             relationship_types = (
-                await RelationshipType.list_with_prompt(
+                await RelationshipType.list_unordered_with_prompt(
                     require_active_company().company_id,
                 )
             )
@@ -377,7 +377,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
                 ns_name
             )
             relationship_types = (
-                await RelationshipType.list_with_prompt(
+                await RelationshipType.list_unordered_with_prompt(
                     require_active_company().company_id,
                 )
             )
@@ -410,7 +410,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
                 ns_name
             )
             relationship_types = (
-                await RelationshipType.list_with_prompt(
+                await RelationshipType.list_unordered_with_prompt(
                     require_active_company().company_id,
                 )
             )
@@ -479,7 +479,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
                     ns_name
                 )
                 relationship_types = (
-                    await RelationshipType.list_with_prompt(
+                    await RelationshipType.list_unordered_with_prompt(
                     require_active_company().company_id,
                 )
                 )

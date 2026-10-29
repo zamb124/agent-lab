@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 
-from apps.search_worker.tasks import crawl_tasks
+from apps.search.tasks import crawl_tasks
 
 
 def test_crawl_orchestrator_tick_accepts_scheduler_company_id_kwarg() -> None:

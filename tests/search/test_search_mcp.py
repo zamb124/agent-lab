@@ -1,5 +1,5 @@
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.search.api.mcp import _tools
 from apps.search.config import SearchIntegrationConfig

@@ -1,4 +1,4 @@
-"""CI script check_tool_contracts.py."""
+"""CI script scripts/gates/flows/tool_contracts.py."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pytest
 def test_check_tool_contracts_exits_zero_on_current_tree() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     completed = subprocess.run(
-        [sys.executable, str(repo_root / "scripts" / "check_tool_contracts.py")],
+        [sys.executable, "-m", "scripts.gates.flows.tool_contracts"],
         cwd=repo_root,
         check=False,
         capture_output=True,

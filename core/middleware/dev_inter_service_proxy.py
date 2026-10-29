@@ -1,14 +1,14 @@
 """
 Прокси первого сегмента пути для локальной разработки без общего ingress.
 
-Ответ upstream пересылается потоком (httpx send(stream=True), Starlette StreamingResponse),
+Ответ upstream пересылается потоком (httpx2 send(stream=True), Starlette StreamingResponse),
 чтобы SSE и крупные тела не буферизовались целиком в памяти на стороне прокси.
 
 В development/test при Host localhost или *.lvh.me запрос пересылается на URL из server.*_service_url.
 Если текущий процесс уже обслуживает этот сервис (первый сегмент пути совпадает с именем процесса
 или с публичным префиксом из _PREFIX_TO_SERVICE_URL_KEY, например office и /documents/...), прокси не используется.
 GET/OPTIONS /frontend/api/platform/brand тоже локальный на любом сервисе (create_service_app
-монтирует platform_brand на всех процессах) — иначе одиночный `scripts/run.py flows` уходит
+монтирует platform_brand на всех процессах) — иначе одиночный `scripts/dev/run.py flows` уходит
 в 502 на frontend:8002 и SPA падает без window.__PLATFORM_BRAND__.
 
 OnlyOffice: префиксы /web-apps, /common, /cache, /fonts, /sdkjs, /downloadfile, /command и пути
@@ -29,7 +29,7 @@ from contextlib import suppress
 from typing import override
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 import websockets
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -272,8 +272,8 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
 
         body = await request.body()
 
-        client = httpx.AsyncClient(
-            timeout=httpx.Timeout(120.0),
+        client = httpx2.AsyncClient(
+            timeout=httpx2.Timeout(120.0),
             trust_env=False,
         )
         try:
@@ -284,7 +284,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
                 content=body if body else None,
             )
             upstream_response = await client.send(httpx_request, stream=True)
-        except httpx.RequestError as e:
+        except httpx2.RequestError as e:
             await client.aclose()
             logger.warning(
                 "dev_proxy.upstream_failed",
@@ -294,7 +294,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             hint = (
                 f"Inter-service dev proxy: нет HTTP-ответа от {base}.\n"
                 f"Проверьте, что целевой сервис запущен (для /litserve — provider_litserve на 8014: "
-                f'"uv run python scripts/run.py provider_litserve" или `make app`).\n'
+                f'"uv run python -m scripts.dev.run provider_litserve" или `make app`).\n'
             )
             return Response(
                 content=hint.encode("utf-8"),

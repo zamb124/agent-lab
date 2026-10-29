@@ -4,6 +4,7 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const flowsDataTableCreateOp = createAsyncOp({
     name: 'flows/data_table_create',
@@ -21,10 +22,10 @@ export const flowsDataTableSnapshotOp = createAsyncOp({
     transport: 'http',
     restMirror: { method: 'GET', path: '/documents/api/v1/data-tables/{file_id}', service: 'office' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
+        if (!isPlainRecord(payload)) {
             throw new Error('flowsDataTableSnapshotOp: payload required');
         }
-        const fileId = (payload as Record<string, any>).file_id;
+        const fileId = payload.file_id;
         if (typeof fileId !== 'string' || fileId.length === 0) {
             throw new Error('flowsDataTableSnapshotOp: file_id required');
         }

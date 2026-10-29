@@ -84,7 +84,7 @@ from apps.stock.models.quant import StockQuant
 from apps.stock.models.removal import (
     RemovalBin,
     container_exact_cover,
-    order_candidates,
+    order_candidates_by_strategy_asc,
 )
 from apps.stock.models.scan import ScanLineDraft
 from apps.stock.models.storage_rules import (
@@ -304,26 +304,22 @@ class StockMove(PlatformModel):
         return move
 
     @classmethod
-    async def list_for_transfer(
+    async def list_for_transfer_by_created_at_asc(
         cls, company_id: str, transfer_id: str
     ) -> list[Self]:
+        """Движения накладной, ORDER BY created_at ASC. Предела нет. Пустые поля не проверяются."""
         return await cls.objects.filter(
             company_id=company_id, transfer_id=transfer_id
         ).order_by("created_at").all()
 
     @classmethod
-    async def list_open_by_origin(
+    async def list_unordered_open_by_origin(
         cls,
         company_id: str,
         origin_document_type: str,
         origin_document_id: str,
     ) -> list[Self]:
-        """Открытые движения по документу-источнику — дедуп для reorder.
-
-        Правило пополнения не должно плодить второй заказ, пока первый
-        ещё открыт: ищем move'ы с ``origin_document_id=rule_id`` в
-        рабочих состояниях (не done/cancel).
-        """
+        """Открытые движения документа-источника: draft, waiting, confirmed, partially_available, assigned. Порядка и предела нет. Пустые поля не проверяются. Пока такое движение есть, повторный заказ по тому же источнику не создаётся."""
         return await cls.objects.filter(
             company_id=company_id,
             origin_document_type=origin_document_type,
@@ -439,7 +435,7 @@ class StockMove(PlatformModel):
             raise PlatformNotFoundError(
                 "Move location not found", error_code="location_not_found"
             )
-        lines = await StockMoveLine.list_for_move(company_id, move.move_id)
+        lines = await StockMoveLine.list_open_for_move_by_created_at_asc(company_id, move.move_id)
         reserved = sum((line.quantity for line in lines), STOCK_ZERO)
         needed = move.product_qty - reserved
         if needed <= STOCK_ZERO:
@@ -465,10 +461,10 @@ class StockMove(PlatformModel):
             _ = await StockMoveLine.objects.create(instance=line)
             await cls.write_state(company_id, move, StockMoveState.ASSIGNED)
             return move
-        location_ids = await StockLocation.list_subtree_ids(
+        location_ids = await StockLocation.list_subtree_ids_by_parent_path_asc(
             company_id, move.location_id
         )
-        candidates = await StockQuant.removal_candidates(
+        candidates = await StockQuant.list_available_by_in_date_and_quant_id_asc_locked(
             company_id=company_id,
             product_id=move.product_id,
             location_ids=location_ids,
@@ -483,7 +479,7 @@ class StockMove(PlatformModel):
             )
             for loc_id, loc in candidate_locations.items()
         }
-        candidates = order_candidates(
+        candidates = order_candidates_by_strategy_asc(
             list(candidates),
             strategy=removal_strategy,
             needed=needed,
@@ -567,10 +563,10 @@ class StockMove(PlatformModel):
             meta = locations.get(cand.location_id)
             if meta is None or meta.usage != StockLocationUsage.CONTAINER:
                 continue
-            subtree = await StockLocation.list_subtree_ids(
+            subtree = await StockLocation.list_subtree_ids_by_parent_path_asc(
                 company_id, cand.location_id
             )
-            inside = await StockQuant.list_for_locations(
+            inside = await StockQuant.list_unordered_for_locations(
                 company_id, subtree, for_update=True
             )
             if (
@@ -637,7 +633,7 @@ class StockMove(PlatformModel):
         создавали — их просто отменяем. ``reservation_underflow`` —
         защита от двойного снятия: reserved не может уйти в минус.
         """
-        lines = await StockMoveLine.list_for_move(company_id, move.move_id)
+        lines = await StockMoveLine.list_open_for_move_by_created_at_asc(company_id, move.move_id)
         location_ids = sorted({line.location_id for line in lines})
         locations = await StockLocation.found_in_company_by_ids(company_id, location_ids)
         for line in lines:
@@ -652,10 +648,10 @@ class StockMove(PlatformModel):
                 # позже) не трогаем — обещание другого документа не наше.
                 if line.container_id is None:
                     continue
-                subtree = await StockLocation.list_subtree_ids(
+                subtree = await StockLocation.list_subtree_ids_by_parent_path_asc(
                     company_id, line.container_id
                 )
-                for quant in await StockQuant.list_for_locations(
+                for quant in await StockQuant.list_unordered_for_locations(
                     company_id, subtree, for_update=True
                 ):
                     if (
@@ -776,7 +772,7 @@ class StockMove(PlatformModel):
         (остаток резерва ждёт backorder).
         """
         if move.state == StockMoveState.DONE:
-            lines = await StockMoveLine.list_all_for_move(
+            lines = await StockMoveLine.list_for_move_by_created_at_asc(
                 company_id, move.move_id
             )
             layers = await StockValueLayer.objects.filter(
@@ -816,7 +812,7 @@ class StockMove(PlatformModel):
             raise PlatformNotFoundError(
                 "Product not found", error_code="product_not_found"
             )
-        lines = await StockMoveLine.list_for_move(company_id, move.move_id)
+        lines = await StockMoveLine.list_open_for_move_by_created_at_asc(company_id, move.move_id)
         posting = [
             line for line in lines if line.kind != StockMoveLineKind.COUNT
         ]
@@ -828,7 +824,7 @@ class StockMove(PlatformModel):
                 owner_entity_id=owner_entity_id,
                 removal_strategy=removal_strategy,
             )
-            lines = await StockMoveLine.list_for_move(company_id, move.move_id)
+            lines = await StockMoveLine.list_open_for_move_by_created_at_asc(company_id, move.move_id)
             posting = [
                 line for line in lines if line.kind != StockMoveLineKind.COUNT
             ]
@@ -1019,7 +1015,7 @@ class StockMove(PlatformModel):
                 raise PlatformNotFoundError(
                     "Product not found", error_code="product_not_found"
                 )
-            open_lines = await StockMoveLine.list_for_move(
+            open_lines = await StockMoveLine.list_open_for_move_by_created_at_asc(
                 company_id, move.move_id
             )
             # Локации концов черновиков грузим разом — нужны и для
@@ -1278,7 +1274,7 @@ class StockMove(PlatformModel):
                     await StockWave.mark_done_when_no_open_lines(company_id, wave_id)
             still_open = [
                 line
-                for line in await StockMoveLine.list_for_move(
+                for line in await StockMoveLine.list_open_for_move_by_created_at_asc(
                     company_id, move.move_id
                 )
                 if line.kind != StockMoveLineKind.COUNT
@@ -1564,10 +1560,10 @@ class StockMove(PlatformModel):
             storage_types=storage_types,
             placing_container_type_id=container.container_type_id,
         )
-        subtree_ids = await StockLocation.list_subtree_ids(
+        subtree_ids = await StockLocation.list_subtree_ids_by_parent_path_asc(
             company_id, container.location_id
         )
-        inside = await StockQuant.list_for_locations(
+        inside = await StockQuant.list_unordered_for_locations(
             company_id, subtree_ids, for_update=True
         )
         moved = STOCK_ZERO
@@ -1767,7 +1763,7 @@ class StockMove(PlatformModel):
             return "location_putaway_blocked"
         if storage_type is None:
             return None
-        contents = await StockQuant.list_for_locations(
+        contents = await StockQuant.list_unordered_for_locations(
             company_id, [line_dst.location_id]
         )
         child_containers = await StockLocation.objects.filter(
@@ -1864,10 +1860,10 @@ class StockMove(PlatformModel):
             storage_types = await StockStorageType.found_in_company_by_ids(
                 company_id, [dest.storage_type_id] if dest.storage_type_id else []
             )
-            subtree_ids = await StockLocation.list_subtree_ids(
+            subtree_ids = await StockLocation.list_subtree_ids_by_parent_path_asc(
                 company_id, container.location_id
             )
-            subtree_quants = await StockQuant.list_for_locations(
+            subtree_quants = await StockQuant.list_unordered_for_locations(
                 company_id, subtree_ids, for_update=True
             )
             if dest.usage not in STOCK_QUANT_USAGES and any(
@@ -2022,10 +2018,10 @@ class StockMove(PlatformModel):
             )
 
     @classmethod
-    async def list_last_move_at(
+    async def last_done_at_by_product_id(
         cls, company_id: str, product_ids: list[str]
     ) -> dict[str, datetime]:
-        """`product_id → max(done_at)` для пульса (факт последнего движения)."""
+        """MAX(done_at) закрытых движений, ключ product_id. Пустой список — {}. Товар без закрытого движения не входит. Строка без строкового product_id или без done_at не входит."""
         if not product_ids:
             return {}
         params: list[str] = [company_id, *product_ids]

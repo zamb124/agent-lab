@@ -80,7 +80,7 @@ async def test_local_dev_binding_secret_uses_conf_password(
             updated_at=now,
         )
     )
-    binding = await MailboxBinding.upsert_by_email(
+    binding = await MailboxBinding.upsert_by_company_and_email(
         MailboxBinding(
             mailbox_binding_id=f"mailbind_{unique_id}",
             company_id=company_id,

@@ -33,14 +33,14 @@ alwaysApply: false
 
 1. Один код обслуживает несколько apex-доменов: `platform_brands.<apex>` в `conf.json`, резолв — `resolve_brand(host)` / `resolve_brand_domain` (`core/platform_brand/resolver.py`). Бренд определяется по `Host`; хардкод домена или имени бренда в сервисах запрещён.
 2. `primary_platform_domain` — primary apex `linnex.io` для дефолтных публичных URL и OAuth callback; второй apex — `humanitec.ru`.
-3. Имена в тексте: продукт — «Платформа»; desktop-агент — LinnexAgent (HumanitecAgent — только на бренде `humanitec.ru`); подписи UI по бренду — поля `platform_brands.*`.
-4. Технические идентификаторы не переименовываются: `humanitec_llm`, `humanitec_agent.mdc`, `apps/agent/desktop/distro/humanitec.json`, workflows `humanitec-agent-build*.yml`, `humanitecToolkitsSync.ts`, toolkit id `humanitec_core`, pronunciation seed «Humanitec → хуманитэк».
+3. Имена в тексте: продукт — «Платформа»; подписи UI по бренду — поля `platform_brands.*`.
+4. Технические идентификаторы не переименовываются: `humanitec_llm`, pronunciation seed «Humanitec → хуманитэк».
 5. Реквизиты `legal` — общий слой; бренд переопределяет `platform_brands.<apex>.legal`.
 
 ### Секреты и переменные
 
 1. Секрет живёт только в ENV или Kubernetes Secret `platform-secrets`; в `conf.json` — плейсхолдер `YOUR_*`. Прод: GitHub Secrets → `platform-secrets` → ENV через `valueFrom.secretKeyRef` (`deploy/helm/agent-lab/templates/_helpers.tpl`).
-2. Переменные и секреты компании — сервис `apps/secrets`: каталог `SECRETS_OPERATIONS` (`apps/secrets/realtime/command_router.py`), REST `/secrets/api/v1/variables*`, UI-фабрики `secrets-*` в `core/frontend/static/lib/events/resources/` на `transport: 'ws'`; доменный слой — `core/secrets/`, `VariablesService` (`core/variables/service.py`). `SecretVariable.masked_page_by_variable_key(company_id, *, limit=1000, offset=0) -> list[PlatformVariable]` — окно по `variable_key`, секреты замаскированы. `SecretVariable.count_for_company(company_id) -> int` — число всех строк компании, дополнительных фильтров нет. `SecretVariableVersion.list_masked_by_version_desc(company_id, variable_key, *, limit=50, offset=0) -> list[PlatformVariable]` — окно версий, `ORDER BY version DESC`, секреты замаскированы. Пустые ключи не проверяются.
+2. Переменные и секреты компании — сервис `apps/secrets`: каталог `SECRETS_OPERATIONS` (`apps/secrets/realtime/command_router.py`), REST `/secrets/api/v1/variables*`, UI-фабрики `secrets-*` в `core/frontend/static/lib/events/resources/` на `transport: 'ws'`; доменный слой — `core/secrets/`, `VariablesService` (`core/variables/service.py`). `SecretVariable.list_masked_by_variable_key_asc(company_id, *, limit=1000, offset=0) -> list[PlatformVariable]` — окно, `ORDER BY variable_key ASC`, секреты замаскированы. `SecretVariable.count_for_company(company_id) -> int` — число всех строк компании, дополнительных фильтров нет. `SecretVariableVersion.list_masked_by_version_desc(company_id, variable_key, *, limit=50, offset=0) -> list[PlatformVariable]` — окно версий, `ORDER BY version DESC`, секреты замаскированы. Пустые ключи не проверяются.
 3. `@var:` резолвит `VarResolver` (`core/variables/resolver.py`): `resolve_ref`, `resolve_text`, `resolve_deep`; неразрешимая ссылка — `VariableResolutionError`; строка `@var:...` в результат не попадает.
 4. Резолв `@var:` вне готового state (конфиг триггера, проверка черновика) — `get_resolved_variables_map` (`apps/flows/src/services/flow_factory.py`).
 
@@ -54,15 +54,15 @@ alwaysApply: false
 ## Исключения
 
 - Исключение: `os.environ` читают `core/config/loader.py` (сборка Settings), `core/config/testing.py` (`TESTING` и `PYTEST_CURRENT_TEST`), `child_process_env` (`core/utils/process_env.py`), entrypoint без Settings (`apps/guest_runtime/examples/`, `apps/guest_runtime/shim/pid1.py`, `apps/test_a2a_sample/`) и тесты. Ratchet `os_environ` эти пути не считает.
-- Исключение: `calls.turn_secret` — единственный путь секрета в allowlist `scripts/check_conf_secrets.py`.
+- Исключение: `calls.turn_secret` — единственный путь секрета в allowlist `scripts/gates/repo/conf_secrets.py`.
 - Исключение: сборка `state.variables` из секции `variables` flow (`FlowFactory._resolve_variables`) кладёт `None` для отсутствующей переменной компании. `[без гейта]`
 
 ## Гейты
 
-- `scripts/check_secrets_model_files.py` (`make lint`) — `SecretVariable` и `SecretVariableVersion` в разных модулях `core/secrets/models/`.
-- `scripts/check_conf_secrets.py` (`make lint`) — секреты `conf.json` только `YOUR_*`.
-- `scripts/check_conf_keys_declared.py` (`make lint`) — каждый ключ `conf.json` объявлен в Settings.
-- `scripts/check_repo_hygiene.py` (`make lint`) — корень репозитория без дампов, ключей и документов.
-- `scripts/check_platform_brand_hardcode.py` (`make lint`) — нет хардкода apex-домена.
-- `scripts/check_variables_legacy.sh` (`make lint`) — нет старого API переменных.
-- `scripts/check_ratchet_counts.py` (`make lint`) — ratchet `os_environ`.
+- `scripts/gates/backend/model_files.py` (`make lint`) — `SecretVariable` и `SecretVariableVersion` в разных модулях `core/secrets/models/`.
+- `scripts/gates/repo/conf_secrets.py` (`make lint`) — секреты `conf.json` только `YOUR_*`.
+- `scripts/gates/repo/conf_keys_declared.py` (`make lint`) — каждый ключ `conf.json` объявлен в Settings.
+- `scripts/gates/repo/repo_hygiene.py` (`make lint`) — корень репозитория без дампов, ключей и документов.
+- `scripts/gates/repo/platform_brand_hardcode.py` (`make lint`) — нет хардкода apex-домена.
+- `scripts/gates/repo/variables_legacy.sh` (`make lint`) — нет старого API переменных.
+- `scripts/gates/backend/ratchet_counts.py` (`make lint`) — ratchet `os_environ`.

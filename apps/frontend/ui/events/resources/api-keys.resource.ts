@@ -14,6 +14,7 @@
  */
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const apiKeysResource = createResourceCollection({
     name: 'frontend/api_keys',
@@ -48,8 +49,9 @@ export const apiKeysResource = createResourceCollection({
     actions: { dismissSecret: 'secret_dismissed' },
     extraReducer: (state, event, events) => {
         if (event.type === events.CREATED) {
-            const item = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).item;
-            if (item && item.secret) {
+            const payload = event.payload;
+            const item = isPlainRecord(payload) ? payload.item : null;
+            if (isPlainRecord(item) && item.secret) {
                 return { ...state, lastSecret: { key_id: item.key_id, secret: item.secret } };
             }
             return state;

@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
@@ -154,18 +155,18 @@ export class WorktrackerApp extends PlatformApp {
         this._countsOp = this.useOp('worktracker/work_item_counts');
         this._routeSel = this.select((state) => state.router.routeKey);
         this.useEvent(WorktrackerUiEvents.DETAIL_OPEN, (event: PlatformEvent) => {
-            this._openWorkItemDetailPanel(event.payload as { work_item_id?: unknown });
+            this._openWorkItemDetailPanel(event.payload);
         });
         this.useEvent(CoreEvents.PLATFORM_WORK_ITEM_DETAIL_OPEN_REQUESTED, (event: PlatformEvent) => {
-            this._openWorkItemDetailPanel(event.payload as { work_item_id?: unknown });
+            this._openWorkItemDetailPanel(event.payload);
         });
         this.useEvent(WorktrackerUiEvents.DETAIL_CLOSE, () => {
             this._detailWorkItemId = '';
             replaceWorkItemUrl('');
         });
         this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, (event: PlatformEvent) => {
-            const payload = event.payload as { routeKey?: string } | undefined;
-            if (!payload || payload.routeKey !== 'work_item_detail') {
+            const payload = event.payload;
+            if (!isPlainRecord(payload) || payload.routeKey !== 'work_item_detail') {
                 return;
             }
             this._detailWorkItemId = '';
@@ -173,16 +174,17 @@ export class WorktrackerApp extends PlatformApp {
         });
     }
 
-    private _openWorkItemDetailPanel(payload: { work_item_id?: unknown } | null | undefined) {
-        if (!payload || typeof payload.work_item_id !== 'string' || payload.work_item_id.length === 0) {
+    private _openWorkItemDetailPanel(payload: unknown) {
+        if (!isPlainRecord(payload) || typeof payload.work_item_id !== 'string' || payload.work_item_id.length === 0) {
             throw new Error('WorktrackerApp: work_item_detail_open requires work_item_id');
         }
+        const workItemId = payload.work_item_id;
         const routeKey = this._routeSel.value;
         if (routeKey === 'work_item_detail') {
             return;
         }
-        this._detailWorkItemId = payload.work_item_id;
-        replaceWorkItemUrl(payload.work_item_id);
+        this._detailWorkItemId = workItemId;
+        replaceWorkItemUrl(workItemId);
     }
 
     override async connectedCallback(): Promise<void> {

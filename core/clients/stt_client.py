@@ -10,14 +10,14 @@ batch-клиенты под капотом.
 * для voice/flows/eval/sync/CRM batch — **только** через
   `core.clients.voice_resolver.get_stt_client(*, company_id, override)`.
   Прямой импорт классов из этого модуля в `apps/**` и в `core/**` вне
-  `core/clients/**` запрещён CI (`scripts/check_voice_resolver_usage.py`).
+  `core/clients/**` запрещён CI (`scripts/gates/voice/resolver_usage.py`).
 """
 
 import json
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, override
 
-import httpx
+import httpx2
 from pydantic import BaseModel, Field
 
 from core.files.models import AudioTranscriptionStatus
@@ -256,7 +256,7 @@ class CloudRuSTTClient(BaseSTTClient):
         files = {"file": (file_name, audio_bytes, content_type)}
 
         async with get_httpx_client(timeout=self._timeout) as client:
-            response: httpx.Response = await client.post(
+            response: httpx2.Response = await client.post(
                 self._base_url,
                 headers=headers,
                 data=payload,

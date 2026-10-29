@@ -42,7 +42,7 @@ alwaysApply: false
 
 ### Сырые теги
 
-Сырой тег в `apps/<svc>/ui/{pages,modals,components}/**` — только по whitelist `scripts/check_field_canon.sh`:
+Сырой тег в `apps/<svc>/ui/{pages,modals,components}/**` — только по whitelist `scripts/gates/frontend/field_canon.sh`:
 
 | Тег | Только |
 |---|---|
@@ -77,6 +77,6 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_field_canon.sh` (`make check-field-canon`, в `make lint-ts`) — сырые `<input>`, `<textarea>`, `<select>` вне whitelist.
-- `scripts/check_ui_canon.sh` (`make check-ui-canon`) — п.17 локальные `.form-*`/`.field-pill*` CSS в `apps/**`, п.18 импорт `glass-input`/`glass-textarea`, п.32 сырые checkbox/radio во flows.
-- `scripts/check_ui_kit_docs.py` (`make lint-ts`) — карточки `platform-field*` в UIKDS.
+- `scripts/gates/frontend/field_canon.sh` (`make check-field-canon`, в `make lint-ts`) — сырые `<input>`, `<textarea>`, `<select>` вне whitelist.
+- `scripts/gates/frontend/ui_canon.sh` (`make check-ui-canon`) — п.17 локальные `.form-*`/`.field-pill*` CSS в `apps/**`, п.18 импорт `glass-input`/`glass-textarea`, п.32 сырые checkbox/radio во flows.
+- `scripts/gates/frontend/ui_kit_docs.py` (`make lint-ts`) — карточки `platform-field*` в UIKDS.

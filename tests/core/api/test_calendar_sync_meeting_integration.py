@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 import core.config.base as config_base
 

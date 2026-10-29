@@ -113,13 +113,14 @@ class IntegrationCredential(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_by_user_provider_service(
+    async def list_by_user_provider_service_created_at_asc(
         cls,
         company_id: str,
         user_id: str,
         provider: IntegrationProvider,
         service: str,
     ) -> list[Self]:
+        """Учётные данные пользователя, провайдера и service, ORDER BY created_at ASC. Предела нет."""
         return await cls.objects.filter(
             company_id=_required_credential_field(company_id, "company_id"),
             user_id=_required_credential_field(user_id, "user_id"),
@@ -128,25 +129,26 @@ class IntegrationCredential(PlatformModel):
         ).order_by("created_at").all()
 
     @classmethod
-    async def list_by_created_at_for_user(
+    async def list_by_created_at_for_user_asc(
         cls,
         company_id: str,
         user_id: str,
     ) -> list[Self]:
-        """Учётные данные пользователя компании, ORDER BY created_at. Предела нет. Пустые company_id и user_id — ValueError."""
+        """Учётные данные пользователя компании, ORDER BY created_at ASC. Предела нет. Пустые company_id и user_id — ValueError."""
         return await cls.objects.filter(
             company_id=_required_credential_field(company_id, "company_id"),
             user_id=_required_credential_field(user_id, "user_id"),
         ).order_by("created_at").all()
 
     @classmethod
-    async def list_by_provider_service(
+    async def list_by_provider_service_updated_at_asc(
         cls,
         provider: IntegrationProvider,
         service: str,
         *,
         limit: int = 500,
     ) -> list[Self]:
+        """Учётные данные провайдера и service, ORDER BY updated_at ASC, не больше limit. Пустой service — ValueError."""
         return await cls.objects.filter(
             provider=provider,
             service=_required_credential_field(service, "service"),

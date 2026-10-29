@@ -7,7 +7,7 @@ import time
 from typing import Any
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from tests.fixtures.audio_bytes import minimal_wav_silence
 from tests.sync.api._helpers import (

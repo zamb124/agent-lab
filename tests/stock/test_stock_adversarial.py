@@ -109,9 +109,9 @@ async def _receipt_to_location(env: StockEnv, dest_id: str, qty: Decimal) -> Non
     внутренний перенос из фактического места прихода (putaway-рефлекс
     волён выбрать любую ячейку — источник читаем из остатка)."""
     _ = await _receipt(env, qty, Decimal("4"))
-    quants = await StockQuant.list_for_locations(
+    quants = await StockQuant.list_unordered_for_locations(
         env.company_id,
-        await StockLocation.list_subtree_ids(env.company_id, env.warehouse.view_location_id),
+        await StockLocation.list_subtree_ids_by_parent_path_asc(env.company_id, env.warehouse.view_location_id),
     )
     loaded = [
         q for q in quants if q.product_id == env.product.product_id and q.quantity > Decimal("0")
@@ -173,7 +173,7 @@ async def _assigned_outgoing(env: StockEnv, qty: Decimal) -> tuple[str, str]:
             company_id=env.company_id,
             transfer_id=transfer.transfer_id,
         )
-    moves = await StockMove.list_for_transfer(env.company_id, transfer.transfer_id)
+    moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id)
     assert len(moves) == 1
     return transfer.transfer_id, moves[0].move_id
 
@@ -397,8 +397,8 @@ class TestContainerGuards:
                 company_id=env.company_id,
                 transfer_id=delivery.transfer_id,
             )
-        moves = await StockMove.list_for_transfer(env.company_id, delivery.transfer_id)
-        lines = await StockMoveLine.list_all_for_move(env.company_id, moves[0].move_id)
+        moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, delivery.transfer_id)
+        lines = await StockMoveLine.list_for_move_by_created_at_asc(env.company_id, moves[0].move_id)
         assert any(ln.kind == StockMoveLineKind.CONTAINER for ln in lines)
         # Между резервом и проводкой на паллету доложили другой товар
         # (физический факт: рабочий поставил чужой короб на паллету).
@@ -550,7 +550,7 @@ class TestBrokenConfiguration:
                 )
             ],
         )
-        move = (await StockMove.list_for_transfer(env.company_id, transfer.transfer_id))[0]
+        move = (await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id))[0]
         _ = await StockWarehouse.objects.filter(
             company_id=env.company_id, warehouse_id=env.warehouse.warehouse_id
         ).delete()
@@ -585,7 +585,7 @@ class TestBrokenConfiguration:
         )
         _ = await _receipt(env, Decimal("5"), Decimal("4"))
         _, move_id = await _assigned_outgoing(env, Decimal("2"))
-        lines = await StockMoveLine.list_for_move(env.company_id, move_id)
+        lines = await StockMoveLine.list_open_for_move_by_created_at_asc(env.company_id, move_id)
         _ = await StockResourceType.objects.filter(
             company_id=env.company_id, resource_type_id=rtype.resource_type_id
         ).delete()
@@ -676,7 +676,7 @@ class TestPutawayModes:
                 )
             ],
         )
-        move = (await StockMove.list_for_transfer(env.company_id, transfer.transfer_id))[0]
+        move = (await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id))[0]
         return move
 
     async def test_putaway_mode_invalid(self, stock_di, unique_id: str) -> None:
@@ -894,7 +894,7 @@ class TestReadSurfaces:
                 )
             ],
         )
-        move = (await StockMove.list_for_transfer(env.company_id, transfer.transfer_id))[0]
+        move = (await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id))[0]
         candidates = await env.di.placement_service.collect_candidates(
             company_id=env.company_id, warehouse=env.warehouse, move=move
         )
@@ -1010,9 +1010,9 @@ class TestAtConfirmReserve:
         )
         # Правило сработало на confirm: dest перезаписан на BIN-A,
         # решение легло в stock_decisions (status=applied).
-        move = (await StockMove.list_for_transfer(env.company_id, transfer.transfer_id))[0]
+        move = (await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id))[0]
         assert move.location_dest_id == bin_a.location_id
-        decision = await StockDecision.latest_for_transfer(env.company_id, transfer.transfer_id)
+        decision = await StockDecision.latest_for_transfer_by_created_at_desc(env.company_id, transfer.transfer_id)
         assert decision is not None
         assert decision.status == StockDecisionStatus.APPLIED
         assert decision.chosen_location_id == bin_a.location_id
@@ -1044,7 +1044,7 @@ class TestShadowPutaway:
                 )
             ],
         )
-        move = (await StockMove.list_for_transfer(env.company_id, transfer.transfer_id))[0]
+        move = (await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer.transfer_id))[0]
         decision = await env.di.placement_service.resolve_putaway(
             company_id=env.company_id,
             warehouse=env.warehouse,

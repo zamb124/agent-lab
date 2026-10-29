@@ -20,7 +20,7 @@ import re
 import zipfile
 from io import BytesIO
 
-import httpx
+import httpx2
 import pytest
 from openpyxl import load_workbook
 
@@ -63,7 +63,7 @@ def _count_data_uri_images(html: str) -> int:
 @pytest.fixture(scope="module")
 def public_http_image_urls_reachable() -> None:
     """Проверка доступности обоих URL до тяжёлых конвертаций."""
-    with httpx.Client(timeout=90.0, follow_redirects=True) as client:
+    with httpx2.Client(timeout=90.0, follow_redirects=True) as client:
         for url in (IMG_HTTP_JPEG_1, IMG_HTTP_JPEG_2):
             response = client.get(url)
             response.raise_for_status()

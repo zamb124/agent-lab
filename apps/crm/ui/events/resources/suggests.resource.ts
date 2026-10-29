@@ -8,6 +8,7 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const suggestsListOp = createAsyncOp({
     name: 'crm/suggests_list',
@@ -23,24 +24,37 @@ export const suggestsListOp = createAsyncOp({
         ) {
             return state;
         }
-        const result = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).result;
-        if (!result || typeof result !== 'object' || typeof result.suggest_id !== 'string') {
+        if (!isPlainRecord(event.payload)) {
             return state;
         }
-        const page = state.lastResult as { items?: unknown; total?: unknown } | null | undefined;
-        if (!page || typeof page !== 'object' || !Array.isArray(page.items)) {
+        const result = event.payload.result;
+        if (!isPlainRecord(result)) {
             return state;
         }
-        const nextItems = page.items.filter(
-            (row) => row && (row as Record<string, any>).suggest_id !== (result as Record<string, any>).suggest_id,
-        );
-        if (nextItems.length === page.items.length) {
+        const suggestId = result.suggest_id;
+        if (typeof suggestId !== 'string') {
             return state;
         }
-        if (typeof page.total !== 'number') {
+        const page = state.lastResult;
+        if (!isPlainRecord(page)) {
+            return state;
+        }
+        const items = page.items;
+        if (!Array.isArray(items)) {
+            return state;
+        }
+        const nextItems = items.filter((row) => {
+            if (!isPlainRecord(row)) return Boolean(row);
+            return row.suggest_id !== suggestId;
+        });
+        if (nextItems.length === items.length) {
+            return state;
+        }
+        const total = page.total;
+        if (typeof total !== 'number') {
             throw new Error('crm/suggests_list extraReducer: page.total number required');
         }
-        const nextTotal = page.total - 1;
+        const nextTotal = total - 1;
         if (nextTotal < 0) {
             throw new Error('crm/suggests_list extraReducer: page.total underflow');
         }

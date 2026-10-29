@@ -13,6 +13,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '../components/interface-editor/flows-interface-template-card.js';
+import { isPlainObject } from '../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations} from 'lit';
 
 const CATEGORIES = Object.freeze(['all', 'conversation', 'forms', 'dashboards', 'content', 'utility']);
@@ -71,7 +72,15 @@ export class FlowsInterfaceTemplateModal extends PlatformModal {
 
     _items() {
         const page = this._templates.lastResult;
-        const items = page === null || page === undefined ? [] : (page as Record<string, any>).items;
+        if (page === null || page === undefined) return [];
+        if (!isPlainObject(page)) {
+            throw new Error('flows-interface-template-modal: templates items required');
+        }
+        const rawItems = page.items;
+        if (!Array.isArray(rawItems)) {
+            throw new Error('flows-interface-template-modal: templates items required');
+        }
+        const items = rawItems;
         const query = this._query.trim().toLowerCase();
         return items.filter((template: any) => (this._category === 'all' || template.category === this._category)
             && (query === '' || template.title.toLowerCase().includes(query) || template.description.toLowerCase().includes(query)));
@@ -103,7 +112,7 @@ export class FlowsInterfaceTemplateModal extends PlatformModal {
                 <div class="chips" role="toolbar" aria-label=${this.t('interface_editor.template_categories')}>
                     ${CATEGORIES.map((category) => html`<span class="chip" role="button" tabindex="0" aria-pressed=${this._category === category ? 'true' : 'false'}
                         @click=${() => { this._category = category; }}
-                        @keydown=${(event: CustomEvent) => { if ((event as Record<string, any>).key === 'Enter' || (event as Record<string, any>).key === ' ') { event.preventDefault(); this._category = category; } }}
+                        @keydown=${(event: KeyboardEvent) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this._category = category; } }}
                     >${this.t(`interface_editor.template_category_${category}`)}</span>`)}
                 </div>
             </div>

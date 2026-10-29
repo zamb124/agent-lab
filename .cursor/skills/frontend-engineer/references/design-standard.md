@@ -53,7 +53,7 @@
 - Примитив повторился второй раз в сервисе — semantic token или компонент сервиса; нужен в двух сервисах — core UI Kit.
 - Shadow reset `PlatformElement` (`core/frontend/static/lib/platform-element/styles.ts`): `:host { font-family: var(--font-sans) }`, `:host button { font: inherit }`, `:host input, textarea, select { font: inherit; color: inherit }`. `color: inherit` на `:host button` не ставим: специфичность `(0,1,1)` перебивает `.btn-primary`/`.cta-btn`, и в light theme CTA получает тёмный `--text-primary`. Локальный размер `input` пишем как `:host input.<class>`, иначе `font: inherit` съедает кегль.
 - Текст на solid primary/accent — `--platform-btn-primary-text`, `--platform-btn-accent-text`, `--text-on-accent`; `--text-inverse` — контраст к фону поверхности, не on-accent.
-- Display-типографика — `--text-display-*`, `--tracking-tight`, `--font-semibold`, не отдельная font-family. Смена шрифта — manifest `core/frontend/static/assets/fonts/platform-typography.json` + woff2 в `core/frontend/static/assets/fonts/<family>/` + `@font-face` в `platform-fonts.css` (проверяет `scripts/check_platform_typography.py`).
+- Display-типографика — `--text-display-*`, `--tracking-tight`, `--font-semibold`, не отдельная font-family. Смена шрифта — manifest `core/frontend/static/assets/fonts/platform-typography.json` + woff2 в `core/frontend/static/assets/fonts/<family>/` + `@font-face` в `platform-fonts.css` (проверяет `scripts/gates/frontend/platform_typography.py`).
 
 ## Responsive sanity
 

@@ -686,7 +686,7 @@ class DurableWorkflowRuntime:
         offset: int = 0,
     ) -> tuple[list[SessionConfig], int]:
         company_id = self._company_id()
-        instances, total = await WorkflowInstance.list_instances(
+        instances, total = await WorkflowInstance.instances_and_total_by_updated_at_desc(
             company_id=company_id,
             flow_id=flow_id,
             user_id=user_id,
@@ -758,7 +758,7 @@ class DurableWorkflowRuntime:
             if instance is None:
                 return [], 0
             resolved_branch_id = instance.active_execution_branch_id
-        records, total = await WorkflowInstance.list_events(
+        records, total = await WorkflowInstance.event_records_and_total_by_sequence_asc(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=resolved_branch_id,
@@ -790,7 +790,7 @@ class DurableWorkflowRuntime:
 
     async def list_branches(self, session_id: str) -> list[WorkflowBranchRecord]:
         company_id = self._company_id()
-        records = await WorkflowInstance.list_branches(
+        records = await WorkflowInstance.branch_records_by_created_at_asc(
             company_id=company_id,
             session_id=session_id,
         )
@@ -920,7 +920,7 @@ class DurableWorkflowRuntime:
         if instance is None:
             raise ValueError(f"Workflow instance not found: {session_id!r}")
         resolved_branch_id = execution_branch_id or instance.active_execution_branch_id
-        failed_event = await WorkflowInstance.event_by_type(
+        failed_event = await WorkflowInstance.event_record_by_type_or_latest_sequence_desc(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=resolved_branch_id,
@@ -935,7 +935,7 @@ class DurableWorkflowRuntime:
             raise TypeError("NodeFailed event must have NodeFailedPayload")
         recover_sequence = payload.recover_sequence
         failed_nodes = payload.failed_nodes
-        events, _ = await WorkflowInstance.list_events(
+        events, _ = await WorkflowInstance.event_records_and_total_by_sequence_asc(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=resolved_branch_id,
@@ -1135,7 +1135,7 @@ class DurableWorkflowRuntime:
         lookup_id: str,
     ) -> str | None:
         company_id = self._company_id()
-        return await WorkflowInstance.resolve_session_id_by_flow_and_identifier(
+        return await WorkflowInstance.latest_session_id_by_flow_identifier_and_updated_at_desc(
             company_id=company_id,
             flow_id=flow_id,
             lookup_id=lookup_id,

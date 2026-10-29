@@ -22,7 +22,7 @@ async def test_entity_type_catalog_cache_hit_and_invalidate(crm_di, unique_id) -
     company_id = f"cache_co_{unique_id}"
     namespace = f"ns_{unique_id}"
 
-    first = await EntityType.catalog(
+    first = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace,
         company_id=company_id,
     )
@@ -46,7 +46,7 @@ async def test_entity_type_catalog_create_visible_after_warm_cache(
     namespace = f"ns2_{unique_id}"
     type_id = f"custom_{unique_id}"
 
-    _ = await EntityType.catalog(namespace=namespace, company_id=company_id)
+    _ = await EntityType.catalog_by_is_system_desc_and_type_id_asc(namespace=namespace, company_id=company_id)
     assert get_entry(company_id, namespace) is not None
 
     row = EntityType(
@@ -59,7 +59,7 @@ async def test_entity_type_catalog_create_visible_after_warm_cache(
     _ = await EntityType.create(row)
     assert get_entry(company_id, namespace) is None
 
-    listed = await EntityType.catalog(
+    listed = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace,
         company_id=company_id,
     )
@@ -88,7 +88,7 @@ async def test_entity_type_catalog_update_visible_after_warm_cache(
             is_system=False,
         ),
     )
-    warmed = await EntityType.catalog(
+    warmed = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace,
         company_id=company_id,
     )
@@ -100,7 +100,7 @@ async def test_entity_type_catalog_update_visible_after_warm_cache(
         company_id=company_id,
         patch={"name": "After"},
     )
-    listed = await EntityType.catalog(
+    listed = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace,
         company_id=company_id,
     )
@@ -132,7 +132,7 @@ async def test_entity_type_catalog_delete_visible_after_warm_cache(
             is_system=False,
         ),
     )
-    _ = await EntityType.catalog(namespace=namespace, company_id=company_id)
+    _ = await EntityType.catalog_by_is_system_desc_and_type_id_asc(namespace=namespace, company_id=company_id)
 
     deleted = await EntityType.delete_by_company_namespace_and_type_id(
         type_id,
@@ -141,7 +141,7 @@ async def test_entity_type_catalog_delete_visible_after_warm_cache(
     )
     assert deleted is True
 
-    listed = await EntityType.catalog(
+    listed = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace,
         company_id=company_id,
     )
@@ -167,11 +167,11 @@ async def test_entity_type_catalog_clone_appears_in_target_namespace(
             is_system=False,
         ),
     )
-    _ = await EntityType.catalog(
+    _ = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=source_namespace,
         company_id=company_id,
     )
-    _ = await EntityType.catalog(
+    _ = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=target_namespace,
         company_id=company_id,
     )
@@ -185,11 +185,11 @@ async def test_entity_type_catalog_clone_appears_in_target_namespace(
     assert cloned.namespace == target_namespace
     assert cloned.type_id == type_id
 
-    source_rows = await EntityType.catalog(
+    source_rows = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=source_namespace,
         company_id=company_id,
     )
-    target_rows = await EntityType.catalog(
+    target_rows = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=target_namespace,
         company_id=company_id,
     )

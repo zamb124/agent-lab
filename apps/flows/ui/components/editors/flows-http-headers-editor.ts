@@ -15,82 +15,69 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
-/**
- * @param {unknown} headers
- * @returns {Record<string, string>}
- */
-function _normalizeHeadersObject(headers: any) {
-    if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+interface HeaderRow {
+    name: string;
+    value: string;
+}
+
+function isHeaderRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function _normalizeHeadersObject(headers: unknown): Record<string, string> {
+    if (!isHeaderRecord(headers)) {
         return {};
     }
-    /** @type {Record<string, string>} */
-    const out = {};
+    const out: Record<string, string> = {};
     for (const key of Object.keys(headers)) {
-        const v = headers[key];
-        (out as any)[key] = typeof v === 'string' ? v : '';
+        const headerValue = headers[key];
+        out[key] = typeof headerValue === 'string' ? headerValue : '';
     }
     return out;
 }
 
-/**
- * @param {{ name: string, value: string }[]} rows
- * @returns {Record<string, string>}
- */
-function _headersObjectFromRows(rows: Record<string, any>[]) {
-    /** @type {Record<string, string>} */
-    const out = {};
-    if (!Array.isArray(rows)) {
-        return out;
-    }
+function _headersObjectFromRows(rows: readonly unknown[]): Record<string, string> {
+    const out: Record<string, string> = {};
     for (const row of rows) {
-        if (!row || typeof row !== 'object') {
+        if (!isHeaderRecord(row)) {
             continue;
         }
         const name = typeof row.name === 'string' ? row.name.trim() : '';
-        if (!name) {
+        if (name.length === 0) {
             continue;
         }
-        (out as any)[name] = typeof row.value === 'string' ? row.value : '';
+        out[name] = typeof row.value === 'string' ? row.value : '';
     }
     return out;
 }
 
-/**
- * @param {Record<string, string>} a
- * @param {Record<string, string>} b
- * @returns {boolean}
- */
-function _headerDictEqual(a: any, b: any) {
-    const ka = Object.keys(a).sort();
-    const kb = Object.keys(b).sort();
-    if (ka.length !== kb.length) {
+function _headerDictEqual(left: Record<string, string>, right: Record<string, string>): boolean {
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    if (leftKeys.length !== rightKeys.length) {
         return false;
     }
-    for (let i = 0; i < ka.length; i += 1) {
-        if (ka[i] !== kb[i]) {
-            return false;
-        }
-        const leftKey = ka[i];
-        const rightKey = kb[i];
+    for (let i = 0; i < leftKeys.length; i += 1) {
+        const leftKey = leftKeys[i];
+        const rightKey = rightKeys[i];
         if (leftKey === undefined || rightKey === undefined) {
             throw new Error('flows-http-headers-editor: header key missing');
         }
-        if (a[leftKey] !== b[rightKey]) {
+        if (leftKey !== rightKey || left[leftKey] !== right[rightKey]) {
             return false;
         }
     }
     return true;
 }
 
-/**
- * @param {Record<string, string>} headers
- * @returns {{ name: string, value: string }[]}
- */
-function _pairsFromHeaders(headers: any) {
-    return Object.keys(headers).map((name) => ({
-        name,
-        value: headers[name],
-    }));
+function _pairsFromHeaders(headers: Record<string, string>): HeaderRow[] {
+    return Object.keys(headers).map((name) => {
+        const headerValue = headers[name];
+        if (typeof headerValue !== 'string') {
+            throw new Error('flows-http-headers-editor: header value must be a string');
+        }
+        return { name, value: headerValue };
+    });
 }
 
 export class FlowsHttpHeadersEditor extends PlatformElement {
@@ -102,9 +89,9 @@ export class FlowsHttpHeadersEditor extends PlatformElement {
         /** @type {{ name: string, value: string }[]} */
         _rows: { state: true },
     }
-    declare value: Record<string, any>;
+    declare value: Record<string, string>;
     declare readOnly: boolean;
-    declare _rows: any[];
+    declare _rows: HeaderRow[];
 ;
 
     static override styles: CSSResultGroup = [
@@ -185,7 +172,7 @@ export class FlowsHttpHeadersEditor extends PlatformElement {
         if (typeof v !== 'string') {
             throw new Error('flows-http-headers-editor: name must be string');
         }
-        this._rows = (this._rows.map as any)((row: any, i: number) => (i === idx ? { ...row, name: v } : row));
+        this._rows = this._rows.map((row, i) => (i === idx ? { ...row, name: v } : row));
         this._emitFromRows();
     }
 
@@ -203,7 +190,7 @@ export class FlowsHttpHeadersEditor extends PlatformElement {
         if (typeof v !== 'string') {
             throw new Error('flows-http-headers-editor: value must be string');
         }
-        this._rows = (this._rows.map as any)((row: any, i: number) => (i === idx ? { ...row, value: v } : row));
+        this._rows = this._rows.map((row, i) => (i === idx ? { ...row, value: v } : row));
         this._emitFromRows();
     }
 
@@ -215,12 +202,15 @@ export class FlowsHttpHeadersEditor extends PlatformElement {
      * @param {number} idx
      */
     _removeRow(idx: number) {
-        this._rows = (this._rows.filter as any)((_: any, i: number) => i !== idx);
+        this._rows = this._rows.filter((_, i) => i !== idx);
         this._emitFromRows();
     }
 
     override render(): TemplateResult {
-        const rows = Array.isArray(this._rows) ? this._rows : [];
+        if (!Array.isArray(this._rows)) {
+            throw new Error('flows-http-headers-editor: rows must be an array');
+        }
+        const rows = this._rows;
         return html`
             <p class="hint">${this.t('http_headers_editor.hint')}</p>
             ${rows.length === 0 && this.readOnly

@@ -24,11 +24,19 @@ import {
 import './flows-base-resource-editor.js';
 import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 
-function recordCopy(value: unknown): Record<string, any> {
+function recordCopy(value: unknown): Record<string, unknown> {
     if (!isPlainObject(value)) return {};
-    const row: Record<string, any> = {};
-    for (const [key, field] of Object.entries(value)) row[key] = field;
-    return row;
+    return { ...value };
+}
+
+function configText(cfg: Record<string, unknown>, key: string): string {
+    const value = cfg[key];
+    return typeof value === 'string' ? value : '';
+}
+
+function configNumber(cfg: Record<string, unknown>, key: string): number | null {
+    const value = cfg[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
@@ -49,7 +57,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         _dragOver: { state: true },
     }
     declare resourceId: string;
-    declare resource: Record<string, any> | null;
+    declare resource: Record<string, unknown> | null;
     declare nodeId: string;
     declare compactHeader: boolean;
     declare _showCreate: boolean;
@@ -212,7 +220,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
     private _upload: OpController;
     private _remove: OpController;
     private _ragNodeTest: ControllerFor<'flows/rag_node_test'>;
-    private _locale: SelectController<any>;
+    private _locale: SelectController<string>;
     private _pendingCreateName: string;
     private _defaultsLoaded: boolean;
     private _namespacesLoaded: boolean;
@@ -234,7 +242,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         this._upload = this.useOp('rag/document_upload');
         this._remove = this.useOp('rag/document_remove');
         this._ragNodeTest = this.useSlice('flows/rag_node_test');
-        this._locale = this.select((s) => (s as any).i18n.locale);
+        this._locale = this.select((state) => state.i18n.locale);
         this._defaultsLoaded = false;
         this._namespacesLoaded = false;
         this.useEvent(this._namespaces.resource.events.CREATED, (event) => {
@@ -285,16 +293,16 @@ export class FlowsRagResourceEditor extends PlatformElement {
     }
 
     _namespaceValue() {
-        const namespace = (this._cfg() as any).namespace;
+        const namespace = (this._cfg()).namespace;
         return typeof namespace === 'string' ? namespace.trim() : '';
     }
 
-    _cfg(): Record<string, any> {
+    _cfg(): Record<string, unknown> {
         if (this.resource === null) return {};
         return recordCopy(this.resource.config);
     }
 
-    _emitConfig(patch: any) {
+    _emitConfig(patch: Record<string, unknown>) {
         const base = this._cfg();
         this.emit('change', {
             resourceId: this.resourceId,
@@ -322,7 +330,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
             }
             opts.push({ value: name, label: name });
         }
-        const current = typeof (this._cfg() as any).namespace === 'string' ? (this._cfg() as any).namespace.trim() : '';
+        const current = configText(this._cfg(), 'namespace').trim();
         if (current.length > 0 && !opts.some((o) => o.value === current)) {
             opts.unshift({ value: current, label: current });
         }
@@ -460,7 +468,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
     }
 
     _collectionId() {
-        const filters = (this._cfg() as any).filters;
+        const filters = (this._cfg()).filters;
         if (!isPlainObject(filters)) {
             return '';
         }
@@ -468,7 +476,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
     }
 
     _chunkField(field: string) {
-        const ipc = (this._cfg() as any).index_profile_config;
+        const ipc = (this._cfg()).index_profile_config;
         if (!isPlainObject(ipc) || !isPlainObject(ipc.split)) {
             return '';
         }
@@ -477,11 +485,9 @@ export class FlowsRagResourceEditor extends PlatformElement {
     }
 
     _enterCreate() {
-        const current = typeof (this._cfg() as any).namespace === 'string' ? (this._cfg() as any).namespace : '';
+        const current = configText(this._cfg(), 'namespace');
         this._createName = current.startsWith('kb-') ? current : '';
-        this._createDescription = typeof (this._cfg() as any).namespace_description === 'string'
-            ? (this._cfg() as any).namespace_description
-            : '';
+        this._createDescription = configText(this._cfg(), 'namespace_description');
         this._showCreate = true;
     }
 
@@ -493,12 +499,12 @@ export class FlowsRagResourceEditor extends PlatformElement {
     }
 
     _createNamespace() {
-        const name = (this._createName.trim() as any);
+        const name = (this._createName.trim());
         if (!NAMESPACE_NAME_PATTERN.test(name)) {
             this.toast('rag_resource_editor.namespace_name_invalid', { type: 'error' });
             return;
         }
-        const description = (this._createDescription.trim() as any);
+        const description = (this._createDescription.trim());
         const descriptionValue = description.length === 0 ? null : description;
         this._pendingCreateName = name;
         const requested = this._namespaces.create({
@@ -527,8 +533,8 @@ export class FlowsRagResourceEditor extends PlatformElement {
     }
 
     _uploadMetadata() {
-        const metadata: any = {};
-        const ttl = (this._cfg() as any).default_ttl_seconds;
+        const metadata: Record<string, unknown> = {};
+        const ttl = (this._cfg()).default_ttl_seconds;
         if (typeof ttl === 'number' && Number.isFinite(ttl)) {
             metadata.ttl_seconds = Math.trunc(ttl);
         }
@@ -539,7 +545,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         return metadata;
     }
 
-    _uploadFile(file: any) {
+    _uploadFile(file: File) {
         const namespace = this._namespaceValue();
         if (namespace.length === 0) {
             throw new Error('flows-rag-resource-editor: namespace required for upload');
@@ -570,12 +576,10 @@ export class FlowsRagResourceEditor extends PlatformElement {
         if (!(input instanceof HTMLInputElement)) {
             throw new Error('flows-rag-resource-editor: file input change');
         }
-        const file = input.files && input.files.length > 0 ? input.files[0] : null;
+        const selected = input.files === null || input.files.length === 0 ? undefined : input.files[0];
         input.value = '';
-        if (file === null) {
-            return;
-        }
-        this._uploadFile(file);
+        if (selected === undefined) return;
+        this._uploadFile(selected);
     }
 
     _onDragOver(e: Event) {
@@ -605,13 +609,12 @@ export class FlowsRagResourceEditor extends PlatformElement {
         }
         const transfer = e.dataTransfer;
         const files = transfer === null ? null : transfer.files;
-        if (files === null || files.length === 0) {
-            return;
-        }
-        this._uploadFile(files[0]);
+        const dropped = files === null || files.length === 0 ? undefined : files[0];
+        if (dropped === undefined) return;
+        this._uploadFile(dropped);
     }
 
-    async _removeDocument(documentId: any) {
+    async _removeDocument(documentId: unknown) {
         if (typeof documentId !== 'string' || documentId.length === 0) {
             throw new Error('flows-rag-resource-editor: documentId required');
         }
@@ -630,13 +633,10 @@ export class FlowsRagResourceEditor extends PlatformElement {
         await this._remove.run({ namespace_id: namespace, document_id: documentId });
     }
 
-    _docCreatedAt(doc: any) {
-        if (typeof doc.created_at === 'string' && doc.created_at.length > 0) {
-            return doc.created_at;
-        }
-        if (isPlainObject(doc.metadata) && typeof doc.metadata.created_at === 'string') {
-            return doc.metadata.created_at;
-        }
+    _docCreatedAt(doc: unknown) {
+        if (!isPlainObject(doc)) return null;
+        if (typeof doc.created_at === 'string' && doc.created_at.length > 0) return doc.created_at;
+        if (isPlainObject(doc.metadata) && typeof doc.metadata.created_at === 'string') return doc.metadata.created_at;
         return null;
     }
 
@@ -648,7 +648,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         if (!isPlainObject(d) || typeof d.value !== 'string') {
             throw new Error('flows-rag-resource-editor: test query change');
         }
-        (this._ragNodeTest.setQuery({ nodeId: this.nodeId, query: d.value }) as any);
+        (this._ragNodeTest.setQuery({ nodeId: this.nodeId, query: d.value }));
     }
 
     _testQueryValue() {
@@ -662,7 +662,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         if (!Object.prototype.hasOwnProperty.call(map, this.nodeId)) {
             return '';
         }
-        const query = (map as any)[this.nodeId];
+        const query = (map)[this.nodeId];
         if (typeof query !== 'string') {
             throw new Error('flows-rag-resource-editor: query must be string');
         }
@@ -680,7 +680,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         if (!Object.prototype.hasOwnProperty.call(byId, this.nodeId)) {
             return null;
         }
-        return (byId as any)[this.nodeId];
+        return (byId)[this.nodeId];
     }
 
     _localeValue() {
@@ -691,7 +691,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         return locale;
     }
 
-    _renderDocumentsSection(namespace: any) {
+    _renderDocumentsSection(namespace: string) {
         const enabled = namespace.length > 0;
         const items = this._docs.state.items;
         if (!Array.isArray(items)) {
@@ -765,7 +765,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         `;
     }
 
-    _renderDocumentRow(doc: any) {
+    _renderDocumentRow(doc: unknown) {
         if (!isPlainObject(doc) || typeof doc.document_id !== 'string') {
             throw new Error('flows-rag-resource-editor: document_id required');
         }
@@ -823,10 +823,13 @@ export class FlowsRagResourceEditor extends PlatformElement {
             return '';
         }
         const result = this._testSearchResult();
-        if (result !== null && (!isPlainObject(result) || !Array.isArray(result.results))) {
+        if (result !== null && !isPlainObject(result)) {
             throw new Error('flows-rag-resource-editor: search result.results array required');
         }
         const hits = result === null ? null : result.results;
+        if (hits !== null && !Array.isArray(hits)) {
+            throw new Error('flows-rag-resource-editor: search result.results array required');
+        }
         return html`
             <div class="section">
                 <div class="section-title">${this.t('rag_resource_editor.section_test')}</div>
@@ -846,14 +849,14 @@ export class FlowsRagResourceEditor extends PlatformElement {
                         ? html`<p class="hint">${this.t('rag_resource_editor.test_results_empty')}</p>`
                         : html`
                             <div class="docs-list">
-                                ${hits.map((hit: any) => this._renderSearchHit(hit))}
+                                ${hits.map((hit) => this._renderSearchHit(hit))}
                             </div>
                         `}
             </div>
         `;
     }
 
-    _renderSearchHit(hit: any) {
+    _renderSearchHit(hit: unknown) {
         if (!isPlainObject(hit)) {
             throw new Error('flows-rag-resource-editor: search hit object required');
         }
@@ -885,7 +888,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         `;
     }
 
-    _renderNamespaceCard(namespace: any, nsDescription: any) {
+    _renderNamespaceCard(namespace: string, nsDescription: string) {
         if (this._showCreate) {
             return html`
                 <div class="ns-card">
@@ -990,14 +993,14 @@ export class FlowsRagResourceEditor extends PlatformElement {
 
     override render(): TemplateResult {
         const cfg = this._cfg();
-        const namespace = typeof (cfg as any).namespace === 'string' ? (cfg as any).namespace : '';
-        const topK = typeof (cfg as any).default_top_k === 'number' ? (cfg as any).default_top_k : DEFAULT_TOP_K;
-        const ttl = typeof (cfg as any).default_ttl_seconds === 'number' ? String((cfg as any).default_ttl_seconds) : '';
-        const nsDescription = typeof (cfg as any).namespace_description === 'string'
-            ? (cfg as any).namespace_description
-            : '';
+        const namespace = configText(cfg, 'namespace');
+        const topKNumber = configNumber(cfg, 'default_top_k');
+        const topK = topKNumber === null ? DEFAULT_TOP_K : topKNumber;
+        const ttlNumber = configNumber(cfg, 'default_ttl_seconds');
+        const ttl = ttlNumber === null ? '' : String(ttlNumber);
+        const nsDescription = configText(cfg, 'namespace_description');
         const retrievalValue = panelValueFromSearchOptions(
-            isPlainObject((cfg as any).search_options) ? (cfg as any).search_options : null,
+            isPlainObject(cfg.search_options) ? cfg.search_options : null,
         );
         return html`
             <flows-base-resource-editor
@@ -1084,7 +1087,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
                         </div>
                     </div>
 
-                    ${this._renderDocumentsSection(typeof (cfg as any).namespace === 'string' ? (cfg as any).namespace.trim() : '')}
+                    ${this._renderDocumentsSection(configText(cfg, 'namespace').trim())}
                     ${this._renderTestSection()}
                 </div>
             </flows-base-resource-editor>

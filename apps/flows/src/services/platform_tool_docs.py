@@ -27,7 +27,7 @@ async def collect_platform_tool_docs(tool_registry: ToolRegistry) -> list[Platfo
 
     ctx = get_context()
     if ctx and ctx.active_company:
-        refs = await ToolReference.list_in_tool_id_order(limit=5000)
+        refs = await ToolReference.list_by_tool_id_asc(limit=5000)
         for ref in refs:
             effective = ref.effective_parameters_schema()
             parameters_json = json.dumps(effective, ensure_ascii=False, indent=2)

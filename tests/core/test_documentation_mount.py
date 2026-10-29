@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.frontend.documentation_mount import mount_documentation_static
 

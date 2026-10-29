@@ -14,7 +14,7 @@ from core.billing.settlement_rules import (
     SettlementRuleMatch,
     SettlementRulesDocument,
     parse_settlement_rules_json,
-    resolve_matched_rules,
+    resolve_matched_rules_by_priority_asc,
     rule_matches_span,
 )
 from core.tracing.models import Span
@@ -82,7 +82,7 @@ def test_production_like_document_all_matching_stack_fixed_plus_tokens() -> None
         operation_name="flows.llm.completion",
         attributes={"platform.llm.total_tokens": 500},
     )
-    out = resolve_matched_rules(doc, span)
+    out = resolve_matched_rules_by_priority_asc(doc, span)
     assert {r.rule_id for r in out} == {"llm_per_call", "llm_per_token"}
 
 
@@ -109,7 +109,7 @@ def test_exclusive_group_prevents_double_llm_line_same_group() -> None:
         ],
     )
     span = _span(operation_name="agent.react.turn")
-    out = resolve_matched_rules(doc, span)
+    out = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(out) == 1
     assert out[0].rule_id == "expensive"
 
@@ -138,7 +138,7 @@ def test_first_win_prefers_lower_priority_number_among_standalone() -> None:
         ],
     )
     span = _span(operation_name="sync.command.execute", service_name="sync")
-    out = resolve_matched_rules(doc, span)
+    out = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(out) == 1
     assert out[0].rule_id == "narrow"
 

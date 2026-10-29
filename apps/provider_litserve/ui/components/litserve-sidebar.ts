@@ -10,7 +10,7 @@ import type { SelectController } from '@platform/lib/events/select-controller.js
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
-import '@platform/lib/components/layout/platform-service-sidebar.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-deployment-version.js';
@@ -77,7 +77,7 @@ export class HumanitecModelsSidebar extends PlatformElement {
 
     declare collapsed: boolean;
     declare mobileOpen: boolean;
-    private _routeKeySel: SelectController<string | null | undefined>;
+    private _routeKeySel: SelectController<string | null>;
 
     static override properties = {
         collapsed: { type: Boolean, reflect: true },
@@ -88,20 +88,22 @@ export class HumanitecModelsSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._routeKeySel = this.select((s) => (s.router as { routeKey?: string | null }).routeKey);
+        this._routeKeySel = this.select((s) => s.router.routeKey);
     }
 
-    private _shell(): { closeMobile?: () => void } | null {
-        return this.renderRoot
-            ? this.renderRoot.querySelector('platform-service-sidebar') as { closeMobile?: () => void } | null
-            : null;
+    private _shell(): PlatformServiceSidebar | null {
+        const root = this.renderRoot;
+        if (!root) return null;
+        const shell = root.querySelector('platform-service-sidebar');
+        if (shell === null) return null;
+        if (!(shell instanceof PlatformServiceSidebar)) {
+            throw new Error('litserve-sidebar: service sidebar required');
+        }
+        return shell;
     }
 
     closeMobile() {
-        const shell = this._shell();
-        if (shell && typeof shell.closeMobile === 'function') {
-            shell.closeMobile();
-        }
+        this._shell()?.closeMobile();
     }
 
     private _navigate(routeKey: string) {

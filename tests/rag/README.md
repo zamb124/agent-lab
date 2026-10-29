@@ -137,7 +137,7 @@ PostgreSQL + pgvector уже настроен:
 
 ```yaml
 postgres-test:
-  image: pgvector/pgvector:pg16
+  image: pgvector/pgvector:0.8.7-pg18
   ports:
     - "5433:5432"
   environment:

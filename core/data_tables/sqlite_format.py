@@ -304,7 +304,7 @@ def add_user_column(
     )
 
 
-def read_schema_snapshot(connection: sqlite3.Connection) -> DataTableSchemaSnapshot:
+def read_schema_snapshot_by_table_name_asc(connection: sqlite3.Connection) -> DataTableSchemaSnapshot:
     meta = _meta_map(connection)
     scope_raw = meta.get("scope")
     if scope_raw == "flow_asset" or scope_raw == "flow_session" or scope_raw == "office_document":
@@ -641,7 +641,7 @@ def _append_column_q_clauses(
         params.append(_like_contains_pattern(trimmed))
 
 
-def page_rows(
+def page_rows_by_sort_then_row_id(
     connection: sqlite3.Connection,
     *,
     table_name: str,
@@ -743,12 +743,13 @@ def _data_table_row_from_sqlite(
     )
 
 
-def list_table_rows(
+def list_table_rows_by_row_id_asc(
     connection: sqlite3.Connection,
     *,
     table_name: str,
     max_rows: int = MAX_EXPORT_ROWS,
 ) -> tuple[list[DataTableColumnSnapshot], list[DataTableRow]]:
+    """Колонки и строки таблицы, ORDER BY row_id ASC, не больше max_rows. max_rows < 1 и превышение — ValueError."""
     name = validate_ident(table_name, kind="table")
     _require_user_table(connection, name)
     if max_rows < 1:
@@ -795,7 +796,7 @@ def execute_user_sql(
 
 
 def schema_summary_text(connection: sqlite3.Connection) -> str:
-    snapshot = read_schema_snapshot(connection)
+    snapshot = read_schema_snapshot_by_table_name_asc(connection)
     lines = [
         f"DataTable schema_version={snapshot.schema_version} scope={snapshot.scope}",
     ]

@@ -5,11 +5,35 @@
  * Доступно только при активной компании system. 503 → unavailable state.
  */
 import { html, css } from 'lit';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function displayText(value: unknown): string {
     if (value === undefined || value === null || value === false || value === 0 || value === '') return '';
     if (typeof value === 'number' && !Number.isFinite(value)) return '';
     return String(value);
+}
+
+function facetContext(filters: Record<string, unknown>, facetKey: string): Record<string, unknown> {
+    const context: Record<string, unknown> = {};
+    const companyId = filters.company_id;
+    if (facetKey !== 'companies' && typeof companyId === 'string' && companyId.length > 0) {
+        context.company_id = companyId;
+    }
+    const namespace = filters.namespace;
+    if (facetKey !== 'namespaces' && typeof namespace === 'string' && namespace.length > 0) {
+        context.namespace = namespace;
+    }
+    return context;
+}
+
+function instantText(value: unknown): string {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return new Date(value).toLocaleString();
+    }
+    if (typeof value === 'string' && value.length > 0) {
+        return new Date(value).toLocaleString();
+    }
+    return '';
 }
 
 function firstText(values: readonly unknown[]): string {
@@ -44,9 +68,9 @@ export class FrontendTracingPage extends PlatformPage {
         _draftFilters: { state: true },
         _traceDrawerSpan: { state: true },
     }
-    declare _activeFacet: any;
-    declare _draftFilters: Record<string, any>;
-    declare _traceDrawerSpan: any;
+    declare _activeFacet: string | null;
+    declare _draftFilters: Record<string, unknown>;
+    declare _traceDrawerSpan: unknown;
 ;
 
     static override styles: CSSResultGroup = [
@@ -239,13 +263,10 @@ export class FrontendTracingPage extends PlatformPage {
 
     _onFilterInput(field: string, facetKey: string | null, value: unknown) {
         this._draftFilters = { ...this._draftFilters, [field]: value };
-        if (facetKey && value && (value as Record<string, any>).length >= 2) {
+        if (facetKey && typeof value === 'string' && value.length >= 2) {
             this._activeFacet = facetKey;
             const filters = this._filters();
-            const context: Record<string, any> = {};
-            if (facetKey !== 'companies' && filters.company_id) context.company_id = filters.company_id;
-            if (facetKey !== 'namespaces' && filters.namespace) context.namespace = filters.namespace;
-            this._facets.search(facetKey, String(value), context);
+            this._facets.search(facetKey, String(value), facetContext(filters, facetKey));
         } else {
             this._activeFacet = null;
         }
@@ -261,10 +282,7 @@ export class FrontendTracingPage extends PlatformPage {
         const raw = filters[facet.field];
         const value = typeof raw === 'string' ? raw : '';
         if (value.length >= 2) {
-            const context: Record<string, any> = {};
-            if (facetKey !== 'companies' && filters.company_id) context.company_id = filters.company_id;
-            if (facetKey !== 'namespaces' && filters.namespace) context.namespace = filters.namespace;
-            this._facets.search(facetKey, String(value), context);
+            this._facets.search(facetKey, String(value), facetContext(filters, facetKey));
         }
     }
 
@@ -273,7 +291,7 @@ export class FrontendTracingPage extends PlatformPage {
         this._activeFacet = null;
     }
 
-    _renderFacetField({ key, field, labelKey }: { key: string; field: string; labelKey: string }, filters: Record<string, any>) {
+    _renderFacetField({ key, field, labelKey }: { key: string; field: string; labelKey: string }, filters: Record<string, unknown>) {
         const raw = filters[field];
         const value = typeof raw === 'string' ? raw : '';
         const rawItems = this._facets.items(key);
@@ -295,7 +313,11 @@ export class FrontendTracingPage extends PlatformPage {
                     @platform-field-managed-focus-out=${(e: CustomEvent) => {
                         const d = e.detail;
                         const rt = d && 'relatedTarget' in d ? d.relatedTarget : null;
-                        const wrap = (e.currentTarget as Record<string, any>).parentElement;
+                        const current = e.currentTarget;
+                        if (!(current instanceof Element)) {
+                            throw new Error('frontend-tracing-page: focus-out target required');
+                        }
+                        const wrap = current.parentElement;
                         if (rt instanceof Node && wrap !== null && wrap.contains(rt)) {
                             return;
                         }
@@ -312,19 +334,30 @@ export class FrontendTracingPage extends PlatformPage {
                             ? html`<div class="suggest-empty"><glass-spinner></glass-spinner></div>`
                             : (items.length === 0
                                 ? html`<div class="suggest-empty">${this.t('tracing_page.empty')}</div>`
-                                : items.map((it: any) => html`
+                                : items.map((it) => {
+                                    const suggestValue = typeof it === 'string'
+                                        ? it
+                                        : (isPlainRecord(it) && typeof it.value === 'string' ? it.value : '');
+                                    if (suggestValue.length === 0) {
+                                        throw new Error('frontend-tracing-page: suggest value required');
+                                    }
+                                    const label = typeof it === 'string'
+                                        ? it
+                                        : (isPlainRecord(it) && typeof it.label === 'string' && it.label.length > 0 ? it.label : suggestValue);
+                                    return html`
                                     <div class="suggest-item"
-                                        @mousedown=${(e: CustomEvent) => { e.preventDefault(); this._selectSuggest(field, typeof it === 'string' ? it : it.value); }}>
-                                        ${typeof it === 'string' ? it : (typeof it.label === 'string' && it.label !== '' ? it.label : it.value)}
+                                        @mousedown=${(event: Event) => { event.preventDefault(); this._selectSuggest(field, suggestValue); }}>
+                                        ${label}
                                     </div>
-                                `))}
+                                `;
+                                }))}
                     </div>
                 ` : null}
             </div>
         `;
     }
 
-    _renderTimeField(field: string, labelKey: string, filters: Record<string, any>) {
+    _renderTimeField(field: string, labelKey: string, filters: Record<string, unknown>) {
         const raw = filters[field];
         const value = typeof raw === 'string' ? raw : '';
         return html`
@@ -336,7 +369,7 @@ export class FrontendTracingPage extends PlatformPage {
                     .value=${value}
                     @change=${(e: CustomEvent) => {
                         const v = typeof e.detail.value === 'string' ? e.detail.value : '';
-                        this._onFilterInput(field, null as string | null, v);
+                        this._onFilterInput(field, null, v);
                     }}
                 ></platform-field>
             </div>
@@ -365,13 +398,12 @@ export class FrontendTracingPage extends PlatformPage {
      * platform-user-chip смотрит только state.team.members активной компании — для админского
      * спан-листа это даёт «Unknown» для чужих компаний и несистемных id (например канал).
      */
-    _spanUserColumn(row: Record<string, any>) {
-        if (row === null || typeof row !== 'object') {
+    _spanUserColumn(row: unknown) {
+        if (!isPlainRecord(row)) {
             throw new Error('frontend-tracing-page: row must be an object');
         }
-        const rec = /** @type {Record<string, unknown>} */ (row);
-        const rawName = rec.user_display_name;
-        const rawId = rec.user_id;
+        const rawName = row.user_display_name;
+        const rawId = row.user_id;
         const hasName = typeof rawName === 'string' && rawName.length > 0;
         const hasId = typeof rawId === 'string' && rawId.length > 0;
         if (hasName) {
@@ -384,7 +416,7 @@ export class FrontendTracingPage extends PlatformPage {
         return '';
     }
 
-    _renderTable(records: Record<string, any>) {
+    _renderTable(records: readonly unknown[]) {
         return html`
             <table>
                 <thead><tr>
@@ -397,17 +429,25 @@ export class FrontendTracingPage extends PlatformPage {
                     <th>${this.t('tracing_page.col_trace')}</th>
                 </tr></thead>
                 <tbody>
-                    ${records.map((r: Record<string, any>) => html`
-                        <tr class="row" @click=${() => this._open(r.trace_id)}>
-                            <td>${r.start_time ? new Date(r.start_time).toLocaleString() : (r.created_at ? new Date(r.created_at).toLocaleString() : '')}</td>
-                            <td>${displayText(r.service_name)}</td>
-                            <td>${displayText(r.operation_name)}</td>
-                            <td>${displayText(r.event_type)}</td>
-                            <td>${firstText([r.company_name, r.company_id])}</td>
-                            <td>${this._spanUserColumn(r)}</td>
-                            <td class="mono">${r.trace_id ? r.trace_id.slice(0, 16) : ''}</td>
+                    ${records.map((row) => {
+                        if (!isPlainRecord(row)) {
+                            throw new Error('frontend-tracing-page: span row must be an object');
+                        }
+                        const started = instantText(row.start_time);
+                        const when = started.length > 0 ? started : instantText(row.created_at);
+                        const traceId = typeof row.trace_id === 'string' ? row.trace_id : '';
+                        return html`
+                        <tr class="row" @click=${() => this._open(traceId)}>
+                            <td>${when}</td>
+                            <td>${displayText(row.service_name)}</td>
+                            <td>${displayText(row.operation_name)}</td>
+                            <td>${displayText(row.event_type)}</td>
+                            <td>${firstText([row.company_name, row.company_id])}</td>
+                            <td>${this._spanUserColumn(row)}</td>
+                            <td class="mono">${traceId.length > 0 ? traceId.slice(0, 16) : ''}</td>
                         </tr>
-                    `)}
+                    `;
+                    })}
                 </tbody>
             </table>
         `;
@@ -423,11 +463,11 @@ export class FrontendTracingPage extends PlatformPage {
     }
 
     /** @param {unknown} span */
-    _renderDrawerSpanDetail(span: Record<string, any>) {
+    _renderDrawerSpanDetail(span: unknown) {
         if (span == null) {
             return null;
         }
-        if (typeof span !== 'object' || span === null) {
+        if (!isPlainRecord(span)) {
             throw new Error('frontend-tracing-page: span must be an object');
         }
         return html`
@@ -442,7 +482,10 @@ export class FrontendTracingPage extends PlatformPage {
         const loading = this._trace.busy;
         const error = this._trace.error;
         if (!trace && !loading && !error) return null;
-        const tree = trace && (trace as Record<string, any>).tree ? (trace as Record<string, any>).tree : [];
+        const loaded = isPlainRecord(trace) ? trace : null;
+        const treeValue = loaded === null ? undefined : loaded.tree;
+        const tree = Array.isArray(treeValue) ? treeValue : [];
+        const traceId = loaded === null ? '' : displayText(loaded.trace_id);
         return html`
             <div
                 class="drawer-backdrop"
@@ -452,7 +495,7 @@ export class FrontendTracingPage extends PlatformPage {
                 <div class="drawer-header">
                     <div>
                         <div class="drawer-trace-title">${this.t('tracing_page.col_trace')}</div>
-                        <div class="drawer-trace-id">${trace ? (trace as Record<string, any>).trace_id : ''}</div>
+                        <div class="drawer-trace-id">${traceId}</div>
                     </div>
                     <button class="btn" @click=${() => this._close()}>${this.t('tracing_page.close')}</button>
                 </div>
@@ -476,8 +519,10 @@ export class FrontendTracingPage extends PlatformPage {
         `;
     }
 
-    _open(traceId: Record<string, any>) {
-        if (!traceId) return;
+    _open(traceId: unknown) {
+        if (typeof traceId !== 'string' || traceId.length === 0) {
+            return;
+        }
         this._traceDrawerSpan = null;
         this._trace.run({ trace_id: traceId });
     }

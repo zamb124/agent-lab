@@ -40,7 +40,7 @@ const BRANDING_SUGGEST_LIMIT = 8;
  * @param {unknown} raw
  * @returns {'http'|'sse'}
  */
-function normalizeMcpTransportType(raw: any) {
+function normalizeMcpTransportType(raw: unknown) {
     if (typeof raw !== 'string') {
         return 'http';
     }
@@ -49,6 +49,142 @@ function normalizeMcpTransportType(raw: any) {
         return t;
     }
     return 'http';
+}
+
+
+type McpTransportType = 'http' | 'sse';
+type McpListTab = 'installed' | 'catalog';
+
+interface McpServerForm {
+    server_id: string;
+    name: string;
+    url: string;
+    transport_type: McpTransportType;
+    description: string;
+    headers: Record<string, string>;
+}
+
+interface McpBrandingForm {
+    server_id: string;
+    icon_file_id: string;
+}
+
+interface McpServerRecord {
+    server_id: string;
+    name: string;
+    url: string;
+    transport_type?: unknown;
+    description?: unknown;
+    headers?: unknown;
+    source?: unknown;
+    cached_tools?: unknown;
+    last_sync_at?: unknown;
+    is_active?: unknown;
+    [key: string]: unknown;
+}
+
+interface McpCatalogEntry {
+    catalog_id: string;
+    title?: unknown;
+    installed?: unknown;
+    platform_curated?: unknown;
+    tool_count_snapshot?: unknown;
+    [key: string]: unknown;
+}
+
+interface McpBrandingRow {
+    server_id: string;
+    icon_file_id?: unknown;
+    [key: string]: unknown;
+}
+
+interface McpTestOk {
+    serverId: string;
+    ok: true;
+    toolsCount: number;
+}
+
+interface McpTestFail {
+    serverId: string;
+    ok: false;
+    message: string;
+}
+
+type McpTestFeedback = McpTestOk | McpTestFail;
+
+interface BrandingUploadFile {
+    file_id?: unknown;
+}
+
+function stringHeaders(value: unknown): Record<string, string> {
+    if (!isPlainObject(value)) {
+        return {};
+    }
+    const headers: Record<string, string> = {};
+    for (const [key, field] of Object.entries(value)) {
+        if (typeof field !== 'string') {
+            throw new Error('flows-mcp-servers-modal: header values must be strings');
+        }
+        headers[key] = field;
+    }
+    return headers;
+}
+
+function isMcpServerRecord(value: unknown): value is McpServerRecord {
+    return isPlainObject(value)
+        && typeof value.server_id === 'string'
+        && typeof value.name === 'string'
+        && typeof value.url === 'string';
+}
+
+function requireMcpServerRecords(value: unknown): McpServerRecord[] {
+    if (!Array.isArray(value)) {
+        throw new Error('flows-mcp-servers-modal: items required');
+    }
+    const items: McpServerRecord[] = [];
+    for (const raw of value) {
+        if (!isMcpServerRecord(raw)) {
+            throw new Error('flows-mcp-servers-modal: server row required');
+        }
+        items.push(raw);
+    }
+    return items;
+}
+
+function isMcpCatalogEntry(value: unknown): value is McpCatalogEntry {
+    return isPlainObject(value) && typeof value.catalog_id === 'string';
+}
+
+function requireMcpCatalogEntries(value: unknown): McpCatalogEntry[] {
+    if (!Array.isArray(value)) {
+        throw new Error('flows-mcp-servers-modal: items required');
+    }
+    const items: McpCatalogEntry[] = [];
+    for (const raw of value) {
+        if (!isMcpCatalogEntry(raw)) {
+            throw new Error('flows-mcp-servers-modal: catalog entry required');
+        }
+        items.push(raw);
+    }
+    return items;
+}
+
+function isMcpBrandingRow(value: unknown): value is McpBrandingRow {
+    return isPlainObject(value) && typeof value.server_id === 'string';
+}
+
+function requireMcpBrandingRows(value: unknown): McpBrandingRow[] {
+    if (!Array.isArray(value)) {
+        throw new Error('flows-mcp-servers-modal: items required');
+    }
+    const items: McpBrandingRow[] = [];
+    for (const raw of value) {
+        if (!isMcpBrandingRow(raw)) {
+            throw new Error('flows-mcp-servers-modal: branding row required');
+        }
+        items.push(raw);
+    }
+    return items;
 }
 
 const HEADER_PRESET_BEARER = Object.freeze({ Authorization: 'Bearer @var:token' });
@@ -60,8 +196,7 @@ const HEADER_PRESET_OPTIONS = Object.freeze([
     Object.freeze({ id: 'basic', titleKey: 'mcp_servers_modal.preset_basic', icon: 'lock' }),
 ]);
 export class FlowsMcpServersModal extends PlatformModal {
-    private _brandingForm: any;
-    private _update: any;
+    private _brandingForm: McpBrandingForm;
     static modalKind = 'flows.mcp_servers';
     static i18nNamespace = 'flows';
 
@@ -91,26 +226,26 @@ export class FlowsMcpServersModal extends PlatformModal {
         _brandingEditingSlug: { state: true },
     }
     declare _view: string;
-    declare _editing: any;
-    declare _form: Record<string, any>;
-    declare _formError: any;
+    declare _editing: string | null;
+    declare _form: McpServerForm;
+    declare _formError: string | null;
     declare _saving: boolean;
-    declare _testFeedback: Record<string, any> | null;
-    declare _testingServerId: any;
+    declare _testFeedback: McpTestFeedback | null;
+    declare _testingServerId: string | null;
     declare _installedSearch: string;
     declare _catalogSearch: string;
-    declare _installedItems: any[];
+    declare _installedItems: McpServerRecord[];
     declare _installedTotal: number;
     declare _installedLoading: boolean;
-    declare _installedError: any;
-    declare _catalogItems: any[];
+    declare _installedError: string | null;
+    declare _catalogItems: McpCatalogEntry[];
     declare _catalogTotal: number;
     declare _catalogLoading: boolean;
-    declare _catalogError: any;
-    declare _brandingItems: any[];
+    declare _catalogError: string | null;
+    declare _brandingItems: McpBrandingRow[];
     declare _brandingTotal: number;
     declare _brandingSearch: string;
-    declare _brandingSlugSuggestions: any[];
+    declare _brandingSlugSuggestions: string[];
     declare _brandingEditingSlug: string;
 ;
 
@@ -516,7 +651,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             }
         `,
     ];
-    private _activeCompanySel: SelectController<any>;
+    private _activeCompanySel: SelectController<string | null>;
     private _servers: ResourceController;
     private _serversListOp: OpController;
     private _syncOp: OpController;
@@ -530,15 +665,15 @@ export class FlowsMcpServersModal extends PlatformModal {
     private _catalogInstallOp: OpController;
     private _catalogUninstallOp: OpController;
     private _listTab: string;
-    private _brandingUploadFiles: readonly any[];
-    private _brandingError: any;
+    private _brandingUploadFiles: readonly BrandingUploadFile[];
+    private _brandingError: string | null;
     private _brandingSaving: boolean;
     private _brandingLoading: boolean;
-    private _catalogInstallingId: any;
-    private _catalogSearchTimer: any;
-    private _installedSearchTimer: any;
-    private _brandingSearchTimer: any;
-    private _brandingSlugTimer: any;
+    private _catalogInstallingId: string | null;
+    private _catalogSearchTimer: ReturnType<typeof setTimeout> | null;
+    private _installedSearchTimer: ReturnType<typeof setTimeout> | null;
+    private _brandingSearchTimer: ReturnType<typeof setTimeout> | null;
+    private _brandingSlugTimer: ReturnType<typeof setTimeout> | null;
 
     constructor() {
         super();
@@ -569,7 +704,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._brandingError = null;
         this._brandingSaving = false;
         this._brandingLoading = false;
-        this._activeCompanySel = this.select((s) => (s as any).auth.activeCompanyId);
+        this._activeCompanySel = this.select((s) => (s).auth.activeCompanyId);
         this._servers = this.useResource('flows/mcp_servers');
         this._serversListOp = this.useOp('flows/mcp_servers_list');
         this._syncOp = this.useOp('flows/mcp_server_sync');
@@ -708,7 +843,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         }, 250);
     }
 
-    _renderInstalledEmptyState(messageKey: any) {
+    _renderInstalledEmptyState(messageKey: string) {
         return html`
             <div class="mcp-empty">
                 <div>${this.t(messageKey)}</div>
@@ -719,7 +854,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         `;
     }
 
-    _isOptInCatalogServer(server: any) {
+    _isOptInCatalogServer(server: McpServerRecord) {
         return server.source === 'catalog';
     }
 
@@ -730,7 +865,7 @@ export class FlowsMcpServersModal extends PlatformModal {
     async _loadInstalled({ reset = false } = {}) {
         this._installedLoading = true;
         this._installedError = null;
-        const offset = reset ? 0 : (this._installedItems.length as any);
+        const offset = reset ? 0 : (this._installedItems.length);
         try {
             const payload = await this._serversListOp.run({
                 search: this._installedSearch,
@@ -740,12 +875,13 @@ export class FlowsMcpServersModal extends PlatformModal {
             if (!isPlainObject(payload)) {
                 throw new Error('flows-mcp-servers-modal: installed load invalid response');
             }
-            const nextItems = asArray((payload as any).items);
+            const nextItems = requireMcpServerRecords(payload.items);
             this._installedItems = reset ? nextItems : [...this._installedItems, ...nextItems];
-            if (typeof (payload as any).total !== 'number') {
+            const total = payload.total;
+            if (typeof total !== 'number') {
                 throw new Error('flows-mcp-servers-modal: installed load total required');
             }
-            this._installedTotal = (payload as any).total;
+            this._installedTotal = total;
         } catch (err) {
             this._installedError = err instanceof Error ? err.message : String(err);
             if (reset) {
@@ -760,7 +896,7 @@ export class FlowsMcpServersModal extends PlatformModal {
     async _loadCatalog({ reset = false } = {}) {
         this._catalogLoading = true;
         this._catalogError = null;
-        const offset = reset ? 0 : (this._catalogItems.length as any);
+        const offset = reset ? 0 : (this._catalogItems.length);
         try {
             const payload = await this._catalogLoadOp.run({
                 search: this._catalogSearch,
@@ -770,12 +906,13 @@ export class FlowsMcpServersModal extends PlatformModal {
             if (!isPlainObject(payload)) {
                 throw new Error('flows-mcp-servers-modal: catalog load invalid response');
             }
-            const nextItems = asArray((payload as any).items);
+            const nextItems = requireMcpCatalogEntries(payload.items);
             this._catalogItems = reset ? nextItems : [...this._catalogItems, ...nextItems];
-            if (typeof (payload as any).total !== 'number') {
+            const total = payload.total;
+            if (typeof total !== 'number') {
                 throw new Error('flows-mcp-servers-modal: catalog load total required');
             }
-            this._catalogTotal = (payload as any).total;
+            this._catalogTotal = total;
         } catch (err) {
             this._catalogError = err instanceof Error ? err.message : String(err);
             if (reset) {
@@ -787,7 +924,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
     }
 
-    async _switchListTab(tab: any) {
+    async _switchListTab(tab: string) {
         if (tab !== 'installed' && tab !== 'catalog') {
             throw new Error(`flows-mcp-servers-modal: invalid list tab ${tab}`);
         }
@@ -800,7 +937,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         await this._loadInstalled({ reset: true });
     }
 
-    async _installCatalogEntry(entry: any) {
+    async _installCatalogEntry(entry: McpCatalogEntry) {
         if (!isPlainObject(entry) || typeof entry.catalog_id !== 'string') {
             throw new Error('flows-mcp-servers-modal: catalog install requires catalog_id');
         }
@@ -816,7 +953,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
     }
 
-    async _uninstallCatalogEntry(entry: any) {
+    async _uninstallCatalogEntry(entry: McpCatalogEntry) {
         if (!isPlainObject(entry) || typeof entry.catalog_id !== 'string') {
             throw new Error('flows-mcp-servers-modal: catalog uninstall requires catalog_id');
         }
@@ -881,7 +1018,7 @@ export class FlowsMcpServersModal extends PlatformModal {
 
     async _loadBranding({ reset = false } = {}) {
         this._brandingLoading = true;
-        const offset = reset ? 0 : (this._brandingItems.length as any);
+        const offset = reset ? 0 : (this._brandingItems.length);
         try {
             const payload = await this._brandingLoadOp.run({
                 search: this._brandingSearch,
@@ -891,12 +1028,13 @@ export class FlowsMcpServersModal extends PlatformModal {
             if (!isPlainObject(payload)) {
                 throw new Error('flows-mcp-servers-modal: branding load invalid response');
             }
-            const nextItems = asArray((payload as any).items);
+            const nextItems = requireMcpBrandingRows(payload.items);
             this._brandingItems = reset ? nextItems : [...this._brandingItems, ...nextItems];
-            if (typeof (payload as any).total !== 'number') {
+            const total = payload.total;
+            if (typeof total !== 'number') {
                 throw new Error('flows-mcp-servers-modal: branding load total required');
             }
-            this._brandingTotal = (payload as any).total;
+            this._brandingTotal = total;
         } catch (err) {
             if (reset) {
                 this._brandingItems = [];
@@ -908,7 +1046,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
     }
 
-    async _loadBrandingSlugSuggestions(search: any) {
+    async _loadBrandingSlugSuggestions(search: string) {
         const payload = await this._brandingSlugSuggestOp.run({
             search,
             limit: BRANDING_SUGGEST_LIMIT,
@@ -916,7 +1054,13 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (!isPlainObject(payload)) {
             throw new Error('flows-mcp-servers-modal: branding slug suggest invalid response');
         }
-        this._brandingSlugSuggestions = asArray((payload as any).slugs).filter((slug) => typeof slug === 'string');
+        const slugs: string[] = [];
+        for (const slug of asArray(payload.slugs)) {
+            if (typeof slug === 'string') {
+                slugs.push(slug);
+            }
+        }
+        this._brandingSlugSuggestions = slugs;
     }
 
     async _goBranding() {
@@ -936,7 +1080,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         return SERVER_ID_PATTERN.test(f.server_id) && f.icon_file_id.length > 0;
     }
 
-    _setBrandingSlug(value: unknown) {
+    _setBrandingSlug(value: string) {
         this._brandingForm = { ...this._brandingForm, server_id: value };
         this._brandingError = null;
         if (this._brandingSlugTimer !== null) {
@@ -953,10 +1097,16 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (!isPlainObject(detail)) {
             throw new TypeError('flows-mcp-servers-modal: branding files-change detail required');
         }
-        const files = asArray(detail.files);
+        const files: BrandingUploadFile[] = [];
+        for (const item of asArray(detail.files)) {
+            if (!isPlainObject(item)) {
+                throw new Error('flows-mcp-servers-modal: branding file required');
+            }
+            files.push({ file_id: item.file_id });
+        }
         this._brandingUploadFiles = files;
-        const last = files.length > 0 ? files[files.length - 1] : null;
-        if (last && typeof last.file_id === 'string' && last.file_id.length > 0) {
+        const last = files[files.length - 1];
+        if (last !== undefined && typeof last.file_id === 'string' && last.file_id.length > 0) {
             this._brandingForm = { ...this._brandingForm, icon_file_id: last.file_id };
         } else {
             this._brandingForm = { ...this._brandingForm, icon_file_id: '' };
@@ -988,7 +1138,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
     }
 
-    async _deleteBranding(serverId: any) {
+    async _deleteBranding(serverId: string) {
         const ok = await platformConfirm(
             this.t('mcp_servers_modal.branding_delete_message', { id: serverId }),
             {
@@ -1015,7 +1165,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._brandingError = null;
     }
 
-    _editBranding(row: any) {
+    _editBranding(row: McpBrandingRow) {
         if (!isPlainObject(row) || typeof row.server_id !== 'string') {
             throw new Error('flows-mcp-servers-modal: branding row with server_id required');
         }
@@ -1039,7 +1189,7 @@ export class FlowsMcpServersModal extends PlatformModal {
 
     _formCanSave() {
         const f = this._form;
-        return SERVER_ID_PATTERN.test((f as any).server_id) && (f as any).name.trim().length > 0 && (f as any).url.trim().length > 0;
+        return SERVER_ID_PATTERN.test(f.server_id) && f.name.trim().length > 0 && f.url.trim().length > 0;
     }
 
     _goList() {
@@ -1056,12 +1206,12 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._resetFormFields();
     }
 
-    _editServer(s: any) {
+    _editServer(s: McpServerRecord) {
         this._view = 'form';
         this._editing = s.server_id;
         this._formError = null;
         const h = s.headers;
-        const headers = isPlainObject(h) ? { ...h } : {};
+        const headers = stringHeaders(h);
         this._form = {
             server_id: s.server_id,
             name: s.name,
@@ -1082,7 +1232,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         return this.t('mcp_servers_modal.transport_unknown');
     }
 
-    _formatLastSync(s: any) {
+    _formatLastSync(s: McpServerRecord) {
         const raw = s.last_sync_at;
         if (raw === null || raw === undefined) {
             return this.t('mcp_servers_modal.sync_never');
@@ -1109,7 +1259,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         return this.t('mcp_servers_modal.sync_invalid');
     }
 
-    _headerNamesSummary(s: any) {
+    _headerNamesSummary(s: McpServerRecord) {
         if (!isPlainObject(s.headers)) {
             return this.t('mcp_servers_modal.headers_none');
         }
@@ -1120,7 +1270,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         return this.t('mcp_servers_modal.headers_keys_prefix') + keys.join(', ');
     }
 
-    _toolsCount(s: any) {
+    _toolsCount(s: McpServerRecord) {
         if (Array.isArray(s.cached_tools)) {
             return s.cached_tools.length;
         }
@@ -1135,36 +1285,35 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (!this._formCanSave()) {
             return;
         }
-        const headersRaw = (f as any).headers;
+        const headersRaw = f.headers;
         if (!isPlainObject(headersRaw)) {
             throw new Error('flows-mcp-servers-modal: form.headers must be an object');
         }
-        /** @type {Record<string, string>} */
-        const headers = {};
+        const headers: Record<string, string> = {};
         for (const [key, val] of Object.entries(headersRaw)) {
             if (typeof val !== 'string') {
                 throw new Error('flows-mcp-servers-modal: header values must be strings');
             }
-            (headers as any)[key] = val;
+            headers[key] = val;
         }
         this._formError = null;
         this._saving = true;
         try {
             if (this._editing) {
-                this._servers.update((f as any).server_id, {
-                    name: (f as any).name,
-                    url: (f as any).url,
-                    transport_type: (f as any).transport_type,
-                    description: (f as any).description,
+                this._servers.update(f.server_id, {
+                    name: f.name,
+                    url: f.url,
+                    transport_type: f.transport_type,
+                    description: f.description,
                     headers,
                 });
             } else {
                 await this._servers.create({
-                    server_id: (f as any).server_id,
-                    name: (f as any).name,
-                    url: (f as any).url,
-                    transport_type: (f as any).transport_type,
-                    description: (f as any).description,
+                    server_id: f.server_id,
+                    name: f.name,
+                    url: f.url,
+                    transport_type: f.transport_type,
+                    description: f.description,
                     headers,
                 });
             }
@@ -1175,12 +1324,12 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
     }
 
-    async _sync(s: any) {
+    async _sync(s: McpServerRecord) {
         await this._syncOp.run({ server_id: s.server_id });
         await this._loadInstalled({ reset: true });
     }
 
-    async _runTest(serverId: any) {
+    async _runTest(serverId: string) {
         if (typeof serverId !== 'string' || serverId.length === 0) {
             throw new Error('flows-mcp-servers-modal: serverId required for test');
         }
@@ -1189,13 +1338,17 @@ export class FlowsMcpServersModal extends PlatformModal {
         try {
             const result = await this._testOp.run({ server_id: serverId });
             if (result !== null) {
-                if (!isPlainObject(result) || typeof (result as Record<string, any>).tools_count !== 'number') {
+                if (!isPlainObject(result)) {
+                    throw new TypeError('flows-mcp-servers-modal: MCP test result must include tools_count');
+                }
+                const toolsCount = result.tools_count;
+                if (typeof toolsCount !== 'number') {
                     throw new TypeError('flows-mcp-servers-modal: MCP test result must include tools_count');
                 }
                 this._testFeedback = {
                     serverId,
                     ok: true,
-                    toolsCount: (result as Record<string, any>).tools_count,
+                    toolsCount,
                 };
                 return;
             }
@@ -1212,7 +1365,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
     }
 
-    async _test(s: any) {
+    async _test(s: McpServerRecord) {
         await this._runTest(s.server_id);
     }
 
@@ -1223,26 +1376,26 @@ export class FlowsMcpServersModal extends PlatformModal {
         await this._runTest(this._editing);
     }
 
-    _renderTestFeedback(serverId: any) {
+    _renderTestFeedback(serverId: string) {
         const fb = this._testFeedback;
-        if (!fb || (fb as Record<string, any>).serverId !== serverId) {
+        if (fb === null || fb.serverId !== serverId) {
             return html``;
         }
-        if ((fb as Record<string, any>).ok === true) {
+        if (fb.ok === true) {
             return html`
                 <div class="mcp-test-feedback ok" role="status">
-                    ${this.t('mcp_servers_modal.test_result_ok', { n: (fb as Record<string, any>).toolsCount })}
+                    ${this.t('mcp_servers_modal.test_result_ok', { n: fb.toolsCount })}
                 </div>
             `;
         }
         return html`
             <div class="mcp-test-feedback err" role="alert">
-                ${this.t('mcp_servers_modal.test_result_error', { message: (fb as Record<string, any>).message })}
+                ${this.t('mcp_servers_modal.test_result_error', { message: fb.message })}
             </div>
         `;
     }
 
-    async _onToggleActive(s: any, e: CustomEvent) {
+    async _onToggleActive(s: McpServerRecord, e: CustomEvent) {
         const d = e.detail;
         if (!d || typeof d !== 'object' || !('value' in d) || typeof d.value !== 'boolean') {
             throw new Error('mcp: platform-switch must emit detail.value boolean');
@@ -1251,7 +1404,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         await this._loadInstalled({ reset: true });
     }
 
-    _sourceLabel(source: any) {
+    _sourceLabel(source: unknown) {
         if (source === 'platform') {
             return this.t('mcp_servers_modal.source_platform');
         }
@@ -1264,7 +1417,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         return this.t('mcp_servers_modal.source_unknown');
     }
 
-    async _resetCatalogDefaults(s: any) {
+    async _resetCatalogDefaults(s: McpServerRecord) {
         const ok = await platformConfirm(
             this.t('mcp_servers_modal.reset_confirm_message', { id: s.server_id }),
             {
@@ -1282,7 +1435,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         await this._loadInstalled({ reset: true });
     }
 
-    async _delete(s: any) {
+    async _delete(s: McpServerRecord) {
         if (this._isOptInCatalogServer(s) && typeof s.catalog_id === 'string' && s.catalog_id.length > 0) {
             await this._uninstallCatalogEntry({ catalog_id: s.catalog_id, title: s.name });
             return;
@@ -1304,7 +1457,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         await this._loadInstalled({ reset: true });
     }
 
-    _applyPreset(preset: any) {
+    _applyPreset(preset: string) {
         if (preset === 'bearer') {
             this._form = { ...this._form, headers: { ...HEADER_PRESET_BEARER } };
         } else if (preset === 'apikey') {
@@ -1327,16 +1480,16 @@ export class FlowsMcpServersModal extends PlatformModal {
                 </div>
             `;
         }
-        if (this._installedLoading && (allItems as any).length === 0) {
+        if (this._installedLoading && (allItems).length === 0) {
             return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
         }
-        if ((allItems as any).length === 0) {
-            return (this._installedSearch.trim() as any).length > 0
+        if ((allItems).length === 0) {
+            return (this._installedSearch.trim()).length > 0
                 ? html`<div class="mcp-empty">${this.t('mcp_servers_modal.empty_search')}</div>`
                 : this._renderInstalledEmptyState('mcp_servers_modal.empty_none_installed');
         }
         return html`
-            ${(allItems as any).map((s: any) => html`
+            ${(allItems).map((s) => html`
             <div class="mcp-card mcp-card-shell">
                 <div class="mcp-card-top">
                     <div class="mcp-card-head-row">
@@ -1425,7 +1578,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                     : ''}
             </div>
             `)}
-            ${(this._installedItems.length as any) < (this._installedTotal as any)
+            ${(this._installedItems.length) < (this._installedTotal)
                 ? this._renderLoadMore(() => this._loadInstalled(), this._installedLoading)
                 : html``}
         `;
@@ -1442,17 +1595,17 @@ export class FlowsMcpServersModal extends PlatformModal {
                 </div>
             `;
         }
-        if (this._catalogLoading && (this._catalogItems.length as any) === 0) {
+        if (this._catalogLoading && (this._catalogItems.length) === 0) {
             return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
         }
-        if ((this._catalogItems.length as any) === 0) {
-            const msg = (this._catalogSearch.trim() as any).length > 0
+        if ((this._catalogItems.length) === 0) {
+            const msg = (this._catalogSearch.trim()).length > 0
                 ? this.t('mcp_servers_modal.catalog_empty_search')
                 : this.t('mcp_servers_modal.catalog_empty');
             return html`<div class="mcp-empty">${msg}</div>`;
         }
         return html`
-        ${(this._catalogItems.map as any)((entry: any) => {
+        ${this._catalogItems.map((entry) => {
             const catalogId = typeof entry.catalog_id === 'string' ? entry.catalog_id : '';
             const title = typeof entry.title === 'string' ? entry.title : catalogId;
             const installed = entry.installed === true;
@@ -1513,17 +1666,17 @@ export class FlowsMcpServersModal extends PlatformModal {
                 </div>
             `;
         })}
-        ${(this._catalogItems.length as any) < (this._catalogTotal as any)
+        ${(this._catalogItems.length) < (this._catalogTotal)
             ? this._renderLoadMore(() => this._loadCatalog(), this._catalogLoading)
             : html``}
         `;
     }
 
     _renderListTabs() {
-        const catalogLabel = (this._catalogTotal as any) > 0
+        const catalogLabel = (this._catalogTotal) > 0
             ? this.t('mcp_servers_modal.tab_catalog_count', { n: this._catalogTotal })
             : this.t('mcp_servers_modal.tab_catalog');
-        const installedLabel = (this._installedTotal as any) > 0
+        const installedLabel = (this._installedTotal) > 0
             ? this.t('mcp_servers_modal.tab_installed_count', { n: this._installedTotal })
             : this.t('mcp_servers_modal.tab_installed');
         return html`
@@ -1542,7 +1695,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         `;
     }
 
-    _renderLoadMore(handler: any, loading: any) {
+    _renderLoadMore(handler: () => Promise<void>, loading: boolean) {
         return html`
             <div class="mcp-load-more">
                 <platform-button variant="ghost" density="compact" ?disabled=${loading} @click=${() => { void handler(); }}>
@@ -1571,12 +1724,12 @@ export class FlowsMcpServersModal extends PlatformModal {
     }
 
     _renderBrandingView() {
-        if (this._brandingLoading && (this._brandingItems.length as any) === 0) {
+        if (this._brandingLoading && (this._brandingItems.length) === 0) {
             return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
         }
         const slugSuggestions = this._brandingSlugSuggestions;
-        const selectedPreview = (this._brandingItems.find as any)((row: any) => row.server_id === this._brandingForm.server_id);
-        const emptyKey = (this._brandingSearch.trim() as any).length > 0
+        const selectedPreview = this._brandingItems.find((row) => row.server_id === this._brandingForm.server_id);
+        const emptyKey = (this._brandingSearch.trim()).length > 0
             ? 'mcp_servers_modal.branding_empty_search'
             : 'mcp_servers_modal.branding_empty';
         return html`
@@ -1598,7 +1751,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                             }}
                         ></platform-field>
                     </div>
-                    ${(slugSuggestions as any).length > 0
+                    ${(slugSuggestions).length > 0
                         ? html`
                             <div class="mcp-branding-slugs" aria-label=${this.t('mcp_servers_modal.branding_slug_suggest_aria')}>
                                 ${repeat(
@@ -1646,19 +1799,19 @@ export class FlowsMcpServersModal extends PlatformModal {
                     </platform-button>
                 </section>
                 <section class="mcp-branding-gallery" aria-label=${this.t('mcp_servers_modal.branding_gallery_aria')}>
-                    ${(this._brandingItems.length as any) === 0
+                    ${(this._brandingItems.length) === 0
                         ? html`<div class="mcp-empty">${this.t(emptyKey)}</div>`
                         : html`
                             <div class="mcp-branding-grid">
                                 ${repeat(
                                     this._brandingItems,
-                                    (row) => (typeof (row as any).server_id === 'string' ? (row as any).server_id : ''),
+                                    (row) => (typeof (row).server_id === 'string' ? (row).server_id : ''),
                                     (row) => html`
                                         <article
                                             class="mcp-branding-card mcp-card-shell"
                                             role="button"
                                             tabindex="0"
-                                            aria-selected=${this._brandingEditingSlug === (row as any).server_id ? 'true' : 'false'}
+                                            aria-selected=${this._brandingEditingSlug === (row).server_id ? 'true' : 'false'}
                                             @click=${() => this._editBranding(row)}
                                             @keydown=${(e: KeyboardEvent) => {
                                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -1675,7 +1828,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                                                     danger
                                                     title=${this.t('mcp_servers_modal.action_delete_aria')}
                                                     aria-label=${this.t('mcp_servers_modal.action_delete_aria')}
-                                                    @click=${(e: Event) => { e.stopPropagation(); void this._deleteBranding((row as any).server_id); }}
+                                                    @click=${(e: Event) => { e.stopPropagation(); void this._deleteBranding((row).server_id); }}
                                                 >
                                                     <platform-icon name="trash" size="16"></platform-icon>
                                                 </platform-button>
@@ -1683,14 +1836,14 @@ export class FlowsMcpServersModal extends PlatformModal {
                                             <div class="mcp-branding-card-icon">
                                                 ${renderMcpServerIcon(row, 40)}
                                             </div>
-                                            <code class="mcp-branding-card-title">${(row as any).server_id}</code>
+                                            <code class="mcp-branding-card-title">${(row).server_id}</code>
                                             <span class="mcp-branding-card-hint">${this.t('mcp_servers_modal.branding_card_edit')}</span>
                                         </article>
                                     `,
                                 )}
                             </div>
                         `}
-                    ${(this._brandingItems.length as any) < (this._brandingTotal as any)
+                    ${(this._brandingItems.length) < (this._brandingTotal)
                         ? this._renderLoadMore(() => this._loadBranding(), this._brandingLoading)
                         : html``}
                 </section>
@@ -1719,7 +1872,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                         mode="edit"
                         .label=${this.t('mcp_servers_modal.label_id')}
                         .hint=${this.t('mcp_servers_modal.hint_id')}
-                        .value=${(f as any).server_id}
+                        .value=${(f).server_id}
                         placeholder=${phId}
                         ?disabled=${isEdit}
                         @change=${(e: CustomEvent) => {
@@ -1736,7 +1889,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                         type="string"
                         mode="edit"
                         .label=${this.t('mcp_servers_modal.label_name')}
-                        .value=${(f as any).name}
+                        .value=${(f).name}
                         placeholder=${phName}
                         @change=${(e: CustomEvent) => {
                             const v = e.detail.value;
@@ -1754,7 +1907,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                         .label=${this.t('mcp_servers_modal.label_url')}
                         .hint=${this.t('mcp_servers_modal.hint_url')}
                         input-type="url"
-                        .value=${(f as any).url}
+                        .value=${(f).url}
                         placeholder=${phUrl}
                         @change=${(e: CustomEvent) => {
                             const v = e.detail.value;
@@ -1771,14 +1924,14 @@ export class FlowsMcpServersModal extends PlatformModal {
                         mode="edit"
                         .label=${this.t('mcp_servers_modal.label_transport')}
                         .hint=${this.t('mcp_servers_modal.hint_transport')}
-                        .value=${(f as any).transport_type}
+                        .value=${(f).transport_type}
                         .config=${transportEnumConfig}
                         @change=${(e: CustomEvent) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
                                 throw new TypeError('flows-mcp-servers-modal: transport_type expects string detail.value');
                             }
-                            this._form = { ...this._form, transport_type: v };
+                            this._form = { ...this._form, transport_type: normalizeMcpTransportType(v) };
                         }}
                     ></platform-field>
                 </div>
@@ -1787,7 +1940,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                         type="string"
                         mode="edit"
                         .label=${this.t('mcp_servers_modal.label_description')}
-                        .value=${(f as any).description}
+                        .value=${(f).description}
                         placeholder=${phDesc}
                         @change=${(e: CustomEvent) => {
                             const v = e.detail.value;
@@ -1825,7 +1978,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                         )}
                     </div>
                     <flows-http-headers-editor
-                        .value=${isPlainObject((f as any).headers) ? (f as any).headers : {}}
+                        .value=${isPlainObject((f).headers) ? (f).headers : {}}
                         @change=${(e: CustomEvent) => {
                             const d = e.detail;
                             if (d === null || typeof d !== 'object' || !('value' in d)) {
@@ -1835,7 +1988,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                             if (!isPlainObject(headers)) {
                                 throw new TypeError('flows-mcp-servers-modal: headers must be an object');
                             }
-                            this._form = { ...this._form, headers };
+                            this._form = { ...this._form, headers: stringHeaders(headers) };
                             this._formError = null;
                         }}
                     ></flows-http-headers-editor>
@@ -1946,7 +2099,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         const saveLabel = isEdit
             ? this.t('common.action_save')
             : this.t('mcp_servers_modal.action_add');
-        const disabled = !this._formCanSave() || this._saving || this._update.busy;
+        const disabled = !this._formCanSave() || this._saving;
         return html`
             <platform-button ?disabled=${this._saving} @click=${() => this._goList()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${disabled} @click=${() => { this._save(); }}>
@@ -1963,7 +2116,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         const saveLabel = isEdit
             ? this.t('common.action_save')
             : this.t('mcp_servers_modal.action_add');
-        const disabled = !this._formCanSave() || this._saving || this._update.busy;
+        const disabled = !this._formCanSave() || this._saving;
         return this._renderHeaderSaveIcon({
             onClick: () => { this._save(); },
             disabled,

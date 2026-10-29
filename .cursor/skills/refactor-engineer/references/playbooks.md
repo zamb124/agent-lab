@@ -31,8 +31,8 @@
 
 1. Одна таблица — один файл `apps/<svc>/models/<entity>.py` (flows — `apps/flows/src/models/`, домен в `core` — `core/<domain>/models/<entity>.py`), класс и его `@classmethod`-запросы переносятся без изменения поведения.
 2. Импорты всех потребителей (сервисы, api, realtime, tests, backfill, scripts) — на новый путь; re-export из старого модуля не оставлять.
-3. `migrations/services.json`: `models_module` указывает на пакет с моделями; `uv run python scripts/db_migrate.py --help` и тесты миграций подтверждают discovery.
-4. `scripts/check_cross_service_imports.py` разрешает `apps.<svc>.models.*` — импорт peer-моделей из `db` заменяется на `models`.
+3. `migrations/services.json`: `models_module` указывает на пакет с моделями; `uv run python -m scripts.db.migrate --help` и тесты миграций подтверждают discovery.
+4. `scripts/gates/backend/cross_service_imports.py` разрешает `apps.<svc>.models.*` — импорт peer-моделей из `db` заменяется на `models`.
 5. Непустой `apps/<svc>/db/` после переноса — только DB-примитивы; они переезжают в `core/db/`, каталог удаляется.
 6. Проверка: `make test-up` (миграции поднимаются), `uv run pytest tests/<svc>/ -q`.
 
@@ -82,17 +82,17 @@ return_contract, error_contract, idempotency, tenant_scope, database_alias, call
 1. Граница — один файл `apps/<svc>/api/*.py` или семейство эндпоинтов.
 2. Эндпоинт команды: логика уходит в `op_*`/сервис, хендлер собирает payload и зовёт `op_*`; ошибки — `raise_*` (`core/websocket/operation.py`) или `Platform*Error` (`core/errors/boundary.py`).
 3. Протокольный хендлер из `PROTOCOL_HANDLERS`: те же `raise_*`/`Platform*Error`; внешняя wire-спека со своим конвертом — `extra_exception_handlers` в `create_service_app`.
-4. `error_code` — ключ `platform:errors.*` в ru и en; кириллица в аргументах `raise` запрещена (`scripts/check_backend_error_i18n.py`).
+4. `error_code` — ключ `platform:errors.*` в ru и en; кириллица в аргументах `raise` запрещена (`scripts/gates/backend/backend_error_i18n.py`).
 5. `ratchet_list.py http_exception_in_services` → число ниже; `check_ratchet_counts.py --update`.
 
 ## Клиент → `core/clients`
 
-Когда: C2 — клиент в `apps/*/clients/`, прямой `httpx`.
+Когда: C2 — клиент в `apps/*/clients/`, прямой `httpx2`.
 
 1. Существующий клиент того же сервиса в `core/clients/` — использовать его; нет — перенести класс в `core/clients/<service>_client.py` поверх `ServiceClient`.
 2. Модель владельца доступна процессу (общая БД) — клиент не нужен: чтение через `await Model.method(...)` (`architecture.mdc` § Межсервисный доступ).
 3. Все импорты — на новый путь; старый модуль удаляется. Tools вызывают клиент тонким `@tool` (`tools.mdc`).
-4. Прямой `httpx.AsyncClient` к внешнему API — через `core/clients/` и `get_httpx_client` (`integrations.mdc`).
+4. Прямой `httpx2.AsyncClient` к внешнему API — через `core/clients/` и `get_httpx_client` (`integrations.mdc`).
 
 ## Копипаста → `core`
 
@@ -108,7 +108,7 @@ return_contract, error_contract, idempotency, tenant_scope, database_alias, call
 
 1. Найти всех вызывающих геттера; каждый — boundary (`di.<field>`) или внутренний класс (constructor dependency).
 2. Компонент становится полем `<Process>Di` нужных процессов; ресурс с teardown или конфиг → примитивы — `@recipe` в `di.py`.
-3. Удалить геттер и module-global; `scripts/check_dependency_injection_canon.py` зелёный; `check_di(<Process>Di)` в тесте.
+3. Удалить геттер и module-global; `scripts/gates/backend/dependency_injection.py` зелёный; `check_di(<Process>Di)` в тесте.
 4. Исключение одно: `set_billing_service` (`architecture.mdc` § Service Kit DI).
 
 ## Дрейф правил
@@ -126,10 +126,10 @@ return_contract, error_contract, idempotency, tenant_scope, database_alias, call
 
 Когда: режим `gate`, норма с `[без гейта]`, или класс нарушения без гейта в срезе `slice`.
 
-1. Выбрать существующий скрипт того же канона (`references/gates.md`): DI и boundary — `scripts/check_dependency_injection_canon.py`; строгость — `scripts/audit_wider_repo_strictness.py` или ratchet; транспорт — `scripts/check_rest_handlers_call_ops.py`; UI — `scripts/check_ui_canon.sh`. Для слоёв и моделей подходящего скрипта нет — новый `scripts/check_<канон>_canon.py`.
+1. Выбрать существующий скрипт того же канона (`references/gates.md`): DI и boundary — `scripts/gates/backend/dependency_injection.py`; строгость — `scripts/gates/backend/wider_repo_strictness.py` или ratchet; транспорт — `scripts/gates/backend/rest_handlers_call_ops.py`; один `PlatformModel` на файл — `scripts/gates/backend/model_files.py`; UI — `scripts/gates/frontend/ui_canon.sh`. Нового нет — модуль `scripts/gates/<область>/<имя>.py` и строка в `scripts/gates/registry.py`.
 2. Детектор — AST или точный regex, ограниченный границей нормы; вывод — `path:line: <норма>`; выход 1 при нарушении.
 3. Запустить на текущем коде: детектор находит известные нарушения. Ничего не нашёл — он неверен.
-4. Нарушений больше одного среза — ratchet-метрика: `RatchetMetric` в `scripts/check_ratchet_counts.py` и текущее число в `scripts/ratchet_baseline.json` (`--update`).
+4. Нарушений больше одного среза — ratchet-метрика: `RatchetMetric` в `scripts/gates/backend/ratchet_counts.py` и текущее число в `scripts/gates/backend/ratchet_baseline.json` (`--update`).
 5. Новый скрипт — строка в `mk/lint.mk` (`_lint-py`) или зависимость `check-events-canon` в `Makefile`.
 6. Правило-владелец: снять `[без гейта]`, добавить гейт в «Гейты»; allowlist — только пункты `Исключение:`.
 7. Проверка: `gates_report.py` показывает новый шаг; `make lint` проходит, если долг оформлен ratchet.

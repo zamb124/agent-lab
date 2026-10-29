@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface PulseQuantRow {
     product_id?: unknown;
@@ -25,6 +26,19 @@ interface PulseTransferRow {
 interface WarehousePulseResult {
     quants?: PulseQuantRow[];
     transfers?: PulseTransferRow[];
+}
+
+function isWarehousePulse(value: unknown): value is WarehousePulseResult {
+    if (!isPlainRecord(value)) {
+        return false;
+    }
+    if (value.quants !== undefined && !Array.isArray(value.quants)) {
+        return false;
+    }
+    if (value.transfers !== undefined && !Array.isArray(value.transfers)) {
+        return false;
+    }
+    return true;
 }
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
@@ -82,7 +96,8 @@ export class StockHomePage extends PlatformPage {
     }
 
     override render() {
-        const pulse = this._pulse.lastResult as WarehousePulseResult | null;
+        const rawPulse = this._pulse.lastResult;
+        const pulse = isWarehousePulse(rawPulse) ? rawPulse : null;
         return html`
             <div class="wrap">
                 <h1>${this.t('home.title')}</h1>

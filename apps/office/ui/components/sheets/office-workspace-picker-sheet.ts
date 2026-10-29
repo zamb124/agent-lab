@@ -20,7 +20,7 @@ import '@platform/lib/components/platform-icon.js';
 import type { CSSResultGroup, TemplateResult } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
-import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 
 const FACTORY_NAME = 'office/namespaces';
 
@@ -28,8 +28,8 @@ export class OfficeWorkspacePickerSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'office.workspace_picker';
     static i18nNamespace = 'documents';
     private _namespaces: ResourceController;
-    private _authSel: SelectController<unknown>;
-    private _namespaceSelectionByCompany: SelectController<unknown>;
+    private _authSel: SelectController<AuthUser | null>;
+    private _namespaceSelectionByCompany: SelectController<Record<string, string>>;
 
     static override styles: CSSResultGroup = [
         PlatformBottomSheet.styles,
@@ -86,7 +86,7 @@ export class OfficeWorkspacePickerSheet extends PlatformBottomSheet {
         this._namespaces = this.useResource(FACTORY_NAME);
         this._authSel = this.select((s) => s.auth.user);
         this._namespaceSelectionByCompany = this.select(
-            (s) => (s.ui.namespace as Record<string, unknown>).selectionByCompany,
+            (s) => s.ui.namespace.selectionByCompany,
         );
     }
 
@@ -97,25 +97,22 @@ export class OfficeWorkspacePickerSheet extends PlatformBottomSheet {
     }
 
     private _currentSelection() {
-        const user = this._authSel.value as { company_id?: unknown } | null;
-        const rawMap = this._namespaceSelectionByCompany.value;
-        if (rawMap !== undefined && rawMap !== null && !isPlainRecord(rawMap)) {
-            throw new Error('office workspace picker: selection map must be an object');
-        }
-        const map = isPlainRecord(rawMap) ? rawMap : {};
+        const user = this._authSel.value;
+        const map = this._namespaceSelectionByCompany.value;
         if (!user || typeof user.company_id !== 'string') return null;
         const cid = user.company_id.trim();
         if (cid.length === 0) return null;
         if (Object.prototype.hasOwnProperty.call(map, cid)) {
             const entry = map[cid];
-            return entry === 'all' ? null : entry;
+            if (entry === undefined || entry === 'all') return null;
+            return entry;
         }
         const sidebar = getPlatformNamespaceSidebarSelection(cid);
         return sidebar === 'all' ? null : sidebar;
     }
 
     private _select(value: string) {
-        const user = this._authSel.value as { company_id?: unknown } | null;
+        const user = this._authSel.value;
         if (!user || typeof user.company_id !== 'string') {
             throw new Error('office-workspace-picker-sheet: cannot change namespace without active company_id');
         }

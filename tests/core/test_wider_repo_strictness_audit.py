@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.audit_wider_repo_strictness import (
+from scripts.gates.backend.wider_repo_strictness import (
     collect_getattr_findings,
     collect_text_findings,
     strict_text_debt,

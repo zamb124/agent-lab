@@ -44,32 +44,38 @@ import {
 
 const SEARCH_DEBOUNCE_MS = 280;
 
-function _templatesFromResult(result: any) {
-    if (result && typeof result === 'object' && Array.isArray(result.templates)) {
-        return result.templates;
+function _templatesFromResult(result: unknown) {
+    if (!isPlainObject(result) || !Array.isArray(result.templates)) {
+        return [];
     }
-    return [];
+    return result.templates;
 }
 
-function _lower(s: any) {
+function _lower(s: unknown) {
     if (typeof s === 'string' && s.length > 0) {
         return s.toLowerCase();
     }
     return '';
 }
 
-function _tagsFromItem(t: any) {
-    if (t && Array.isArray(t.tags)) {
-        return t.tags.filter((x: any) => typeof x === 'string' && x.length > 0);
+function _tagsFromItem(t: unknown) {
+    if (!isPlainObject(t) || !Array.isArray(t.tags)) {
+        return [];
     }
-    return [];
+    const tags: string[] = [];
+    for (const tag of t.tags) {
+        if (typeof tag === 'string' && tag.length > 0) {
+            tags.push(tag);
+        }
+    }
+    return tags;
 }
 
-function _hasInlineCode(t: any) {
-    return t && typeof t.code === 'string' && t.code.trim().length > 0;
+function _hasInlineCode(t: unknown) {
+    return isPlainObject(t) && typeof t.code === 'string' && t.code.trim().length > 0;
 }
 
-function _truncateText(text: any, maxLen = 180) {
+function _truncateText(text: unknown, maxLen = 180) {
     if (typeof text !== 'string' || text.length === 0) {
         return '';
     }
@@ -92,7 +98,7 @@ function presentText(value: unknown): string {
     return String(value);
 }
 
-function _sdkMethodName(raw: any) {
+function _sdkMethodName(raw: unknown) {
     let name = presentText(raw)
         .replace(/[^0-9A-Za-z_]/g, '_')
         .replace(/^_+|_+$/g, '');
@@ -108,7 +114,7 @@ function _sdkMethodName(raw: any) {
     return name;
 }
 
-function _exportedMethodName(raw: any) {
+function _exportedMethodName(raw: unknown) {
     const matched = presentText(raw).match(/[0-9A-Za-z]+/g);
     const parts = matched === null ? [] : matched;
     if (parts.length === 0) {
@@ -125,27 +131,27 @@ function _jsonString(value: unknown) {
     return JSON.stringify(String(value));
 }
 
-function _schemaProperties(schema: any) {
+function _schemaProperties(schema: unknown) {
     if (!isPlainObject(schema) || !isPlainObject(schema.properties)) {
         return {};
     }
-    const out = {};
+    const out: Record<string, Record<string, unknown>> = {};
     for (const [name, prop] of Object.entries(schema.properties)) {
         if (isPlainObject(prop)) {
-            (out as any)[name] = prop;
+            out[name] = prop;
         }
     }
     return out;
 }
 
-function _parametersSchemaObject(schema: any) {
+function _parametersSchemaObject(schema: unknown) {
     if (isPlainObject(schema) && schema.type === 'object' && isPlainObject(schema.properties)) {
         return schema;
     }
     return { type: 'object', properties: {}, required: [] };
 }
 
-function _toolCallCode(language: string, toolId: string, parametersSchema: any) {
+function _toolCallCode(language: string, toolId: string, parametersSchema: unknown) {
     const lang = normalizeFlowCodeLanguage(language);
     const method = _sdkMethodName(toolId);
     const exported = _exportedMethodName(method);
@@ -181,15 +187,17 @@ function _toolCallCode(language: string, toolId: string, parametersSchema: any) 
     return `using System.Collections.Generic;\nusing System.Threading.Tasks;\n\nasync Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n{\n    var result = await tools.${exported}(${payload});\n    return new Dictionary<string, object?> { ["result"] = result };\n}\n`;
 }
 
-function _generatedToolConfig(t: any, language: string) {
+function _generatedToolConfig(t: unknown, language: string) {
+    if (!isPlainObject(t) || typeof t.tool_id !== 'string' || t.tool_id.length === 0) {
+        throw new Error('flows-library-picker-modal: tool config requires tool_id');
+    }
     const parametersSchema = _parametersSchemaObject(t.parameters_schema);
-    const cfg: any = {
+    return {
         tool_id: t.tool_id,
         code: _toolCallCode(language, t.tool_id, parametersSchema),
         language: normalizeFlowCodeLanguage(language),
         parameters_schema: parametersSchema,
     };
-    return cfg;
 }
 
 export class FlowsLibraryPickerModal extends PlatformModal {
@@ -212,19 +220,19 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         _collapsedTags: { state: true },
         _pickerLoadingMore: { state: true },
     }
-    declare onPick: ((payload: any) => void) | null;
-    declare onPickBatch: ((payload: any) => void) | null;
-    declare onCommit: ((payload: any) => void) | null;
+    declare onPick: ((payload: unknown) => void) | null;
+    declare onPickBatch: ((payload: unknown) => void) | null;
+    declare onCommit: ((payload: unknown) => void) | null;
     declare pickMode: string;
     declare _search: string;
     declare _toolCategoryTab: string;
     declare _codeLanguage: string;
-    declare _testFeedback: Record<string, any> | null;
-    declare _testingServerId: any;
-    declare _syncingServerId: any;
-    declare _selectedToolIds: any[];
-    declare _tagGroupDescriptions: Record<string, any>;
-    declare _collapsedTags: Record<string, any>;
+    declare _testFeedback: { serverId: string; ok: true; toolsCount: number } | { serverId: string; ok: false; message: string } | null;
+    declare _testingServerId: string | null;
+    declare _syncingServerId: string | null;
+    declare _selectedToolIds: string[];
+    declare _tagGroupDescriptions: Record<string, { description_ru: string; description_en: string }>;
+    declare _collapsedTags: Record<string, boolean>;
     declare _pickerLoadingMore: boolean;
 ;
 
@@ -807,17 +815,17 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     private _mcpServers: ResourceController;
     private _syncOp: OpController;
     private _testOp: OpController;
-    private _localeSelect: SelectController<any>;
-    private _pickerItemsByCategory: Map<any, any>;
-    private _pickerNextOffsetByCategory: Map<any, any>;
-    private _pickerHasMoreByCategory: Map<any, any>;
-    private _pickerErrorByCategory: Map<any, any>;
-    private _pickerLoadingCategory: any;
+    private _localeSelect: SelectController<string>;
+    private _pickerItemsByCategory: Map<string, unknown[]>;
+    private _pickerNextOffsetByCategory: Map<string, number>;
+    private _pickerHasMoreByCategory: Map<string, boolean>;
+    private _pickerErrorByCategory: Map<string, string>;
+    private _pickerLoadingCategory: string | null;
     private _pickerActiveQuery: string;
     private _pickerLoadGeneration: number;
-    private _searchDebounceTimer: any;
-    private _scrollObserver: any;
-    private _observedSentinel: any;
+    private _searchDebounceTimer: ReturnType<typeof setTimeout> | null;
+    private _scrollObserver: IntersectionObserver | null;
+    private _observedSentinel: Element | null;
 
     constructor() {
         super();
@@ -853,7 +861,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._mcpServers = this.useResource('flows/mcp_servers', { autoload: false });
         this._syncOp = this.useOp('flows/mcp_server_sync');
         this._testOp = this.useOp('flows/mcp_server_test');
-        this._localeSelect = this.select((s) => (s as any).i18n.locale);
+        this._localeSelect = this.select((s) => (s).i18n.locale);
     }
 
     _isCodeNodeTemplates() {
@@ -990,7 +998,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const offset = append ? (storedOffset === undefined ? 0 : storedOffset) : 0;
         try {
             const page = await fetchToolsAllPage(
-                (payload: any) => this._toolsAll.run(payload),
+                (payload: unknown) => this._toolsAll.run(payload),
                 {
                     offset,
                     picker_category: category,
@@ -1003,12 +1011,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             if (this._pickerSearchQuery() !== q) {
                 return;
             }
-            const prev = append && Array.isArray(this._pickerItemsByCategory.get(category))
-                ? this._pickerItemsByCategory.get(category)
-                : [];
+            const stored = this._pickerItemsByCategory.get(category);
+            const prev = append && stored !== undefined ? stored : [];
             const seen = new Set(
                 prev
-                    .map((item: any) => (isPlainObject(item) && typeof item.tool_id === 'string' ? item.tool_id : ''))
+                    .map((item: unknown) => (isPlainObject(item) && typeof item.tool_id === 'string' ? item.tool_id : ''))
                     .filter((id: string) => id.length > 0),
             );
             const merged = [...prev];
@@ -1051,7 +1058,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         await this._ensurePickerCategoryLoaded(category, { append: true });
     }
 
-    _onToolCategoryTabChange(nextTab: any) {
+    _onToolCategoryTabChange(nextTab: string) {
         this._toolCategoryTab = nextTab;
         void this._ensurePickerCategoryLoaded(this._currentPickerCategory());
         if (this._usesMcpGroupedLayout()) {
@@ -1097,8 +1104,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     async _loadTagGroupDescriptions() {
-        /** @type {Record<string, { description_ru: string, description_en: string }>} */
-        const map = {};
+        const map: Record<string, { description_ru: string; description_en: string }> = {};
         let offset = 0;
         while (true) {
             const result = await this._toolTagGroups.run({
@@ -1116,7 +1122,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 if (!isPlainObject(item) || typeof item.tag !== 'string' || item.tag.length === 0) {
                     continue;
                 }
-                (map as any)[item.tag] = {
+                map[item.tag] = {
                     description_ru: typeof item.description_ru === 'string' ? item.description_ru : '',
                     description_en: typeof item.description_en === 'string' ? item.description_en : '',
                 };
@@ -1141,17 +1147,21 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         });
     }
 
-    _toolsAllItems() {
+    _toolsAllItems(): Record<string, unknown>[] {
         const category = this._currentPickerCategory();
         const cached = this._pickerItemsByCategory.get(category);
-        if (Array.isArray(cached)) {
-            return cached;
+        if (cached !== undefined) {
+            return cached.filter((item): item is Record<string, unknown> => isPlainObject(item));
         }
         const r = this._toolsAll.lastResult;
-        if (!isPlainObject(r) || !Array.isArray((r as any).items)) {
+        if (!isPlainObject(r)) {
             return [];
         }
-        return (r as any).items.filter((x: any) => isPlainObject(x));
+        const items = r.items;
+        if (!Array.isArray(items)) {
+            return [];
+        }
+        return items.filter((item): item is Record<string, unknown> => isPlainObject(item));
     }
 
     _templateListRaw() {
@@ -1163,7 +1173,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
      * @param {Record<string, unknown>} t
      * @returns {Record<string, unknown> | null}
      */
-    _normalizeCatalogTemplate(t: any) {
+    _normalizeCatalogTemplate(t: unknown) {
         if (!isPlainObject(t)) {
             return null;
         }
@@ -1191,9 +1201,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
      * Объединённый список: каталог code-templates + registry code tools.
      * @returns {Record<string, unknown>[]}
      */
-    _codeNodePickRows() {
+    _codeNodePickRows(): Record<string, unknown>[] {
         const wantedLanguage = normalizeFlowCodeLanguage(this._codeLanguage);
-        const catalog: any[] = [];
+        const catalog: Record<string, unknown>[] = [];
         for (const raw of this._templateListRaw()) {
             const normalized = this._normalizeCatalogTemplate(raw);
             if (normalized === null) {
@@ -1204,7 +1214,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             catalog.push(normalized);
         }
-        const registry: any[] = [];
+        const registry: Record<string, unknown>[] = [];
         for (const t of this._toolsAllItems()) {
             if (!isPlainObject(t) || t.item_type === 'flow') {
                 continue;
@@ -1218,8 +1228,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             registry.push({ ...t, _pickerSource: 'registry' });
         }
         const seen = new Set();
-        const rows: any[] = [];
+        const rows: Record<string, unknown>[] = [];
         for (const item of [...catalog, ...registry]) {
+            if (!isPlainObject(item)) {
+                continue;
+            }
             const toolId = typeof item.tool_id === 'string' ? item.tool_id : '';
             if (toolId.length === 0 || seen.has(toolId)) {
                 continue;
@@ -1230,15 +1243,18 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return rows;
     }
 
-    _pickModeRows() {
+    _pickModeRows(): Record<string, unknown>[] {
         if (this._isCodeNodeTemplates()) {
-            const list: any[] = this._codeNodePickRows();
+            const list = this._codeNodePickRows();
             const q = _lower(this._pickerSearchQuery());
             if (q.length === 0) {
                 return list;
             }
             // Каталог шаблонов — client filter; registry уже отфильтрован серверным q.
-            return list.filter((t: any) => {
+            return list.filter((t) => {
+                if (!isPlainObject(t)) {
+                    return false;
+                }
                 if (t._pickerSource === 'registry') {
                     return true;
                 }
@@ -1254,7 +1270,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return this._toolsAllItems();
     }
 
-    _mcpServerIdFromTool(item: any) {
+    _mcpServerIdFromTool(item: unknown) {
         if (!isPlainObject(item)) {
             throw new Error('flows-library-picker-modal: MCP tool item required');
         }
@@ -1269,10 +1285,13 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _mcpToolsBase() {
-        return this._toolsAllItems().filter((t: any) => isMcpToolRegistryItem(t));
+        return this._toolsAllItems().filter((t: unknown) => isMcpToolRegistryItem(t));
     }
 
-    _toolMatchesSearch(t: any, q: any) {
+    _toolMatchesSearch(t: unknown, q: string) {
+        if (!isPlainObject(t)) {
+            return false;
+        }
         if (q.length === 0) {
             return true;
         }
@@ -1284,7 +1303,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             || _lower(desc).indexOf(q) >= 0;
     }
 
-    _serverRecordMatchesSearch(server: any, q: any) {
+    _serverRecordMatchesSearch(server: unknown, q: string) {
+        if (!isPlainObject(server)) {
+            return false;
+        }
         if (q.length === 0) {
             return true;
         }
@@ -1312,7 +1334,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
         // Порядок с API: platform → yaml allowlist → manual → прочий catalog.
         const activeServers = asArray(this._mcpServers.items)
-            .filter((s) => isPlainObject(s) && s.is_active === true);
+            .filter((server): server is Record<string, unknown> => isPlainObject(server) && server.is_active === true);
 
         const knownServerIds = new Set();
         const groups = [];
@@ -1326,7 +1348,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             const serverTools = storedTools === undefined ? [] : storedTools;
             const filteredTools = q.length === 0
                 ? serverTools
-                : serverTools.filter((t: any) => this._toolMatchesSearch(t, q));
+                : serverTools.filter((t: unknown) => this._toolMatchesSearch(t, q));
             const include = q.length === 0
                 || this._serverRecordMatchesSearch(server, q)
                 || filteredTools.length > 0;
@@ -1345,7 +1367,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             const filteredTools = q.length === 0
                 ? serverTools
-                : serverTools.filter((t: any) => this._toolMatchesSearch(t, q));
+                : serverTools.filter((t: unknown) => this._toolMatchesSearch(t, q));
             const synthetic = {
                 server_id: serverId,
                 name: serverId,
@@ -1380,8 +1402,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (q.length === 0) {
             return [];
         }
-        const flat = [];
+        const flat: { tool: Record<string, unknown>; server: Record<string, unknown> }[] = [];
         for (const tool of this._mcpToolsBase()) {
+            if (!isPlainObject(tool)) {
+                continue;
+            }
             if (!this._toolMatchesSearch(tool, q)) {
                 continue;
             }
@@ -1404,7 +1429,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
         const serverOrder = new Map();
         for (const [index, server] of asArray(this._mcpServers.items).entries()) {
-            if (typeof server.server_id === 'string' && server.server_id.length > 0) {
+            if (!isPlainObject(server) || typeof server.server_id !== 'string' || server.server_id.length === 0) {
+                continue;
+            }
+            if (server.server_id.length > 0) {
                 serverOrder.set(server.server_id, index);
             }
         }
@@ -1427,7 +1455,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return flat;
     }
 
-    _renderMcpFlatToolCard(entry: any) {
+    _renderMcpFlatToolCard(entry: { tool: Record<string, unknown>; server: Record<string, unknown> }) {
         const { tool, server } = entry;
         const title = registryItemTitle(tool);
         const desc = typeof tool.description === 'string' ? _truncateText(tool.description, 120) : '';
@@ -1463,7 +1491,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _renderMcpFlatSearchBody(showTabs: any) {
+    _renderMcpFlatSearchBody(showTabs: unknown) {
         const flat = this._buildMcpFlatSearchTools();
         if (flat.length === 0) {
             return html`
@@ -1496,7 +1524,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _mcpServerById(serverId: any) {
+    _mcpServerById(serverId: unknown) {
         if (typeof serverId !== 'string' || serverId.length === 0) {
             return null;
         }
@@ -1518,7 +1546,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return this.t('mcp_servers_modal.transport_unknown');
     }
 
-    _mcpSourceLabel(source: any) {
+    _mcpSourceLabel(source: unknown) {
         if (source === 'platform') {
             return this.t('mcp_servers_modal.source_platform');
         }
@@ -1539,7 +1567,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             || (this._mcpServers.loading && serversEmpty);
     }
 
-    async _syncMcpServer(serverId: any) {
+    async _syncMcpServer(serverId: unknown) {
         if (typeof serverId !== 'string' || serverId.length === 0) {
             throw new Error('flows-library-picker-modal: serverId required for sync');
         }
@@ -1553,7 +1581,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
     }
 
-    async _runMcpTest(serverId: any) {
+    async _runMcpTest(serverId: unknown) {
         if (typeof serverId !== 'string' || serverId.length === 0) {
             throw new Error('flows-library-picker-modal: serverId required for test');
         }
@@ -1609,7 +1637,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _renderMcpTestFeedback(serverId: any) {
+    _renderMcpTestFeedback(serverId: unknown) {
         const fb = this._testFeedback;
         if (fb === null || fb.serverId !== serverId) {
             return html``;
@@ -1628,7 +1656,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _renderMcpToolCard(t: any) {
+    _renderMcpToolCard(t: Record<string, unknown>) {
         const title = registryItemTitle(t);
         const desc = typeof t.description === 'string' ? _truncateText(t.description, 120) : '';
         const mcpServerId = typeof t.mcp_server_id === 'string' ? t.mcp_server_id : '';
@@ -1647,7 +1675,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _renderMcpServerSection(group: any) {
+    _renderMcpServerSection(group: { server: Record<string, unknown>; tools: readonly Record<string, unknown>[] }) {
         const server = group.server;
         const serverId = server.server_id;
         const tools = group.tools;
@@ -1731,7 +1759,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         ? html`<div class="mcp-picker-server-empty">${this.t('tool_picker_modal.mcp_server_empty')}</div>`
                         : html`
                             <div class="mcp-picker-tools-grid" role="list">
-                                ${tools.map((t: any) => this._renderMcpToolCard(t))}
+                                ${tools.map((t) => this._renderMcpToolCard(t))}
                             </div>
                         `}
                 </div>
@@ -1917,7 +1945,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return typeof this.onPickBatch === 'function';
     }
 
-    _pickToolLike(t: any) {
+    _pickToolLike(t: unknown) {
         if (this._isCodeNodeTemplates()) {
             if (!isPlainObject(t)) {
                 return;
@@ -1950,7 +1978,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         });
     }
 
-    _pickAllMcpToolsFromServer(tools: any) {
+    _pickAllMcpToolsFromServer(tools: unknown) {
         const fn = this.onPickBatch;
         if (typeof fn !== 'function') {
             return;
@@ -1973,7 +2001,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         });
     }
 
-    _templateParametersSchema(t: any, parsed: any) {
+    _templateParametersSchema(t: unknown, parsed: unknown) {
+        if (!isPlainObject(t)) {
+            return { type: 'object', properties: {}, required: [] };
+        }
         if (isPlainObject(t.parameters_schema)) {
             return _parametersSchemaObject(t.parameters_schema);
         }
@@ -1983,7 +2014,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return { type: 'object', properties: {}, required: [] };
     }
 
-    async _commitTemplate(t: any) {
+    async _commitTemplate(t: unknown) {
+        if (!isPlainObject(t)) {
+            return;
+        }
         if (!isPlainObject(t) || typeof t.code !== 'string' || t.code.length === 0) {
             return;
         }
@@ -1996,7 +2030,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             });
         this.close();
         if (typeof fn === 'function') {
-            const cfg: any = {
+            const cfg: Record<string, unknown> = {
                 code: t.code,
                 language,
             };
@@ -2010,7 +2044,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
     }
 
-    _commitTool(t: any) {
+    _commitTool(t: unknown) {
         if (!isPlainObject(t) || typeof t.tool_id !== 'string' || t.tool_id.length === 0) {
             return;
         }
@@ -2096,8 +2130,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _tagGroupTitle(tag: any) {
-        const knownKeys = {
+    _tagGroupTitle(tag: string) {
+        const knownKeys: Record<string, string> = {
             crm: 'tool_picker_modal.tag_groups.crm',
             documents: 'tool_picker_modal.tag_groups.documents',
             files: 'tool_picker_modal.tag_groups.files',
@@ -2116,7 +2150,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             mcp: 'tool_picker_modal.tag_groups.mcp',
             flow: 'tool_picker_modal.tag_groups.flow',
         };
-        const key = (knownKeys as any)[tag];
+        const key = knownKeys[tag];
         if (typeof key === 'string') {
             return this.t(key);
         }
@@ -2132,31 +2166,34 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _isToolSelected(toolId: string) {
-        return (this._selectedToolIds.includes(toolId) as any);
+        return (this._selectedToolIds.includes(toolId));
     }
 
     _toggleToolSelection(toolId: string) {
         if (typeof toolId !== 'string' || toolId.length === 0) {
             return;
         }
-        if ((this._selectedToolIds.includes(toolId) as any)) {
-            this._selectedToolIds = (this._selectedToolIds.filter as any)((id: string) => id !== toolId);
+        if ((this._selectedToolIds.includes(toolId))) {
+            this._selectedToolIds = (this._selectedToolIds.filter)((id: string) => id !== toolId);
             return;
         }
         this._selectedToolIds = [...this._selectedToolIds, toolId];
     }
 
-    _toggleGroupSelection(tools: any) {
-        const ids = tools
-            .map((t: any) => (isPlainObject(t) && typeof t.tool_id === 'string' ? t.tool_id : ''))
-            .filter((id: string) => id.length > 0);
+    _toggleGroupSelection(tools: readonly unknown[]) {
+        const ids: string[] = [];
+        for (const tool of tools) {
+            if (isPlainObject(tool) && typeof tool.tool_id === 'string' && tool.tool_id.length > 0) {
+                ids.push(tool.tool_id);
+            }
+        }
         if (ids.length === 0) {
             return;
         }
-        const allSelected = ids.every((id: string) => (this._selectedToolIds.includes(id) as any));
+        const allSelected = ids.every((id: string) => (this._selectedToolIds.includes(id)));
         if (allSelected) {
             const remove = new Set(ids);
-            this._selectedToolIds = (this._selectedToolIds.filter as any)((id: string) => !remove.has(id));
+            this._selectedToolIds = (this._selectedToolIds.filter)((id: string) => !remove.has(id));
             return;
         }
         const next = new Set(this._selectedToolIds);
@@ -2166,23 +2203,26 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._selectedToolIds = [...next];
     }
 
-    _groupAllSelected(tools: any) {
-        const ids = tools
-            .map((t: any) => (isPlainObject(t) && typeof t.tool_id === 'string' ? t.tool_id : ''))
-            .filter((id: string) => id.length > 0);
-        return ids.length > 0 && ids.every((id: string) => (this._selectedToolIds.includes(id) as any));
+    _groupAllSelected(tools: readonly unknown[]) {
+        const ids: string[] = [];
+        for (const tool of tools) {
+            if (isPlainObject(tool) && typeof tool.tool_id === 'string' && tool.tool_id.length > 0) {
+                ids.push(tool.tool_id);
+            }
+        }
+        return ids.length > 0 && ids.every((id: string) => (this._selectedToolIds.includes(id)));
     }
 
-    _toggleTagCollapsed(tag: any) {
+    _toggleTagCollapsed(tag: string) {
         const next = { ...this._collapsedTags };
-        next[tag] = !next[tag];
+        next[tag] = next[tag] !== true;
         this._collapsedTags = next;
     }
 
     _confirmSelectedTools() {
         const selectedSet = new Set(this._selectedToolIds);
         const items = this._pickModeRows().filter(
-            (t: any) => isPlainObject(t) && typeof t.tool_id === 'string' && selectedSet.has(t.tool_id),
+            (t: unknown) => isPlainObject(t) && typeof t.tool_id === 'string' && selectedSet.has(t.tool_id),
         );
         if (items.length === 0) {
             return;
@@ -2199,10 +2239,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
     }
 
-    _renderTagGroupCard(group: any, { forceExpand = false } = {}) {
+    _renderTagGroupCard(group: { tag: string; description: string; tools: readonly unknown[] }, { forceExpand = false } = {}) {
         const tag = group.tag;
         const tools = group.tools;
-        const collapsed = forceExpand ? false : (this._collapsedTags as any)[tag] === true;
+        const collapsed = forceExpand ? false : (this._collapsedTags)[tag] === true;
         const hue = hueFromString(tag);
         const allSelected = this._groupAllSelected(tools);
         const batchEnabled = this._mcpBulkAddEnabled();
@@ -2269,15 +2309,15 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     ? nothing
                     : html`
                         <div class="tag-group-tools" role="list">
-                            ${tools.map((t: any) => this._renderTagToolCard(t, { batchEnabled }))}
+                            ${tools.map((t) => isPlainObject(t) ? this._renderTagToolCard(t, { batchEnabled }) : nothing)}
                         </div>
                     `}
             </section>
         `;
     }
 
-    _tagToolKindChipLabel(kind: string, language: any) {
-        if (kind === 'code' && language.length > 0) {
+    _tagToolKindChipLabel(kind: string, language: unknown) {
+        if (kind === 'code' && typeof language === 'string' && language.length > 0) {
             return flowCodeLanguageShortLabel(language);
         }
         if (kind === 'flow') {
@@ -2292,7 +2332,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return this.t('tool_picker_modal.kind_tool');
     }
 
-    _confirmationFloorChipLabel(floor: any) {
+    _confirmationFloorChipLabel(floor: unknown) {
         if (floor === 'preview') {
             return this.t('tool_picker_modal.confirmation_preview');
         }
@@ -2302,7 +2342,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return '';
     }
 
-    _renderTagToolCard(t: any, { batchEnabled }: any) {
+    _renderTagToolCard(t: Record<string, unknown>, { batchEnabled }: { batchEnabled: boolean }) {
         const toolId = typeof t.tool_id === 'string' ? t.tool_id : '';
         const title = registryItemTitle(t);
         const desc = typeof t.description === 'string' ? _truncateText(t.description, 140) : '';
@@ -2313,7 +2353,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const mcpServerId = typeof t.mcp_server_id === 'string' ? t.mcp_server_id : '';
         const server = mcpServerId.length > 0 ? this._mcpServerById(mcpServerId) : null;
         const effects = Array.isArray(t.effects)
-            ? t.effects.filter((effect: any) => typeof effect === 'string')
+            ? t.effects.filter((effect: unknown) => typeof effect === 'string')
             : [];
         const confirmationFloor =
             typeof t.confirmation_floor === 'string' ? t.confirmation_floor : '';
@@ -2343,7 +2383,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     <div class="tag-tool-meta">
                         <span class="tag-tool-chip" data-kind=${kind}>${chipLabel}</span>
                         ${effects.map(
-                            (effect: any) => html`
+                            (effect: unknown) => html`
                                 <span class="tag-tool-chip" data-kind="effect">${effect}</span>
                             `,
                         )}
@@ -2381,7 +2421,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (!this._mcpBulkAddEnabled()) {
             return html``;
         }
-        const count = (this._selectedToolIds.length as any);
+        const count = (this._selectedToolIds.length);
         return html`
             <div class="picker-footer">
                 <span class="picker-footer-count">

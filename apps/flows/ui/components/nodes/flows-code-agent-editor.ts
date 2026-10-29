@@ -2,6 +2,7 @@
  * flows-code-agent-editor — инспектор ноды code_agent (дерево Documents + rebuild).
  */
 
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { html, css, nothing } from 'lit';
@@ -16,10 +17,44 @@ import { getActivePlatformNamespaceName } from '@platform/lib/utils/platform-nam
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { commitShaFromGitUrl } from '../../_helpers/code-agent-git.js';
 import { parseJsonStringList } from '../../_helpers/code-agent-json-list.js';
-import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-state-mapping-editor.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
+
+interface CodeAgentTreeFile {
+    kind: 'file';
+    title: string;
+}
+
+interface CodeAgentTreeDir {
+    kind: 'dir';
+    title: string;
+    children: CodeAgentTreeNode[];
+}
+
+type CodeAgentTreeNode = CodeAgentTreeFile | CodeAgentTreeDir;
+
+function configRecord(value: unknown): Record<string, unknown> {
+    if (!isPlainObject(value)) return {};
+    return value;
+}
+
+function configText(cfg: Record<string, unknown>, key: string): string {
+    const value = cfg[key];
+    return typeof value === 'string' ? value : '';
+}
+
+function configNumber(cfg: Record<string, unknown>, key: string): number | null {
+    const value = cfg[key];
+    return typeof value === 'number' ? value : null;
+}
+
+function jsonListText(value: unknown, skipEmpty: boolean): string {
+    if (!Array.isArray(value)) return '';
+    if (skipEmpty && value.length === 0) return '';
+    return JSON.stringify(value);
+}
 
 function elementRenderRoot(host: Element, label: string): ParentNode {
     if (!('renderRoot' in host)) {
@@ -44,7 +79,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -61,19 +96,19 @@ export class FlowsCodeAgentEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
-    declare _tree: any;
-    declare _status: any;
-    declare _draftGitUrl: any;
-    declare _draftSourceSha: any;
-    declare _draftArgvText: any;
-    declare _draftEgressText: any;
+    declare _tree: CodeAgentTreeNode[] | null;
+    declare _status: Record<string, unknown> | null;
+    declare _draftGitUrl: string | null;
+    declare _draftSourceSha: string | null;
+    declare _draftArgvText: string | null;
+    declare _draftEgressText: string | null;
     declare _treeLoading: boolean;
 ;
 
@@ -215,7 +250,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
     private _statusOp: OpController;
     private _catalogItemsOp: OpController;
     private _fileUpload: OpController;
-    private _authSel: SelectController<any>;
+    private _authSel: SelectController<AuthUser | null>;
 
     constructor() {
         super();
@@ -223,7 +258,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'code_agent';
+        this.flowNodeType = 'code_agent';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -242,10 +277,10 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         this._statusOp = this.useOp('flows/code_agent_status');
         this._catalogItemsOp = this.useOp('office/catalog_items');
         this._fileUpload = this.useOp('platform/file_create');
-        this._authSel = this.select((s) => (s as any).auth.user);
+        this._authSel = this.select((state) => state.auth.user);
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
@@ -261,35 +296,28 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         if (this._draftGitUrl !== null) {
             return this._draftGitUrl;
         }
-        const cfg = asObject(this.nodeConfig);
-        return typeof (cfg as any).git_url === 'string' ? (cfg as any).git_url : '';
+        return configText(configRecord(this.nodeConfig), 'git_url');
     }
 
     _liveSourceSha() {
         if (this._draftSourceSha !== null) {
             return this._draftSourceSha;
         }
-        const cfg = asObject(this.nodeConfig);
-        return typeof (cfg as any).source_sha === 'string' ? (cfg as any).source_sha : '';
+        return configText(configRecord(this.nodeConfig), 'source_sha');
     }
 
     _liveArgvText() {
         if (this._draftArgvText !== null) {
             return this._draftArgvText;
         }
-        const cfg = asObject(this.nodeConfig);
-        if (Array.isArray((cfg as any).invoke_argv) && (cfg as any).invoke_argv.length > 0) {
-            return JSON.stringify((cfg as any).invoke_argv);
-        }
-        return '';
+        return jsonListText(configRecord(this.nodeConfig).invoke_argv, true);
     }
 
     _liveEgressText() {
         if (this._draftEgressText !== null) {
             return this._draftEgressText;
         }
-        const cfg = asObject(this.nodeConfig);
-        return Array.isArray((cfg as any).egress_hosts) ? JSON.stringify((cfg as any).egress_hosts) : '';
+        return jsonListText(configRecord(this.nodeConfig).egress_hosts, false);
     }
 
     _ingestBusy() {
@@ -302,8 +330,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
     }
 
     _catalogId() {
-        const cfg = asObject(this.nodeConfig);
-        const catalogId = (cfg as any).catalog_id;
+        const catalogId = configRecord(this.nodeConfig).catalog_id;
         if (typeof catalogId === 'string' && catalogId.length > 0) {
             return catalogId;
         }
@@ -338,7 +365,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
      * @param {string} catalogId
      * @returns {Promise<CodeAgentTreeNode[]>}
      */
-    async _loadCatalogTree(catalogId: any): Promise<any[]> {
+    async _loadCatalogTree(catalogId: string): Promise<CodeAgentTreeNode[]> {
         const items = await this._catalogItemsOp.run({ catalog_id: catalogId });
         if (!isPlainObject(items)) {
             throw new Error('flows-code-agent-editor: catalog items object required');
@@ -351,10 +378,9 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         if (!Array.isArray(documents)) {
             throw new Error('flows-code-agent-editor: catalog items.documents array required');
         }
-        /** @type {CodeAgentTreeNode[]} */
-        const nodes = [];
+        const nodes: CodeAgentTreeNode[] = [];
         for (const catalog of catalogs) {
-            if (catalog === null || typeof catalog !== 'object') {
+            if (!isPlainObject(catalog)) {
                 throw new Error('flows-code-agent-editor: catalog entry must be an object');
             }
             const childId = catalog.catalog_id;
@@ -372,7 +398,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
             });
         }
         for (const document of documents) {
-            if (document === null || typeof document !== 'object') {
+            if (!isPlainObject(document)) {
                 throw new Error('flows-code-agent-editor: document entry must be an object');
             }
             const title = document.title;
@@ -384,7 +410,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         return nodes;
     }
 
-    async _reloadTree(catalogId: any) {
+    async _reloadTree(catalogId: string) {
         this._treeLoading = true;
         try {
             this._tree = await this._loadCatalogTree(catalogId);
@@ -399,6 +425,13 @@ export class FlowsCodeAgentEditor extends PlatformElement {
             node_id: this.nodeId,
             branch_id: this._apiBranchId(),
         });
+        if (status === null) {
+            this._status = null;
+            return;
+        }
+        if (!isPlainObject(status)) {
+            throw new Error('flows-code-agent-editor: status object required');
+        }
         this._status = status;
     }
 
@@ -526,7 +559,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         if (!isPlainObject(mapping)) {
             throw new Error('flows-code-agent-editor: guest_env mapping must be an object');
         }
-        const guestEnv = {};
+        const guestEnv: Record<string, string> = {};
         for (const [key, item] of Object.entries(mapping)) {
             if (!/^[A-Z][A-Z0-9_]*$/.test(key)) {
                 throw new Error(`flows-code-agent-editor: guest_env key ${key} is invalid`);
@@ -537,13 +570,13 @@ export class FlowsCodeAgentEditor extends PlatformElement {
             if (typeof item !== 'string' || item.length === 0) {
                 throw new Error(`flows-code-agent-editor: guest_env ${key} must be a non-empty string`);
             }
-            (guestEnv as any)[key] = item;
+            guestEnv[key] = item;
         }
         this._emitPatch({ guest_env: guestEnv });
     }
 
-    _onMetadataTemplate(parsed: any) {
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    _onMetadataTemplate(parsed: unknown) {
+        if (!isPlainObject(parsed)) {
             throw new Error('flows-code-agent-editor: metadata_template must be a JSON object');
         }
         this._emitPatch({ metadata_template: JSON.stringify(parsed, null, 2) });
@@ -570,14 +603,14 @@ export class FlowsCodeAgentEditor extends PlatformElement {
             if (!item || typeof item.path !== 'string') continue;
             if (item.path.startsWith('variables.')) vars.push(item.path.slice('variables.'.length));
         }
-        const fv = this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {};
+        const fv = isPlainObject(this.flowVariables) ? this.flowVariables : {};
         for (const key of Object.keys(fv)) {
             vars.push(key);
         }
         return Array.from(new Set(vars));
     }
 
-    _platformFieldInputValue(testid: any) {
+    _platformFieldInputValue(testid: string) {
         const host = this.renderRoot.querySelector(`[data-testid="${testid}"]`);
         if (host === null) {
             return null;
@@ -644,12 +677,12 @@ export class FlowsCodeAgentEditor extends PlatformElement {
             this.toast('code_agent_editor.toast_catalog_required', { type: 'error' });
             return;
         }
-        const cfg = asObject(this.nodeConfig);
-        const language = (cfg as any).language;
+        const cfg = configRecord(this.nodeConfig);
+        const language = cfg.language;
         if (typeof language !== 'string' || language.length === 0) {
             throw new Error('flows-code-agent-editor: language required for rebuild');
         }
-        const invokeKind = (cfg as any).invoke_kind;
+        const invokeKind = cfg.invoke_kind;
         if (typeof invokeKind !== 'string' || invokeKind.length === 0) {
             throw new Error('flows-code-agent-editor: invoke_kind required for rebuild');
         }
@@ -663,7 +696,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
             return;
         }
         const invokeArgv = argvParsed.items;
-        const listenPort = (cfg as any).invoke_listen_port;
+        const listenPort = cfg.invoke_listen_port;
         if (
             listenPort !== undefined
             && listenPort !== null
@@ -706,7 +739,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         this.openModal('flows.logs', { flowId: this.flowId, nodeId: this.nodeId });
     }
 
-    _relativeDirFromFile(file: any) {
+    _relativeDirFromFile(file: File) {
         const relative = typeof file.webkitRelativePath === 'string' ? file.webkitRelativePath : '';
         if (relative.length === 0) {
             return '';
@@ -718,7 +751,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         return parts.slice(0, -1).join('/');
     }
 
-    async _uploadSourceFile(file: any, relativeDir: any) {
+    async _uploadSourceFile(file: File, relativeDir: string) {
         const spec = buildCodeAgentSourceFileCreateSpecJson({
             flowId: this.flowId,
             nodeId: this.nodeId,
@@ -731,14 +764,14 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         return result.file_id;
     }
 
-    async _ingestFiles(files: any) {
-        if (!files || files.length === 0) {
-            return;
-        }
+    async _ingestFiles(files: FileList | null) {
+        if (files === null || files.length === 0) return;
         const list = Array.from(files);
-        const onlyZip = list.length === 1 && (list as any)[0].name.toLowerCase().endsWith('.zip');
+        const first = list[0];
+        if (first === undefined) throw new Error('flows-code-agent-editor: upload file required');
+        const onlyZip = list.length === 1 && first.name.toLowerCase().endsWith('.zip');
         if (onlyZip) {
-            const fileId = await this._uploadSourceFile(list[0], '');
+            const fileId = await this._uploadSourceFile(first, '');
             await this._importArchiveOp.run({
                 flow_id: this.flowId,
                 node_id: this.nodeId,
@@ -774,7 +807,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         await this._ingestFiles(e.dataTransfer === null ? null : e.dataTransfer.files);
     }
 
-    _clickHiddenInput(testid: any) {
+    _clickHiddenInput(testid: string) {
         const input = this.renderRoot.querySelector(`[data-testid="${testid}"]`);
         if (!(input instanceof HTMLInputElement)) {
             throw new Error(`flows-code-agent-editor: ${testid} input required`);
@@ -798,10 +831,10 @@ export class FlowsCodeAgentEditor extends PlatformElement {
     /**
      * @param {CodeAgentTreeNode[]} nodes
      */
-    _renderTreeNodes(nodes: any) {
+    _renderTreeNodes(nodes: readonly CodeAgentTreeNode[]): TemplateResult {
         return html`
             <ul>
-                ${nodes.map((node: any) => {
+                ${nodes.map((node) => {
                     if (node.kind === 'dir') {
                         return html`<li>${node.title}/${this._renderTreeNodes(node.children)}</li>`;
                     }
@@ -823,25 +856,21 @@ export class FlowsCodeAgentEditor extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const cfg = asObject(this.nodeConfig);
+        const cfg = configRecord(this.nodeConfig);
         const gitUrl = this._liveGitUrl();
         const sourceSha = this._liveSourceSha();
         const shaFromUrl = commitShaFromGitUrl(gitUrl);
         const needsSha = shaFromUrl.length === 0;
-        const language = typeof (cfg as any).language === 'string' ? (cfg as any).language : '';
-        const invokeKind = typeof (cfg as any).invoke_kind === 'string' ? (cfg as any).invoke_kind : '';
+        const language = configText(cfg, 'language');
+        const invokeKind = configText(cfg, 'invoke_kind');
         const argvText = this._liveArgvText();
-        const listenPort = typeof (cfg as any).invoke_listen_port === 'number' ? (cfg as any).invoke_listen_port : null;
-        const idleTtl = typeof (cfg as any).idle_ttl_seconds === 'number' ? (cfg as any).idle_ttl_seconds : null;
+        const listenPort = configNumber(cfg, 'invoke_listen_port');
+        const idleTtl = configNumber(cfg, 'idle_ttl_seconds');
         const egressText = this._liveEgressText();
-        const guestEnv =
-            (cfg as any).guest_env !== null && typeof (cfg as any).guest_env === 'object' && !Array.isArray((cfg as any).guest_env)
-                ? (cfg as any).guest_env
-                : {};
-        const metadataTemplateStr =
-            typeof (cfg as any).metadata_template === 'string' && (cfg as any).metadata_template.length > 0
-                ? (cfg as any).metadata_template
-                : '{}';
+        const guestEnv = isPlainObject(cfg.guest_env) ? cfg.guest_env : {};
+        const metadataTemplateStr = configText(cfg, 'metadata_template').length > 0
+            ? configText(cfg, 'metadata_template')
+            : '{}';
         const catalogId = this._catalogId();
         const status = isPlainObject(this._status) ? this._status : null;
         const digest = status !== null && typeof status.image_digest === 'string' ? status.image_digest : '';
@@ -854,7 +883,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'code_agent'}
+                .flowNodeType=${this.flowNodeType.length > 0 ? this.flowNodeType : 'code_agent'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

@@ -48,5 +48,5 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_platform_events_canon.py` (`make check-events-canon`) — нет HTTP-входа inbox (`internal/employee/inbox`).
+- `scripts/gates/backend/platform_events.py` (`make check-events-canon`) — нет HTTP-входа inbox (`internal/employee/inbox`).
 - `tests/**/test*flow_employee*`, `tests/**/test*employee*` — provisioning, inbox, act-as.

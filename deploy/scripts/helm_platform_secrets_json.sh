@@ -92,7 +92,6 @@ jq -n \
   --arg searchLinkupApiKey "${SEARCH__LINKUP__API_KEY:-}" \
   --arg searchSerperApiKey "${SEARCH__SERPER__API_KEY:-}" \
   --arg searchTavilyApiKey "${SEARCH__TAVILY__API_KEY:-}" \
-  --arg agentReleasesGithubToken "${AGENT__RELEASES__GITHUB_TOKEN:-}" \
   --arg mailSystemIspmanagerAuthinfoPassword "${MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD:-}" \
   '{
     create: true,
@@ -172,6 +171,5 @@ jq -n \
     searchLinkupApiKey: $searchLinkupApiKey,
     searchSerperApiKey: $searchSerperApiKey,
     searchTavilyApiKey: $searchTavilyApiKey,
-    agentReleasesGithubToken: $agentReleasesGithubToken,
     mailSystemIspmanagerAuthinfoPassword: $mailSystemIspmanagerAuthinfoPassword
   }'

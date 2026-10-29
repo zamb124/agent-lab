@@ -22,7 +22,7 @@ from apps.wiki.content.markdown_serializer import (
     document_to_plain_text,
 )
 from apps.wiki.content.prosemirror import ProseMirrorMark, ProseMirrorNode
-from apps.wiki.content.schema import WikiSchemaError, normalize_document
+from apps.wiki.content.schema import WikiSchemaError, normalize_document_in_serialization_order
 
 FULL_DOCUMENT = """# Заголовок
 
@@ -184,7 +184,7 @@ def test_yjs_float_attributes_are_normalized_to_int():
             )
         ],
     )
-    normalized = normalize_document(raw)
+    normalized = normalize_document_in_serialization_order(raw)
     assert normalized.content[0].attrs["level"] == 2
     assert document_to_markdown(raw) == "## Заголовок"
 
@@ -219,7 +219,7 @@ def test_table_colwidth_list_is_accepted_and_normalized():
             )
         ],
     )
-    normalized = normalize_document(raw)
+    normalized = normalize_document_in_serialization_order(raw)
     header = normalized.content[0].content[0].content[0]
     cell = normalized.content[0].content[0].content[1]
     assert header.attrs["colwidth"] == [404]
@@ -274,7 +274,7 @@ def test_unknown_node_is_rejected():
         type="doc", content=[ProseMirrorNode(type="mystery_block")]
     )
     with pytest.raises(WikiSchemaError):
-        _ = normalize_document(document)
+        _ = normalize_document_in_serialization_order(document)
 
 
 def test_raw_html_is_converted_and_reported_not_rejected():

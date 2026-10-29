@@ -1,11 +1,11 @@
-"""Smoke tests for scripts/test_coverage_report.py."""
+"""Smoke tests for scripts/testing/coverage_report.py."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from scripts.test_coverage_report import (
+from scripts.testing.coverage_report import (
     _TOP_UNCOVERED_FILES,
     _format_missing_lines,
     _parse_lcov,
@@ -20,7 +20,7 @@ from scripts.test_coverage_report import (
 
 def test_reset_creates_run_directory(tmp_path: Path, monkeypatch) -> None:
     reports_root = tmp_path / "coverage"
-    monkeypatch.setattr("scripts.test_coverage_report._REPORTS_ROOT", reports_root)
+    monkeypatch.setattr("scripts.testing.coverage_report._REPORTS_ROOT", reports_root)
 
     run_dir = cmd_reset("20260101T120000", workers="10")
 
@@ -71,7 +71,7 @@ def test_format_missing_lines_collapses_ranges() -> None:
 
 def test_report_generates_html_and_terminal(tmp_path: Path, monkeypatch) -> None:
     reports_root = tmp_path / "coverage"
-    monkeypatch.setattr("scripts.test_coverage_report._REPORTS_ROOT", reports_root)
+    monkeypatch.setattr("scripts.testing.coverage_report._REPORTS_ROOT", reports_root)
 
     run_id = "20260101T130000"
     run_dir = cmd_reset(run_id, workers="5")

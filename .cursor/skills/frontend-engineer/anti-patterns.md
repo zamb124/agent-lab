@@ -1,6 +1,6 @@
 # Frontend Anti-Patterns — плохо → хорошо → детектор
 
-Каждая запись — класс нарушения, единственная замена и детектор. «п.N» — пункт `scripts/check_ui_canon.sh`; `rule_id` — правило `scripts/ui_canon_rules.py`; «проба» — секция `.cursor/skills/frontend-engineer/scripts/ui_audit.py`. «Нет» — детектора нет: первым шагом среза он добавляется (`references/loop.md` § Детектор). Детектор, который проба «Слепота» отмечает слепым, не защищает: сначала `references/playbooks.md` § Слепой гейт → зрячий. Нормы — `frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`; эталон — `references/target-architecture.md`.
+Каждая запись — класс нарушения, единственная замена и детектор. «п.N» — пункт `scripts/gates/frontend/ui_canon.sh`; `rule_id` — правило `scripts/gates/frontend/ui_canon_rules.py`; «проба» — секция `.cursor/skills/frontend-engineer/scripts/ui_audit.py`. «Нет» — детектора нет: первым шагом среза он добавляется (`references/loop.md` § Детектор). Детектор, который проба «Слепота» отмечает слепым, не защищает: сначала `references/playbooks.md` § Слепой гейт → зрячий. Нормы — `frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`; эталон — `references/target-architecture.md`.
 
 ## 0. Машинные сигнатуры
 
@@ -115,9 +115,9 @@ if (this._wsState === 'open') this._ws.close(1000, 'client_close');
 
 | Плохо | Хорошо | Детектор |
 |---|---|---|
-| `class MyPage extends LitElement` / `extends HTMLElement` | `extends PlatformPage` (`PlatformElement`, `PlatformModal`) | `extends_native`, п.1, `scripts/check_core_frontend_canon.py` |
+| `class MyPage extends LitElement` / `extends HTMLElement` | `extends PlatformPage` (`PlatformElement`, `PlatformModal`) | `extends_native`, п.1, `scripts/gates/frontend/core_frontend_canon.py` |
 | `import … from '/static/core/lib/…'` | `import … from '@platform/lib/…'` | п.2 |
-| `import { syncX } from '../../../sync/ui/components/…'` во flows | общий модуль в `core/frontend/static/lib/` | `scripts/check_cross_service_imports.py` (Python), UI — нет |
+| `import { syncX } from '../../../sync/ui/components/…'` во flows | общий модуль в `core/frontend/static/lib/` | `scripts/gates/backend/cross_service_imports.py` (Python), UI — нет |
 | `this.services.api.get(…)`, `this.notify.toast(…)`, `this.team` | фабрика + `this.toast(…)`; команда — `use*` | п.6, п.11 |
 | `ServiceRegistry`, `BaseStore`, `AppEvents`, Zustand | фабрика + helper базы | п.3, п.4 |
 | `this.bus.getState().frontendApiKeys.items` | `this.useResource('frontend/api_keys').items` или `this.select(…)` | п.14 |
@@ -150,7 +150,7 @@ extraReducer: (state, event) => (event.type === CRM_NOTE_CREATED ? upsertItem(st
 | `getServiceSlices() { return { mySlice: { reducer, initial } }; }` | фабрика в `static factories` | нет |
 | `apps/<svc>/ui/services/`, `store/`, `stores/` | фабрики в `events/resources/` | п.8 |
 | `apps/<svc>/ui/events/effects/`, `events/reducers/`, `events/selectors.ts` | логика в фабрике; связка с core — bridge-effect `events/<svc>-*.effect.ts` | п.13 (`events/effects`), остальное — нет |
-| `new WebSocket(…)` + `ws.send({ type: '…_requested' })` для команды | фабрика `transport: 'ws'` + `commandType` | `scripts/check_core_frontend_canon.py` (core), apps — нет |
+| `new WebSocket(…)` + `ws.send({ type: '…_requested' })` для команды | фабрика `transport: 'ws'` + `commandType` | `scripts/gates/frontend/core_frontend_canon.py` (core), apps — нет |
 | свой span waterfall, `*-trace-tree.ts` | `<platform-trace-viewer>` | нет |
 | своя `.log-entry` таблица | `<platform-log-viewer>` | нет |
 
@@ -189,7 +189,7 @@ mapItem: (raw) => {
     // …
 },
 ```
-Детектор: `ts_literal_fallback`, п.15 (`*.resource.*`), `scripts/check_core_frontend_canon.py` (core reducers и factories).
+Детектор: `ts_literal_fallback`, п.15 (`*.resource.*`), `scripts/gates/frontend/core_frontend_canon.py` (core reducers и factories).
 
 ```ts
 // плохо: тихий catch
@@ -252,7 +252,7 @@ this.useEvent(this._search.op.events.SUCCEEDED, (event) => {
 | `bus.subscribeType(CREATED, …)` без снятия | снять обе подписки при первом совпадении `causation_id` (`recipes.md` § 3) | нет |
 | `override updated(): void { this._load.run(); }` | старт в `connectedCallback` или по действию; в `updated()` — по смене свойства с проверкой `busy`/`lastResult` | нет |
 | `try { await runViaWs(p) } catch { await runViaHttp(p) }` | один транспорт фабрики; обрыв — `GET /realtime/api/v1/events/{event_id}/terminal` | `ts_silent_catch` (частично) |
-| WS-фабрика без `restMirror` | `restMirror: { method, path }` на FastAPI route | runtime `throw`, `scripts/check_command_rest_mirror.py` |
+| WS-фабрика без `restMirror` | `restMirror: { method, path }` на FastAPI route | runtime `throw`, `scripts/gates/backend/command_rest_mirror.py` |
 | `commandType: 'sync/calls/invite'` | `commandType: 'sync/calls/invite_requested'` | runtime `throw` |
 | push `sync/messages/send` при команде `sync/messages/send_requested` | другое entity: `sync/message/created` | нет |
 
@@ -264,13 +264,13 @@ this.useEvent(CRM_NOTE_UPDATED, () => this._notes.load());
 // хорошо: фабрика мержит; страница реагирует только UI
 extraReducer: (state, event) => (event.type === CRM_NOTE_UPDATED ? upsertItem(state, event.payload.note, 'entity_id') : state),
 ```
-Детектор: `scripts/check_platform_events_canon.py` (`_check_push_reload`).
+Детектор: `scripts/gates/backend/platform_events.py` (`_check_push_reload`).
 
 | Плохо | Хорошо | Детектор |
 |---|---|---|
 | `useEvent(WS_CONNECTED, () => this._tasks.load())` в странице | `extraEffect` фабрики на `CoreEvents.WS_CONNECTED` → `reloadLastList(ctx, resource)` | `_check_push_reload` |
 | `useEvent(NS_UPDATE_SUCCEEDED, () => this._graph.run(q))` | `onSuccess: (ctx) => rerunLastRequest(ctx, graphOp, { when })` | `_check_push_reload` |
-| литерал `'crm/task/updated'` в странице | константа `CRM_TASK_UPDATED` из `../events/types.js` | `scripts/check_platform_events_canon.py` |
+| литерал `'crm/task/updated'` в странице | константа `CRM_TASK_UPDATED` из `../events/types.js` | `scripts/gates/backend/platform_events.py` |
 | `setInterval(() => this._load.run(), 5000)` | push через фабрику; поллинг — только внешний источник без push, с причиной в коде | `setinterval_poll` |
 | `window.addEventListener('keydown', …)` в компоненте сервиса | helper базы или core-компонент (`<platform-command-palette>`, `<platform-popover>`) | `window_listeners` |
 
@@ -279,19 +279,19 @@ extraReducer: (state, event) => (event.type === CRM_NOTE_UPDATED ? upsertItem(st
 | Плохо | Хорошо | Детектор |
 |---|---|---|
 | `this.dispatch('foo/bar', …)`, `'Foo/Bar/Baz'`, `'foo-bar/baz/qux'` | `'crm/note/created'` — не меньше трёх сегментов snake_case | п.12, `assertEventType` |
-| `name: 'crm.notes.create'`, `'notes/create'` | `name: 'crm/note_create'` | `scripts/check_ui_factories.py`, `assertResourceName` |
-| `successToastKey: 'foo.bar'` | `'frontend:foo.bar'` | `scripts/check_ui_factories.py`, `requireI18nKey` |
+| `name: 'crm.notes.create'`, `'notes/create'` | `name: 'crm/note_create'` | `scripts/gates/frontend/ui_factories.py`, `assertResourceName` |
+| `successToastKey: 'foo.bar'` | `'frontend:foo.bar'` | `scripts/gates/frontend/ui_factories.py`, `requireI18nKey` |
 | `this.t('foo.' + status)` | `status === 'forbidden' ? this.t('foo.forbidden') : …` + `throw` на неизвестном | нет (`check_i18n_keys.py` пропускает динамику) |
-| `` html`<button>Сохранить</button>` `` | `this.t('action_save', null, 'common')` + ключи ru/en | `scripts/report_ui_i18n_gaps.py` (отчёт) |
-| ключ только в `ru/<ns>.json` | тот же ключ в `en/<ns>.json` | toast — `scripts/check_ui_factories.py`, прочие — нет |
+| `` html`<button>Сохранить</button>` `` | `this.t('action_save', null, 'common')` + ключи ru/en | `scripts/tools/report_ui_i18n_gaps.py` (отчёт) |
+| ключ только в `ru/<ns>.json` | тот же ключ в `en/<ns>.json` | toast — `scripts/gates/frontend/ui_factories.py`, прочие — нет |
 
 ## 13. Поля форм
 
 | Плохо | Хорошо | Детектор |
 |---|---|---|
-| `<input type="text" class="form-input">` | `<platform-field type="string" input-type="email">` | `raw_controls`, `scripts/check_field_canon.sh` |
-| `<textarea>` без `data-canon` | `<platform-field type="text">` или `<platform-markdown-editor>` | `raw_controls`, `scripts/check_field_canon.sh` |
-| `<select>` для enum | `<platform-field type="enum" .config=${{ values }}>` | `raw_controls`, `scripts/check_field_canon.sh` |
+| `<input type="text" class="form-input">` | `<platform-field type="string" input-type="email">` | `raw_controls`, `scripts/gates/frontend/field_canon.sh` |
+| `<textarea>` без `data-canon` | `<platform-field type="text">` или `<platform-markdown-editor>` | `raw_controls`, `scripts/gates/frontend/field_canon.sh` |
+| `<select>` для enum | `<platform-field type="enum" .config=${{ values }}>` | `raw_controls`, `scripts/gates/frontend/field_canon.sh` |
 | ручная `.field-pill`-разметка | `<platform-field-shell>` или `<platform-field>` | `manual_pill` |
 | `import '@platform/lib/components/glass-input.js'` | `<platform-field>` | п.18 |
 | `` css`.form-input { … } .field-pill { … }` `` в `apps/**` | токены `--field-pill-*` в `tokens.css` | п.17 |
@@ -310,7 +310,7 @@ extraReducer: (state, event) => (event.type === CRM_NOTE_UPDATED ? upsertItem(st
 | `new Intl.NumberFormat('ru-RU')`, `toLocaleDateString('ru-RU')` | `formatPlatformNumber(v, locale)`, `formatPlatformDate(v, locale)` с `state.i18n.locale` | п.19a |
 | `globalThis.marked`, `<script src="…/marked.js">` | `markdownToHtml` из `@platform/lib/utils/markdown.js` | п.19c-2 |
 | `localStorage.setItem('sync.chat.draft', …)` | `platformStorageKey('sync', 'chat_draft')` | `localstorage_raw` |
-| свой `createAsyncOp` с `FormData`, `name: 'sync/file_upload'` | `useOp('platform/file_create')` → chunked `uploadPlatformFile` | `scripts/check_files_canon.py`, `scripts/check_files_ui_canon.sh` |
+| свой `createAsyncOp` с `FormData`, `name: 'sync/file_upload'` | `useOp('platform/file_create')` → chunked `uploadPlatformFile` | `scripts/gates/files/files_canon.py`, `scripts/gates/files/files_ui_canon.sh` |
 
 ## 15. Визуал, shell, core-компоненты
 

@@ -8,7 +8,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
-import '@platform/lib/components/layout/platform-service-sidebar.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -89,16 +89,23 @@ export class FlowsSidebar extends PlatformElement {
         });
     }
 
-    _shell() {
-        return this.renderRoot?.querySelector('platform-service-sidebar');
+    _shell(): PlatformServiceSidebar | null {
+        const root = this.renderRoot;
+        if (!root) return null;
+        const shell = root.querySelector('platform-service-sidebar');
+        if (shell === null) return null;
+        if (!(shell instanceof PlatformServiceSidebar)) {
+            throw new Error('flows-sidebar: service sidebar required');
+        }
+        return shell;
     }
 
     toggleMobile() {
-        (this._shell() as Record<string, any>)?.toggleMobile();
+        this._shell()?.toggleMobile();
     }
 
     closeMobile() {
-        (this._shell() as Record<string, any>)?.closeMobile();
+        this._shell()?.closeMobile();
     }
 
     _openHome() {

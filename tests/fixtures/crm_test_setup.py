@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import AbstractSet, Any
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 _CUSTOM_ENTITY_TYPES: list[dict[str, str]] = [
     {"type_id": "note", "name": "Заметка"},

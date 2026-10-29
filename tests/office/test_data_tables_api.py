@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import Any
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 from openpyxl import Workbook
 
 from core.data_tables.import_tabular import parse_tabular_bytes

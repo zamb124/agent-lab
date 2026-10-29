@@ -70,6 +70,18 @@ FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR = 4.0
 
 _SqlParam = str | int | float | bool | datetime | None
 
+def _kept_by_score_desc(entries: list[RAGSearchResult]) -> list[RAGSearchResult]:
+    """Кандидаты поиска, score DESC."""
+    entries.sort(key=lambda entry: entry.score, reverse=True)
+    return entries
+
+
+def _pairs_by_score_desc(scored: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """Пары (id, score), score DESC."""
+    scored.sort(key=lambda item: item[1], reverse=True)
+    return scored
+
+
 class _Binder:
     """Нумерация параметров сырого SQL с уже занятым префиксом."""
 
@@ -796,7 +808,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def get_document(self, namespace_id: str, document_id: str) -> RAGDocument | None:
-        loaded = await VectorDocument.list_by_namespace_and_document_id(namespace_id, document_id, limit=1)
+        loaded = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(namespace_id, document_id, limit=1)
         if len(loaded) == 0:
             return None
         row = loaded[0]
@@ -814,7 +826,7 @@ class PgVectorProvider(BaseRAGProvider):
         namespace_id: str,
         document_id: str,
     ) -> RAGDocumentContent | None:
-        rows = await VectorDocument.list_by_namespace_and_document_id(namespace_id, document_id)
+        rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(namespace_id, document_id)
         if not rows:
             return None
         first_row = rows[0]
@@ -842,7 +854,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def list_documents(self, namespace_id: str, limit: int = 100) -> list[RAGDocument]:
-        rows = await VectorDocument.any_chunk_rows_by_document_id(namespace_id, limit=limit)
+        rows = await VectorDocument.any_chunk_rows_by_document_id_asc(namespace_id, limit=limit)
         docs: list[RAGDocument] = []
         for row in rows:
             meta = row.metadata
@@ -870,7 +882,7 @@ class PgVectorProvider(BaseRAGProvider):
         if where is not None:
             validate_metadata_filters(where)
             filter_sql = " AND " + _metadata_filter_sql(binder, where)
-        loaded = await VectorDocument.any_chunk_rows_by_document_id_where(
+        loaded = await VectorDocument.any_chunk_rows_by_document_id_where_asc(
             namespace_id,
             filter_sql=filter_sql,
             filter_params=binder.params,
@@ -932,7 +944,7 @@ class PgVectorProvider(BaseRAGProvider):
         target_embedding_model: str,
     ) -> list[tuple[str, str, str]]:
         """Кандидаты на перевекторизацию: (id, content, company_id)."""
-        return await VectorDocument.stale_id_content_company_rows(
+        return await VectorDocument.stale_id_content_company_rows_by_company_rank_asc(
             limit=limit,
             target_embedding_model=target_embedding_model,
         )
@@ -951,7 +963,7 @@ class PgVectorProvider(BaseRAGProvider):
     @override
     async def delete_orphan_company_chunks(self, *, limit: int) -> int:
         """Удаляет чанки без company_id."""
-        return await VectorDocument.delete_without_company_id(limit=limit)
+        return await VectorDocument.delete_without_company_id_by_id_asc(limit=limit)
 
     # — Поиск —
 
@@ -1010,7 +1022,7 @@ class PgVectorProvider(BaseRAGProvider):
             validate_metadata_filters(filters)
             filter_sql = " AND " + _metadata_filter_sql(binder, filters)
         limit_placeholder = binder.next_index()
-        rows = await VectorDocument.rows_with_similarity(
+        rows = await VectorDocument.rows_with_similarity_by_distance_asc(
             namespace_id=namespace_id,
             embedding_model=embedding_model,
             query_embedding=query_embedding,
@@ -1043,8 +1055,7 @@ class PgVectorProvider(BaseRAGProvider):
                     }
                 )
             )
-        rescored.sort(key=lambda entry: entry.score, reverse=True)
-        return rescored[:limit]
+        return _kept_by_score_desc(rescored)[:limit]
 
     async def _hybrid_search_rrf(
         self,
@@ -1081,7 +1092,7 @@ class PgVectorProvider(BaseRAGProvider):
         if filters is not None:
             lexical_filter = " AND " + _metadata_filter_sql(lexical_binder, filters)
         lexical_limit = lexical_binder.next_index()
-        semantic_ids, lexical_ids = await VectorDocument.semantic_and_lexical_chunk_ids(
+        semantic_ids, lexical_ids = await VectorDocument.semantic_by_distance_and_lexical_by_ts_rank_desc_chunk_ids(
             namespace_id=namespace_id,
             embedding_model=embedding_model,
             query_embedding=query_embedding,
@@ -1118,7 +1129,7 @@ class PgVectorProvider(BaseRAGProvider):
                     now=now,
                 )
             scored.append((doc_id, final_score))
-        scored.sort(key=lambda item: item[1], reverse=True)
+        scored = _pairs_by_score_desc(scored)
         top = scored[:limit]
         top_ids = [doc_id for doc_id, _score in top]
         if not top_ids:

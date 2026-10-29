@@ -103,7 +103,7 @@ def _pad_topic_tags_to_minimum(
     return topic_tags
 
 
-def coerce_filter_metadata_for_taxonomy(
+def coerce_filter_metadata_for_taxonomy_by_tag_asc(
     filter_metadata: CrawlPageFilterMetadata,
     taxonomy: SearchIndexCrawlTaxonomy,
 ) -> CrawlPageFilterMetadata:

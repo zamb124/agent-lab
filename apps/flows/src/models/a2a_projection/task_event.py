@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from a2a.types import Task
 from oxyde import Field as DbField
@@ -58,8 +58,8 @@ class A2ATaskEvent(PlatformModel):
 
 
     @classmethod
-    async def pending_events_by_created_at(cls, *, limit: int = 100) -> list[A2APendingEvent]:
-        """Неопубликованные события, ORDER BY created_at, не больше limit. Возврат — A2APendingEvent. limit <= 0 — A2ATaskRepositoryError."""
+    async def pending_events_by_created_at_asc(cls, *, limit: int = 100) -> list[A2APendingEvent]:
+        """Неопубликованные события, ORDER BY created_at ASC, не больше limit. Возврат — A2APendingEvent. limit <= 0 — A2ATaskRepositoryError."""
         if limit <= 0:
             raise A2ATaskRepositoryError("unpublished event limit must be positive")
         rows = await (
@@ -78,6 +78,11 @@ class A2ATaskEvent(PlatformModel):
             )
             for row in rows
         ]
+
+    @classmethod
+    async def list_for_task_by_sequence_asc(cls, task_id: str) -> list[Self]:
+        """События задачи, ORDER BY sequence ASC. Предела нет."""
+        return await cls.objects.filter(task_id=task_id).order_by("sequence").all()
 
     @classmethod
     async def any_submitted_task(cls, *, company_id: str, task_id: str) -> Task | None:

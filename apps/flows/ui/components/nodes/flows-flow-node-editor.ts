@@ -13,7 +13,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import './flows-base-node-editor.js';
-import { asObject } from '../../_helpers/flows-resolvers.js';
+import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 export class FlowsFlowNodeEditor extends PlatformElement {
@@ -22,7 +22,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -33,12 +33,12 @@ export class FlowsFlowNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
     declare _showCustom: boolean;
 ;
@@ -81,7 +81,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'flow';
+        this.flowNodeType = 'flow';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -105,42 +105,33 @@ export class FlowsFlowNodeEditor extends PlatformElement {
     /**
      * Канвас и вложенный tool могут хранить поля в `config`; runtime читает с корня или из `config`.
      */
-    _resolvedFlowId(cfg: any) {
-        if (cfg === null) {
-            return '';
-        }
+    _resolvedFlowId(cfg: Record<string, unknown>) {
         const root = typeof cfg.flow_id === 'string' && cfg.flow_id.length > 0 ? cfg.flow_id : '';
         if (root.length > 0) {
             return root;
         }
         const inner = asObject(cfg.config);
-        return typeof (inner as any).flow_id === 'string' && (inner as any).flow_id.length > 0 ? (inner as any).flow_id : '';
+        return typeof inner.flow_id === 'string' && inner.flow_id.length > 0 ? inner.flow_id : '';
     }
 
-    _resolvedBranchId(cfg: any) {
-        if (cfg === null) {
-            return 'default';
-        }
+    _resolvedBranchId(cfg: Record<string, unknown>) {
         const root = typeof cfg.branch_id === 'string' && cfg.branch_id.length > 0 ? cfg.branch_id : '';
         if (root.length > 0) {
             return root;
         }
         const inner = asObject(cfg.config);
-        return typeof (inner as any).branch_id === 'string' && (inner as any).branch_id.length > 0 ? (inner as any).branch_id : 'default';
+        return typeof inner.branch_id === 'string' && inner.branch_id.length > 0 ? inner.branch_id : 'default';
     }
 
-    _branchIdOptions(resolvedFlowId: any, branchId: any) {
-        const detail = this._flows.byId && typeof this._flows.byId === 'object' && resolvedFlowId.length > 0
-            ? this._flows.byId[resolvedFlowId]
-            : null;
-        const sk = detail !== null && detail !== undefined && typeof detail === 'object'
-            && detail.branches !== null && detail.branches !== undefined && typeof detail.branches === 'object'
-            ? Object.keys(detail.branches)
-            : [];
-        if (sk.length === 0) {
+    _branchIdOptions(resolvedFlowId: string, branchId: string): string[] {
+        const byId = this._flows.byId;
+        const detail = resolvedFlowId.length > 0 && isPlainObject(byId) ? byId[resolvedFlowId] : null;
+        const branches = isPlainObject(detail) ? detail.branches : null;
+        const keys = isPlainObject(branches) ? Object.keys(branches) : [];
+        if (keys.length === 0) {
             return branchId.length > 0 ? [branchId] : ['default'];
         }
-        const set = new Set(sk);
+        const set = new Set(keys);
         if (branchId.length > 0) {
             set.add(branchId);
         }
@@ -157,7 +148,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         return arr;
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
@@ -207,17 +198,32 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         const cfg = asObject(this.nodeConfig);
         const flowId = this._resolvedFlowId(cfg);
         const branchId = this._resolvedBranchId(cfg);
-        const callType = (cfg as Record<string, any>)?.call_type === 'handoff' ? 'handoff' : 'call';
+        const callType = cfg.call_type === 'handoff' ? 'handoff' : 'call';
         const branchOptions = this._branchIdOptions(flowId, branchId);
-        const flows = Array.isArray(this._flows.items) ? this._flows.items.filter((f: any) => f && f.flow_id !== this.flowId) : [];
-        const isInList = flows.some((f: any) => f.flow_id === flowId);
+        const flows: Record<string, unknown>[] = [];
+        if (!Array.isArray(this._flows.items)) {
+            throw new Error('flows-flow-node-editor: flows.items must be an array');
+        }
+        for (const item of this._flows.items) {
+            if (!isPlainObject(item) || typeof item.flow_id !== 'string' || item.flow_id.length === 0) {
+                throw new Error('flows-flow-node-editor: flow row requires flow_id');
+            }
+            if (item.flow_id !== this.flowId) {
+                flows.push(item);
+            }
+        }
+        const isInList = flows.some((flow) => flow.flow_id === flowId);
         const useCustom = this._showCustom || (flowId.length > 0 && !isInList);
         const flowIdEnumValues = [
             { value: '', label: '—' },
-            ...flows.map((f: any) => ({
-                value: f.flow_id,
-                label: typeof f.name === 'string' && f.name.length > 0 ? f.name : f.flow_id,
-            })),
+            ...flows.map((flow) => {
+                const id = flow.flow_id;
+                if (typeof id !== 'string' || id.length === 0) {
+                    throw new Error('flows-flow-node-editor: flow row requires flow_id');
+                }
+                const name = typeof flow.name === 'string' && flow.name.length > 0 ? flow.name : id;
+                return { value: id, label: name };
+            }),
         ];
         const branchEnumValues = branchOptions.map((sid) => ({ value: sid, label: sid }));
         return html`
@@ -226,7 +232,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'flow'}
+                .flowNodeType=${this.flowNodeType}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.models.identity_models import Company
 from core.utils.tokens import get_token_service

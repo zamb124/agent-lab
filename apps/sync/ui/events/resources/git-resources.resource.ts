@@ -7,10 +7,15 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 
 interface SyncGitResourceGetSlice extends AsyncOpSlice {
     byId: Readonly<Record<string, unknown>>;
+}
+
+function isGitGetSlice(state: AsyncOpSlice): state is SyncGitResourceGetSlice {
+    return isPlainRecord(state.byId);
 }
 
 export const gitResourceUpsertOp = createAsyncOp({
@@ -37,23 +42,23 @@ export const gitResourceGetOp = createAsyncOp({
         if (event.type !== 'sync/git_resource/upserted') {
             return state;
         }
-        const payload = event.payload as Record<string, unknown> | null;
-        if (!payload || typeof payload !== 'object') {
+        const payload = event.payload;
+        if (!isPlainRecord(payload)) {
             return state;
         }
         const gitRefId = payload.git_ref_id;
         if (typeof gitRefId !== 'string' || gitRefId.length === 0) {
             return state;
         }
-        const s = state as SyncGitResourceGetSlice;
-        const byId = Object.freeze({ ...s.byId, [gitRefId]: payload });
-        const lastResult =
-            s.lastResult
-            && typeof s.lastResult === 'object'
-            && (s.lastResult as Record<string, unknown>).git_ref_id === gitRefId
-                ? payload
-                : s.lastResult;
-        return { ...s, byId, lastResult };
+        if (!isGitGetSlice(state)) {
+            throw new Error('sync/git_resource_get: byId must be an object');
+        }
+        const byId = Object.freeze({ ...state.byId, [gitRefId]: payload });
+        const last = state.lastResult;
+        const lastResult = isPlainRecord(last) && last.git_ref_id === gitRefId
+            ? payload
+            : last;
+        return { ...state, byId, lastResult };
     },
 });
 

@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.guest_runtime.services.farm_service import GuestFarmService
 from apps.guest_runtime.services.identity import guest_identity_scope
@@ -91,7 +91,7 @@ def _guest_execution_token(
 def _docker_slot_env(*, flow_id: str, execution_token: str, capability_context: str) -> dict[str, str]:
     return {
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "OPENAI_BASE_URL": "http://host.docker.internal:9001/flows/api/v1/agent/llm/v1",
+        "OPENAI_BASE_URL": "http://host.docker.internal:9001/flows/api/v1/llm/v1",
         "OPENAI_API_KEY": execution_token,
         "CAPABILITY_GATEWAY_URL": "http://host.docker.internal:9016",
         "PLATFORM_EXECUTION_TOKEN": execution_token,

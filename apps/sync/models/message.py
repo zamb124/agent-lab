@@ -71,7 +71,7 @@ class SyncMessage(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_root_lane(
+    async def list_root_lane_by_sent_at_desc(
         cls,
         channel_id: str,
         *,
@@ -87,7 +87,7 @@ class SyncMessage(PlatformModel):
         ).order_by("-sent_at").limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_root_lane_by_call(
+    async def list_root_lane_by_call_sent_at_and_message_id_asc(
         cls,
         *,
         channel_id: str,
@@ -103,7 +103,7 @@ class SyncMessage(PlatformModel):
         ).order_by("sent_at", "message_id").all()
 
     @classmethod
-    async def list_alive_by_sent_at(
+    async def list_alive_by_sent_at_asc(
         cls,
         thread_id: str,
         *,
@@ -181,7 +181,7 @@ class SyncMessage(PlatformModel):
                 has_more_older=True,
                 has_more_newer=has_more_newer,
             )
-        latest = await query.order_by("-sent_at", "-message_id").limit(fetch_limit).all()
+        latest = await _latest_root_lane_by_sent_at_and_message_id_desc(query, fetch_limit=fetch_limit)
         has_more_older = len(latest) > limit
         return MessageCursorWindow(
             rows=latest[:limit],
@@ -311,7 +311,7 @@ class SyncMessage(PlatformModel):
         return _datetime_cell(raw_sent_at, "sync message max sent_at")
 
     @classmethod
-    async def channel_lane_summaries(
+    async def channel_lane_summaries_by_channel_id_asc_and_sent_at_desc(
         cls,
         *,
         company_id: str,
@@ -411,7 +411,7 @@ class SyncMessage(PlatformModel):
             channel_id = _str_cell(parsed.get("channel_id"), "sync last channel_id")
             message_id = _str_cell(parsed.get("message_id"), "sync last message_id")
             sent_at = _datetime_cell(parsed.get("sent_at"), "sync last sent_at")
-            blocks = await SyncMessageContent.list_for_message(message_id)
+            blocks = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(message_id)
             preview = lane_preview_from_content(blocks[0]) if len(blocks) > 0 else None
             prev = base[channel_id]
             base[channel_id] = ChannelLaneSummary(
@@ -443,6 +443,15 @@ def _str_cell(value: JsonValue, label: str) -> str:
     if not isinstance(value, str) or value == "":
         raise ValueError(label)
     return value
+
+
+async def _latest_root_lane_by_sent_at_and_message_id_desc[TMessage: SyncMessage](
+    query: Query[TMessage],
+    *,
+    fetch_limit: int,
+) -> list[TMessage]:
+    """Последние сообщения ленты, ORDER BY sent_at DESC, message_id DESC, не больше fetch_limit."""
+    return await query.order_by("-sent_at", "-message_id").limit(fetch_limit).all()
 
 
 async def _root_lane_before[TMessage: SyncMessage](

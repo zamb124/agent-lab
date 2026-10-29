@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-import httpx
+import httpx2
 
 from apps.search.config import SearchTinyFishConfig
 from apps.search.providers.common import display_url, int_rank, provider_status, string_field
@@ -52,7 +52,7 @@ class TinyFishSearchProvider:
                     error=f"tinyfish returned HTTP {response.status_code}: {response.text[:300]}",
                 )
             payload = parse_json_object(response.content, "tinyfish response")
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx2.HTTPError, ValueError) as exc:
             return [], provider_status(started, ok=False, error=str(exc))
 
         results = parse_tinyfish_results(payload, limit=request.limit)

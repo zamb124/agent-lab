@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from docx import Document
 
-from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.docx_template import (
     DocxTemplateContextError,
     DocxTemplateInvalidError,
@@ -20,6 +19,7 @@ from core.files.docx_template import (
 from core.files.docx_template.normalize import normalize_template_context
 from core.files.file_ref import FileRef
 from core.files.models import FileRecord, FileStatus
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.writer import FileWriteError
 
 

@@ -48,7 +48,8 @@ class EvaluationPairwiseJudgment(CompanyScopedModel):
     feedback: str = DbField(default="")
 
     @classmethod
-    async def list_for_case_run(cls, case_run_id: str) -> list[Self]:
+    async def list_for_case_run_by_created_at_desc(cls, case_run_id: str) -> list[Self]:
+        """Суждения, где прогон слева или справа, ORDER BY created_at DESC, pairwise_judgment_id DESC. Предела нет. Пустой case_run_id — ValueError case_run_id is required."""
         if case_run_id == "":
             raise ValueError("case_run_id is required")
         return await (

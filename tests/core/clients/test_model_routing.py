@@ -379,29 +379,29 @@ def test_retry_after_ttl_seconds_http_date():
     from datetime import datetime, timedelta, timezone
     from email.utils import format_datetime
 
-    import httpx
+    import httpx2
 
     from core.clients.llm.candidate_cooldown import retry_after_ttl_seconds
 
     future = datetime.now(timezone.utc) + timedelta(seconds=45)
-    response = httpx.Response(
+    response = httpx2.Response(
         429,
         headers={"Retry-After": format_datetime(future, usegmt=True)},
-        request=httpx.Request("POST", "https://example.test/v1/chat/completions"),
+        request=httpx2.Request("POST", "https://example.test/v1/chat/completions"),
     )
     ttl = retry_after_ttl_seconds(response)
     assert 40 <= ttl <= 50
 
 
 def test_retry_after_ttl_seconds_empty_header_raises():
-    import httpx
+    import httpx2
 
     from core.clients.llm.candidate_cooldown import retry_after_ttl_seconds
 
-    response = httpx.Response(
+    response = httpx2.Response(
         429,
         headers={"Retry-After": "  "},
-        request=httpx.Request("POST", "https://example.test/v1/chat/completions"),
+        request=httpx2.Request("POST", "https://example.test/v1/chat/completions"),
     )
     with pytest.raises(ValueError, match="Retry-After header is empty"):
         retry_after_ttl_seconds(response)

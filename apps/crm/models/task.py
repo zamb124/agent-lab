@@ -57,12 +57,13 @@ class CRMTask(PlatformModel):
         return await cls.objects.create(instance=task)
 
     @classmethod
-    def namespace_tasks(
+    def query_namespace_tasks(
         cls,
         company_id: str,
         namespace: str | None,
         task_type: str | None,
     ) -> Query[Self]:
+        """Задачи компании. namespace is None и task_type is None не фильтруют. Порядка нет."""
         rows = cls.objects.filter(company_id=company_id)
         if namespace is not None:
             rows = rows.filter(namespace=namespace)
@@ -184,7 +185,7 @@ class CRMTask(PlatformModel):
         return [_task_from_row(row) for row in rows]
 
     @classmethod
-    async def list_by_note_id(
+    async def list_for_note_by_created_at_desc(
         cls,
         *,
         company_id: str,
@@ -194,6 +195,7 @@ class CRMTask(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[CRMTask]:
+        """Задачи заметки, ORDER BY created_at DESC, окно limit и offset."""
         table = cls.get_table_name()
         where_sql, params = _note_filter(company_id, namespace, task_type, note_id)
         params.append(limit)
@@ -231,13 +233,14 @@ class CRMTask(PlatformModel):
         return _count_cell(rows)
 
     @classmethod
-    async def active_by_data_keys(
+    async def latest_active_by_data_keys_created_at_desc(
         cls,
         task_type: str,
         data_key_values: dict[str, str],
         namespace: str,
         company_id: str,
     ) -> CRMTask | None:
+        """Последняя активная задача этих ключей data, ORDER BY created_at DESC. Нет строки — None."""
         table = cls.get_table_name()
         clauses = [
             "company_id = $1",

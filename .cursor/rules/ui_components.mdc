@@ -119,17 +119,17 @@ alwaysApply: false
 ### UI Kit Documentation System
 
 - Каждый `platform-*` с `customElements.define` в `core/frontend/static/lib/components/**` имеет `tests/ui/design-system/components/<tag>/` с `README.md`, `README.en.md`, `manifest.yaml`, `contract.spec.js` (WTR), `playwright.spec.py`; реестр — `tests/ui/design-system/catalog.yaml`.
-- Документация генерируется в `docs/scenarios/platform/ui-kit/<tag>/` (`scripts/generate_ui_kit_docs.py`, `make doc-ui-kit`); playground — `GET /frontend/design-system/preview?component=<tag>&variant=<id>` только для компонентов каталога; страница грузит модуль карточки (`import` манифеста) из `/static/core/lib/`, его собирает `scripts/build_ui.mjs` (`buildPageModules`).
+- Документация генерируется в `docs/scenarios/platform/ui-kit/<tag>/` (`scripts/docs/ui_kit_docs.py`, `make doc-ui-kit`); playground — `GET /frontend/design-system/preview?component=<tag>&variant=<id>` только для компонентов каталога; страница грузит модуль карточки (`import` манифеста) из `/static/core/lib/`, его собирает `scripts/build/ui.mjs` (`buildPageModules`).
 
 ## Исключения
 
 - Исключение: `SyncCallIncomingModal` (`sync.call_incoming`) — overlay-баннер входящего звонка на `PlatformElement` под стеком модалок. `[без гейта]`
-- Исключение: `core/frontend/static/lib/flow-ui/**` — standalone-рендерер Flow UI для внешнего embed-host, у `<platform-flow-ui>` `theme` — Lit property (исключение п.11 `scripts/check_ui_canon.sh`) → `flow_ui.mdc`.
+- Исключение: `core/frontend/static/lib/flow-ui/**` — standalone-рендерер Flow UI для внешнего embed-host, у `<platform-flow-ui>` `theme` — Lit property (исключение п.11 `scripts/gates/frontend/ui_canon.sh`) → `flow_ui.mdc`.
 
 ## Гейты
 
-- `scripts/check_ui_canon.sh` (`make check-ui-canon`) — п.0 `transition: all`; п.5 `new CustomEvent` в `apps/**`; п.9 и 14 открытие модалок; п.10 window-события и `CustomEvent('navigate')`; п.11 геттеры в core; п.13 прямой dispatch `UI_TOAST_SHOW`, `UI_MODAL_*`, `UI_CLIPBOARD_COPY_REQUESTED`, `ROUTER_NAVIGATE_REQUESTED` в pages/modals; п.20 `*-mobile-app-header`, локальные bottom-nav, sheet-stack и top-bar, `this.openSidebar()`; п.21 `bottomSheetKind`; п.36 long-text-редактор; п.37 колокольчик в `<platform-user>`.
-- `scripts/check_core_frontend_canon.py` (`make check-core-frontend-canon`) — база core-компонентов, `modalKind` + `registerModalKind`, `bottomSheetKind` + `registerBottomSheetKind`.
-- `scripts/check_ui_kit_docs.py` (`make lint-ts`) — каталог UIKDS ↔ файлы компонентов.
+- `scripts/gates/frontend/ui_canon.sh` (`make check-ui-canon`) — п.0 `transition: all`; п.5 `new CustomEvent` в `apps/**`; п.9 и 14 открытие модалок; п.10 window-события и `CustomEvent('navigate')`; п.11 геттеры в core; п.13 прямой dispatch `UI_TOAST_SHOW`, `UI_MODAL_*`, `UI_CLIPBOARD_COPY_REQUESTED`, `ROUTER_NAVIGATE_REQUESTED` в pages/modals; п.20 `*-mobile-app-header`, локальные bottom-nav, sheet-stack и top-bar, `this.openSidebar()`; п.21 `bottomSheetKind`; п.36 long-text-редактор; п.37 колокольчик в `<platform-user>`.
+- `scripts/gates/frontend/core_frontend_canon.py` (`make check-core-frontend-canon`) — база core-компонентов, `modalKind` + `registerModalKind`, `bottomSheetKind` + `registerBottomSheetKind`.
+- `scripts/gates/frontend/ui_kit_docs.py` (`make lint-ts`) — каталог UIKDS ↔ файлы компонентов.
 - `tests/frontend_core/unit/utils/ui-icon-assets.spec.js` — у каждого `name` иконки в `core/frontend/static/lib/**` и `apps/**` есть ассет.
 - `make ui` (`lint-ts` + `test-frontend-core`, WTR с UIKDS L1), `make ui-doc` (Playwright L2 + генерация доков).

@@ -6,7 +6,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.voice.di import VoiceDi
 from core.context import reset_context, set_context

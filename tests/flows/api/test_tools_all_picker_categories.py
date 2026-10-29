@@ -173,11 +173,11 @@ async def test_picker_category_code_total_ignores_mcp_batch(
 
     exclude_ids = {
         row.tool_id
-        for row in await ToolReference.list_tool_index(mcp="exclude")
+        for row in await ToolReference.list_tool_index_items_by_tool_id_asc(mcp="exclude")
     }
     only_ids = {
         row.tool_id
-        for row in await ToolReference.list_tool_index(mcp="only")
+        for row in await ToolReference.list_tool_index_items_by_tool_id_asc(mcp="only")
     }
     mcp_tool_id = mcp_tool_reference_id(server_id, "bulk_tool_0")
     assert mcp_tool_id in only_ids
@@ -216,28 +216,3 @@ async def test_picker_category_filters_code_and_mcp(client, app, unique_id, di):
     mcp_ids = {item["tool_id"] for item in mcp_body["items"]}
     assert mcp_tool_id in mcp_ids
     assert code_tool_id not in mcp_ids
-
-
-@pytest.mark.asyncio
-async def test_picker_category_all_skips_agent_toolkit_lookup(
-    client, app, monkeypatch, unique_id, di
-):
-    """picker_category=all не вызывает N+1 lookup agent_toolkit_ids."""
-    flow_id = f"picker_fast_flow_{unique_id}"
-    await _persist_flow(di, _flow_config(flow_id))
-
-    async def _fail_toolkit_lookup(*_args, **_kwargs):
-        raise AssertionError("picker endpoint must not resolve agent_toolkit_ids")
-
-    monkeypatch.setattr(
-        "apps.flows.src.models.agent_toolkit.AgentToolkit.toolkit_ids_for_tool",
-        _fail_toolkit_lookup,
-    )
-    monkeypatch.setattr(
-        "apps.flows.src.models.agent_toolkit.AgentToolkit.toolkit_ids_for_flow",
-        _fail_toolkit_lookup,
-    )
-
-    body = await _get_tools_all(client, picker_category="all", q=flow_id)
-    ids = {item["tool_id"] for item in body["items"]}
-    assert flow_id in ids

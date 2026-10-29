@@ -86,14 +86,14 @@ class SecretVariable(PlatformModel):
         return platform_variable_from_current(row, include_secret_values=include_secret_values)
 
     @classmethod
-    async def masked_page_by_variable_key(
+    async def list_masked_by_variable_key_asc(
         cls,
         company_id: str,
         *,
         limit: int = 1000,
         offset: int = 0,
     ) -> list[PlatformVariable]:
-        """Окно переменных компании, ORDER BY variable_key. Секреты замаскированы. limit по умолчанию 1000, offset 0."""
+        """Окно переменных компании, ORDER BY variable_key ASC. Секреты замаскированы. limit по умолчанию 1000, offset 0."""
         rows = await (
             cls.objects.filter(company_id=company_id)
             .order_by("variable_key")

@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 
 import pytest_asyncio
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.secrets.di import SecretsDi
 from core.di import require_di

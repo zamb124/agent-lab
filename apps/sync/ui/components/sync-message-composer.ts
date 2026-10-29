@@ -83,7 +83,7 @@ export class SyncMessageComposer extends PlatformElement {
     declare channelId: string;
     declare threadId: string;
     declare _draft: string;
-    declare _attachments: Record<string, any>[];
+    declare _attachments: Record<string, unknown>[];
     declare _recording: boolean;
     declare _mentionQuery: { query: string; atPos: number } | null;
     declare _emojiOpen: boolean;
@@ -430,7 +430,7 @@ export class SyncMessageComposer extends PlatformElement {
         const slice = this._messagesStoreSel.value;
         const channelData = slice && slice.byChannelId && slice.byChannelId[this.channelId];
         if (!channelData || !Array.isArray(channelData.items)) return;
-        const message = channelData.items.find((m: Record<string, any>) => m.message_id === messageId);
+        const message = channelData.items.find((m: Record<string, unknown>) => m.message_id === messageId);
         if (!message || !Array.isArray(message.contents)) return;
         const contents = message.contents;
         if (!Array.isArray(contents)) return;
@@ -517,12 +517,12 @@ export class SyncMessageComposer extends PlatformElement {
         const q = this._mentionQuery.query.toLowerCase();
         const channelMemberIds = this._channelMemberIdSet();
         return this._members.items
-            .filter((m: Record<string, any>) => {
+            .filter((m: Record<string, unknown>) => {
                 const name = resolveDisplayName(m).toLowerCase();
                 const userId = m && typeof m.user_id === 'string' ? m.user_id.toLowerCase() : '';
                 return name.includes(q) || userId.includes(q);
             })
-            .sort((a: Record<string, any>, b: Record<string, any>) => {
+            .sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
                 const aId = a && typeof a.user_id === 'string' ? a.user_id : '';
                 const bId = b && typeof b.user_id === 'string' ? b.user_id : '';
                 const aInChannel = channelMemberIds.has(aId) ? 0 : 1;
@@ -539,7 +539,7 @@ export class SyncMessageComposer extends PlatformElement {
         const raw = byChannel && this.channelId ? byChannel[this.channelId] : null;
         if (!Array.isArray(raw)) return new Set();
         const ids = raw
-            .map((m: Record<string, any>) => (m && typeof m.user_id === 'string' ? m.user_id : ''))
+            .map((m: Record<string, unknown>) => (m && typeof m.user_id === 'string' ? m.user_id : ''))
             .filter((id: string) => id !== '');
         return new Set<string>(ids);
     }
@@ -713,7 +713,7 @@ export class SyncMessageComposer extends PlatformElement {
         if (typeof replyId !== 'string' || replyId === '') return null;
         const channelData = slice && slice.byChannelId && slice.byChannelId[this.channelId];
         if (!channelData || !Array.isArray(channelData.items)) return null;
-        const found = channelData.items.find((m: Record<string, any>) => m.message_id === replyId);
+        const found = channelData.items.find((m: Record<string, unknown>) => m.message_id === replyId);
         return found ? found : null;
     }
 
@@ -750,7 +750,7 @@ export class SyncMessageComposer extends PlatformElement {
             return;
         }
 
-        const contents: Record<string, any>[] = [];
+        const contents: Record<string, unknown>[] = [];
         if (text.length > 0) {
             contents.push({ type: 'text/plain', data: { body: text }, order: 0 });
         }
@@ -785,7 +785,7 @@ export class SyncMessageComposer extends PlatformElement {
         if (reply) body.parent_message_id = reply.message_id;
 
         const me = this._authSel.value;
-        const optimisticItem: Record<string, any> = {
+        const optimisticItem: Record<string, unknown> = {
             local_id: localId,
             message_id: localId,
             channel_id: this.channelId,
@@ -849,7 +849,7 @@ export class SyncMessageComposer extends PlatformElement {
             ` : ''}
             ${this._attachments.length > 0 ? html`
                 <div class="attachments">
-                    ${this._attachments.map((att: Record<string, any>, i: number) => {
+                    ${this._attachments.map((att: Record<string, unknown>, i: number) => {
                         const contentType = typeof att.content_type === 'string' ? att.content_type : '';
                         const isVoiceDraft = att.voiceMessage === true && contentType.startsWith('audio/');
                         if (isVoiceDraft) {
@@ -889,7 +889,7 @@ export class SyncMessageComposer extends PlatformElement {
             <div class="pill" style="position: relative;" @drop=${this._onDrop} @dragover=${(e: Event) => e.preventDefault()}>
                 ${memberSuggestions.length > 0 ? html`
                     <div class="mention-popup">
-                        ${memberSuggestions.map((m: Record<string, any>, i: number) => html`
+                        ${memberSuggestions.map((m: Record<string, unknown>, i: number) => html`
                             <div
                                 class="item ${i === Math.max(0, Math.min(this._mentionIndex, memberSuggestions.length - 1)) ? 'active' : ''}"
                                 data-user-id=${m.user_id}

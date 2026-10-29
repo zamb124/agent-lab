@@ -6,6 +6,7 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const integrationsListOp = createAsyncOp({
     name: 'flows/integrations_list',
@@ -35,22 +36,31 @@ export const googleWorkspaceAuthorizeOp = createAsyncOp({
         path: '/flows/api/v1/integrations/credentials/google/workspace/authorize',
     },
     request: async ({ payload }) => {
-        if (!payload || typeof (payload as Record<string, any>).return_path !== 'string' || (payload as Record<string, any>).return_path.length === 0) {
+        if (!isPlainRecord(payload)) {
+            throw new Error('googleWorkspaceAuthorizeOp: return_path required');
+        }
+        const returnPath = payload.return_path;
+        if (typeof returnPath !== 'string' || returnPath.length === 0) {
             throw new Error('googleWorkspaceAuthorizeOp: return_path required');
         }
         const qs = new URLSearchParams();
-        qs.set('return_path', (payload as Record<string, any>).return_path);
-        if (typeof (payload as Record<string, any>).return_origin === 'string' && (payload as Record<string, any>).return_origin.length > 0) {
-            qs.set('return_origin', (payload as Record<string, any>).return_origin);
+        qs.set('return_path', returnPath);
+        const returnOrigin = payload.return_origin;
+        if (typeof returnOrigin === 'string' && returnOrigin.length > 0) {
+            qs.set('return_origin', returnOrigin);
         }
         const data = await httpRequest({
             method: 'GET',
             url: `/flows/api/v1/integrations/credentials/google/workspace/authorize?${qs.toString()}`,
         });
-        if (!data || typeof (data as Record<string, any>).authorize_url !== 'string' || (data as Record<string, any>).authorize_url.length === 0) {
+        if (!isPlainRecord(data)) {
             throw new Error('googleWorkspaceAuthorizeOp: authorize_url missing');
         }
-        return (data as Record<string, any>).authorize_url;
+        const authorizeUrl = data.authorize_url;
+        if (typeof authorizeUrl !== 'string' || authorizeUrl.length === 0) {
+            throw new Error('googleWorkspaceAuthorizeOp: authorize_url missing');
+        }
+        return authorizeUrl;
     },
 });
 

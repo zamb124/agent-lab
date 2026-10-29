@@ -6,6 +6,7 @@
  */
 
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { TeamState } from '@platform/lib/events/reducers/team.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
@@ -16,8 +17,8 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-date-picker.js';
-import '@platform/lib/components/platform-searchable-combobox.js';
-import { asArray, asString } from '../_helpers/flows-resolvers.js';
+import { PlatformSearchableCombobox } from '@platform/lib/components/platform-searchable-combobox.js';
+import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { flowSessionRoute } from '../_helpers/flow-session-route.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
@@ -38,8 +39,8 @@ export class FlowsSessionsModal extends PlatformModal {
     declare _filterUserId: string;
     declare _filterFlowId: string;
     declare _filterBranchId: string;
-    declare _dateFromValue: any;
-    declare _dateToValue: any;
+    declare _dateFromValue: unknown;
+    declare _dateToValue: unknown;
 ;
 
     static override styles: CSSResultGroup = [
@@ -284,7 +285,7 @@ export class FlowsSessionsModal extends PlatformModal {
     ];
     private _sessions: ResourceController;
     private _flows: ResourceController;
-    private _teamSel: SelectController<any>;
+    private _teamSel: SelectController<TeamState>;
 
     constructor() {
         super();
@@ -332,7 +333,7 @@ export class FlowsSessionsModal extends PlatformModal {
         const items = asArray(this._flows.items);
         const out = [];
         for (const f of items) {
-            if (!f || typeof f !== 'object') {
+            if (!isPlainObject(f)) {
                 continue;
             }
             const id = f.flow_id;
@@ -365,7 +366,7 @@ export class FlowsSessionsModal extends PlatformModal {
     }
 
     _buildLoadPayload() {
-        const payload: any = { limit: 200 };
+        const payload: Record<string, string | number> = { limit: 200 };
         if (this._filterUserId.length > 0) {
             payload.user_id = this._filterUserId;
         }
@@ -392,9 +393,10 @@ export class FlowsSessionsModal extends PlatformModal {
         const root = this.renderRoot;
         if (root) {
             for (const el of root.querySelectorAll('platform-searchable-combobox')) {
-                if (typeof (el as Record<string, any>).flush === 'function') {
-                    (el as Record<string, any>).flush();
+                if (!(el instanceof PlatformSearchableCombobox)) {
+                    throw new Error('flows-sessions-modal: searchable combobox required');
                 }
+                el.flush();
             }
         }
         this._loadSessions();
@@ -417,8 +419,8 @@ export class FlowsSessionsModal extends PlatformModal {
         }
     }
 
-    _sessionId(session: any) {
-        if (!session || typeof session !== 'object') {
+    _sessionId(session: unknown) {
+        if (!isPlainObject(session)) {
             return '';
         }
         const sessionId = asString(session.session_id);
@@ -428,7 +430,10 @@ export class FlowsSessionsModal extends PlatformModal {
         return asString(session.id);
     }
 
-    _open(session: any) {
+    _open(session: unknown) {
+        if (!isPlainObject(session)) {
+            return;
+        }
         const sessionId = this._sessionId(session);
         if (sessionId.length === 0) {
             return;
@@ -447,11 +452,18 @@ export class FlowsSessionsModal extends PlatformModal {
         if (route === null) {
             return;
         }
-        this.navigate(route.routeKey, route.params as Record<string, string>);
+        const params: Record<string, string> = {};
+        for (const [key, value] of Object.entries(route.params)) {
+            if (typeof value !== 'string') {
+                throw new Error('flows-sessions-modal: route param must be a string');
+            }
+            params[key] = value;
+        }
+        this.navigate(route.routeKey, params);
         this.close();
     }
 
-    _openDurableHistory(session: any) {
+    _openDurableHistory(session: unknown) {
         const sessionId = this._sessionId(session);
         if (sessionId.length === 0) {
             return;
@@ -459,7 +471,7 @@ export class FlowsSessionsModal extends PlatformModal {
         this.openModal('flows.durable_history', { sessionId });
     }
 
-    async _delete(session: any) {
+    async _delete(session: unknown) {
         const sessionId = this._sessionId(session);
         if (sessionId.length === 0) {
             return;
@@ -480,8 +492,8 @@ export class FlowsSessionsModal extends PlatformModal {
         await this._sessions.remove(sessionId);
     }
 
-    _formatLastActivity(s: any) {
-        if (!s || typeof s !== 'object') {
+    _formatLastActivity(s: unknown) {
+        if (!isPlainObject(s)) {
             return this.t('sessions_modal.col_last_empty');
         }
         const raw = s.last_activity;
@@ -529,7 +541,7 @@ export class FlowsSessionsModal extends PlatformModal {
                 <td class="flows-sessions-col-session" data-label=${this.t('sessions_modal.col_session')}>
                     <code class="flows-sessions-id">${this._sessionId(s)}</code>
                 </td>
-                <td class="flows-sessions-col-flow" data-label=${this.t('sessions_modal.col_flow')}>${asString(s.flow_id)}</td>
+                <td class="flows-sessions-col-flow" data-label=${this.t('sessions_modal.col_flow')}>${asString(isPlainObject(s) ? s.flow_id : '')}</td>
                 <td class="flows-sessions-col-last" data-label=${this.t('sessions_modal.col_last')}>${this._formatLastActivity(s)}</td>
                 <td class="flows-sessions-td-actions flows-sessions-col-actions" data-label=${this.t('sessions_modal.col_actions')}>
                     <div class="flows-sessions-row-actions">

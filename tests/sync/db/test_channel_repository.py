@@ -49,7 +49,7 @@ async def test_channel_crud(
     assert got.name == "general"
     assert got.namespace == namespace
 
-    by_ns = await SyncChannel.list_by_name_in_namespace(
+    by_ns = await SyncChannel.list_by_name_in_namespace_asc(
         namespace, company_id=company_id, limit=100, offset=0
     )
     assert {c.channel_id for c in by_ns} == {ch1, ch2}
@@ -80,21 +80,21 @@ async def test_channel_members(
     )
     _ = await SyncChannel.objects.create(instance=ch)
 
-    ids_before = await SyncChannelMember.list_user_ids(ch_mbr, company_id=company_id
+    ids_before = await SyncChannelMember.list_unordered_user_ids(ch_mbr, company_id=company_id
     )
     assert "user_10" not in ids_before
 
     await SyncChannelMember.ensure_member(
         ch_mbr, "user_10", company_id=company_id
     )
-    ids_after = await SyncChannelMember.list_user_ids(ch_mbr, company_id=company_id
+    ids_after = await SyncChannelMember.list_unordered_user_ids(ch_mbr, company_id=company_id
     )
     assert "user_10" in ids_after
 
     await SyncChannelMember.ensure_member(
         ch_mbr, "user_10", company_id=company_id
     )
-    ids_idempotent = await SyncChannelMember.list_user_ids(ch_mbr, company_id=company_id
+    ids_idempotent = await SyncChannelMember.list_unordered_user_ids(ch_mbr, company_id=company_id
     )
     assert ids_idempotent.count("user_10") == 1
     assert await SyncChannelMember.is_notifications_muted(
@@ -121,11 +121,11 @@ async def test_channel_members(
     assert await SyncChannelMember.delete_by_user(
         ch_mbr, "user_10", company_id=f"other_{unique_id}"
     ) is False
-    assert "user_10" in await SyncChannelMember.list_user_ids(ch_mbr, company_id=company_id)
+    assert "user_10" in await SyncChannelMember.list_unordered_user_ids(ch_mbr, company_id=company_id)
     assert await SyncChannelMember.delete_by_user(
         ch_mbr, "user_10", company_id=company_id
     ) is True
-    assert "user_10" not in await SyncChannelMember.list_user_ids(ch_mbr, company_id=company_id)
+    assert "user_10" not in await SyncChannelMember.list_unordered_user_ids(ch_mbr, company_id=company_id)
     assert await SyncChannelMember.delete_by_user(
         ch_mbr, "user_10", company_id=company_id
     ) is False
@@ -207,7 +207,7 @@ async def test_list_for_user_filters_by_membership(
     await SyncChannelMember.ensure_member(ch_dm, "alice", company_id=company_id)
     await SyncChannelMember.ensure_member(ch_secret, "bob", company_id=company_id)
 
-    alice_all = await SyncChannel.list_member_channels_by_type_and_name(
+    alice_all = await SyncChannel.list_member_channels_by_type_and_name_asc(
         "alice",
         company_id=company_id,
         namespace=None,
@@ -216,7 +216,7 @@ async def test_list_for_user_filters_by_membership(
     )
     assert {c.channel_id for c in alice_all} == {ch_topic, ch_dm}
 
-    alice_in_ns = await SyncChannel.list_member_channels_by_type_and_name(
+    alice_in_ns = await SyncChannel.list_member_channels_by_type_and_name_asc(
         "alice",
         company_id=company_id,
         namespace=namespace,
@@ -225,7 +225,7 @@ async def test_list_for_user_filters_by_membership(
     )
     assert [c.channel_id for c in alice_in_ns] == [ch_topic]
 
-    ids = await SyncChannelMember.list_user_ids(ch_dm, company_id=company_id
+    ids = await SyncChannelMember.list_unordered_user_ids(ch_dm, company_id=company_id
     )
     assert "alice" in ids
 
@@ -275,9 +275,9 @@ async def test_list_by_name_filters_company_and_orders_by_name(
     _ = await SyncChannel.objects.create(instance=beta)
     _ = await SyncChannel.objects.create(instance=foreign)
 
-    found = await SyncChannel.list_by_name(company_id, unique_id, limit=20)
+    found = await SyncChannel.list_by_name_asc(company_id, unique_id, limit=20)
     assert [row.channel_id for row in found] == [alpha_id, beta_id]
-    limited = await SyncChannel.list_by_name(company_id, "", limit=1)
+    limited = await SyncChannel.list_by_name_asc(company_id, "", limit=1)
     assert [row.channel_id for row in limited] == [alpha_id]
 
 
@@ -320,15 +320,15 @@ async def test_list_for_both_members_returns_shared_channels(
     await SyncChannelMember.ensure_member(foreign_shared, "alice", company_id=other_company)
     await SyncChannelMember.ensure_member(foreign_shared, "bob", company_id=other_company)
 
-    found = await SyncChannel.list_for_both_members(
+    found = await SyncChannel.list_for_both_members_by_type_and_name_asc(
         "alice", "bob", company_id=company_id, limit=10, offset=0
     )
     assert [row.channel_id for row in found] == [shared_group, shared_topic]
-    limited = await SyncChannel.list_for_both_members(
+    limited = await SyncChannel.list_for_both_members_by_type_and_name_asc(
         "alice", "bob", company_id=company_id, limit=1, offset=0
     )
     assert [row.channel_id for row in limited] == [shared_group]
-    assert await SyncChannel.list_for_both_members(
+    assert await SyncChannel.list_for_both_members_by_type_and_name_asc(
         "alice", "carol", company_id=company_id, limit=10, offset=0
     ) == []
 

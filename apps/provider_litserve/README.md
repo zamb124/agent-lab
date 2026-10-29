@@ -4,7 +4,7 @@
 
 Один процесс:
 
-| Сервис (`scripts/run.py`) | Модуль | Порт (по умолчанию) | Зависимости |
+| Сервис (`scripts/dev/run.py`) | Модуль | Порт (по умолчанию) | Зависимости |
 |---------------------------|--------|---------------------|-------------|
 | **`provider-litserve`** | **`apps.provider_litserve.main`** (LitServe) | **`provider_litserve.infra.gateway_port`** (8014) | **`uv sync --group reranker-model`** для реальных весов эмбеддера и `flagllm` |
 

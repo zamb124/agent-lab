@@ -134,8 +134,8 @@ export function flowCodeLanguageOptions() {
  * Items для platform-segmented-control: brand-логотипы через iconSrc (img), не platform-icon.
  * @param {{ iconOnly?: boolean }} [options]
  */
-export function flowCodeLanguageSegmentItems(options = {}) {
-    const iconOnly = (options as Record<string, any>).iconOnly === true;
+export function flowCodeLanguageSegmentItems(options: { iconOnly?: unknown } = {}) {
+    const iconOnly = options.iconOnly === true;
     return FLOW_CODE_LANGUAGES.map((item) => ({
         value: item.value,
         iconSrc: `/static/core/assets/icons/${item.icon}.svg`,

@@ -69,14 +69,15 @@ class UsageRecord(PlatformModel):
     )
 
     @classmethod
-    async def list_company_since(cls, company_id: str, since: datetime) -> list[Self]:
+    async def list_unordered_since(cls, company_id: str, since: datetime) -> list[Self]:
+        """Записи компании с timestamp не раньше since. Порядка и limit нет."""
         return await cls.objects.filter(
             company_id=company_id,
             timestamp__gte=since,
         ).all()
 
     @classmethod
-    async def admin_search_usage_records(
+    async def admin_search_by_timestamp_desc(
         cls,
         *,
         company_id: str | None = None,
@@ -87,6 +88,7 @@ class UsageRecord(PlatformModel):
         limit: int = 200,
         offset: int = 0,
     ) -> OffsetPage[UsageRecord]:
+        """Страница записей, ORDER BY timestamp DESC. company_id, usage_type, resource_name и окно времени равные None не фильтруют."""
         if limit < 1 or limit > ADMIN_USAGE_MAX_LIMIT:
             raise ValueError(f"limit must be between 1 and {ADMIN_USAGE_MAX_LIMIT}")
         if offset < 0:

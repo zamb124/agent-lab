@@ -29,6 +29,7 @@
 
 import { html, svg, css, unsafeCSS } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import { readMindmapView, writeMindmapView } from '../_helpers/mindmap-view-preference.js';
 import type {
@@ -71,12 +72,11 @@ const BRANCH_PALETTE = [
  * @returns {{ source: string, target: string } | null}
  */
 function _edgeEndpoints(edge: unknown): { source: string; target: string } | null {
-    if (!edge || typeof edge !== 'object') {
+    if (!isPlainRecord(edge)) {
         return null;
     }
-    const e = edge as Record<string, any>;
-    const sourceRaw = e.source_id !== undefined ? e.source_id : e.source_entity_id;
-    const targetRaw = e.target_id !== undefined ? e.target_id : e.target_entity_id;
+    const sourceRaw = edge.source_id !== undefined ? edge.source_id : edge.source_entity_id;
+    const targetRaw = edge.target_id !== undefined ? edge.target_id : edge.target_entity_id;
     const source = typeof sourceRaw === 'string' ? sourceRaw.trim() : '';
     const target = typeof targetRaw === 'string' ? targetRaw.trim() : '';
     if (source.length === 0 || target.length === 0) {
@@ -348,8 +348,11 @@ function _relationshipTypeForUndirectedPair(edges: unknown[], a: string, b: stri
             continue;
         }
         if ((ep.source === a && ep.target === b) || (ep.source === b && ep.target === a)) {
-            const rt = (raw as Record<string, any>).relationship_type;
-            return typeof rt === 'string' ? rt.trim() : '';
+            if (!isPlainRecord(raw)) {
+                continue;
+            }
+            const relationshipType = raw.relationship_type;
+            return typeof relationshipType === 'string' ? relationshipType.trim() : '';
         }
     }
     return '';
@@ -547,13 +550,16 @@ export class CRMMindmapCanvas extends PlatformElement {
         }
         const root = this.renderRoot;
         const viewport = root ? root.querySelector('.viewport') : null;
-        if (!viewport) {
+        if (viewport === null) {
             return;
+        }
+        if (!(viewport instanceof HTMLElement)) {
+            throw new Error('mindmap-canvas: viewport element required');
         }
         this._teardownViewportResizeObserver();
         this._viewportResizeObserver = new ResizeObserver(() => {
-            const w = (viewport as HTMLElement).clientWidth;
-            const h = (viewport as HTMLElement).clientHeight;
+            const w = viewport.clientWidth;
+            const h = viewport.clientHeight;
             if (Number.isFinite(w) && w > 0 && Math.abs(w - this._viewportWidthPx) >= 1) {
                 this._viewportWidthPx = w;
             }
@@ -674,20 +680,19 @@ export class CRMMindmapCanvas extends PlatformElement {
     _labelMap(): Map<string, MindmapLabelRow> {
         const map = new Map<string, MindmapLabelRow>();
         for (const raw of this.graphNodes) {
-            if (!raw || typeof raw !== 'object') {
+            if (!isPlainRecord(raw)) {
                 continue;
             }
-            const node = raw as Record<string, any>;
-            const idRaw = node.entity_id !== undefined ? node.entity_id : node.id;
+            const idRaw = raw.entity_id !== undefined ? raw.entity_id : raw.id;
             const id = typeof idRaw === 'string' ? idRaw.trim() : '';
             if (id.length === 0) {
                 continue;
             }
-            const nameRaw = node.name !== undefined ? node.name : node.label;
+            const nameRaw = raw.name !== undefined ? raw.name : raw.label;
             const label = typeof nameRaw === 'string' && nameRaw.trim().length > 0 ? nameRaw.trim() : id;
-            const etRaw = node.entity_type;
-            const entityType = typeof etRaw === 'string' ? etRaw.trim() : '';
-            const access = node.access === false ? false : true;
+            const entityTypeRaw = raw.entity_type;
+            const entityType = typeof entityTypeRaw === 'string' ? entityTypeRaw.trim() : '';
+            const access = raw.access === false ? false : true;
             map.set(id, { label, entity_type: entityType, access });
         }
         return map;

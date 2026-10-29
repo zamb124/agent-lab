@@ -5,14 +5,15 @@
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import type { PlatformEvent, EffectCtx } from '@platform/lib/events/contract.js';
 import type { EventEffect } from '@platform/lib/events/bus.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export function createOfficeCatalogsLegacyRoutesEffect(): EventEffect {
     return async function officeCatalogsLegacyRoutesEffect(event: PlatformEvent, ctx: EffectCtx) {
         if (event.type !== CoreEvents.ROUTER_ROUTE_CHANGED) {
             return;
         }
-        const payload = event.payload as { routeKey?: unknown } | null;
-        if (!payload || typeof payload !== 'object') {
+        const payload = event.payload;
+        if (!isPlainRecord(payload)) {
             return;
         }
         const routeKey = typeof payload.routeKey === 'string' ? payload.routeKey : '';

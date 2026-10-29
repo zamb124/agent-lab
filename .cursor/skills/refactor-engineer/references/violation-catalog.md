@@ -20,7 +20,7 @@ rg -n '\.objects\.|execute_raw\(|\batomic\(' apps core -g '*.py' -g '!**/models/
 **L3. Право, событие, HTTP, задача в модели.** Норма: `main.mdc` § Куда писать код. Цель: метод сервиса.
 
 ```bash
-rg -n 'publish_event|require_can_|ServiceClient|httpx|enqueue\(' -g '**/models/**' -g '**/models.py' apps core
+rg -n 'publish_event|require_can_|ServiceClient|httpx2|enqueue\(' -g '**/models/**' -g '**/models.py' apps core
 ```
 
 **L4. `handlers.py` и свободные функции со смыслом сценария.** Норма: `main.mdc` § Куда писать код. Цель: метод сервиса с именем логики.
@@ -56,7 +56,7 @@ rg --files apps core | rg '_queries\.py$'
 rg -n 'def (get_by|find|load|fetch|read|save|remove)_\w+' -g '**/models/**' -g '**/models.py' apps core
 ```
 
-**M5. Разрыв цепочки миграций.** Норма: `database.mdc` § Миграции. Цель: `0001_initial.py` и дальше `NNNN_<name>.py` без пропусков. Детектор: `scripts/check_migration_files_canon.py`.
+**M5. Разрыв цепочки миграций.** Норма: `database.mdc` § Миграции. Цель: `0001_initial.py` и дальше `NNNN_<name>.py` без пропусков. Детектор: `scripts/gates/backend/migration_files.py`.
 
 ## D — композиция процесса
 
@@ -74,11 +74,11 @@ rg -n '^\s*global \w+' apps core -g '*.py'
 rg -n '^_\w+: .*\| None = None$' apps core -g '*.py'
 ```
 
-**D3. `di` внутри service, model, runtime, client.** Норма: `architecture.mdc` § Service Kit DI. Детектор: `uv run python scripts/check_dependency_injection_canon.py`. Цель: конкретный компонент через constructor.
+**D3. `di` внутри service, model, runtime, client.** Норма: `architecture.mdc` § Service Kit DI. Детектор: `uv run python -m scripts.gates.backend.dependency_injection`. Цель: конкретный компонент через constructor.
 
 ## T — транспорт и ошибки
 
-**T1. REST-хендлер без `op_*`.** Норма: `architecture.mdc` § REST-зеркало. Детектор: `uv run python scripts/check_rest_handlers_call_ops.py`. Цель: payload → тот же `op_*`.
+**T1. REST-хендлер без `op_*`.** Норма: `architecture.mdc` § REST-зеркало. Детектор: `uv run python -m scripts.gates.backend.rest_handlers_call_ops`. Цель: payload → тот же `op_*`.
 
 **T2. `HTTPException` в `apps/`.** Норма: `architecture.mdc` § Ошибки границы. Цель: `raise_*` или `Platform*Error`.
 
@@ -92,7 +92,7 @@ uv run python .cursor/skills/refactor-engineer/scripts/ratchet_list.py http_exce
 rg -n '@app\.exception_handler|app\.add_middleware|on_startup|on_shutdown' apps -g 'main.py'
 ```
 
-**T4. Команда без каталога владельца или без REST-зеркала фабрики.** Норма: `architecture.mdc` § Транспорт. Детекторы: `scripts/check_command_owner_catalogs.py`, `scripts/check_command_rest_mirror.py`. Цель: `<SVC>_OPERATIONS` + REST route + `restMirror`.
+**T4. Команда без каталога владельца или без REST-зеркала фабрики.** Норма: `architecture.mdc` § Транспорт. Детекторы: `scripts/gates/backend/command_owner_catalogs.py`, `scripts/gates/backend/command_rest_mirror.py`. Цель: `<SVC>_OPERATIONS` + REST route + `restMirror`.
 
 **T5. Свой класс ошибки без дополнительных атрибутов.** Норма: `architecture.mdc` § Ошибки границы. Цель: `core/errors/boundary.py`.
 
@@ -123,13 +123,13 @@ rg -n '^\s*return await (self|cls)\.\w+\(' apps core -g '*.py'
 
 ## C — границы сервисов
 
-**C1. Импорт `apps/<a>` → `apps/<b>`.** Норма: `main.mdc` § Границы core и apps. Детектор: `uv run python scripts/check_cross_service_imports.py`. Цель: общее — `core/`, владелец — `core/clients/` или его модель.
+**C1. Импорт `apps/<a>` → `apps/<b>`.** Норма: `main.mdc` § Границы core и apps. Детектор: `uv run python -m scripts.gates.backend.cross_service_imports`. Цель: общее — `core/`, владелец — `core/clients/` или его модель.
 
-**C2. Клиент вне `core/clients/`, прямой `httpx`.** Норма: `main.mdc` § Границы core и apps; `architecture.mdc` § Межсервисный доступ. Цель: typed клиент в `core/clients/` поверх `ServiceClient`.
+**C2. Клиент вне `core/clients/`, прямой `httpx2`.** Норма: `main.mdc` § Границы core и apps; `architecture.mdc` § Межсервисный доступ. Цель: typed клиент в `core/clients/` поверх `ServiceClient`.
 
 ```bash
 rg --files apps | rg '/clients/'
-rg -n 'httpx\.(AsyncClient|Client)\(' apps -g '*.py'
+rg -n 'httpx2\.(AsyncClient|Client)\(' apps -g '*.py'
 ```
 
 **C3. Копипаста между сервисами.** Норма: запрет 16. Цель: модуль в `core/`.
@@ -168,7 +168,7 @@ uv run python .cursor/skills/refactor-engineer/scripts/ratchet_list.py cast_call
 rg -n '\bAny\b' apps core -g '*.py'
 ```
 
-**S2. `getattr(obj, "x", default)`.** Норма: запрет 7. Детектор: `uv run python scripts/audit_wider_repo_strictness.py`. Цель: прямой доступ к атрибуту типизированной модели.
+**S2. `getattr(obj, "x", default)`.** Норма: запрет 7. Детектор: `uv run python -m scripts.gates.backend.wider_repo_strictness`. Цель: прямой доступ к атрибуту типизированной модели.
 
 **S3. `value or "default"`.** Норма: запрет 7. Цель: `raise` при отсутствии; дефолт — в Pydantic-модели.
 
@@ -242,13 +242,13 @@ rg -n '^class (InMemory|Fake|Stub)\w+' tests -g '*.py'
 
 ## F — frontend
 
-**F1. Нарушения UI-канона.** Нормы: `frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`. Детекторы: `make check-events-canon`, `make check-field-canon`, пункты `scripts/check_ui_canon.sh`. Цель: фабрика, helper базы, core-компонент.
+**F1. Нарушения UI-канона.** Нормы: `frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`. Детекторы: `make check-events-canon`, `make check-field-canon`, пункты `scripts/gates/frontend/ui_canon.sh`. Цель: фабрика, helper базы, core-компонент.
 
 **F2. Текст вне i18n.** Норма: `frontend.mdc`.
 
 ```bash
 make check-i18n-keys
-uv run python scripts/report_ui_i18n_gaps.py --app <svc>
+uv run python -m scripts.tools.report_ui_i18n_gaps --app <svc>
 ```
 
 ## R — правила

@@ -12,7 +12,7 @@ import re
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.crm.system_templates import NAMESPACE_TEMPLATE_SEEDS, NamespaceTemplateSeed
 from tests.crm.e2e._json_helpers import (

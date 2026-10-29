@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.clients.flow_ui_client import FlowUIStateEvent, decode_task_events
 from core.context import require_context

@@ -47,7 +47,7 @@ class RuleService:
         warehouse_id: str | None,
     ) -> list[StockReorderRule]:
         """Каталог min/max-правил — «полка не должна пустеть»."""
-        return await StockReorderRule.list_by_rule_id(
+        return await StockReorderRule.list_by_rule_id_asc(
             company_id, warehouse_id=warehouse_id
         )
 
@@ -134,7 +134,7 @@ class RuleService:
         warehouse = await StockWarehouse.by_id(company_id, warehouse_id)
         if warehouse is None:
             raise _not_found("Warehouse not found", "warehouse_not_found")
-        return await StockPutawayRule.list_by_sequence_and_rule_id_for_warehouse(
+        return await StockPutawayRule.list_for_warehouse_by_sequence_and_rule_id_asc(
             company_id, warehouse_id
         )
 
@@ -298,7 +298,7 @@ class RuleService:
         offset: int = 0,
     ) -> list[StockRoute]:
         """Каталог маршрутов компании, опционально — по складу."""
-        items = await StockRoute.list_active_by_name(
+        items = await StockRoute.list_active_by_name_asc(
             company_id, warehouse_id=warehouse_id, limit=limit + offset
         )
         return items[offset:]

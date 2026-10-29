@@ -513,7 +513,7 @@ describe('platform-rich-editor', () => {
         });
         el._handleBlockPos = 0;
 
-        el._onBlockMenuSelect({ detail: { id: 'delete' } });
+        el._onBlockMenuSelect(new CustomEvent('menu-select', { detail: { id: 'delete' } }));
         await elementUpdated(el);
 
         expect(el.querySelector('.pm-editor').textContent).to.not.contain('Первый');
@@ -524,7 +524,7 @@ describe('platform-rich-editor', () => {
         const el = await mountEditor({ value: docWithText('Копируемый') });
         el._handleBlockPos = 0;
 
-        el._onBlockMenuSelect({ detail: { id: 'duplicate' } });
+        el._onBlockMenuSelect(new CustomEvent('menu-select', { detail: { id: 'duplicate' } }));
         await elementUpdated(el);
 
         expect(el.value.content.length).to.equal(2);
@@ -534,7 +534,7 @@ describe('platform-rich-editor', () => {
         const el = await mountEditor({ value: docWithText('Станет заголовком') });
         el._handleBlockPos = 0;
 
-        el._onBlockMenuSelect({ detail: { id: 'turn_heading_2' } });
+        el._onBlockMenuSelect(new CustomEvent('menu-select', { detail: { id: 'turn_heading_2' } }));
         await elementUpdated(el);
 
         expect(el.value.content[0].type).to.equal('heading');
@@ -545,7 +545,7 @@ describe('platform-rich-editor', () => {
         const el = await mountEditor({ value: docWithText('Текст') });
         el._handleBlockPos = 0;
 
-        expect(() => el._onBlockMenuSelect({ detail: { id: 'turn_unknown' } })).to.throw();
+        expect(() => el._onBlockMenuSelect(new CustomEvent('menu-select', { detail: { id: 'turn_unknown' } }))).to.throw();
     });
 
     it('внутри таблицы появляются контролы строк и колонок', async () => {

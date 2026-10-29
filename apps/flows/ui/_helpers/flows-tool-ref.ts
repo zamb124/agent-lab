@@ -7,7 +7,7 @@ import { asString, isPlainObject } from './flows-resolvers.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from './flows-mcp-tool-registry.js';
 import { normalizeFlowCodeLanguage } from './flows-code-languages.js';
 
-function _mcpFieldsFromRef(raw: any, toolId: string) {
+function _mcpFieldsFromRef(raw: Record<string, unknown>, toolId: string) {
     let serverId = asString(raw.server_id);
     if (serverId.length === 0) {
         serverId = asString(raw.mcp_server_id);
@@ -39,11 +39,11 @@ export function normalizeToolRef(ref: unknown) {
     if (!isPlainObject(ref)) {
         throw new Error('flows-tool-ref: tool ref must be a string or object');
     }
-    const toolId = asString((ref as any).tool_id);
+    const toolId = asString(ref.tool_id);
     if (toolId.length === 0) {
         throw new Error('flows-tool-ref: tool_id is required');
     }
-    return { tool_id: toolId, raw: { ...(ref as Record<string, any>) } };
+    return { tool_id: toolId, raw: { ...ref } };
 }
 
 /**
@@ -56,26 +56,26 @@ export function toolRefNeedsRegistryFetch(raw: unknown) {
     if (!isPlainObject(raw)) {
         return true;
     }
-    if ((raw as any).prompt) {
+    if (raw.prompt) {
         return false;
     }
-    if ((raw as any).type === 'llm_node') {
+    if (raw.type === 'llm_node') {
         return false;
     }
-    if ((raw as any).mcp_server_id) {
+    if (raw.mcp_server_id) {
         return false;
     }
-    if (asString((raw as any).tool_id).startsWith('mcp:')) {
+    if (asString(raw.tool_id).startsWith('mcp:')) {
         return false;
     }
-    const t = asString((raw as any).type);
-    if (t === 'mcp' || t === 'channel' || t === 'flow' || t === 'external_api' || t === 'remote_flow' || t === 'hitl_node') {
+    const toolType = asString(raw.type);
+    if (toolType === 'mcp' || toolType === 'channel' || toolType === 'flow' || toolType === 'external_api' || toolType === 'remote_flow' || toolType === 'hitl_node') {
         return false;
     }
-    if (t === 'code' && typeof (raw as any).code === 'string' && (raw as any).code.length > 0) {
+    if (toolType === 'code' && typeof raw.code === 'string' && raw.code.length > 0) {
         return false;
     }
-    if (typeof (raw as any).code === 'string' && (raw as any).code.length > 0) {
+    if (typeof raw.code === 'string' && raw.code.length > 0) {
         return false;
     }
     return true;
@@ -86,7 +86,7 @@ export function toolRefNeedsRegistryFetch(raw: unknown) {
  * @param {string} toolId
  * @returns {Record<string, unknown>}
  */
-export function toolRefToInitialNode(raw: any, toolId: string) {
+export function toolRefToInitialNode(raw: unknown, toolId: string): Record<string, unknown> {
     if (toolRefNeedsRegistryFetch(raw)) {
         throw new Error('flows-tool-ref: use registry path for this ref');
     }
@@ -117,7 +117,7 @@ export function toolRefToInitialNode(raw: any, toolId: string) {
         };
     }
     if (explicitType === 'flow') {
-        const base: any = { ...raw, node_id: rid, type: 'flow' };
+        const base: Record<string, unknown> = { ...raw, node_id: rid, type: 'flow' };
         const fid = asString(base.flow_id);
         const outFlowId = fid.length > 0 ? fid : toolId;
         const sid = asString(base.branch_id);
@@ -145,7 +145,7 @@ export function toolRefToInitialNode(raw: any, toolId: string) {
                 : nameFromTitle.length > 0
                     ? nameFromTitle
                     : rid;
-        const out: any = {
+        const out: Record<string, unknown> = {
             node_id: rid,
             type: 'code',
             name: displayName,
@@ -184,7 +184,7 @@ export function toolRefToInitialNode(raw: any, toolId: string) {
  * @param {Record<string, unknown>} t
  * @returns {Record<string, unknown>}
  */
-export function registryToolItemToNode(t: any) {
+export function registryToolItemToNode(t: unknown): Record<string, unknown> {
     if (!isPlainObject(t)) {
         throw new Error('flows-tool-ref: tool item must be an object');
     }
@@ -233,9 +233,12 @@ export function registryToolItemToNode(t: any) {
         };
     }
     if (t.builtin === true) {
-        const effects = Array.isArray(t.effects)
-            ? t.effects.filter((effect: any) => typeof effect === 'string')
-            : [];
+        const effects: string[] = [];
+        if (Array.isArray(t.effects)) {
+            for (const effect of t.effects) {
+                if (typeof effect === 'string') effects.push(effect);
+            }
+        }
         const confirmationFloor =
             typeof t.confirmation_floor === 'string' && t.confirmation_floor.length > 0
                 ? t.confirmation_floor
@@ -255,7 +258,7 @@ export function registryToolItemToNode(t: any) {
             confirmation_floor: confirmationFloor,
         };
     }
-    const out: any = {
+    const out: Record<string, unknown> = {
         node_id: toolId,
         type: 'code',
         name: displayTitle,
@@ -279,7 +282,7 @@ export function registryToolItemToNode(t: any) {
  * @param {Record<string, unknown>} updated
  * @returns {unknown[]}
  */
-export function replaceToolRefInToolsList(tools: any, updated: any) {
+export function replaceToolRefInToolsList(tools: unknown, updated: unknown): unknown[] {
     if (!isPlainObject(updated)) {
         throw new Error('flows-tool-ref: updated tool ref must be an object');
     }
@@ -337,7 +340,7 @@ const CODE_TOOL_REF_KEYS = new Set([
  * @param {Record<string, unknown>} node
  * @returns {Record<string, unknown>}
  */
-export function nodeConfigToToolRef(node: any) {
+export function nodeConfigToToolRef(node: unknown): Record<string, unknown> {
     if (!isPlainObject(node)) {
         throw new Error('flows-tool-ref: node must be an object');
     }
@@ -347,7 +350,7 @@ export function nodeConfigToToolRef(node: any) {
     }
     if (asString(node.type) === 'mcp') {
         const { serverId, toolName } = _mcpFieldsFromRef(node, nid);
-        const out: any = {};
+        const out: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(node)) {
             if (
                 k === 'node_id'
@@ -373,14 +376,14 @@ export function nodeConfigToToolRef(node: any) {
         return { tool_id: nid };
     }
     if (nodeType === 'code' || (typeof node.code === 'string' && node.code.length > 0 && nodeType.length === 0)) {
-        const out: any = { tool_id: nid };
+        const out: Record<string, unknown> = { tool_id: nid };
         for (const key of CODE_TOOL_REF_KEYS) {
             if (!(key in node)) continue;
             out[key] = node[key];
         }
         return out;
     }
-    const out: any = {};
+    const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(node)) {
         if (k === 'node_id' || k === 'tool_id') {
             continue;

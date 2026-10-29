@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.search.di import SearchDi
 from core.crawl.models import CrawlProfile, CrawlProfileWithIndex, CrawlUrl
 from core.search.index_models import SearchIndexDefinition
 from tests.fixtures.taskiq_capture import taskiq_task_name
@@ -15,7 +14,7 @@ from tests.fixtures.taskiq_capture import taskiq_task_name
 @pytest.mark.asyncio
 async def test_enqueue_domain_fetch_respects_http_concurrency(
     monkeypatch: pytest.MonkeyPatch,
-    search_di: SearchDi,
+    search_di,
 ) -> None:
     enqueued: list[tuple[object, ...]] = []
 

@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-import httpx
+import httpx2
 import pytest
 
 # Игнорируем тест, если мы не в docker-compose (нет доступа к инфраструктуре observability)
@@ -23,7 +23,7 @@ async def test_observability_pipeline_e2e():
     """
     # 1. Генерируем событие (запрос к provider_litserve)
     # Используем таймаут побольше, на случай если сервис долго стартует
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx2.AsyncClient(timeout=10.0) as client:
         # Проверяем доступность Grafana
         try:
             grafana_resp = await client.get("http://grafana-test:3000/api/health")

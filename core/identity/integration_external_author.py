@@ -85,7 +85,7 @@ class IntegrationExternalAuthorService:
                 return uid
             _ = await self._storage.delete(key)
 
-        matches = await User.list_by_email_ci(email_norm)
+        matches = await User.list_containing_email_ci_by_user_id_asc(email_norm)
         if len(matches) > 1:
             raise ValueError(
                 f"Multiple users with email {email_norm}: "

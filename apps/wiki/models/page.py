@@ -73,7 +73,8 @@ class WikiPage(PlatformModel):
     deleted_at: datetime | None = DbField(default=None)
 
     @classmethod
-    async def list_deleted(cls, company_id: str, namespace: str) -> list[Self]:
+    async def list_deleted_by_deleted_at_desc(cls, company_id: str, namespace: str) -> list[Self]:
+        """Удалённые страницы namespace, ORDER BY deleted_at DESC. Предела нет. Пустые поля не проверяются."""
         return await cls.objects.filter(
             company_id=company_id,
             namespace=namespace,
@@ -182,7 +183,8 @@ class WikiPage(PlatformModel):
         ).update(using="wiki", depth=depth, root_page_id=root_page_id)
 
     @classmethod
-    async def alive_by_created_at(cls, *, limit: int | None) -> list[Self]:
+    async def alive_by_created_at_asc(cls, *, limit: int | None) -> list[Self]:
+        """Живые страницы, ORDER BY created_at ASC. limit is None не ограничивает. limit < 1 — ValueError."""
         query = cls.objects.filter(deleted_at=None).order_by("created_at")
         if limit is not None:
             if limit < 1:
@@ -224,7 +226,7 @@ class WikiPage(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_alive_by_title(
+    async def list_alive_by_title_asc(
         cls,
         company_id: str,
         query: str,
@@ -300,7 +302,8 @@ class WikiPage(PlatformModel):
         ).update(using="wiki", company_visible=company_visible)
 
     @classmethod
-    async def list_alive(cls, company_id: str, wiki_page_ids: list[str]) -> list[Self]:
+    async def list_unordered_alive(cls, company_id: str, wiki_page_ids: list[str]) -> list[Self]:
+        """Живые страницы из списка id. deleted_at пустой. Пустой список id — []. Порядка и limit нет."""
         if len(wiki_page_ids) == 0:
             return []
         return await cls.objects.filter(
@@ -361,17 +364,17 @@ class WikiPage(PlatformModel):
         )
 
     @classmethod
-    async def tree_summaries(cls, company_id: str, namespace: str) -> list[WikiPageSummary]:
-        """Всё дерево namespace, отсортированное для отрисовки sidebar."""
+    async def list_alive_summaries_by_depth_position_and_title_asc(cls, company_id: str, namespace: str) -> list[WikiPageSummary]:
+        """Сводки живых страниц namespace, ORDER BY depth, position, title ASC. Предела нет. У страницы с детьми has_children. Пустые поля не проверяются."""
         pages = await cls._alive(company_id, namespace).order_by("depth", "position", "title").all()
         parents = {page.parent_page_id for page in pages if page.parent_page_id is not None}
         return [cls._summary(page, page.wiki_page_id in parents) for page in pages]
 
     @classmethod
-    async def list_subtree(
+    async def list_unordered_subtree(
         cls, company_id: str, namespace: str, wiki_page_id: str
     ) -> list[Self]:
-        """Страница и все её потомки. Обход по уровням, без рекурсивного SQL."""
+        """Страница и потомки. Живые страницы namespace читаются без порядка. Обход стеком. Нет страницы — []."""
         pages = await cls._alive(company_id, namespace).all()
         by_parent: dict[str | None, list[Self]] = {}
         for page in pages:
@@ -389,10 +392,10 @@ class WikiPage(PlatformModel):
         return collected
 
     @classmethod
-    async def published_subtree_summaries(
+    async def list_published_subtree_summaries_breadth_first(
         cls, company_id: str, namespace: str, root_page_id: str
     ) -> list[WikiPageSummary]:
-        """Опубликованное поддерево. Черновик обрывает ветку вместе с потомками."""
+        """Сводки опубликованной ветки, обход в ширину. Дети внутри родителя идут как depth, position, title. Неопубликованный узел обрывает ветку. Нет корня или корень не опубликован — []."""
         pages = await cls._alive(company_id, namespace).order_by("depth", "position", "title").all()
         by_parent: dict[str | None, list[Self]] = {}
         for page in pages:
@@ -506,7 +509,7 @@ class WikiPage(PlatformModel):
         return max_position + 1
 
     @classmethod
-    async def list_search_hits(
+    async def list_alive_search_hits_by_rank_desc_and_updated_at_desc(
         cls,
         company_id: str,
         namespace: str,
@@ -514,7 +517,7 @@ class WikiPage(PlatformModel):
         limit: int,
         allowed_page_ids: list[str] | None,
     ) -> list[WikiSearchHit]:
-        """Живые страницы namespace по search_vector как WikiSearchHit. Ранг по убыванию, затем updated_at. Не больше limit. Пустой allowed_page_ids — []."""
+        """Живые страницы namespace по search_vector как WikiSearchHit. Ранг DESC, затем updated_at DESC. Не больше limit. Пустой allowed_page_ids — []."""
         if allowed_page_ids is not None and len(allowed_page_ids) == 0:
             return []
         params: list[str | int] = [query, company_id, namespace, limit]

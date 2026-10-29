@@ -40,7 +40,7 @@ def go_lsp_command() -> list[str]:
         env["PATH"] = f"{platform_runtime_bin_dir()}{os.pathsep}{env.get('PATH', '')}"
         env["GOBIN"] = str(gobin)
         completed = subprocess.run(
-            [go_bin, "install", "golang.org/x/tools/gopls@latest"],
+            [go_bin, "install", "golang.org/x/tools/gopls@v0.24.0"],
             check=False,
             capture_output=True,
             text=True,

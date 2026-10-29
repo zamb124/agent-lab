@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 import jwt
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.config import get_settings
 from core.models.identity_models import Company, User

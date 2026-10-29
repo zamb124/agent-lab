@@ -48,17 +48,17 @@ async def test_sync_flow_employee_binds_and_unbinds_company_mailbox(
     )
     try:
         await sync_flow_employee(di.authz_service, mail_service, enabled)
-        binding = await MailboxBinding.preferred_for_user(company_id, employee_user_id)
+        binding = await MailboxBinding.find_default_or_first_by_email_for_user(company_id, employee_user_id)
         assert binding is not None
         assert binding.kind == MailboxBindingKind.USER
         assert binding.user_id == employee_user_id
 
         disabled = enabled.model_copy(update={"employee": FlowEmployeeConfig()})
         await sync_flow_employee(di.authz_service, mail_service, disabled)
-        unbound = await MailboxBinding.preferred_for_user(company_id, employee_user_id)
+        unbound = await MailboxBinding.find_default_or_first_by_email_for_user(company_id, employee_user_id)
         assert unbound is None
     finally:
-        leftover = await MailboxBinding.preferred_for_user(company_id, employee_user_id)
+        leftover = await MailboxBinding.find_default_or_first_by_email_for_user(company_id, employee_user_id)
         if leftover is not None:
             await mail_service.unbind_mailbox(
                 leftover.mailbox_binding_id,

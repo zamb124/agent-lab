@@ -6,7 +6,7 @@
 import os
 from typing import ClassVar, override
 
-import httpx
+import httpx2
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.fastapi_routes import add_a2a_routes_to_fastapi
@@ -44,7 +44,7 @@ class CatFactTool:
     async def execute(self, args: JsonObject, state: JsonObject | None) -> str:
         """Получает факт с внешнего API."""
         _ = args, state
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx2.AsyncClient(timeout=10.0) as client:
             http_response = await client.get("https://catfact.ninja/fact")
             _ = http_response.raise_for_status()
             return CatFactResponse.model_validate_json(http_response.text).fact

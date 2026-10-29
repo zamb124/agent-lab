@@ -21,11 +21,22 @@ import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 const SCOPE_COMPANY = 'company';
 const SCOPE_FLOW = 'flow';
 
-function _normalizeFlowVar(raw: any) {
+interface FlowVarEntry {
+    key: string;
+    value: unknown;
+    secret: boolean;
+    public: boolean;
+    title: string | null;
+    description: string | null;
+    order: number | null;
+    scope: string;
+}
+
+function _normalizeFlowVar(raw: unknown): Omit<FlowVarEntry, 'key' | 'scope'> {
     if (raw === null || raw === undefined) {
         return { value: '', secret: false, public: false, title: null, description: null, order: null };
     }
-    if (typeof raw === 'object' && !Array.isArray(raw) && 'value' in raw) {
+    if (isPlainObject(raw) && 'value' in raw) {
         return {
             value: raw.value,
             secret: Boolean(raw.secret),
@@ -38,7 +49,7 @@ function _normalizeFlowVar(raw: any) {
     return { value: raw, secret: false, public: false, title: null, description: null, order: null };
 }
 
-function _stringifyVarValue(value: unknown, secret: any) {
+function _stringifyVarValue(value: unknown, secret: boolean) {
     if (secret) return '***';
     if (value === null || value === undefined) return '';
     if (typeof value === 'string') return value;
@@ -143,10 +154,11 @@ export class FlowsVariablesModal extends PlatformModal {
         }
     }
 
-    _flowVariablesEntries() {
+    _flowVariablesEntries(): FlowVarEntry[] {
         const state = this._editor.state;
-        const skills = isPlainObject(state.branchData) ? state.branchData : null;
-        const skillVars = skills !== null && isPlainObject((skills as Record<string, any>).variables) ? (skills as Record<string, any>).variables : {};
+        const branchData = isPlainObject(state.branchData) ? state.branchData : null;
+        const variables = branchData === null ? undefined : branchData.variables;
+        const skillVars = isPlainObject(variables) ? variables : {};
         return Object.entries(skillVars).map(([key, raw]) => ({
             key,
             ...(_normalizeFlowVar(raw)),
@@ -160,7 +172,7 @@ export class FlowsVariablesModal extends PlatformModal {
         });
     }
 
-    _editFlow(entry: any) {
+    _editFlow(entry: FlowVarEntry) {
         this.openModal('flows.variable_editor', {
             flowId: this.flowId,
             variableKey: entry.key,
@@ -173,7 +185,7 @@ export class FlowsVariablesModal extends PlatformModal {
         });
     }
 
-    async _deleteFlow(entry: any) {
+    async _deleteFlow(entry: FlowVarEntry) {
         const ok = await platformConfirm(
             this.t('variables_modal.delete_message', { key: entry.key }),
             {
@@ -187,14 +199,17 @@ export class FlowsVariablesModal extends PlatformModal {
         if (!ok) return;
         const state = this._editor.state;
         const skillsData = state.branchData;
-        const nextVars = { ...(skillsData as any).variables };
+        if (!isPlainObject(skillsData)) {
+            throw new Error('flows-variables-modal: branchData required');
+        }
+        const nextVars = isPlainObject(skillsData.variables) ? { ...skillsData.variables } : {};
         delete nextVars[entry.key];
-        (this._editor.updateBranchData({ data: { ...skillsData, variables: nextVars } }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
+        this._editor.updateBranchData({ data: { ...skillsData, variables: nextVars } });
+        this._editor.setDirty({ dirty: true });
         this.toast('flows:toast.variable_applied', { type: 'success' });
     }
 
-    _renderFlowRow(entry: any) {
+    _renderFlowRow(entry: FlowVarEntry) {
         return html`
             <tr>
                 <td><code>${entry.key}</code></td>
@@ -231,7 +246,7 @@ export class FlowsVariablesModal extends PlatformModal {
         `;
     }
 
-    _renderFlowTable(rows: Record<string, any>[]) {
+    _renderFlowTable(rows: readonly FlowVarEntry[]) {
         if (rows.length === 0) {
             return html`<div class="flows-vars-empty">${this.t('variables_modal.empty_flow')}</div>`;
         }
@@ -245,7 +260,7 @@ export class FlowsVariablesModal extends PlatformModal {
                         <th>${this.t('variables_modal.col_actions')}</th>
                     </tr>
                 </thead>
-                <tbody>${rows.map((entry: any) => this._renderFlowRow(entry))}</tbody>
+                <tbody>${rows.map((entry) => this._renderFlowRow(entry))}</tbody>
             </table>
         `;
     }

@@ -98,7 +98,7 @@ class WorkQueueAccessService:
         if deletes:
             await self._authz.delete(deletes)
 
-    async def list_member_rows(
+    async def list_member_rows_by_user_id_asc(
         self, work_queue_id: str
     ) -> list[tuple[str, WorkQueueMemberRelation]]:
         items: list[tuple[str, WorkQueueMemberRelation]] = []

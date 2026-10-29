@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
-import httpx
+import httpx2
 from playwright.async_api import Page, expect
 
 from core.di.platform import PlatformDi
@@ -61,7 +61,7 @@ async def wiki_api_create_page(
         body["parent_page_id"] = parent_page_id
     if markdown != "":
         body["markdown"] = markdown
-    async with httpx.AsyncClient(base_url=origin, timeout=30.0) as client:
+    async with httpx2.AsyncClient(base_url=origin, timeout=30.0) as client:
         response = await client.post(
             "/wiki/api/v1/pages",
             json=body,

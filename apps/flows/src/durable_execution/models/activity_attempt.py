@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from oxyde import Field as DbField
 from oxyde import Index
@@ -44,3 +44,11 @@ class ActivityAttempt(PlatformModel):
     lease_until: datetime | None = DbField(default=None)
     started_at: datetime | None = DbField(default=None)
     completed_at: datetime | None = DbField(default=None)
+
+    @classmethod
+    async def latest_by_attempt_desc(cls, activity_id: str, *, for_update: bool) -> Self | None:
+        """Последняя попытка activity, ORDER BY attempt DESC. Несколько с одним attempt — какая именно, не задано. Нет строки — None."""
+        query = cls.objects.filter(activity_id=activity_id).order_by("-attempt")
+        if for_update:
+            query = query.for_update()
+        return await query.first()

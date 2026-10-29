@@ -16,16 +16,16 @@ import {
     createAsyncOp,
     upsertItem,
 } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const ROW_SEP = '\u0000';
 
 function rowIdFromRaw(raw: unknown): string {
-    if (!raw || typeof raw !== 'object') {
+    if (!isPlainRecord(raw)) {
         throw new Error('crm/entity_types rowId: object required');
     }
-    const r = raw as Record<string, unknown>;
-    const ns = r.namespace;
-    const tid = r.type_id;
+    const ns = raw.namespace;
+    const tid = raw.type_id;
     if (typeof ns !== 'string' || !ns.length) {
         throw new Error('crm/entity_types rowId: namespace string required');
     }
@@ -36,15 +36,14 @@ function rowIdFromRaw(raw: unknown): string {
 }
 
 function mapEntityType(raw: unknown) {
-    if (!raw || typeof raw !== 'object') {
+    if (!isPlainRecord(raw)) {
         throw new Error('crm/entity_types mapItem: item object required');
     }
-    const r = raw as Record<string, unknown>;
-    const listEntityType = r.list_entity_type;
+    const listEntityType = raw.list_entity_type;
     if (typeof listEntityType !== 'string' || listEntityType.length === 0) {
         throw new Error('crm/entity_types mapItem: list_entity_type string required');
     }
-    let listEntitySubtype = r.list_entity_subtype;
+    let listEntitySubtype = raw.list_entity_subtype;
     if (listEntitySubtype === undefined || listEntitySubtype === null) {
         listEntitySubtype = null;
     } else if (typeof listEntitySubtype !== 'string') {
@@ -90,8 +89,11 @@ export const entityTypesResource = createResourceCollection({
         if (event.type !== ENTITY_TYPE_UPDATE_SUCCEEDED) {
             return state;
         }
-        const updated = (event.payload as Record<string, any>).result;
-        if (!updated || typeof updated !== 'object' || typeof updated.type_id !== 'string') {
+        if (!isPlainRecord(event.payload)) {
+            return state;
+        }
+        const updated = event.payload.result;
+        if (!isPlainRecord(updated) || typeof updated.type_id !== 'string') {
             return state;
         }
         return upsertItem(state, mapEntityType(updated), 'crm_entity_type_row_id');

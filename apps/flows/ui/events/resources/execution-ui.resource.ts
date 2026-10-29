@@ -10,6 +10,7 @@
 
 import { createSlice } from '@platform/lib/events/index.js';
 import type { ExecutionUiSlice } from '../editor.types.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function normalizeMockResponses(value: unknown) {
     if (!Array.isArray(value)) {
@@ -41,14 +42,18 @@ export const executionUiSlice = createSlice({
         const p = event.payload;
 
         if (t === 'flows/execution_ui/persist_context_toggled') {
-            if (p && typeof (p as Record<string, any>).value === 'boolean') {
-                return { ...state, persistContext: (p as Record<string, any>).value };
+            if (isPlainRecord(p)) {
+                const value = p.value;
+                if (typeof value === 'boolean') {
+                    return { ...state, persistContext: value };
+                }
             }
             return { ...state, persistContext: !state.persistContext };
         }
 
         if (t === 'flows/execution_ui/mocks_set') {
-            return { ...state, mockResponses: normalizeMockResponses(p && (p as Record<string, any>).mocks) };
+            const mocks = isPlainRecord(p) ? p.mocks : undefined;
+            return { ...state, mockResponses: normalizeMockResponses(mocks) };
         }
 
         return state;

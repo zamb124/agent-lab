@@ -19,7 +19,8 @@ import {
 } from '@platform/lib/flow-ui/protocol/a2a-stream.js';
 import { RESPONSE_ARTIFACT_NAME, STATE_ARTIFACT_ID } from '@platform/lib/flow-ui/protocol/constants.js';
 import { applyJsonPatch, decodePart, textFromParts } from '@platform/lib/flow-ui/protocol/parts.js';
-import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
+import type { A2aUnwrappedFrame } from '@platform/lib/flow-ui/protocol/a2a-stream.js';
 import {
     takePendingPublicSearchRunFiles,
     uploadPublicSearchFilesForA2a,
@@ -39,15 +40,158 @@ const PUBLIC_SEARCH_STREAM_EVENT = 'frontend/public_search_run/stream_event';
 const PUBLIC_SEARCH_SOURCE_STREAM_EVENT = 'frontend/public_search_source_describe/stream_event';
 const RUN_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+interface PublicSearchResult {
+    title: string;
+    url: string;
+    snippet: string;
+    display_url: string;
+    provider: string;
+    provider_rank: number;
+    rank: number;
+    score: number;
+    published_at: string | null;
+    source_type: string;
+    site_name: string;
+    favicon_url: string;
+    preview_image_url: string;
+}
+
+interface ProviderStatus {
+    ok: boolean;
+    latency_ms: number;
+    results_count: number;
+    error: string | null;
+    selected: boolean;
+    skipped: boolean;
+    skip_reason: string | null;
+}
+
+interface SearchSuggestion {
+    text: string;
+    kind: string;
+    score: number;
+}
+
+interface ResultInsight {
+    title: string;
+    url: string;
+    provider: string;
+    rank: number;
+    confidence: number;
+    matched_terms: string[];
+    relevance_hint: string;
+    actions: string[];
+}
+
+interface ResearchStep {
+    phase: string;
+    count: number;
+    title: string;
+}
+
+interface ResearchSource {
+    index: number;
+    url: string;
+    title: string;
+    provider: string;
+    site_name: string;
+    snippet: string;
+}
+
+interface PublicSearchStream {
+    kind: 'public_search_stream';
+    version: 1;
+    run_id: string;
+    query: string;
+    mode: string;
+    phase: string;
+    activity: string;
+    task_id: string;
+    context_id: string;
+    task_primed: boolean;
+    results: PublicSearchResult[];
+    providers: Record<string, ProviderStatus>;
+    suggestions: SearchSuggestion[];
+    followups: SearchSuggestion[];
+    result_insights: ResultInsight[];
+    answer: string;
+    markdown_sources: string;
+    completed: boolean;
+    serp_cache_key: string;
+    rank_stage: string;
+    total_count: number;
+    has_more: boolean;
+    results_offset: number;
+    page_limit: number;
+    research_brief: string;
+    research_sub_questions: string[];
+    research_outline: string[];
+    research_steps: ResearchStep[];
+    research_sources: ResearchSource[];
+    report: string;
+}
+
+interface SourceDescribeStream {
+    kind: 'public_search_source_stream';
+    version: 1;
+    run_id: string;
+    query: string;
+    title: string;
+    url: string;
+    display_url: string;
+    provider: string;
+    rank: number;
+    phase: string;
+    activity: string;
+    task_id: string;
+    context_id: string;
+    task_primed: boolean;
+    answer: string;
+    completed: boolean;
+}
+
+interface PublicSearchSession {
+    token: string;
+    token_type: string;
+    expires_at: string;
+    embed_id: string;
+    flow_id: string;
+    branch_id: string;
+}
+
+interface SearchRunRequest {
+    run_id: string;
+    query: string;
+    mode: string;
+}
+
+interface SourceDescribeRequest {
+    run_id: string;
+    query: string;
+    mode: 'source';
+    source: PublicSearchResult;
+}
+
+interface StagedSearchEvent {
+    type?: unknown;
+    payload: unknown;
+}
+
+interface TaskStreamFields {
+    task_id: string;
+    context_id: string;
+    task_primed: boolean;
+}
+
 let activeSearchRun: { run_id: string; controller: AbortController } | null = null;
 
 /** @type {Map<string, ReturnType<typeof _normalizeSession>>} */
-const publicSearchSessionByMode = new Map();
+const publicSearchSessionByMode = new Map<string, PublicSearchSession>();
 
 const PUBLIC_SEARCH_SESSION_EXPIRY_SKEW_MS = 30_000;
 const PUBLIC_SEARCH_STREAM_THROTTLE_MS = 90;
 
-function _emptyStream() {
+function _emptyStream(): PublicSearchStream {
     return {
         kind: 'public_search_stream',
         version: 1,
@@ -82,7 +226,7 @@ function _emptyStream() {
     };
 }
 
-function _emptySourceDescribeStream() {
+function _emptySourceDescribeStream(): SourceDescribeStream {
     return {
         kind: 'public_search_source_stream',
         version: 1,
@@ -188,7 +332,7 @@ function _requirePublicSearchErrorKind(value: unknown, label: string) {
     return kind;
 }
 
-function _normalizeRunPayload(payload: any) {
+function _normalizeRunPayload(payload: unknown): SearchRunRequest {
     const body = _requireObject(payload, 'frontend/public_search_run payload');
     const runId = _requireNonEmptyString(body.run_id, 'run_id');
     if (!RUN_ID_PATTERN.test(runId)) {
@@ -229,7 +373,7 @@ function _normalizeResults(value: unknown) {
 
 function _normalizeProviders(value: unknown) {
     const providers = _requireObject(value, 'providers');
-    const out: Record<string, any> = {};
+    const out: Record<string, ProviderStatus> = {};
     for (const [name, raw] of Object.entries(providers)) {
         const status = _requireObject(raw, `providers.${name}`);
         out[name] = {
@@ -319,7 +463,7 @@ function _normalizeFailedRunPayload(event: PlatformEvent) {
     };
 }
 
-function _normalizeSourceDescribePayload(payload: any) {
+function _normalizeSourceDescribePayload(payload: unknown): SourceDescribeRequest {
     const body = _requireObject(payload, 'frontend/public_search_source_describe payload');
     const runId = _requireNonEmptyString(body.run_id, 'run_id');
     if (!RUN_ID_PATTERN.test(runId)) {
@@ -330,7 +474,7 @@ function _normalizeSourceDescribePayload(payload: any) {
     return { run_id: runId, query, mode: 'source', source };
 }
 
-function _contextIdFromRunId(runId: Record<string, any>) {
+function _contextIdFromRunId(runId: unknown) {
     const value = _requireNonEmptyString(runId, 'run_id');
     if (!RUN_ID_PATTERN.test(value)) {
         throw new Error('run_id must contain only latin letters, digits, underscore or dash');
@@ -338,7 +482,7 @@ function _contextIdFromRunId(runId: Record<string, any>) {
     return value;
 }
 
-function _streamFromRunPayload(payload: Record<string, any>) {
+function _streamFromRunPayload(payload: SearchRunRequest): PublicSearchStream {
     return {
         ..._emptyStream(),
         run_id: payload.run_id,
@@ -349,7 +493,7 @@ function _streamFromRunPayload(payload: Record<string, any>) {
     };
 }
 
-function _sourceStreamFromPayload(payload: Record<string, any>) {
+function _sourceStreamFromPayload(payload: SourceDescribeRequest): SourceDescribeStream {
     return {
         ..._emptySourceDescribeStream(),
         run_id: payload.run_id,
@@ -422,7 +566,7 @@ function _normalizeSourceDescribeStream(value: unknown) {
     };
 }
 
-function _normalizeSession(value: unknown) {
+function _normalizeSession(value: unknown): PublicSearchSession {
     const session = _requireObject(value, 'public search session');
     const tokenType = _requireNonEmptyString(session.token_type, 'session.token_type');
     if (tokenType !== 'Bearer') {
@@ -449,7 +593,7 @@ function _flowsBaseUrl() {
     return `${_windowOrigin()}/flows`;
 }
 
-function _publishStream(ctx: Record<string, any>, eventId: string, stream: Record<string, any>) {
+function _publishStream(ctx: EffectCtx, eventId: string, stream: PublicSearchStream) {
     ctx.dispatch(
         PUBLIC_SEARCH_STREAM_EVENT,
         { stream: _normalizeStreamPayload(stream) },
@@ -463,9 +607,13 @@ function _publishStream(ctx: Record<string, any>, eventId: string, stream: Recor
  * страницы (мерцание, layout-shift). Редкие важные кадры (results/suggestions/
  * insights/completed/task_started/failed) публикуются немедленно.
  */
-function _createStreamPublisher(ctx: Record<string, any>, eventId: string, publishFn: (ctx: Record<string, any>, eventId: string, stream: Record<string, any>) => void) {
+function _createStreamPublisher<TStream>(
+    ctx: EffectCtx,
+    eventId: string,
+    publishFn: (ctx: EffectCtx, eventId: string, stream: TStream) => void,
+) {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let pending: Record<string, any> | null = null;
+    let pending: TStream | null = null;
     const flush = () => {
         if (timer !== null) {
             clearTimeout(timer);
@@ -478,7 +626,7 @@ function _createStreamPublisher(ctx: Record<string, any>, eventId: string, publi
         }
     };
     return {
-        publish: (stream: Record<string, any>, immediate: boolean) => {
+        publish: (stream: TStream, immediate: boolean) => {
             pending = stream;
             if (immediate === true) {
                 flush();
@@ -498,7 +646,7 @@ function _createStreamPublisher(ctx: Record<string, any>, eventId: string, publi
     };
 }
 
-function _publishSourceDescribeStream(ctx: Record<string, any>, eventId: string, sourceStream: Record<string, any>) {
+function _publishSourceDescribeStream(ctx: EffectCtx, eventId: string, sourceStream: SourceDescribeStream) {
     ctx.dispatch(
         PUBLIC_SEARCH_SOURCE_STREAM_EVENT,
         { source_stream: _normalizeSourceDescribeStream(sourceStream) },
@@ -531,7 +679,7 @@ function _clearActiveSearchRun(runId: string, controller: AbortController) {
     }
 }
 
-function _applySearchUiEvent(stream: Record<string, any>, event: PlatformEvent) {
+function _applySearchUiEvent(stream: PublicSearchStream, event: StagedSearchEvent) {
     const eventType = _requireNonEmptyString(event.type, 'staged search event type');
     if (eventType.startsWith('files.')) {
         return;
@@ -608,7 +756,7 @@ function _applySearchUiEvent(stream: Record<string, any>, event: PlatformEvent) 
         const sourceUrl = _requireNonEmptyString(payload.url, 'source_read.url');
         const sourceProvider = _requireString(payload.provider, 'source_read.provider');
         const sourceSiteName = _requireString(payload.site_name, 'source_read.site_name');
-        if (!stream.research_sources.some((item: Record<string, any>) => item.index === sourceIndex)) {
+        if (!stream.research_sources.some((item) => item.index === sourceIndex)) {
             stream.research_sources = [...stream.research_sources, {
                 index: sourceIndex,
                 url: sourceUrl,
@@ -696,7 +844,7 @@ function _foldStateArtifact(fold: SearchStateFold, artifact: Record<string, unkn
 }
 
 function _stagedSearchEvents(fold: SearchStateFold) {
-    const events: any[] = [];
+    const events: StagedSearchEvent[] = [];
     for (const [path, eventType] of SEARCH_STATE_EVENTS) {
         const payload = fold.state[path as string];
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -719,7 +867,7 @@ function _stagedSearchEvents(fold: SearchStateFold) {
     return events;
 }
 
-function _taskFrame(stream: Record<string, any>, unwrapped: Record<string, any>) {
+function _taskFrame(stream: TaskStreamFields, unwrapped: A2aUnwrappedFrame) {
     const { frameKind, event } = unwrapped;
     const taskId = frameKind === 'task' ? event.id : event.taskId;
     if (typeof taskId === 'string' && taskId !== '') {
@@ -735,12 +883,13 @@ function _taskFrame(stream: Record<string, any>, unwrapped: Record<string, any>)
     return false;
 }
 
-function _statusFrameError(status: Record<string, any>) {
+function _statusFrameError(status: Record<string, unknown>) {
     const state = _requireNonEmptyString(status.state, 'status.state');
     if (state === 'TASK_STATE_COMPLETED' || !isTerminalTaskState(state)) {
         return null;
     }
-    const text = status.message && typeof status.message === 'object' ? textFromParts((status.message).parts) : '';
+    const message = status.message;
+    const text = isPlainRecord(message) ? textFromParts(message.parts) : '';
     return new Error(text !== '' ? text : `A2A task ${state}`);
 }
 
@@ -748,7 +897,7 @@ function _statusFrameError(status: Record<string, any>) {
  * Один кадр SendStreamingMessage → SERP-stream. Возвращает true, когда кадр
  * требует немедленной публикации (staged-событие, старт Task), false для текстовых чанков.
  */
-function _applySearchFrame(stream: Record<string, any>, fold: SearchStateFold, result: Record<string, any>) {
+function _applySearchFrame(stream: PublicSearchStream, fold: SearchStateFold, result: unknown) {
     const unwrapped = unwrapA2aStreamResult(result);
     if (unwrapped === null) {
         throw new Error('A2A SSE result is not a StreamResponse frame');
@@ -806,7 +955,7 @@ function _applySearchFrame(stream: Record<string, any>, fold: SearchStateFold, r
     return started;
 }
 
-function _applySourceDescribeFrame(stream: Record<string, any>, result: Record<string, any>) {
+function _applySourceDescribeFrame(stream: SourceDescribeStream, result: unknown) {
     const unwrapped = unwrapA2aStreamResult(result);
     if (unwrapped === null) {
         throw new Error('A2A SSE result is not a StreamResponse frame');
@@ -847,7 +996,7 @@ function _applySourceDescribeFrame(stream: Record<string, any>, result: Record<s
     }
 }
 
-function _errorMessage(error: any) {
+function _errorMessage(error: unknown) {
     if (error instanceof Error && typeof error.message === 'string' && error.message !== '') {
         return error.message;
     }
@@ -914,7 +1063,7 @@ function _publicSearchErrorStatus(kind: string, transportStatus: number) {
     return transportStatus;
 }
 
-function _isPublicSearchSessionFresh(session: Record<string, any>, mode: string) {
+function _isPublicSearchSessionFresh(session: PublicSearchSession, mode: string) {
     const sessionMode = _requirePublicSearchSessionMode(mode, 'public search session mode');
     if (session.branch_id !== sessionMode) {
         return false;
@@ -926,7 +1075,7 @@ function _isPublicSearchSessionFresh(session: Record<string, any>, mode: string)
     return Date.now() < expiresAtMs - PUBLIC_SEARCH_SESSION_EXPIRY_SKEW_MS;
 }
 
-function _rememberPublicSearchSession(session: Record<string, any>) {
+function _rememberPublicSearchSession(session: PublicSearchSession) {
     publicSearchSessionByMode.set(session.branch_id, session);
 }
 
@@ -953,7 +1102,7 @@ async function _issuePublicSearchSession(mode: string, { force = false, consumeS
     return session;
 }
 
-async function _runPublicSearch({ payload, ctx, event }: { payload: unknown; ctx: Record<string, any>; event: PlatformEvent }) {
+async function _runPublicSearch({ payload, ctx, event }: { payload: unknown; ctx: EffectCtx; event: PlatformEvent }) {
     if (!ctx || typeof ctx.dispatch !== 'function') {
         throw new Error('frontend/public_search_run: ctx.dispatch required');
     }
@@ -1029,7 +1178,7 @@ async function _runPublicSearch({ payload, ctx, event }: { payload: unknown; ctx
     return _normalizeStreamPayload(stream);
 }
 
-function _sourceDescribeMessage(request: Record<string, any>) {
+function _sourceDescribeMessage(request: SourceDescribeRequest) {
     const source = request.source;
     const displayUrl = source.display_url !== '' ? source.display_url : source.url;
     return [
@@ -1049,7 +1198,7 @@ function _sourceDescribeMessage(request: Record<string, any>) {
     ].join('\n');
 }
 
-async function _runPublicSearchSourceDescribe({ payload, ctx, event }: { payload: unknown; ctx: Record<string, any>; event: PlatformEvent }) {
+async function _runPublicSearchSourceDescribe({ payload, ctx, event }: { payload: unknown; ctx: EffectCtx; event: PlatformEvent }) {
     if (!ctx || typeof ctx.dispatch !== 'function') {
         throw new Error('frontend/public_search_source_describe: ctx.dispatch required');
     }

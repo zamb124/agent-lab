@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-import httpx
+import httpx2
 import pytest
 
 from apps.search.services.crawl.sitemap_parser import _append_entries, discover_sitemap_urls
@@ -14,11 +14,11 @@ from tests.core.http_proxy_helpers import install_mock_httpx_client
 _PERMISSIVE_FILTER = CrawlUrlFilter(include_patterns=[], exclude_patterns=[], exclude_extensions=[])
 
 
-def _site(body: bytes) -> Callable[[httpx.Request], httpx.Response]:
-    def handler(request: httpx.Request) -> httpx.Response:
+def _site(body: bytes) -> Callable[[httpx2.Request], httpx2.Response]:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/sitemap.xml":
-            return httpx.Response(200, content=body, request=request)
-        return httpx.Response(404, request=request)
+            return httpx2.Response(200, content=body, request=request)
+        return httpx2.Response(404, request=request)
 
     return handler
 

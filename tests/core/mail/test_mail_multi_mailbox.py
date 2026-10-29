@@ -40,7 +40,7 @@ async def test_list_by_user_and_default(unique_id: str) -> None:
             updated_at=now,
         )
     )
-    first = await MailboxBinding.upsert_by_email(
+    first = await MailboxBinding.upsert_by_company_and_email(
         MailboxBinding(
             mailbox_binding_id=f"mailbind_a_{unique_id}",
             company_id=company_id,
@@ -56,7 +56,7 @@ async def test_list_by_user_and_default(unique_id: str) -> None:
             updated_at=now,
         )
     )
-    second = await MailboxBinding.upsert_by_email(
+    second = await MailboxBinding.upsert_by_company_and_email(
         MailboxBinding(
             mailbox_binding_id=f"mailbind_b_{unique_id}",
             company_id=company_id,
@@ -72,22 +72,22 @@ async def test_list_by_user_and_default(unique_id: str) -> None:
             updated_at=now,
         )
     )
-    listed = await MailboxBinding.list_user_kind_by_default_and_email(company_id, user_id)
+    listed = await MailboxBinding.list_user_kind_by_default_desc_and_email_asc(company_id, user_id)
     assert len(listed) == 2
     assert listed[0].mailbox_binding_id == first.mailbox_binding_id
-    by_user = await MailboxBinding.preferred_for_user(company_id, user_id)
+    by_user = await MailboxBinding.find_default_or_first_by_email_for_user(company_id, user_id)
     assert by_user is not None
     assert by_user.mailbox_binding_id == first.mailbox_binding_id
 
     await MailboxBinding.clear_defaults_for_user(company_id, user_id)
     promoted = second.model_copy(update={"is_default": True})
-    _ = await MailboxBinding.upsert_by_email(promoted)
-    by_user2 = await MailboxBinding.preferred_for_user(company_id, user_id)
+    _ = await MailboxBinding.upsert_by_company_and_email(promoted)
+    by_user2 = await MailboxBinding.find_default_or_first_by_email_for_user(company_id, user_id)
     assert by_user2 is not None
     assert by_user2.mailbox_binding_id == second.mailbox_binding_id
-    assert await MailboxBinding.preferred_for_user(company_id, f"missing_{unique_id}") is None
+    assert await MailboxBinding.find_default_or_first_by_email_for_user(company_id, f"missing_{unique_id}") is None
     with pytest.raises(ValueError, match="user_id cannot be empty"):
-        _ = await MailboxBinding.preferred_for_user(company_id, "")
+        _ = await MailboxBinding.find_default_or_first_by_email_for_user(company_id, "")
 
 
 @pytest.mark.asyncio

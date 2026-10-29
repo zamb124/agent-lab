@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.src.models.flow_config import FlowConfig
 from core.context import get_context, reset_context, set_context

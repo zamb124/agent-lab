@@ -14,7 +14,7 @@ from asyncpg.exceptions import (
     InvalidCatalogNameError,
     PostgresConnectionError,
 )
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.config import get_settings
 from core.types import parse_json_object

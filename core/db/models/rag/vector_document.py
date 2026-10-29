@@ -137,7 +137,7 @@ class VectorDocument(PlatformModel):
         return deleted_count
 
     @classmethod
-    async def list_by_namespace_and_document_id(
+    async def list_for_namespace_and_document_by_chunk_index_asc(
         cls,
         namespace_id: str,
         document_id: str,
@@ -157,8 +157,8 @@ class VectorDocument(PlatformModel):
         return [_chunk_from_row(row) for row in rows]
 
     @classmethod
-    async def any_chunk_rows_by_document_id(cls, namespace_id: str, *, limit: int) -> list[VectorDocument]:
-        """По одной строке чанка на document_id, ORDER BY document_id, не больше limit. Какой чанк внутри документа, не задано."""
+    async def any_chunk_rows_by_document_id_asc(cls, namespace_id: str, *, limit: int) -> list[VectorDocument]:
+        """По одной строке чанка на document_id, ORDER BY document_id ASC, не больше limit. Какой чанк внутри документа, не задано."""
         rows = await execute_raw(
             f"""
             SELECT DISTINCT ON (document_id) {_CHUNK_COLUMNS}
@@ -173,7 +173,7 @@ class VectorDocument(PlatformModel):
         return [_chunk_from_row(row) for row in rows]
 
     @classmethod
-    async def any_chunk_rows_by_document_id_where(
+    async def any_chunk_rows_by_document_id_where_asc(
         cls,
         namespace_id: str,
         *,
@@ -182,7 +182,7 @@ class VectorDocument(PlatformModel):
         limit: int,
         limit_placeholder: int,
     ) -> list[VectorDocument]:
-        """По одной строке чанка на document_id в namespace с filter_sql, ORDER BY document_id, не больше limit. Какой чанк внутри документа, не задано. filter_sql дописывается к предикату namespace."""
+        """По одной строке чанка на document_id в namespace с filter_sql, ORDER BY document_id ASC, не больше limit. Какой чанк внутри документа, не задано. filter_sql дописывается к предикату namespace."""
         rows = await execute_raw(
             f"""
             SELECT DISTINCT ON (document_id) {_CHUNK_COLUMNS}
@@ -242,13 +242,13 @@ class VectorDocument(PlatformModel):
         return counts
 
     @classmethod
-    async def stale_id_content_company_rows(
+    async def stale_id_content_company_rows_by_company_rank_asc(
         cls,
         *,
         limit: int,
         target_embedding_model: str,
     ) -> list[tuple[str, str, str]]:
-        """Строки (id, content, company_id) для перевекторизации: модель пустая или не target, content непустой. Порядок company_rank, company_id, id. limit <= 0 — ValueError."""
+        """Строки (id, content, company_id) для перевекторизации: модель пустая или не target, content непустой. ORDER BY company_rank ASC, company_id ASC, id ASC. limit <= 0 — ValueError."""
         if limit <= 0:
             raise ValueError("stale_id_content_company_rows: limit must be positive")
         rows = await execute_raw(
@@ -310,7 +310,7 @@ class VectorDocument(PlatformModel):
         return updated
 
     @classmethod
-    async def delete_without_company_id(cls, *, limit: int) -> int:
+    async def delete_without_company_id_by_id_asc(cls, *, limit: int) -> int:
         """Удаляет строки с пустым company_id, ORDER BY id ASC, не больше limit. Возвращает число выбранных id. Нет строк — 0. limit <= 0 — ValueError."""
         if limit <= 0:
             raise ValueError("delete_without_company_id: limit must be positive")
@@ -344,7 +344,7 @@ class VectorDocument(PlatformModel):
         return len(chunk_ids)
 
     @classmethod
-    async def semantic_and_lexical_chunk_ids(
+    async def semantic_by_distance_and_lexical_by_ts_rank_desc_chunk_ids(
         cls,
         *,
         namespace_id: str,
@@ -399,7 +399,7 @@ class VectorDocument(PlatformModel):
         return ([_row_id(row) for row in semantic_rows], [_row_id(row) for row in lexical_rows])
 
     @classmethod
-    async def rows_with_similarity(
+    async def rows_with_similarity_by_distance_asc(
         cls,
         *,
         namespace_id: str,

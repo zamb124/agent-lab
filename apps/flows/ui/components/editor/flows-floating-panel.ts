@@ -37,11 +37,41 @@ export const PANEL_COLLAPSED_WIDTH = 280;
 export const PANEL_COLLAPSED_HEIGHT = 44;
 const PANEL_BASE_Z_INDEX = 25100;
 
+interface PanelRect {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    expandedWidth?: number;
+    expandedHeight?: number;
+}
+
+interface PanelLayoutSnapshot extends PanelRect {
+    collapsed: boolean;
+}
+
+interface PanelPointerState {
+    startX: number;
+    startY: number;
+    startRect: PanelRect;
+}
+
+interface AssistantResizeState {
+    startX: number;
+    startAssistantWidth: number;
+    panelWidth: number;
+}
+
+interface TitlePointerDown {
+    x: number;
+    y: number;
+}
+
 export class FlowsFloatingPanel extends PlatformElement {
-    private _assistantWidth: any;
-    private _boundGeometryTransitionEnd: any;
-    private _boundPanelPointerMove: any;
-    private _boundPanelPointerUp: any;
+    private _assistantWidth: number;
+    private _boundGeometryTransitionEnd: (event: Event) => void;
+    private _boundPanelPointerMove: (event: MouseEvent) => void;
+    private _boundPanelPointerUp: (event: MouseEvent) => void;
     static i18nNamespace = 'flows';
 
     static override properties: PropertyDeclarations = {
@@ -63,7 +93,7 @@ export class FlowsFloatingPanel extends PlatformElement {
     declare aiEnabled: boolean;
     declare aiActive: boolean;
     declare showBackdrop: boolean;
-    declare layout: Record<string, any> | null;
+    declare layout: Record<string, unknown> | null;
     declare _laraGlow: boolean;
     declare _collapsed: boolean;
 ;
@@ -428,15 +458,15 @@ export class FlowsFloatingPanel extends PlatformElement {
             }
         `,
     ];
-    private _panelRect: any;
-    private _widthBeforeAi: any;
-    private _dragState: any;
-    private _resizeState: any;
-    private _assistantResizeState: any;
-    private _titlePointerDown: any;
-    private _pointerCaptureEl: any;
-    private _activePointerId: any;
-    private _boundPanelViewportResize: any;
+    private _panelRect: PanelRect | null;
+    private _widthBeforeAi: number | null;
+    private _dragState: PanelPointerState | null;
+    private _resizeState: PanelPointerState | null;
+    private _assistantResizeState: AssistantResizeState | null;
+    private _titlePointerDown: TitlePointerDown | null;
+    private _pointerCaptureEl: Element | null;
+    private _activePointerId: number | null;
+    private _boundPanelViewportResize: () => void;
 
     constructor() {
         super();
@@ -488,7 +518,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         super.disconnectedCallback?.();
     }
 
-    override firstUpdated(changed: any) {
+    override firstUpdated(changed: PropertyValues<this>) {
         super.firstUpdated?.(changed);
         this._loadAssistantWidth();
         this.setAttribute('data-layout-ready', '');
@@ -531,7 +561,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         this.style.setProperty('--panel-assistant-width', `${this._assistantColumnWidth()}px`);
     }
 
-    _setAssistantWidth(width: any, { persist = false, flush = false } = {}) {
+    _setAssistantWidth(width: number, { persist = false, flush = false } = {}) {
         const normalized = normalizeAssistantWidth(width);
         if (normalized === null) {
             throw new Error('flows-floating-panel: assistant width must be a finite number');
@@ -582,7 +612,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
 
-    _setGeometryTransition(enabled: any) {
+    _setGeometryTransition(enabled: boolean) {
         if (
             enabled
             && !this._dragState
@@ -600,19 +630,22 @@ export class FlowsFloatingPanel extends PlatformElement {
         if (e.target !== this) {
             return;
         }
-        if ((e as Record<string, any>).propertyName !== 'width' && (e as Record<string, any>).propertyName !== 'left') {
+        if (!(e instanceof TransitionEvent)) {
+            return;
+        }
+        if (e.propertyName !== 'width' && e.propertyName !== 'left') {
             return;
         }
         this._setGeometryTransition(false);
     }
 
-    _persistWidthSnapshot(snapshot: any) {
+    _persistWidthSnapshot(snapshot: PanelLayoutSnapshot): PanelLayoutSnapshot {
         if (!this.aiActive || snapshot.collapsed) {
             return snapshot;
         }
         const assistantWidth = this._assistantColumnWidth();
         const baseWidth = Math.max(this._panelMinWidth(false), snapshot.width - assistantWidth);
-        const next: any = {
+        const next: PanelLayoutSnapshot = {
             ...snapshot,
             width: baseWidth,
         };
@@ -625,7 +658,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         return next;
     }
 
-    _syncAiPanelWidth(wasActive: any) {
+    _syncAiPanelWidth(wasActive: boolean) {
         if (this._collapsed || this._dragState || this._resizeState || this._assistantResizeState) {
             return;
         }
@@ -676,7 +709,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         }
     }
 
-    _clampPanelRect(rect: any, collapsed = this._collapsed) {
+    _clampPanelRect(rect: PanelRect, collapsed = this._collapsed): PanelRect {
         const viewport = this._panelViewport();
         const margin = PANEL_VIEWPORT_MARGIN;
         if (collapsed) {
@@ -775,7 +808,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         }
     }
 
-    _applyFloatingPanelRect(rect: any, { bringToFront = false, emit = false } = {}) {
+    _applyFloatingPanelRect(rect: PanelRect, { bringToFront = false, emit = false } = {}) {
         const clamped = this._clampPanelRect(rect);
         this._panelRect = {
             ...clamped,
@@ -858,7 +891,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         const collapsed = layout.collapsed === true;
         this._collapsed = collapsed;
         const baseRect = this._panelRect ?? this._defaultFloatingPanelRect(collapsed);
-        const nextRect: any = {
+        const nextRect: PanelRect = {
             left: typeof layout.left === 'number' ? layout.left : baseRect.left,
             top: typeof layout.top === 'number' ? layout.top : baseRect.top,
             width: typeof layout.width === 'number' ? layout.width : baseRect.width,
@@ -876,7 +909,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         }
     }
 
-    _isPanelControlTarget(target: any) {
+    _isPanelControlTarget(target: EventTarget | null) {
         if (!(target instanceof Element)) {
             return false;
         }
@@ -894,13 +927,13 @@ export class FlowsFloatingPanel extends PlatformElement {
         ].join(',')));
     }
 
-    _capturePanelPointer(e: MouseEvent) {
+    _capturePanelPointer(e: PointerEvent) {
         if (!(e.currentTarget instanceof Element)) {
             throw new Error('flows-floating-panel: pointer capture target must be Element');
         }
         this._pointerCaptureEl = e.currentTarget;
-        this._activePointerId = (e as Record<string, any>).pointerId;
-        this._pointerCaptureEl.setPointerCapture((e as Record<string, any>).pointerId);
+        this._activePointerId = e.pointerId;
+        this._pointerCaptureEl.setPointerCapture(e.pointerId);
     }
 
     _releasePanelPointerCapture() {
@@ -915,7 +948,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         this._activePointerId = null;
     }
 
-    _onPanelTitlePointerDown(e: MouseEvent) {
+    _onPanelTitlePointerDown(e: PointerEvent) {
         if (e.button !== 0 || this._isPanelControlTarget(e.target)) {
             return;
         }
@@ -938,7 +971,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         window.addEventListener('pointercancel', this._boundPanelPointerUp);
     }
 
-    _onResizePointerDown(e: MouseEvent) {
+    _onResizePointerDown(e: PointerEvent) {
         if (e.button !== 0) {
             return;
         }
@@ -965,7 +998,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         window.addEventListener('pointercancel', this._boundPanelPointerUp);
     }
 
-    _onAssistantResizePointerDown(e: MouseEvent) {
+    _onAssistantResizePointerDown(e: PointerEvent) {
         if (e.button !== 0 || !this.aiActive || this._collapsed) {
             return;
         }

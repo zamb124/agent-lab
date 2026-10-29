@@ -76,6 +76,70 @@ function arrayField(value: unknown, label: string): unknown[] {
     return value;
 }
 
+interface SearchProviderDraft {
+    provider_id: string;
+    enabled: boolean;
+    credential_source: 'company' | 'platform';
+    api_key: string;
+    base_url: string;
+    timeout_seconds: number | null;
+    depth: string;
+    search_depth: string;
+    topic: string;
+    include_answer: boolean | null;
+}
+
+interface ModelScoreDraft {
+    capability: string;
+    provider: string;
+    model_id: string;
+    editorial_prior: number;
+    enabled: boolean;
+    note: string;
+}
+
+function requireSearchProviderId(provider: Record<string, unknown>): string {
+    if (typeof provider.provider_id !== 'string' || provider.provider_id.length === 0) {
+        throw new Error('settings: search provider_id required');
+    }
+    return provider.provider_id;
+}
+
+function scoreField(row: Record<string, unknown>, field: string): string {
+    const value = row[field];
+    if (typeof value !== 'string') {
+        throw new Error(`model scoring: ${field} must be a string`);
+    }
+    return value;
+}
+
+function scoreRows(value: unknown): Record<string, unknown>[] {
+    if (!Array.isArray(value)) {
+        throw new Error('model scoring: items must be an array');
+    }
+    return value.map((row, index) => {
+        if (!isPlainRecord(row)) {
+            throw new Error(`model scoring: item ${index} must be an object`);
+        }
+        return row;
+    });
+}
+
+function searchProviderDraftFrom(provider: Record<string, unknown>): SearchProviderDraft {
+    return {
+        provider_id: requireSearchProviderId(provider),
+        enabled: provider.enabled === true,
+        credential_source: provider.credential_source === 'company' ? 'company' : 'platform',
+        api_key: '',
+        base_url: typeof provider.base_url === 'string' ? provider.base_url : '',
+        timeout_seconds: typeof provider.timeout_seconds === 'number' ? provider.timeout_seconds : null,
+        depth: typeof provider.depth === 'string' ? provider.depth : '',
+        search_depth: typeof provider.search_depth === 'string' ? provider.search_depth : '',
+        topic: typeof provider.topic === 'string' ? provider.topic : '',
+        include_answer: typeof provider.include_answer === 'boolean' ? provider.include_answer : null,
+    };
+}
+
 function budgetNumber(value: unknown): number {
     if (value === undefined || value === null || value === '') return 0;
     const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
@@ -603,9 +667,6 @@ export class FrontendSettingsPage extends PlatformPage {
         _modelScoreDrafts: { state: true },
         _modelScoreNew: { state: true },
         _scoreStatusFilter: { state: true },
-        _agentPairingCode: { state: true },
-        _agentPairingExpires: { state: true },
-        _agentPairingCountdown: { state: true },
     }
     declare _activeTab: string;
     declare _storageName: string;
@@ -620,16 +681,13 @@ export class FrontendSettingsPage extends PlatformPage {
     declare _monthlyBudget: number;
     declare _metadataJson: string;
     declare _metadataError: string;
-    declare _capabilityDrafts: Record<string, any>;
-    declare _llmContextDraft: Record<string, any>;
-    declare _searchProviderDrafts: Record<string, any>;
-    declare _searchProviderOrder: any[];
-    declare _modelScoreDrafts: Record<string, any>;
-    declare _modelScoreNew: Record<string, any>;
+    declare _capabilityDrafts: Record<string, Record<string, unknown>>;
+    declare _llmContextDraft: Record<string, unknown>;
+    declare _searchProviderDrafts: Record<string, SearchProviderDraft>;
+    declare _searchProviderOrder: string[];
+    declare _modelScoreDrafts: Record<string, ModelScoreDraft>;
+    declare _modelScoreNew: ModelScoreDraft;
     declare _scoreStatusFilter: string;
-    declare _agentPairingCode: string;
-    declare _agentPairingExpires: number;
-    declare _agentPairingCountdown: number;
 ;
 
     constructor() {
@@ -652,14 +710,6 @@ export class FrontendSettingsPage extends PlatformPage {
         this._scoreDelete = this.useOp('frontend/llm_model_score_delete');
         this._scoreRefreshCache = this.useOp('frontend/llm_model_scores_refresh_cache');
         this._scoreProbe = this.useOp('frontend/llm_model_scores_probe_providers');
-        this._agentPairing = this.useOp('frontend/agent_pairing_create');
-        this._agentDevices = this.useOp('frontend/agent_devices_load');
-        this._agentRevoke = this.useOp('frontend/agent_device_revoke');
-        this._agentReleases = this.useOp('frontend/agent_releases_status');
-        this._agentPolicyPatch = this.useOp('frontend/agent_device_policy_patch');
-        this._agentAudit = this.useOp('frontend/agent_audit_load');
-        this._agentToolkits = this.useOp('flows/agent_toolkits');
-        this._agentPairingTimerId = null;
         this._loaded = false;
         this._aiLoaded = false;
         this._searchLoaded = false;
@@ -694,13 +744,6 @@ export class FrontendSettingsPage extends PlatformPage {
             enabled: true,
             note: '',
         };
-        this._agentPairingCode = '';
-        this._agentPairingExpires = 0;
-        this._agentPairingCountdown = 0;
-        this._agentDevicesLoaded = false;
-        this._agentReleasesLoaded = false;
-        this._agentAuditLoaded = false;
-        this._agentToolkitsLoaded = false;
     }
     private _load: OpController;
     private _update: OpController;
@@ -720,25 +763,13 @@ export class FrontendSettingsPage extends PlatformPage {
     private _scoreDelete: OpController;
     private _scoreRefreshCache: OpController;
     private _scoreProbe: OpController;
-    private _agentPairing: OpController;
-    private _agentDevices: OpController;
-    private _agentRevoke: OpController;
-    private _agentReleases: OpController;
-    private _agentPolicyPatch: OpController;
-    private _agentAudit: OpController;
-    private _agentToolkits: OpController;
-    private _agentPairingTimerId: any;
     private _loaded: boolean;
     private _aiLoaded: boolean;
     private _searchLoaded: boolean;
     private _scoresLoaded: boolean;
-    private _lastSeededCompanyRef: any;
-    private _lastSeededAiRef: any;
-    private _lastSeededSearchRef: any;
-    private _agentDevicesLoaded: boolean;
-    private _agentReleasesLoaded: boolean;
-    private _agentAuditLoaded: boolean;
-    private _agentToolkitsLoaded: boolean;
+    private _lastSeededCompanyRef: unknown;
+    private _lastSeededAiRef: unknown;
+    private _lastSeededSearchRef: unknown;
 
 
     override updated() {
@@ -754,22 +785,6 @@ export class FrontendSettingsPage extends PlatformPage {
             this._searchLoaded = true;
             this._searchLoad.run();
         }
-        if (!this._agentDevicesLoaded) {
-            this._agentDevicesLoaded = true;
-            this._agentDevices.run();
-        }
-        if (!this._agentReleasesLoaded) {
-            this._agentReleasesLoaded = true;
-            this._agentReleases.run();
-        }
-        if (this._activeTab === 'agent' && !this._agentAuditLoaded) {
-            this._agentAuditLoaded = true;
-            this._agentAudit.run();
-        }
-        if (this._activeTab === 'agent' && !this._agentToolkitsLoaded) {
-            this._agentToolkitsLoaded = true;
-            this._agentToolkits.run({});
-        }
         const company = this._load.lastResult;
         const companyId = companyIdOf(company);
         if (companyId === 'system' && !this._scoresLoaded) {
@@ -784,65 +799,57 @@ export class FrontendSettingsPage extends PlatformPage {
             this._seedDraft(company);
         }
         const ai = this._aiLoad.lastResult;
-        if (ai && ai !== this._lastSeededAiRef) {
+        if (isPlainRecord(ai) && ai !== this._lastSeededAiRef) {
             this._lastSeededAiRef = ai;
             this._seedAiDraft(ai);
         }
         const search = this._searchLoad.lastResult;
-        if (search && search !== this._lastSeededSearchRef) {
+        if (isPlainRecord(search) && search !== this._lastSeededSearchRef) {
             this._lastSeededSearchRef = search;
             this._seedSearchDraft(search);
         }
     }
 
-    _seedDraft(company: Record<string, any>) {
+    _seedDraft(company: Record<string, unknown>) {
         this._name = displayText(company.name);
         this._monthlyBudget = budgetNumber(company.monthly_budget);
         const metadata = recordField(company.metadata, 'settings: company.metadata');
         this._metadataJson = JSON.stringify(metadata, null, 2);
     }
 
-    _seedAiDraft(data: Record<string, any>) {
-        const ctx = data && typeof data === 'object' && data.llm_context && typeof data.llm_context === 'object'
-            ? data.llm_context
-            : {};
-        this._llmContextDraft = ctx.config && typeof ctx.config === 'object' && !Array.isArray(ctx.config)
-            ? { ...ctx.config }
-            : {};
+    _seedAiDraft(data: Record<string, unknown>) {
+        const context = data.llm_context;
+        if (!isPlainRecord(context) || !isPlainRecord(context.config)) {
+            this._llmContextDraft = {};
+            return;
+        }
+        this._llmContextDraft = { ...context.config };
     }
 
-    _seedSearchDraft(data: Record<string, any>) {
+    _seedSearchDraft(data: Record<string, unknown>) {
         const providers = Array.isArray(data.providers) ? data.providers : [];
-        const drafts: Record<string, any> = {};
+        const drafts: Record<string, SearchProviderDraft> = {};
         for (const provider of providers) {
-            if (!provider || typeof provider !== 'object' || typeof provider.provider_id !== 'string') {
+            if (!isPlainRecord(provider) || typeof provider.provider_id !== 'string') {
                 continue;
             }
-            drafts[provider.provider_id] = {
-                provider_id: provider.provider_id,
-                enabled: provider.enabled === true,
-                credential_source: provider.credential_source === 'company' ? 'company' : 'platform',
-                api_key: '',
-                base_url: typeof provider.base_url === 'string' ? provider.base_url : '',
-                timeout_seconds: typeof provider.timeout_seconds === 'number' ? provider.timeout_seconds : null,
-                depth: typeof provider.depth === 'string' ? provider.depth : '',
-                search_depth: typeof provider.search_depth === 'string' ? provider.search_depth : '',
-                topic: typeof provider.topic === 'string' ? provider.topic : '',
-                include_answer: typeof provider.include_answer === 'boolean' ? provider.include_answer : null,
-            };
+            drafts[provider.provider_id] = searchProviderDraftFrom(provider);
         }
         this._searchProviderDrafts = drafts;
-        this._searchProviderOrder = Array.isArray(data.provider_order)
-            ? data.provider_order.map((id) => String(id))
-            : [];
+        const order: string[] = [];
+        if (Array.isArray(data.provider_order)) {
+            for (const providerId of data.provider_order) {
+                if (typeof providerId !== 'string' || providerId.length === 0) {
+                    throw new Error('settings: provider_order id must be a string');
+                }
+                order.push(providerId);
+            }
+        }
+        this._searchProviderOrder = order;
     }
 
     _setTab(tab: string) {
         this._activeTab = tab;
-        if (tab === 'agent' && !this._agentAuditLoaded) {
-            this._agentAuditLoaded = true;
-            this._agentAudit.run();
-        }
     }
 
     _save() {
@@ -880,7 +887,6 @@ export class FrontendSettingsPage extends PlatformPage {
             { id: 'search_providers', label: this.t('settings_page.tab_search_providers') },
             ...(isSystem ? [{ id: 'model_scoring', label: this.t('settings_page.tab_model_scoring') }] : []),
             { id: 'security', label: this.t('settings_page.tab_security') },
-            { id: 'agent', label: this.t('settings_page.tab_agent') },
             { id: 'integrations', label: this.t('settings_page.tab_integrations') },
             { id: 'storages', label: this.t('settings_page.tab_storages') },
         ];
@@ -900,7 +906,7 @@ export class FrontendSettingsPage extends PlatformPage {
         return html`<company-storage-settings></company-storage-settings>`;
     }
 
-    _renderCompanyTab(company: Record<string, any>) {
+    _renderCompanyTab(company: Record<string, unknown>) {
         const saving = this._update.busy;
         return html`
             <div class="two-col">
@@ -911,7 +917,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         <dt>${this.t('settings_page.company_status')}</dt><dd>${displayText(company.status)}</dd>
                         <dt>${this.t('settings_page.company_owner')}</dt><dd>${company.owner_user_id ? html`<platform-user-chip user-id=${company.owner_user_id} size="sm"></platform-user-chip>` : ''}</dd>
                         <dt>${this.t('settings_page.tariff_plan')}</dt><dd>${displayText(company.tariff_plan)}</dd>
-                        <dt>${this.t('settings_page.created_at')}</dt><dd>${company.created_at ? new Date(company.created_at).toLocaleString() : ''}</dd>
+                        <dt>${this.t('settings_page.created_at')}</dt><dd>${typeof company.created_at === 'string' && company.created_at.length > 0 ? new Date(company.created_at).toLocaleString() : ''}</dd>
                     </div>
                 </section>
 
@@ -980,7 +986,7 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
-    _capabilityDraft(cap: Record<string, unknown>) {
+    _capabilityDraft(cap: Record<string, unknown>): Record<string, unknown> {
         if (typeof cap.capability !== 'string' || cap.capability.length === 0) {
             throw new Error('settings: capability name required');
         }
@@ -998,7 +1004,9 @@ export class FrontendSettingsPage extends PlatformPage {
     }
 
     _onCapabilityChange(capName: string, e: CustomEvent) {
-        if (!e.detail || !e.detail.config) return;
+        if (!isPlainRecord(e.detail) || !isPlainRecord(e.detail.config)) {
+            return;
+        }
         this._capabilityDrafts = {
             ...this._capabilityDrafts,
             [capName]: { ...e.detail.config },
@@ -1007,17 +1015,25 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _saveCapability(capability: string) {
         const draft = this._capabilityDrafts[capability];
-        if (!draft || !draft.provider) {
+        if (draft === undefined || typeof draft.provider !== 'string' || draft.provider.length === 0) {
             return;
         }
         const body: Record<string, unknown> = { capability, provider: draft.provider };
-        if (draft.api_key) body.api_key = draft.api_key;
-        if (draft.base_url) body.base_url = draft.base_url;
-        if (draft.model) body.model = draft.model;
-        if (draft.dimension) body.dimension = draft.dimension;
-        if (draft.mrl_output_dimension) body.mrl_output_dimension = draft.mrl_output_dimension;
-        if (draft.folder_id) body.folder_id = draft.folder_id;
-        if (draft.extra_request_headers) body.extra_request_headers = draft.extra_request_headers;
+        if (draft.api_key !== undefined && draft.api_key !== '') body.api_key = draft.api_key;
+        if (draft.base_url !== undefined && draft.base_url !== '') body.base_url = draft.base_url;
+        if (draft.model !== undefined && draft.model !== '') body.model = draft.model;
+        if (draft.dimension !== undefined && draft.dimension !== '' && draft.dimension !== null && draft.dimension !== false) {
+            body.dimension = draft.dimension;
+        }
+        if (draft.mrl_output_dimension !== undefined && draft.mrl_output_dimension !== '' && draft.mrl_output_dimension !== null && draft.mrl_output_dimension !== false) {
+            body.mrl_output_dimension = draft.mrl_output_dimension;
+        }
+        if (draft.folder_id !== undefined && draft.folder_id !== '' && draft.folder_id !== null && draft.folder_id !== false) {
+            body.folder_id = draft.folder_id;
+        }
+        if (draft.extra_request_headers !== undefined && draft.extra_request_headers !== '' && draft.extra_request_headers !== null && draft.extra_request_headers !== false) {
+            body.extra_request_headers = draft.extra_request_headers;
+        }
         if (Array.isArray(draft.fallback_models) && draft.fallback_models.length > 0) {
             body.fallback_models = draft.fallback_models;
         }
@@ -1047,10 +1063,8 @@ export class FrontendSettingsPage extends PlatformPage {
         this._contextDelete.run();
     }
 
-    _renderLlmContextCard(data: Record<string, any>) {
-        const info = data && typeof data === 'object' && data.llm_context && typeof data.llm_context === 'object'
-            ? data.llm_context
-            : {};
+    _renderLlmContextCard(data: Record<string, unknown>) {
+        const info = isPlainRecord(data.llm_context) ? data.llm_context : {};
         const configured = info.configured === true;
         return html`
             <section>
@@ -1059,15 +1073,16 @@ export class FrontendSettingsPage extends PlatformPage {
                 <div class="context-card">
                     <platform-llm-context-editor
                         .config=${this._llmContextDraft}
-                        .resolved=${info.resolved && typeof info.resolved === 'object' ? info.resolved : {}}
+                        .resolved=${isPlainRecord(info.resolved) ? info.resolved : {}}
                         .profiles=${Array.isArray(info.profiles) ? info.profiles : []}
                         .budgets=${Array.isArray(info.budgets) ? info.budgets : []}
                         .clearable=${configured || Object.keys(this._llmContextDraft).length > 0}
                         @change=${(e: CustomEvent) => {
-                            const cfg = e.detail && e.detail.config && typeof e.detail.config === 'object'
-                                ? e.detail.config
-                                : {};
-                            this._llmContextDraft = { ...cfg };
+                            if (!isPlainRecord(e.detail) || !isPlainRecord(e.detail.config)) {
+                                this._llmContextDraft = {};
+                                return;
+                            }
+                            this._llmContextDraft = { ...e.detail.config };
                         }}
                         @clear=${() => this._clearLlmContext()}
                     ></platform-llm-context-editor>
@@ -1133,7 +1148,7 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
-    _platformModelForCapability(cap: Record<string, any>, draft: Record<string, any>) {
+    _platformModelForCapability(cap: Record<string, unknown>, draft: Record<string, unknown>) {
         const platformModel = displayText(cap.platform_default_model);
         if (platformModel.length === 0) {
             return '';
@@ -1145,7 +1160,7 @@ export class FrontendSettingsPage extends PlatformPage {
         if (provider !== 'humanitec_llm') {
             return platformModel;
         }
-        const companyModel = (draft && draft.model) || 'auto';
+        const companyModel = typeof draft.model === 'string' && draft.model.length > 0 ? draft.model : 'auto';
         if (companyModel === platformModel) {
             return '';
         }
@@ -1288,28 +1303,18 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
-    _searchProviderDraft(provider: Record<string, any>) {
-        const draft = this._searchProviderDrafts[provider.provider_id];
-        if (draft && typeof draft === 'object') {
+    _searchProviderDraft(provider: Record<string, unknown>): SearchProviderDraft {
+        const providerId = requireSearchProviderId(provider);
+        const draft = this._searchProviderDrafts[providerId];
+        if (draft !== undefined) {
             return draft;
         }
-        return {
-            provider_id: provider.provider_id,
-            enabled: provider.enabled === true,
-            credential_source: provider.credential_source === 'company' ? 'company' : 'platform',
-            api_key: '',
-            base_url: typeof provider.base_url === 'string' ? provider.base_url : '',
-            timeout_seconds: typeof provider.timeout_seconds === 'number' ? provider.timeout_seconds : null,
-            depth: typeof provider.depth === 'string' ? provider.depth : '',
-            search_depth: typeof provider.search_depth === 'string' ? provider.search_depth : '',
-            topic: typeof provider.topic === 'string' ? provider.topic : '',
-            include_answer: typeof provider.include_answer === 'boolean' ? provider.include_answer : null,
-        };
+        return searchProviderDraftFrom(provider);
     }
 
-    _setSearchProviderDraft(providerId: string, patch: Record<string, any>) {
+    _setSearchProviderDraft(providerId: string, patch: Partial<SearchProviderDraft>) {
         const current = this._searchProviderDrafts[providerId];
-        if (!current || typeof current !== 'object') {
+        if (current === undefined) {
             throw new Error(`search provider draft missing: ${providerId}`);
         }
         this._searchProviderDrafts = {
@@ -1323,7 +1328,7 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _saveSearchProvider(providerId: string) {
         const draft = this._searchProviderDrafts[providerId];
-        if (!draft || typeof draft !== 'object') {
+        if (draft === undefined) {
             return;
         }
         const body: Record<string, unknown> = {
@@ -1343,12 +1348,12 @@ export class FrontendSettingsPage extends PlatformPage {
         this._searchProviderPut.run(body);
     }
 
-    _resetSearchProvider(providerId: Record<string, any>) {
+    _resetSearchProvider(providerId: string) {
         this._searchProviderDelete.run({ provider_id: providerId });
     }
 
-    _moveSearchProvider(providerId: number, delta: number) {
-        const current = Array.isArray(this._searchProviderOrder) ? this._searchProviderOrder.slice() : [];
+    _moveSearchProvider(providerId: string, delta: number) {
+        const current = this._searchProviderOrder.slice();
         const index = current.indexOf(providerId);
         if (index < 0) {
             return;
@@ -1359,14 +1364,18 @@ export class FrontendSettingsPage extends PlatformPage {
         }
         const next = current.slice();
         const item = next[index];
+        if (item === undefined) {
+            throw new Error('settings: search provider order entry missing');
+        }
         next.splice(index, 1);
         next.splice(target, 0, item);
         this._searchProviderOrder = next;
         this._searchProviderOrderPut.run({ provider_order: next });
     }
 
-    _renderSearchProviderSpecificFields(provider: Record<string, any>, draft: Record<string, any>) {
-        if (provider.provider_id === 'linkup') {
+    _renderSearchProviderSpecificFields(provider: Record<string, unknown>, draft: SearchProviderDraft) {
+        const providerId = requireSearchProviderId(provider);
+        if (providerId === 'linkup') {
             return html`
                 <platform-field
                     type="enum"
@@ -1383,12 +1392,12 @@ export class FrontendSettingsPage extends PlatformPage {
                         if (!e.detail || typeof e.detail.value !== 'string') {
                             throw new Error('search provider depth expects string detail.value');
                         }
-                        this._setSearchProviderDraft(provider.provider_id, { depth: e.detail.value });
+                        this._setSearchProviderDraft(providerId, { depth: e.detail.value });
                     }}
                 ></platform-field>
             `;
         }
-        if (provider.provider_id === 'tavily') {
+        if (providerId === 'tavily') {
             return html`
                 <platform-field
                     type="enum"
@@ -1404,7 +1413,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         if (!e.detail || typeof e.detail.value !== 'string') {
                             throw new Error('search provider search_depth expects string detail.value');
                         }
-                        this._setSearchProviderDraft(provider.provider_id, { search_depth: e.detail.value });
+                        this._setSearchProviderDraft(providerId, { search_depth: e.detail.value });
                     }}
                 ></platform-field>
                 <platform-field
@@ -1422,7 +1431,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         if (!e.detail || typeof e.detail.value !== 'string') {
                             throw new Error('search provider topic expects string detail.value');
                         }
-                        this._setSearchProviderDraft(provider.provider_id, { topic: e.detail.value });
+                        this._setSearchProviderDraft(providerId, { topic: e.detail.value });
                     }}
                 ></platform-field>
                 <platform-field
@@ -1434,7 +1443,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         if (!e.detail || typeof e.detail.value !== 'boolean') {
                             throw new Error('search provider include_answer expects boolean detail.value');
                         }
-                        this._setSearchProviderDraft(provider.provider_id, { include_answer: e.detail.value });
+                        this._setSearchProviderDraft(providerId, { include_answer: e.detail.value });
                     }}
                 ></platform-field>
             `;
@@ -1442,12 +1451,13 @@ export class FrontendSettingsPage extends PlatformPage {
         return '';
     }
 
-    _renderSearchProviderCard(provider: Record<string, any>) {
+    _renderSearchProviderCard(provider: Record<string, unknown>) {
+        const providerId = requireSearchProviderId(provider);
         const draft = this._searchProviderDraft(provider);
-        const meta = searchProviderMeta(provider.provider_id);
+        const meta = searchProviderMeta(providerId);
         const { label, logo, tone } = meta;
-        const description = this.t(`settings_page.search_providers.catalog.${provider.provider_id}.description`);
-        const tooltip = this.t(`settings_page.search_providers.catalog.${provider.provider_id}.tooltip`);
+        const description = this.t(`settings_page.search_providers.catalog.${providerId}.description`);
+        const tooltip = this.t(`settings_page.search_providers.catalog.${providerId}.tooltip`);
         const isCompany = draft.credential_source === 'company';
         return html`
             <article class="search-provider-card" data-source=${isCompany ? 'company' : 'platform'}>
@@ -1476,12 +1486,12 @@ export class FrontendSettingsPage extends PlatformPage {
                     <button
                         type="button"
                         data-active=${isCompany ? 'false' : 'true'}
-                        @click=${() => this._setSearchProviderDraft(provider.provider_id, { credential_source: 'platform' })}
+                        @click=${() => this._setSearchProviderDraft(providerId, { credential_source: 'platform' })}
                     >${this.t('settings_page.search_providers.source_platform')}</button>
                     <button
                         type="button"
                         data-active=${isCompany ? 'true' : 'false'}
-                        @click=${() => this._setSearchProviderDraft(provider.provider_id, { credential_source: 'company' })}
+                        @click=${() => this._setSearchProviderDraft(providerId, { credential_source: 'company' })}
                     >${this.t('settings_page.search_providers.source_company')}</button>
                 </div>
 
@@ -1495,7 +1505,7 @@ export class FrontendSettingsPage extends PlatformPage {
                             if (!e.detail || typeof e.detail.value !== 'boolean') {
                                 throw new Error('search provider enabled expects boolean detail.value');
                             }
-                            this._setSearchProviderDraft(provider.provider_id, { enabled: e.detail.value });
+                            this._setSearchProviderDraft(providerId, { enabled: e.detail.value });
                         }}
                     ></platform-field>
                     <platform-field
@@ -1508,7 +1518,7 @@ export class FrontendSettingsPage extends PlatformPage {
                             if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'number')) {
                                 throw new Error('search provider timeout expects numeric detail.value');
                             }
-                            this._setSearchProviderDraft(provider.provider_id, { timeout_seconds: e.detail.value });
+                            this._setSearchProviderDraft(providerId, { timeout_seconds: e.detail.value });
                         }}
                     ></platform-field>
                     <platform-field
@@ -1521,7 +1531,7 @@ export class FrontendSettingsPage extends PlatformPage {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('search provider base_url expects string detail.value');
                             }
-                            this._setSearchProviderDraft(provider.provider_id, { base_url: e.detail.value });
+                            this._setSearchProviderDraft(providerId, { base_url: e.detail.value });
                         }}
                     ></platform-field>
                     ${isCompany
@@ -1539,7 +1549,7 @@ export class FrontendSettingsPage extends PlatformPage {
                                     if (!e.detail || typeof e.detail.value !== 'string') {
                                         throw new Error('search provider api_key expects string detail.value');
                                     }
-                                    this._setSearchProviderDraft(provider.provider_id, { api_key: e.detail.value });
+                                    this._setSearchProviderDraft(providerId, { api_key: e.detail.value });
                                 }}
                             ></platform-field>
                         `
@@ -1552,12 +1562,12 @@ export class FrontendSettingsPage extends PlatformPage {
                         <glass-button
                             size="sm"
                             variant="ghost"
-                            @click=${() => this._moveSearchProvider(provider.provider_id, -1)}
+                            @click=${() => this._moveSearchProvider(providerId, -1)}
                         >${this.t('settings_page.search_providers.move_up')}</glass-button>
                         <glass-button
                             size="sm"
                             variant="ghost"
-                            @click=${() => this._moveSearchProvider(provider.provider_id, 1)}
+                            @click=${() => this._moveSearchProvider(providerId, 1)}
                         >${this.t('settings_page.search_providers.move_down')}</glass-button>
                     </div>
                     <div class="order-controls">
@@ -1565,12 +1575,12 @@ export class FrontendSettingsPage extends PlatformPage {
                             size="sm"
                             variant="ghost"
                             ?disabled=${this._searchProviderDelete.busy}
-                            @click=${() => this._resetSearchProvider(provider.provider_id)}
+                            @click=${() => this._resetSearchProvider(providerId)}
                         >${this.t('settings_page.search_providers.reset')}</glass-button>
                         <glass-button
                             size="sm"
                             ?disabled=${this._searchProviderPut.busy}
-                            @click=${() => this._saveSearchProvider(provider.provider_id)}
+                            @click=${() => this._saveSearchProvider(providerId)}
                         >${this.t('settings_page.search_providers.save')}</glass-button>
                     </div>
                 </div>
@@ -1584,12 +1594,17 @@ export class FrontendSettingsPage extends PlatformPage {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
         const providers = isPlainRecord(data) && Array.isArray(data.providers) ? data.providers : [];
-        const order = Array.isArray(this._searchProviderOrder) ? this._searchProviderOrder : [];
-        const orderedProviders = order
-             .map((id: string) => providers.find((provider: Record<string, any>) => provider && provider.provider_id === id))
-            .filter((provider) => provider && typeof provider === 'object');
-        for (const provider of providers) {
-            if (provider && typeof provider.provider_id === 'string' && !order.includes(provider.provider_id)) {
+        const providerRecords = providers.filter((provider): provider is Record<string, unknown> => isPlainRecord(provider) && typeof provider.provider_id === 'string');
+        const order = this._searchProviderOrder;
+        const orderedProviders: Record<string, unknown>[] = [];
+        for (const providerId of order) {
+            const provider = providerRecords.find((item) => item.provider_id === providerId);
+            if (provider !== undefined) {
+                orderedProviders.push(provider);
+            }
+        }
+        for (const provider of providerRecords) {
+            if (!order.includes(requireSearchProviderId(provider))) {
                 orderedProviders.push(provider);
             }
         }
@@ -1614,29 +1629,37 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
-    _modelScoreKey(row: Record<string, any>) {
-        return `${row.capability}\n${row.provider}\n${row.model_id}`;
+    _modelScoreKey(row: Record<string, unknown>) {
+        return `${scoreField(row, 'capability')}\n${scoreField(row, 'provider')}\n${scoreField(row, 'model_id')}`;
     }
 
-    _modelScoreDraft(row: Record<string, any>) {
+    _modelScoreDraft(row: Record<string, unknown>): ModelScoreDraft {
         const key = this._modelScoreKey(row);
+        const saved = this._modelScoreDrafts[key];
+        if (saved !== undefined) {
+            return saved;
+        }
         if (typeof row.editorial_prior !== 'number') {
             throw new Error('model scoring: editorial_prior must be a number');
         }
         if (typeof row.enabled !== 'boolean') {
             throw new Error('model scoring: enabled must be boolean');
         }
-        return this._modelScoreDrafts[key] || {
-            provider: row.provider,
-            model_id: row.model_id,
-            capability: row.capability,
+        const note = row.note === null || row.note === undefined ? '' : row.note;
+        if (typeof note !== 'string') {
+            throw new Error('model scoring: note must be a string');
+        }
+        return {
+            provider: scoreField(row, 'provider'),
+            model_id: scoreField(row, 'model_id'),
+            capability: scoreField(row, 'capability'),
             enabled: row.enabled,
-            note: row.note == null ? '' : row.note,
+            note,
             editorial_prior: row.editorial_prior,
         };
     }
 
-    _formatScoreBreakdown(breakdown: Record<string, any>) {
+    _formatScoreBreakdown(breakdown: unknown) {
         if (breakdown == null) {
             return '—';
         }
@@ -1662,7 +1685,7 @@ export class FrontendSettingsPage extends PlatformPage {
         return value.toFixed(1);
     }
 
-    _setModelScoreDraft(row: Record<string, any>, patch: Record<string, any>) {
+    _setModelScoreDraft(row: Record<string, unknown>, patch: Partial<ModelScoreDraft>) {
         const key = this._modelScoreKey(row);
         this._modelScoreDrafts = {
             ...this._modelScoreDrafts,
@@ -1673,7 +1696,7 @@ export class FrontendSettingsPage extends PlatformPage {
         };
     }
 
-    _saveModelScore(row: Record<string, any>) {
+    _saveModelScore(row: Record<string, unknown>) {
         const draft = this._modelScoreDraft(row);
         this._scoreUpsert.run({
             provider: draft.provider,
@@ -1685,8 +1708,12 @@ export class FrontendSettingsPage extends PlatformPage {
         });
     }
 
-    _deleteModelScore(row: Record<string, any>) {
-        this._scoreDelete.run({ capability: row.capability, provider: row.provider, model_id: row.model_id });
+    _deleteModelScore(row: Record<string, unknown>) {
+        this._scoreDelete.run({
+            capability: scoreField(row, 'capability'),
+            provider: scoreField(row, 'provider'),
+            model_id: scoreField(row, 'model_id'),
+        });
     }
 
     _createModelScore() {
@@ -1719,7 +1746,7 @@ export class FrontendSettingsPage extends PlatformPage {
         return llmProviderErrorClassLabel((key: string) => this.t(key), errorClass);
     }
 
-    _scoreAvailabilityLabel(row: Record<string, any>) {
+    _scoreAvailabilityLabel(row: Record<string, unknown>) {
         if (row.availability === 'available') {
             return this.t('settings_page.model_scoring.status_available');
         }
@@ -1738,19 +1765,19 @@ export class FrontendSettingsPage extends PlatformPage {
         throw new Error(`model scoring: unknown availability ${row.availability}`);
     }
 
-    _scoreRowClass(row: Record<string, any>) {
+    _scoreRowClass(row: Record<string, unknown>) {
         if (row.availability !== 'cooldown') {
             return '';
         }
-        if (llmProviderErrorClassIsBlocking(row.error_class)) {
+        if (typeof row.error_class === 'string' && llmProviderErrorClassIsBlocking(row.error_class)) {
             return 'score-row-error';
         }
         return 'score-row-cooldown';
     }
 
-    _scoreStatusHint(row: Record<string, any>) {
-        const parts: any[] = [];
-        if (row.error_class !== null) {
+    _scoreStatusHint(row: Record<string, unknown>) {
+        const parts: string[] = [];
+        if (typeof row.error_class === 'string') {
             parts.push(this._scoreErrorClassLabel(row.error_class));
         }
         if (typeof row.error_text === 'string' && row.error_text !== '') {
@@ -1759,7 +1786,7 @@ export class FrontendSettingsPage extends PlatformPage {
         return parts.join('\n');
     }
 
-    _filteredScoreItems(items: Record<string, any>[]) {
+    _filteredScoreItems(items: Record<string, unknown>[]) {
         if (this._scoreStatusFilter === 'all') {
             return items;
         }
@@ -1774,13 +1801,13 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!result) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
-        if (!isPlainRecord(result) || !Array.isArray(result.items)) {
-            throw new Error('model scoring: items must be an array');
+        if (!isPlainRecord(result)) {
+            throw new Error('model scoring: payload must be an object');
         }
         if (!Array.isArray(result.providers)) {
             throw new Error('model scoring: providers must be an array');
         }
-        const items = result.items;
+        const items = scoreRows(result.items);
         const visibleItems = this._filteredScoreItems(items);
         return html`
             <section>
@@ -2020,302 +2047,6 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
-    async _createAgentPairingCode() {
-        const result = await this._agentPairing.run();
-        if (!isPlainRecord(result)) {
-            return;
-        }
-        const pairingCode = result.pairing_code;
-        const expiresIn = result.expires_in_seconds;
-        if (typeof pairingCode !== 'string' || typeof expiresIn !== 'number') {
-            throw new Error('agent pairing: invalid response shape');
-        }
-        this._agentPairingCode = pairingCode;
-        this._agentPairingExpires = expiresIn;
-        this._agentPairingCountdown = expiresIn;
-        if (this._agentPairingTimerId !== null) {
-            clearInterval(this._agentPairingTimerId);
-        }
-        this._agentPairingTimerId = setInterval(() => {
-            if (this._agentPairingCountdown <= 1) {
-                if (this._agentPairingTimerId !== null) {
-                    clearInterval(this._agentPairingTimerId);
-                    this._agentPairingTimerId = null;
-                }
-                this._agentPairingCountdown = 0;
-                this._agentPairingCode = '';
-                return;
-            }
-            this._agentPairingCountdown -= 1;
-        }, 1000);
-    }
-
-    async _copyAgentPairingCode() {
-        if (!this._agentPairingCode) {
-            return;
-        }
-        await navigator.clipboard.writeText(this._agentPairingCode);
-    }
-
-    _agentDeepLinkBase() {
-        return 'humanitec://pairing';
-    }
-
-    _agentAuthLoginUrl() {
-        const redirect = encodeURIComponent('humanitec://auth/callback');
-        return `/frontend/api/agent/login?redirect=${redirect}`;
-    }
-
-    _openAgentPairingDeepLink() {
-        if (!this._agentPairingCode) {
-            return;
-        }
-        const deepLink = `${this._agentDeepLinkBase()}?code=${encodeURIComponent(this._agentPairingCode)}`;
-        window.location.href = deepLink;
-    }
-
-    async _revokeAgentDevice(deviceId: Record<string, any>) {
-        if (typeof deviceId !== 'string' || !deviceId) {
-            throw new Error('agent device revoke: device_id required');
-        }
-        const confirmed = await platformConfirm(this.t('settings_page.agent.revoke_confirm'));
-        if (!confirmed) {
-            return;
-        }
-        await this._agentRevoke.run({ device_id: deviceId });
-    }
-
-    async _toggleAgentShell(device: Record<string, any>) {
-        if (!device || typeof device !== 'object') {
-            return;
-        }
-        const deviceId = device.device_id;
-        const policy = device.policy;
-        if (typeof deviceId !== 'string' || !deviceId || !policy || typeof policy !== 'object') {
-            return;
-        }
-        const nextPolicy = {
-            ...policy,
-            shell_enabled: !policy.shell_enabled,
-        };
-        await this._agentPolicyPatch.run({ device_id: deviceId, policy: nextPolicy });
-    }
-
-    _renderAgentReleaseBanner() {
-        const releasePayload = this._agentReleases.lastResult;
-        if (!isPlainRecord(releasePayload)) {
-            return '';
-        }
-        if (releasePayload.ready === true) {
-            const latestTag = releasePayload.latest_tag;
-            const tagLabel = typeof latestTag === 'string' && latestTag ? latestTag : '';
-            return html`
-                <div class="section-help">
-                    ${this.t('settings_page.agent.release_ready')}${tagLabel ? html` · ${tagLabel}` : ''}
-                </div>
-            `;
-        }
-        const detail = releasePayload.detail;
-        const detailText = typeof detail === 'string' && detail ? detail : this.t('settings_page.agent.release_not_ready');
-        return html`<div class="section-help">${detailText}</div>`;
-    }
-
-    _agentAuditEventLabel(eventType: unknown) {
-        if (typeof eventType !== 'string' || eventType.length === 0) {
-            throw new Error('agent audit event_type required');
-        }
-        const key = `settings_page.agent.audit_event_${eventType.replace(/\./g, '_')}`;
-        const translated = this.t(key);
-        if (translated !== key) {
-            return translated;
-        }
-        return eventType;
-    }
-
-    _renderAgentAuditSection() {
-        const auditPayload = this._agentAudit.lastResult;
-        const auditBusy = this._agentAudit.busy;
-        const items = isPlainRecord(auditPayload) && Array.isArray(auditPayload.items) ? auditPayload.items : [];
-        return html`
-            <section>
-                <h3>${this.t('settings_page.agent.audit_title')}</h3>
-                ${auditBusy ? html`<div class="empty"><glass-spinner></glass-spinner></div>` : ''}
-                ${!auditBusy && items.length === 0
-                    ? html`<div class="empty">${this.t('settings_page.agent.audit_empty')}</div>`
-                    : ''}
-                ${!auditBusy && items.length > 0 ? html`
-                    <div class="custom-provider-list">
-                        ${items.map((event) => {
-                            if (!isPlainRecord(event)) {
-                                throw new Error('settings-page: audit event must be an object');
-                            }
-                            const recordedAt = event.recorded_at;
-                            const recordedLabel = typeof recordedAt === 'string' || typeof recordedAt === 'number'
-                                ? new Date(recordedAt).toLocaleString()
-                                : '';
-                            return html`
-                            <div class="custom-provider-card">
-                                <div class="meta">
-                                    <div class="title-line">${this._agentAuditEventLabel(event.event_type)}</div>
-                                    <div class="ref-line">${displayText(event.detail)}</div>
-                                    <div class="capability-line">
-                                        ${recordedLabel}
-                                    </div>
-                                </div>
-                            </div>
-                        `; })}
-                    </div>
-                ` : ''}
-            </section>
-        `;
-    }
-
-    _renderAgentTab() {
-        const devicesPayload = this._agentDevices.lastResult;
-        const items = isPlainRecord(devicesPayload) && Array.isArray(devicesPayload.items) ? devicesPayload.items : [];
-        const pairingBusy = this._agentPairing.busy;
-        const devicesBusy = this._agentDevices.busy;
-
-        return html`
-            <section>
-                <div class="header">
-                    <h3>${this.t('settings_page.agent.title')}</h3>
-                    <button class="btn" ?disabled=${pairingBusy} @click=${() => this._createAgentPairingCode()}>
-                        ${this.t('settings_page.agent.connect_button')}
-                    </button>
-                </div>
-                <div class="section-help">${this.t('settings_page.agent.help')}</div>
-                ${this._renderAgentReleaseBanner()}
-                ${this._agentPairingCode ? html`
-                    <div class="info-grid form-narrow">
-                        <dt>${this.t('settings_page.agent.pairing_code')}</dt>
-                        <dd>
-                            ${this._agentPairingCode}
-                            <button class="btn btn-sm" @click=${() => this._copyAgentPairingCode()}>
-                                ${this.t('settings_page.agent.copy_pairing_code')}
-                            </button>
-                            <button class="btn btn-sm" @click=${() => this._openAgentPairingDeepLink()}>
-                                ${this.t('settings_page.agent.open_in_agent')}
-                            </button>
-                        </dd>
-                        <dt>${this.t('settings_page.agent.pairing_ttl')}</dt>
-                        <dd>${this._agentPairingCountdown}s</dd>
-                    </div>
-                ` : ''}
-                <div class="section-help">
-                    <a href=${this._agentAuthLoginUrl()}>${this.t('settings_page.agent.login_via_browser')}</a>
-                </div>
-                <div class="section-help">${this.t('settings_page.agent.download_hint')} <a href="/agent">${this.t('settings_page.agent.download_link')}</a></div>
-            </section>
-            <section>
-                <h3>${this.t('settings_page.agent.devices_title')}</h3>
-                ${devicesBusy ? html`<div class="empty"><glass-spinner></glass-spinner></div>` : ''}
-                ${!devicesBusy && items.length === 0 ? html`<div class="empty">${this.t('settings_page.agent.devices_empty')}</div>` : ''}
-                ${!devicesBusy && items.length > 0 ? html`
-                    <div class="custom-provider-list">
-                        ${items.map((device: Record<string, any>) => html`
-                            <div class="custom-provider-card">
-                                <div class="meta">
-                                    <div class="title-line">${device.device_name}</div>
-                                    <div class="ref-line">${device.hostname} · ${device.os}</div>
-                                    <div class="caps-line">
-                                        ${device.is_tunnel_online
-                                            ? this.t('settings_page.agent.status_online')
-                                            : this.t('settings_page.agent.status_offline')}
-                                        · ${device.is_active
-                                            ? this.t('settings_page.agent.status_active')
-                                            : this.t('settings_page.agent.status_revoked')}
-                                    </div>
-                                    <div class="caps-line">
-                                        ${this.t('settings_page.agent.policy_shell')}: ${device.policy?.shell_enabled
-                                            ? this.t('settings_page.agent.policy_enabled')
-                                            : this.t('settings_page.agent.policy_disabled')}
-                                        · ${this.t('settings_page.agent.policy_browser')}: ${device.policy?.browser_enabled
-                                            ? this.t('settings_page.agent.policy_enabled')
-                                            : this.t('settings_page.agent.policy_disabled')}
-                                    </div>
-                                </div>
-                                <div class="actions">
-                                    <glass-button
-                                        size="sm"
-                                        ?disabled=${this._agentPolicyPatch.busy || !device.is_active}
-                                        @click=${() => this._toggleAgentShell(device)}
-                                    >${this.t('settings_page.agent.toggle_shell')}</glass-button>
-                                    <glass-button
-                                        size="sm"
-                                        variant="danger"
-                                        ?disabled=${this._agentRevoke.busy || !device.is_active}
-                                        @click=${() => this._revokeAgentDevice(device.device_id)}
-                                    >${this.t('settings_page.agent.revoke')}</glass-button>
-                                </div>
-                            </div>
-                        `)}
-                    </div>
-                ` : ''}
-            </section>
-            ${this._renderAgentToolkitsSection()}
-            ${this._renderAgentAuditSection()}
-        `;
-    }
-
-    _renderAgentToolkitsSection() {
-        const toolkitsBusy = this._agentToolkits.busy;
-        const payload = this._agentToolkits.lastResult;
-        if (toolkitsBusy) {
-            return html`
-                <section>
-                    <h3>${this.t('settings_page.agent.toolkits_title')}</h3>
-                    <div class="section-help">${this.t('settings_page.agent.toolkits_help')}</div>
-                    <div class="empty"><glass-spinner></glass-spinner></div>
-                </section>
-            `;
-        }
-        if (payload == null) {
-            return html`
-                <section>
-                    <h3>${this.t('settings_page.agent.toolkits_title')}</h3>
-                    <div class="section-help">${this.t('settings_page.agent.toolkits_help')}</div>
-                </section>
-            `;
-        }
-        if (!isPlainRecord(payload) || !Array.isArray(payload.items)) {
-            throw new Error('flows/agent_toolkits: items[] required');
-        }
-        const toolkits = payload.items;
-        return html`
-            <section>
-                <h3>${this.t('settings_page.agent.toolkits_title')}</h3>
-                <div class="section-help">${this.t('settings_page.agent.toolkits_help')}</div>
-                ${toolkits.length === 0 ? html`<div class="empty">${this.t('settings_page.agent.toolkits_empty')}</div>` : ''}
-                ${toolkits.length > 0 ? html`
-                    <div class="custom-provider-list">
-                        ${toolkits.map((toolkit: Record<string, any>) => {
-                            if (!Array.isArray(toolkit.flow_ids) || !Array.isArray(toolkit.tool_ids)) {
-                                throw new Error('flows/agent_toolkits: flow_ids and tool_ids required');
-                            }
-                            return html`
-                            <div class="custom-provider-card">
-                                <div class="meta">
-                                    <div class="title-line">${toolkit.name}</div>
-                                    <div class="ref-line">${toolkit.toolkit_id}</div>
-                                    <div class="caps-line">${toolkit.description}</div>
-                                    <div class="caps-line">
-                                        ${this.t('settings_page.agent.toolkits_default')}: ${toolkit.default_enabled
-                                            ? this.t('settings_page.agent.policy_enabled')
-                                            : this.t('settings_page.agent.policy_disabled')}
-                                        · ${this.t('settings_page.agent.toolkits_flows')}: ${toolkit.flow_ids.length}
-                                        · ${this.t('settings_page.agent.toolkits_tools')}: ${toolkit.tool_ids.length}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        })}
-                    </div>
-                ` : ''}
-            </section>
-        `;
-    }
-
     _renderSecurityTab() {
         return html`
             <div class="two-col">
@@ -2375,7 +2106,6 @@ export class FrontendSettingsPage extends PlatformPage {
             ${this._activeTab === 'search_providers' ? this._renderSearchProvidersTab() : ''}
             ${this._activeTab === 'model_scoring' ? this._renderModelScoringTab() : ''}
             ${this._activeTab === 'security' ? this._renderSecurityTab() : ''}
-            ${this._activeTab === 'agent' ? this._renderAgentTab() : ''}
             ${this._activeTab === 'integrations' ? this._renderIntegrationsTab() : ''}
             ${this._activeTab === 'storages' ? this._renderStoragesTab() : ''}
             </div>

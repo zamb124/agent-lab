@@ -57,7 +57,7 @@ from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.base import StreamEvent
 from apps.flows.src.streaming.subscriber import EventSubscriber, event_platform_sequence
-from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
+from apps.idle.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.a2a import (
     is_interrupted_a2a_task_state,
     is_terminal_a2a_task_state,
@@ -383,7 +383,7 @@ class A2AChannel(BaseChannel):
     ) -> AsyncGenerator[StreamEvent, None]:
         """Yield lossless status/artifact updates from the durable A2A ledger."""
         company_id, _ = self._task_access_scope()
-        stored_events = await A2ATaskProjection.list_events_after_sequence(
+        stored_events = await A2ATaskProjection.list_events_after_sequence_asc(
             company_id=company_id,
             task_id=task_id,
             after_sequence=after_sequence,
@@ -780,7 +780,7 @@ class A2AChannel(BaseChannel):
             # GetTask/CancelTask id may be context_id (same contract as
             # BaseChannel._resolve_session_id_for_a2a_lookup).
             if task is None and params.id == share_context:
-                shared_tasks, _ = await A2ATaskProjection.list_tasks_for_context(
+                shared_tasks, _ = await A2ATaskProjection.tasks_for_context_and_total_by_updated_at_desc(
                     company_id=company_id,
                     flow_id=self.flow_id,
                     context_id=share_context,
@@ -797,7 +797,7 @@ class A2AChannel(BaseChannel):
                 task_id=params.id,
             )
             if task is None:
-                task = await A2ATaskProjection.latest_task_for_context(
+                task = await A2ATaskProjection.latest_task_for_context_by_updated_at_desc(
                     company_id=company_id,
                     owner_user_id=owner_user_id,
                     flow_id=self.flow_id,
@@ -977,7 +977,7 @@ class A2AChannel(BaseChannel):
                 context_id=share_context,
                 require_editor=False,
             )
-            tasks, total = await A2ATaskProjection.list_tasks_for_context(
+            tasks, total = await A2ATaskProjection.tasks_for_context_and_total_by_updated_at_desc(
                 company_id=ctx.active_company.company_id,
                 flow_id=self.flow_id,
                 context_id=share_context,
@@ -986,7 +986,7 @@ class A2AChannel(BaseChannel):
                 offset=offset,
             )
         else:
-            tasks, total = await A2ATaskProjection.list_tasks(
+            tasks, total = await A2ATaskProjection.tasks_and_total_by_updated_at_desc(
                 company_id=ctx.active_company.company_id,
                 owner_user_id=user_id,
                 flow_id=self.flow_id,
@@ -1003,7 +1003,7 @@ class A2AChannel(BaseChannel):
                 )
                 if parked is not None:
                     tasks, total = (
-                        await A2ATaskProjection.list_tasks_for_context(
+                        await A2ATaskProjection.tasks_for_context_and_total_by_updated_at_desc(
                             company_id=ctx.active_company.company_id,
                             flow_id=self.flow_id,
                             context_id=context_id,

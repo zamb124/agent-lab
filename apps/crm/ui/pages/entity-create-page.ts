@@ -12,8 +12,8 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
-import '../components/entity-card.js';
-import type { CRMEntityCard } from '../components/entity-card.js';
+import { CRMEntityCard } from '../components/entity-card.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
     CSSResultGroup,
     PropertyDeclarations,
@@ -136,17 +136,25 @@ export class CRMEntityCreatePage extends PlatformPage {
     private declare _onCardToolbarStateBound: (ev: Event) => void;
 
     _onCardToolbarState(ev: Event) {
-        const d = (ev as CustomEvent).detail;
-        if (!d || typeof d.saveDisabled !== 'boolean' || typeof d.submitting !== 'boolean') {
+        if (!(ev instanceof CustomEvent) || !isPlainRecord(ev.detail)) {
             throw new Error('crm-entity-card-toolbar-state: invalid detail');
         }
-        this._saveDisabled = d.saveDisabled;
-        this._submitting = d.submitting;
+        const saveDisabled = ev.detail.saveDisabled;
+        const submitting = ev.detail.submitting;
+        if (typeof saveDisabled !== 'boolean' || typeof submitting !== 'boolean') {
+            throw new Error('crm-entity-card-toolbar-state: invalid detail');
+        }
+        this._saveDisabled = saveDisabled;
+        this._submitting = submitting;
     }
 
     _getCard(): CRMEntityCard {
-        const card = this.shadowRoot?.querySelector('crm-entity-card') as CRMEntityCard | null;
-        if (!card) {
+        const root = this.shadowRoot;
+        if (root === null) {
+            throw new Error('CRMEntityCreatePage: crm-entity-card missing');
+        }
+        const card = root.querySelector('crm-entity-card');
+        if (!(card instanceof CRMEntityCard)) {
             throw new Error('CRMEntityCreatePage: crm-entity-card missing');
         }
         return card;

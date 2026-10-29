@@ -15,6 +15,66 @@ import { FrontendSystemAccessModal } from '../../modals/system-access-modal.js';
 import { FrontendBalanceGrantModal } from '../../modals/balance-grant-modal.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
+
+interface PriceRow {
+    category: string;
+    resource_name: string;
+    price: string;
+}
+
+interface BillingMatch {
+    attribute_equals: Record<string, unknown>;
+    attribute_regex: Record<string, unknown>;
+    attribute_keys_present: unknown[];
+    [key: string]: unknown;
+}
+
+interface BillingRule {
+    match: BillingMatch;
+    [key: string]: unknown;
+}
+
+interface BillingRulesDoc {
+    version: unknown;
+    application_mode: unknown;
+    rules: BillingRule[];
+    [key: string]: unknown;
+}
+
+interface PricingLayerRow {
+    category: string;
+    resource_name: string;
+    static_base: number | null;
+    global_override: number | null;
+    company_override: number | null;
+    base_effective: number | null;
+    tariff_multiplier: number;
+    unit_effective: number | null;
+    source: string;
+}
+
+function billingMatch(value: unknown): BillingMatch {
+    const match: BillingMatch = {
+        attribute_equals: {},
+        attribute_regex: {},
+        attribute_keys_present: [],
+    };
+    if (!isPlainRecord(value)) return match;
+    for (const [key, field] of Object.entries(value)) match[key] = field;
+    if (!isPlainRecord(match.attribute_equals)) match.attribute_equals = {};
+    if (!isPlainRecord(match.attribute_regex)) match.attribute_regex = {};
+    if (!Array.isArray(match.attribute_keys_present)) match.attribute_keys_present = [];
+    return match;
+}
+
+function billingRule(value: Record<string, unknown>): BillingRule {
+    const rule: BillingRule = { match: billingMatch(value.match) };
+    for (const [key, field] of Object.entries(value)) {
+        if (key === 'match') continue;
+        rule[key] = field;
+    }
+    return rule;
+}
 import type { OpController, FacetsController} from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
@@ -143,13 +203,13 @@ export class FrontendBillingAdminPage extends PlatformPage {
     declare _companySubdomain: string;
     declare _companyQuery: string;
     declare _facetOpen: boolean;
-    declare _pricesDraft: any;
-    declare _companyPricesDraft: any;
-    declare _rulesDraft: any;
+    declare _pricesDraft: PriceRow[] | null;
+    declare _companyPricesDraft: PriceRow[] | null;
+    declare _rulesDraft: string | null;
     declare _rulesDraftError: string;
-    declare _matchModeDraft: Record<string, any>;
-    declare _usageFilters: Record<string, any>;
-    declare _usageFacetOpen: any;
+    declare _matchModeDraft: Record<string, string>;
+    declare _usageFilters: Record<string, string>;
+    declare _usageFacetOpen: string | null;
 ;
 
     static override styles: CSSResultGroup = [
@@ -656,7 +716,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
         this._loadedTabs = new Set();
     }
-    private _pendingRuleScrollId: any;
+    private _pendingRuleScrollId: string | null;
     private _companies: OpController;
     private _companyResolve: OpController;
     private _pricesGlobal: OpController;
@@ -956,7 +1016,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
     _flattenPrices(catalog: unknown) {
         if (!isPlainRecord(catalog)) return [];
-        const out: any[] = [];
+        const out: PriceRow[] = [];
         for (const [category, resources] of Object.entries(catalog)) {
             if (!resources || typeof resources !== 'object') continue;
             for (const [resource_name, price] of Object.entries(resources)) {
@@ -973,7 +1033,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return !!(bucket && typeof bucket === 'object' && Object.prototype.hasOwnProperty.call(bucket, resourceName));
     }
 
-    _priceSource(row: Record<string, any>, companyOverride: Record<string, unknown> | null | undefined, globalOverride: Record<string, unknown> | null | undefined) {
+    _priceSource(row: { category: string; resource_name: string }, companyOverride: Record<string, unknown> | null | undefined, globalOverride: Record<string, unknown> | null | undefined) {
         if (this._catalogHas(companyOverride, row.category, row.resource_name)) return 'company';
         if (this._catalogHas(globalOverride, row.category, row.resource_name)) return 'global';
         return 'base';
@@ -1014,7 +1074,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 }
             }
         }
-        const rows: any[] = [];
+        const rows: PricingLayerRow[] = [];
         for (const key of keys) {
             const [category = '', resourceName = ''] = key.split('\u0000');
             const row = {
@@ -1036,25 +1096,26 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return rows;
     }
 
-    _buildCatalog(rows: Record<string, any>[]) {
-        const catalog: Record<string, any> = {};
+    _buildCatalog(rows: readonly PriceRow[]) {
+        const catalog: Record<string, Record<string, number>> = {};
         for (const r of rows) {
-            const cat = r.category && r.category.trim();
-            const name = r.resource_name && r.resource_name.trim();
-            if (!cat || !name) continue;
-            if (!catalog[cat]) catalog[cat] = {};
+            const cat = r.category.trim();
+            const name = r.resource_name.trim();
+            if (cat.length === 0 || name.length === 0) continue;
             const price = Number(r.price);
             if (Number.isNaN(price)) throw new Error(`invalid price for ${cat}:${name}`);
-            catalog[cat][name] = price;
+            const bucket = catalog[cat];
+            if (bucket === undefined) catalog[cat] = { [name]: price };
+            else bucket[name] = price;
         }
         return catalog;
     }
 
-    _renderPriceSource(source: Record<string, any>) {
+    _renderPriceSource(source: string) {
         return html`<span class="source ${source}">${this.t(`platform_billing_page.price_source_${source}`)}</span>`;
     }
 
-    _renderReadonlyPriceTable(rows: Record<string, any>[], showSource: Record<string, any>) {
+    _renderReadonlyPriceTable(rows: ReadonlyArray<PriceRow & { source?: string }>, showSource: boolean) {
         if (rows.length === 0) {
             return html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`;
         }
@@ -1073,7 +1134,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                 <td>${r.category}</td>
                                 <td class="mono">${r.resource_name}</td>
                                 <td>${r.price}</td>
-                                ${showSource ? html`<td>${this._renderPriceSource(r.source)}</td>` : null}
+                                ${showSource && typeof r.source === 'string' ? html`<td>${this._renderPriceSource(r.source)}</td>` : null}
                             </tr>
                         `)}
                     </tbody>
@@ -1082,7 +1143,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _renderPricingLayerTable(rows: Record<string, any>[], showCompanyPricing: boolean) {
+    _renderPricingLayerTable(rows: readonly PricingLayerRow[], showCompanyPricing: boolean) {
         if (rows.length === 0) {
             return html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`;
         }
@@ -1120,7 +1181,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _renderPricesEditor(rows: Record<string, any>[], onChange: (rows: Record<string, any>[]) => void) {
+    _renderPricesEditor(rows: PriceRow[], onChange: (rows: PriceRow[]) => void) {
         return html`
             ${rows.length === 0 ? html`<div class="empty-block">${this.t('platform_billing_page.price_override_empty')}</div>` : html`
                 <div class="table-wrap compact-table">
@@ -1228,18 +1289,22 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _saveGlobalPrices() {
+        const rows = this._pricesDraft;
+        if (rows === null) throw new Error('billing-admin: prices draft required');
         try {
-            this._pricesGlobalSave.run({ catalog: this._buildCatalog(this._pricesDraft) });
+            this._pricesGlobalSave.run({ catalog: this._buildCatalog(rows) });
         } catch (_err) {
             this.toast('platform_billing_page.price_invalid_row', { type: 'error' });
         }
     }
 
     _saveCompanyPrices() {
+        const rows = this._companyPricesDraft;
+        if (rows === null) throw new Error('billing-admin: company prices draft required');
         try {
             this._companyPricesSave.run({
                 company_id: this._companyId,
-                catalog: this._buildCatalog(this._companyPricesDraft),
+                catalog: this._buildCatalog(rows),
             });
         } catch (_err) {
             this.toast('platform_billing_page.price_invalid_row', { type: 'error' });
@@ -1302,7 +1367,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                             <div class="section-subtitle">${this.t('platform_billing_page.hint_prices_global_scope')}</div>
                         </div>
                     </div>
-                    ${this._renderPricesEditor(globalRows, (rows: Record<string, any>[]) => { this._pricesDraft = rows; })}
+                    ${this._renderPricesEditor(globalRows, (rows: PriceRow[]) => { this._pricesDraft = rows; })}
                     <div class="actions">
                         <button class="btn primary" ?disabled=${this._pricesGlobalSave.busy} @click=${() => this._saveGlobalPrices()}>
                             <platform-icon name="save" size="16"></platform-icon>
@@ -1325,7 +1390,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                     </div>
                     ${this._companyId
                         ? html`
-                            ${this._renderPricesEditor(companyRows, (rows: Record<string, any>[]) => { this._companyPricesDraft = rows; })}
+                            ${this._renderPricesEditor(companyRows, (rows: PriceRow[]) => { this._companyPricesDraft = rows; })}
                             <div class="actions">
                                 <button class="btn primary" ?disabled=${this._companyPricesSave.busy} @click=${() => this._saveCompanyPrices()}>
                                     <platform-icon name="save" size="16"></platform-icon>
@@ -1351,26 +1416,41 @@ export class FrontendBillingAdminPage extends PlatformPage {
         }
     }
 
-    _emptyRulesDoc() {
+    _emptyRulesDoc(): BillingRulesDoc {
         return { version: 1, application_mode: 'first_win', rules: [] };
     }
 
-    _cloneRulesDoc() {
-        const doc = this._rulesDocFromDraft();
-        const source = doc && typeof doc === 'object' ? doc : this._emptyRulesDoc();
-        const clone = JSON.parse(JSON.stringify(source));
-        if (!Array.isArray(clone.rules)) clone.rules = [];
-        if (!clone.version) clone.version = 1;
-        if (!clone.application_mode) clone.application_mode = 'first_win';
-        return clone;
+    _cloneRulesDoc(): BillingRulesDoc {
+        const parsed = this._rulesDocFromDraft();
+        const source = isPlainRecord(parsed) ? parsed : this._emptyRulesDoc();
+        const version = source.version;
+        const applicationMode = source.application_mode;
+        const doc: BillingRulesDoc = {
+            version: version === undefined || version === null || version === '' || version === 0 ? 1 : version,
+            application_mode: typeof applicationMode === 'string' && applicationMode.length > 0 ? applicationMode : 'first_win',
+            rules: [],
+        };
+        const rules = source.rules;
+        if (rules !== undefined && rules !== null) {
+            if (!Array.isArray(rules)) throw new Error('billing-admin: rules must be a list');
+            for (const item of rules) {
+                if (!isPlainRecord(item)) throw new Error('billing-admin: rule must be an object');
+                doc.rules.push(billingRule(item));
+            }
+        }
+        for (const [key, field] of Object.entries(source)) {
+            if (key === 'rules' || key === 'version' || key === 'application_mode') continue;
+            doc[key] = field;
+        }
+        return doc;
     }
 
-    _setRulesDoc(doc: Record<string, any>) {
+    _setRulesDoc(doc: BillingRulesDoc) {
         this._rulesDraft = JSON.stringify(doc, null, 2);
         this._rulesDraftError = '';
     }
 
-    _updateRulesDoc(mutator: (doc: Record<string, any>) => void) {
+    _updateRulesDoc(mutator: (doc: BillingRulesDoc) => void) {
         const doc = this._cloneRulesDoc();
         mutator(doc);
         this._setRulesDoc(doc);
@@ -1397,7 +1477,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     _addRuleAndScroll() {
         const rule = this._emptyRule();
         this._pendingRuleScrollId = rule.rule_id;
-        this._updateRulesDoc((draft: Record<string, any>) => {
+        this._updateRulesDoc((draft: BillingRulesDoc) => {
             draft.rules.push(rule);
         });
         this.updateComplete.then(() => {
@@ -1422,30 +1502,22 @@ export class FrontendBillingAdminPage extends PlatformPage {
         target.focus({ preventScroll: true });
     }
 
-    _ensureRule(doc: Record<string, any>, idx: number) {
+    _ensureRule(doc: BillingRulesDoc, idx: number): BillingRule {
         const rule = doc.rules[idx];
-        if (!rule.match || typeof rule.match !== 'object') rule.match = {};
-        if (!rule.match.attribute_equals || typeof rule.match.attribute_equals !== 'object') {
-            rule.match.attribute_equals = {};
-        }
-        if (!rule.match.attribute_regex || typeof rule.match.attribute_regex !== 'object') {
-            rule.match.attribute_regex = {};
-        }
-        if (!Array.isArray(rule.match.attribute_keys_present)) {
-            rule.match.attribute_keys_present = [];
-        }
+        if (rule === undefined) throw new Error('billing-admin: rule missing');
+        rule.match = billingMatch(rule.match);
         return rule;
     }
 
     _setRuleField(idx: number, field: string, value: unknown) {
-        this._updateRulesDoc((doc: Record<string, any>) => {
+        this._updateRulesDoc((doc: BillingRulesDoc) => {
             const rule = this._ensureRule(doc, idx);
             rule[field] = value;
         });
     }
 
     _setRuleMatchField(idx: number, field: string, value: unknown) {
-        this._updateRulesDoc((doc: Record<string, any>) => {
+        this._updateRulesDoc((doc: BillingRulesDoc) => {
             const rule = this._ensureRule(doc, idx);
             if (typeof value === 'string' && value.trim().length === 0) {
                 delete rule.match[field];
@@ -1455,7 +1527,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         });
     }
 
-    _matchModeDraftKey(idx: number, rule: Record<string, any>, scope: string) {
+    _matchModeDraftKey(idx: number, rule: BillingRule, scope: string) {
         const rid = rule && typeof rule.rule_id === 'string' && rule.rule_id.length > 0
             ? rule.rule_id
             : String(idx);
@@ -1499,7 +1571,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         }
     }
 
-    _actualMatchMode(match: Record<string, any>, scope: string) {
+    _actualMatchMode(match: Record<string, unknown>, scope: string) {
         if (!match || typeof match !== 'object') return 'none';
         if (scope === 'operation') {
             if (typeof match.operation_name_regex === 'string' && match.operation_name_regex.length > 0) return 'regex';
@@ -1517,7 +1589,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return 'none';
     }
 
-    _matchMode(match: Record<string, any>, scope: string, idx: number | null = null, rule: Record<string, any> | null = null) {
+    _matchMode(match: BillingMatch, scope: string, idx: number | null = null, rule: BillingRule | null = null) {
         const actual = this._actualMatchMode(match, scope);
         if (actual !== 'none') return actual;
         if (idx === null || rule === null) return 'none';
@@ -1525,7 +1597,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return typeof draft === 'string' && draft.length > 0 ? draft : 'none';
     }
 
-    _matchValue(match: Record<string, any>, scope: string) {
+    _matchValue(match: Record<string, unknown>, scope: string) {
         if (!match || typeof match !== 'object') return '';
         if (scope === 'operation') {
             return firstText([match.operation_name_regex, match.operation_name_equals, match.operation_name_prefix]);
@@ -1557,7 +1629,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         this._clearMatchModeDraft(key);
     }
 
-    _quantityParts(quantityFrom: Record<string, any>) {
+    _quantityParts(quantityFrom: unknown) {
         const value = typeof quantityFrom === 'string' ? quantityFrom : '';
         if (value.startsWith('attr:')) return { mode: 'attr', value: value.slice(5) };
         if (value.startsWith('const:')) return { mode: 'const', value: value.slice(6) };
@@ -1595,13 +1667,13 @@ export class FrontendBillingAdminPage extends PlatformPage {
         }
     }
 
-    _mapEntries(map: Record<string, any>) {
-        if (!map || typeof map !== 'object') return [];
+    _mapEntries(map: unknown): Array<[string, unknown]> {
+        if (!isPlainRecord(map)) return [];
         return Object.entries(map);
     }
 
     _setMapEntry(idx: number, mapName: string, entryIndex: number, key: string, value: unknown) {
-        this._updateRulesDoc((doc: Record<string, any>) => {
+        this._updateRulesDoc((doc: BillingRulesDoc) => {
             const rule = this._ensureRule(doc, idx);
             const entries = this._mapEntries(rule.match[mapName]);
             entries[entryIndex] = [key, value];
@@ -1610,7 +1682,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _addMapEntry(idx: number, mapName: string) {
-        this._updateRulesDoc((doc: Record<string, any>) => {
+        this._updateRulesDoc((doc: BillingRulesDoc) => {
             const rule = this._ensureRule(doc, idx);
             const current = rule.match[mapName];
             rule.match[mapName] = { ...(current && typeof current === 'object' ? current : {}), '': '' };
@@ -1618,7 +1690,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _removeMapEntry(idx: number, mapName: string, entryIndex: number) {
-        this._updateRulesDoc((doc: Record<string, any>) => {
+        this._updateRulesDoc((doc: BillingRulesDoc) => {
             const rule = this._ensureRule(doc, idx);
             const entries = this._mapEntries(rule.match[mapName]);
             entries.splice(entryIndex, 1);
@@ -1627,7 +1699,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _setPresentAttr(idx: number, entryIndex: number, value: unknown) {
-        this._updateRulesDoc((doc: Record<string, any>) => {
+        this._updateRulesDoc((doc: BillingRulesDoc) => {
             const rule = this._ensureRule(doc, idx);
             rule.match.attribute_keys_present[entryIndex] = value;
             rule.match.attribute_keys_present = rule.match.attribute_keys_present.filter((v: unknown) => typeof v === 'string' && v.length > 0);
@@ -1635,22 +1707,22 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _addPresentAttr(idx: number) {
-        this._updateRulesDoc((doc: Record<string, any>) => {
+        this._updateRulesDoc((doc: BillingRulesDoc) => {
             const rule = this._ensureRule(doc, idx);
             rule.match.attribute_keys_present.push('');
         });
     }
 
     _removePresentAttr(idx: number, entryIndex: number) {
-        this._updateRulesDoc((doc: Record<string, any>) => {
+        this._updateRulesDoc((doc: BillingRulesDoc) => {
             const rule = this._ensureRule(doc, idx);
             rule.match.attribute_keys_present.splice(entryIndex, 1);
         });
     }
 
-    _formatMatch(match: Record<string, any>) {
-        if (!match || typeof match !== 'object') return '';
-        const parts: any[] = [];
+    _formatMatch(match: unknown) {
+        if (!isPlainRecord(match)) return '';
+        const parts: string[] = [];
         if (match.operation_name_equals) parts.push(`op=${match.operation_name_equals}`);
         if (match.operation_name_prefix) parts.push(`op^=${match.operation_name_prefix}`);
         if (match.operation_name_regex) parts.push(`op~=${match.operation_name_regex}`);
@@ -1677,7 +1749,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return parts.join(' · ');
     }
 
-    _enumConfig(values: Record<string, any>) {
+    _enumConfig(values: readonly string[] | readonly { value: string; label: string }[]) {
         return { values };
     }
 
@@ -1695,7 +1767,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return Number.isFinite(parsed) ? parsed : fallback;
     }
 
-    _renderRulesSummary(doc: Record<string, any>) {
+    _renderRulesSummary(doc: BillingRulesDoc) {
         const rules = doc && Array.isArray(doc.rules) ? doc.rules : [];
         if (rules.length === 0) {
             return html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`;
@@ -1728,7 +1800,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _renderMatchSelector(idx: number, rule: Record<string, any>, scope: string, labelKey: string) {
+    _renderMatchSelector(idx: number, rule: BillingRule, scope: string, labelKey: string) {
         const mode = this._matchMode(rule.match, scope, idx, rule);
         const values = scope === 'operation'
             ? [
@@ -1782,7 +1854,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _renderAttributeMapEditor(idx: number, rule: Record<string, any>, mapName: string, titleKey: string, valueMode: string) {
+    _renderAttributeMapEditor(idx: number, rule: BillingRule, mapName: string, titleKey: string, valueMode: string) {
         const entries = this._mapEntries(rule.match[mapName]);
         const isRegex = valueMode === 'regex';
         return html`
@@ -1851,7 +1923,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _renderPresentAttributes(idx: number, rule: Record<string, any>) {
+    _renderPresentAttributes(idx: number, rule: BillingRule) {
         const items = Array.isArray(rule.match.attribute_keys_present) ? rule.match.attribute_keys_present : [];
         return html`
             <div class="rule-subsection">
@@ -1896,7 +1968,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _renderRuleCard(rule: Record<string, any>, idx: number) {
+    _renderRuleCard(rule: BillingRule, idx: number) {
         const quantity = this._quantityParts(rule.quantity_from);
         const usageTypeValues = [
             'tool_call',
@@ -1915,7 +1987,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         <span class="source">${idx + 1}</span>
                         <span class="mono">${rule.rule_id}</span>
                     </div>
-                    <button class="btn" @click=${() => this._updateRulesDoc((doc: Record<string, any>) => { doc.rules.splice(idx, 1); })}>
+                    <button class="btn" @click=${() => this._updateRulesDoc((doc: BillingRulesDoc) => { doc.rules.splice(idx, 1); })}>
                         <platform-icon name="trash" size="16"></platform-icon>
                         ${this.t('platform_billing_page.rules_remove_rule')}
                     </button>
@@ -2050,7 +2122,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _renderRulesBuilder(doc: Record<string, any>) {
+    _renderRulesBuilder(doc: BillingRulesDoc) {
         const rules = doc && Array.isArray(doc.rules) ? doc.rules : [];
         return html`
             <div class="rule-grid">
@@ -2063,7 +2135,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                     .value=${this._numberOrDefault(doc.version, 1)}
                     @change=${(e: CustomEvent) => {
                         const value = e.detail && typeof e.detail.value === 'number' ? e.detail.value : 1;
-                        this._updateRulesDoc((draft: Record<string, any>) => { draft.version = value; });
+                        this._updateRulesDoc((draft: BillingRulesDoc) => { draft.version = value; });
                     }}
                 ></platform-field>
                 <platform-field
@@ -2081,7 +2153,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         if (e.detail.value !== 'first_win' && e.detail.value !== 'all_matching') {
                             return;
                         }
-                        this._updateRulesDoc((draft: Record<string, any>) => { draft.application_mode = e.detail.value; });
+                        this._updateRulesDoc((draft: BillingRulesDoc) => { draft.application_mode = e.detail.value; });
                     }}
                 ></platform-field>
             </div>
@@ -2256,7 +2328,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         `;
     }
 
-    _usageSummary(items: Record<string, any>[]) {
+    _usageSummary(items: Record<string, unknown>[]) {
         let quantity = 0;
         let cost = 0;
         const companies = new Set();
@@ -2288,7 +2360,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         this._usage.run(this._usagePayload(0, this._usage.state.limit as number));
     }
 
-    _renderUsageSummary(summary: Record<string, any>) {
+    _renderUsageSummary(summary: Record<string, unknown>) {
         return html`
             <div class="summary-row">
                 <div class="summary-item">
@@ -2375,7 +2447,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                         <th>${this.t('platform_billing_page.col_rule')}</th>
                                     </tr></thead>
                                     <tbody>
-                                        ${items.map((r: Record<string, any>) => html`
+                                        ${items.map((r: Record<string, unknown>) => html`
                                             <tr>
                                                 <td>${this._formatDate(r.timestamp)}</td>
                                                 <td>
@@ -2387,7 +2459,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                                 <td>${this._formatNumber(r.quantity, 0)}</td>
                                                 <td>${this._formatNumber(r.unit_cost, 8)}</td>
                                                 <td>${this._formatNumber(r.cost, 4)}</td>
-                                                <td class="mono">${r.span_id ? r.span_id.slice(0, 16) : ''}</td>
+                                                <td class="mono">${typeof r.span_id === 'string' ? r.span_id.slice(0, 16) : ''}</td>
                                                 <td class="mono">${displayText(r.rule_id)}</td>
                                             </tr>
                                         `)}

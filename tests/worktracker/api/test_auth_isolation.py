@@ -29,7 +29,7 @@ async def test_system_item_not_visible_in_company2(
 
 
 async def test_unauthenticated_request_rejected(worktracker_app, unique_id: str) -> None:
-    from httpx import ASGITransport, AsyncClient
+    from httpx2 import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=worktracker_app)
     async with worktracker_app.router.lifespan_context(worktracker_app):

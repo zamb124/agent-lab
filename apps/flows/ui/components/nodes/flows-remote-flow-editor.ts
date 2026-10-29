@@ -24,7 +24,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -34,12 +34,12 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
 ;
 
@@ -155,7 +155,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'remote_flow';
+        this.flowNodeType = 'remote_flow';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -163,7 +163,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         this.embedded = false;
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
@@ -197,7 +197,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         this._emitPatch({ branch_id: v });
     }
 
-    _onMetadataTemplate(parsed: any) {
+    _onMetadataTemplate(parsed: unknown) {
         if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
             throw new Error('flows-remote-flow-editor: metadata_template must be a JSON object');
         }
@@ -238,23 +238,23 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
 
     override render(): TemplateResult {
         const cfg = asObject(this.nodeConfig);
-        const url = typeof (cfg as any).url === 'string' ? (cfg as any).url : '';
-        const branchId = typeof (cfg as any).branch_id === 'string' ? (cfg as any).branch_id : 'default';
+        const url = typeof cfg.url === 'string' ? cfg.url : '';
+        const branchId = typeof cfg.branch_id === 'string' ? cfg.branch_id : 'default';
         const metadataTemplateStr =
-            typeof (cfg as any).metadata_template === 'string' && (cfg as any).metadata_template.length > 0
-                ? (cfg as any).metadata_template
+            typeof cfg.metadata_template === 'string' && cfg.metadata_template.length > 0
+                ? cfg.metadata_template
                 : '{}';
-        const headers =
-            (cfg as any).headers && typeof (cfg as any).headers === 'object' && !Array.isArray((cfg as any).headers)
-                ? (cfg as any).headers
-                : {};
+        const headersValue = cfg.headers;
+        const headers = headersValue !== null && typeof headersValue === 'object' && !Array.isArray(headersValue)
+            ? headersValue
+            : {};
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'remote_flow'}
+                .flowNodeType=${this.flowNodeType}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

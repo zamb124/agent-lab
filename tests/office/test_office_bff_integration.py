@@ -1,5 +1,5 @@
 """
-BFF documents/office: реальные PostgreSQL (platform_office), S3, httpx; callback — GET с aiohttp (как URL от Document Server).
+BFF documents/office: реальные PostgreSQL (platform_office), S3, httpx2; callback — GET с aiohttp (как URL от Document Server).
 """
 
 from __future__ import annotations

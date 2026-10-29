@@ -6,15 +6,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from apps.flows.src.durable_execution.models import (
-    WorkflowEvent,
-    WorkflowInstance,
-    WorkflowSnapshot,
-)
 from apps.flows.src.durable_execution import (
     UserInputAppliedPayload,
     WorkflowEventType,
     create_initial_state,
+)
+from apps.flows.src.durable_execution.models import (
+    WorkflowEvent,
+    WorkflowInstance,
+    WorkflowSnapshot,
 )
 from core.context import require_active_company
 from core.state import ExecutionState

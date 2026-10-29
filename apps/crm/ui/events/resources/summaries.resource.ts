@@ -10,33 +10,45 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const CRM_DAILY_SUMMARY_UPDATED = 'crm/daily_summary/updated';
 const CRM_PERIOD_SUMMARY_UPDATED = 'crm/period_summary/updated';
 
-function _requireSummaryState(payload: Record<string, any>, owner: string) {
-    const st = payload.state as Record<string, any> | null;
-    if (!st || typeof st !== 'object' || Array.isArray(st)) {
+function requirePayload(payload: unknown, message: string): Record<string, unknown> {
+    if (!isPlainRecord(payload)) {
+        throw new Error(message);
+    }
+    return payload;
+}
+
+function _requireSummaryState(payload: Record<string, unknown>, owner: string) {
+    const st = payload.state;
+    if (!isPlainRecord(st)) {
         throw new Error(`${owner}: payload.state object required`);
     }
-    if (typeof st.summary !== 'string') {
+    const summary = st.summary;
+    if (typeof summary !== 'string') {
         throw new Error(`${owner}: payload.state.summary string required`);
     }
-    if (!Array.isArray(st.entities)) {
+    const entities = st.entities;
+    if (!Array.isArray(entities)) {
         throw new Error(`${owner}: payload.state.entities array required`);
     }
-    if (!Array.isArray(st.entity_links)) {
+    const entityLinks = st.entity_links;
+    if (!Array.isArray(entityLinks)) {
         throw new Error(`${owner}: payload.state.entity_links array required`);
     }
-    if (typeof st.generated_at !== 'string' || st.generated_at.length === 0) {
+    const generatedAt = st.generated_at;
+    if (typeof generatedAt !== 'string' || generatedAt.length === 0) {
         throw new Error(`${owner}: payload.state.generated_at string required`);
     }
     return {
-        summary: st.summary,
-        entities: st.entities,
-        entity_links: st.entity_links,
+        summary,
+        entities,
+        entity_links: entityLinks,
         revalidating: false,
-        generated_at: st.generated_at,
+        generated_at: generatedAt,
     };
 }
 
@@ -63,26 +75,21 @@ export const dailySummaryOp = createAsyncOp({
     },
     extraReducer: (state, event, events) => {
         if (event.type === events.REQUESTED) {
-            const payload = (event.payload as Record<string, any>);
-            if (!payload || typeof payload !== 'object') {
-                throw new Error('crm/daily_summary extraReducer: request payload required');
-            }
-            if (typeof payload.date !== 'string' || payload.date.length === 0) {
+            const payload = requirePayload(event.payload, 'crm/daily_summary extraReducer: request payload required');
+            const date = payload.date;
+            if (typeof date !== 'string' || date.length === 0) {
                 throw new Error('crm/daily_summary extraReducer: payload.date required');
             }
             return {
                 ...state,
-                watchDate: payload.date,
+                watchDate: date,
                 watchNamespace: _namespaceOrNull(payload.namespace, 'crm/daily_summary'),
             };
         }
         if (event.type !== CRM_DAILY_SUMMARY_UPDATED) {
             return state;
         }
-        const payload = (event.payload as Record<string, any>);
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('crm/daily_summary extraReducer: push payload required');
-        }
+        const payload = requirePayload(event.payload, 'crm/daily_summary extraReducer: push payload required');
         if (payload.date !== state.watchDate) {
             return state;
         }
@@ -112,27 +119,23 @@ export const periodSummaryOp = createAsyncOp({
     },
     extraReducer: (state, event, events) => {
         if (event.type === events.REQUESTED) {
-            const payload = (event.payload as Record<string, any>);
-            if (!payload || typeof payload !== 'object') {
-                throw new Error('crm/period_summary extraReducer: request payload required');
-            }
-            if (typeof payload.date_from !== 'string' || typeof payload.date_to !== 'string') {
+            const payload = requirePayload(event.payload, 'crm/period_summary extraReducer: request payload required');
+            const dateFrom = payload.date_from;
+            const dateTo = payload.date_to;
+            if (typeof dateFrom !== 'string' || typeof dateTo !== 'string') {
                 throw new Error('crm/period_summary extraReducer: date_from and date_to required');
             }
             return {
                 ...state,
-                watchDateFrom: payload.date_from,
-                watchDateTo: payload.date_to,
+                watchDateFrom: dateFrom,
+                watchDateTo: dateTo,
                 watchNamespace: _namespaceOrNull(payload.namespace, 'crm/period_summary'),
             };
         }
         if (event.type !== CRM_PERIOD_SUMMARY_UPDATED) {
             return state;
         }
-        const payload = (event.payload as Record<string, any>);
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('crm/period_summary extraReducer: push payload required');
-        }
+        const payload = requirePayload(event.payload, 'crm/period_summary extraReducer: push payload required');
         if (payload.date_from !== state.watchDateFrom || payload.date_to !== state.watchDateTo) {
             return state;
         }

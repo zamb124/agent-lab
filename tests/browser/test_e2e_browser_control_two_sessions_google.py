@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 URL = "https://duckduckgo.com/"
 ACTION_TIMEOUT_MS = 10_000

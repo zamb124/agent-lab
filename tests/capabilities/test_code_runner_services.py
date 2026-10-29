@@ -10,7 +10,7 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.capabilities import (

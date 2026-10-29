@@ -197,7 +197,7 @@ export class CRMGraphToolbar extends PlatformElement {
                 </button>
             </div>
             <div class="separator"></div>
-            ${(this.actions as { id: string; label: string }[]).map((action) => html`
+            ${this.actions.map((action) => html`
                 <button
                     class="icon-btn ${this._isActionActive(action.id) ? 'active' : ''}"
                     type="button"

@@ -42,7 +42,7 @@ async def test_sync_channel_access_service_roles(
         obj,
     ) is True
 
-    rows = await access.list_member_rows(channel_id)
+    rows = await access.list_member_rows_by_user_id_asc(channel_id)
     by_user = {uid: role for uid, role in rows}
     assert by_user[owner_id] == "owner"
     assert by_user[admin_id] == "admin"

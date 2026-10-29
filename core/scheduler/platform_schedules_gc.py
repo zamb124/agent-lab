@@ -40,7 +40,7 @@ class PlatformSchedulesGcService:
         return schedule_id
 
     async def run_gc(self, *, dry_run: bool = False) -> PlatformSchedulesGcResult:
-        known_schedule_ids = await PlatformScheduledTask.list_all_schedule_ids()
+        known_schedule_ids = await PlatformScheduledTask.schedule_id_set()
         redis_keys = await self._broker_redis.scan_keys(f"{PLATFORM_SCHEDULES_DATA_PREFIX}*")
         orphan_keys: list[str] = []
         for redis_key in redis_keys:

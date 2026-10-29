@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Annotated, ClassVar, NoReturn, Protocol
 
-import httpx
+import httpx2
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -367,7 +367,7 @@ async def oauth_callback(
             )
             return HTMLResponse(content=body, status_code=400)
         raise HTTPException(status_code=400, detail=msg)
-    except httpx.HTTPStatusError as exc:
+    except httpx2.HTTPStatusError as exc:
         logger.error("api.oauth.provider.token.exchange.error", status=exc.response.status_code)
         raise HTTPException(status_code=502, detail="OAuth provider error")
 

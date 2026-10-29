@@ -23,7 +23,7 @@ from core.crawl.models import (
     CrawlStructuralSignals,
 )
 from core.crawl.taxonomy import (
-    coerce_filter_metadata_for_taxonomy,
+    coerce_filter_metadata_for_taxonomy_by_tag_asc,
     validate_filter_metadata_against_taxonomy,
 )
 from core.search.index_models import SearchIndexCrawlTaxonomy
@@ -200,7 +200,7 @@ class CrawlPageEnrichmentService:
                 response_model=CrawlEnrichedPageLLMOutput,
                 llm_context=_CRAWL_ENRICHMENT_LLM_CONTEXT,
             )
-            coerced_filter_metadata = coerce_filter_metadata_for_taxonomy(
+            coerced_filter_metadata = coerce_filter_metadata_for_taxonomy_by_tag_asc(
                 llm_output.chunks[0].filter_metadata,
                 taxonomy,
             )

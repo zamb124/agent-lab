@@ -133,7 +133,7 @@ export class FlowsAgentSkillsPage extends PlatformPage {
             this._selectedSkill = null;
             return;
         }
-        const fromList = asArray(this._skills.items).find((item) => item.agent_skill_id === id);
+        const fromList = asArray(this._skills.items).find((item) => isPlainObject(item) && item.agent_skill_id === id);
         if (fromList) {
             this._selectedSkill = fromList;
         }

@@ -6,7 +6,7 @@ globs:
   - "apps/*/models/**"
   - "apps/flows/src/models/**"
   - "migrations/**"
-  - "scripts/db_migrate.py"
+  - "scripts/db/migrate.py"
   - "core/clients/redis_client.py"
 alwaysApply: false
 ---
@@ -18,7 +18,7 @@ alwaysApply: false
 ## Канон
 
 1. Таблица — класс `PlatformModel` с `Meta.is_table = True`; тот же класс — Pydantic-сущность домена; поля — `oxyde.Field`.
-2. Одна таблица — один файл `models/<entity>.py` у владельца: сервис — `apps/<svc>/models/`, flows — `apps/flows/src/models/`, shared-таблица и домен `core` — `core/<domain>/`. `[без гейта]`
+2. Одна таблица — один файл. Не больше одного `PlatformModel` на файл — `scripts/gates/backend/model_files.py`. Файл таблицы — `models/<entity>.py` у владельца: сервис — `apps/<svc>/models/`, flows — `apps/flows/src/models/`, shared-таблица и домен `core` — `core/<domain>/`. Расположение `[без гейта]`.
 3. База модели — `__database_alias__` из whitelist `PlatformModelMeta`; таблица в нескольких базах — `__database_aliases__`. `objects` — `BoundQueryManager` с алиасом модели.
 4. Модель без `__global_model__ = True` получает `company_id` активной компании из `get_context()` в каждом запросе; ручной фильтр `company_id` у неё запрещён. Модель с `__global_model__ = True` не фильтруется: выборка одной компании — явный фильтр `company_id` в `@classmethod`. `[без гейта]`
 5. PK CRUD базового класса: `get(entity_id) -> Self | None`, `set(entity) -> bool` (insert или update по первичному ключу), `delete_by_id(entity_id) -> bool`, `list(*, limit, offset=0) -> list[Self]` (`limit >= 1`), `count_all() -> int`, `get_many(entity_ids) -> dict[str, Self]`. Они не переопределяются: другой ключ, фильтр, срок, JSONB-путь или условный `UPDATE` — именованный запрос. `[без гейта]`
@@ -57,14 +57,15 @@ alwaysApply: false
 - `by_*` не поднимает not-found; `require_*` не возвращает `None`.
 - Имя не повторяет класс: `Record.get_record`, `Record.list_records` запрещены.
 - Append и версия — никогда `set`/`update`; soft delete и отзыв — никогда `delete`; upsert по естественному ключу — никогда `save`/`set`.
+- Порядок колонки виден в имени (`_asc`, `_desc`, `unordered`). Ранг score, priority, distance, tag и serialization — своим токеном в имени. `op_*` порядок в имени не несёт: запрос живёт в методе модели.
 
 ### Миграции
 
-1. У базы — каталог `migrations/<db>/` и цепочка `NNNN_<name>.py` от `0001_initial.py`. Снимает `uv run python -m scripts.db_migrate makemigrations [--service <db>]`: пустой каталог пишет `0001_initial`, непустой — следующий номер по дифу моделей и replay уже лежащих файлов. Таблицы находит `core/db/migrations.py` по `Meta.is_table = True` в `core/` и `apps/`; `models_module` манифеста импортирует `bootstrap_migration_registry` (`core/db/migration_manifest.py`).
+1. У базы — каталог `migrations/<db>/` и цепочка `NNNN_<name>.py` от `0001_initial.py`. Снимает `uv run python -m scripts.db.migrate makemigrations [--service <db>]`: пустой каталог пишет `0001_initial`, непустой — следующий номер по дифу моделей и replay уже лежащих файлов. Таблицы находит `core/db/migrations.py` по `Meta.is_table = True` в `core/` и `apps/`; `models_module` манифеста импортирует `bootstrap_migration_registry` (`core/db/migration_manifest.py`).
 2. Правка схемы: модель → `makemigrations`. Новый файл дописывается в конец цепочки и переносит данные живой базы операциями дифа.
 3. `upgrade` (`make migrate`, init-контейнер `db-migrate` в pod) применяет файлы, которых нет в `oxyde_migrations`. Повтор при полной цепочке ничего не меняет. База со старыми таблицами и без записи `0001_initial` не накатывается: её поднимают пустой.
 4. Базы создаёт `ensure_postgres_service_databases_async` (`core/db/postgres_service_databases.py`) по `postgres.databases` манифеста; Oxyde базы не создаёт; локально — `migrations/postgres/init.sql`.
-5. База из `postgres.vector_extensions` начинает `upgrade()` файла `0001_initial` с `CREATE EXTENSION IF NOT EXISTS vector`; образ Postgres — `pgvector/pgvector:pg17`. Составной PK, generated `tsvector`, GIN, HNSW и FK вне дифа моделей остаются в `upgrade()` файла, который их вводит.
+5. База из `postgres.vector_extensions` начинает `upgrade()` файла `0001_initial` с `CREATE EXTENSION IF NOT EXISTS vector`; образ Postgres — `pgvector/pgvector:0.8.7-pg18`. Составной PK, generated `tsvector`, GIN, HNSW и FK вне дифа моделей остаются в `upgrade()` файла, который их вводит.
 6. Новая база — запись в `migrations/services.json`, каталог `migrations/<db>/`, строка `init.sql`, поле `*_url` в `DatabaseConfig` и `conf.json`, алиас в whitelist `PlatformModelMeta`.
 
 ### Полосы (строгая сериализация команд)
@@ -73,7 +74,7 @@ alwaysApply: false
 2. Команда с эффектом в леджере исполняется только внутри `run_in_lanes` (`core/lanes/tx.py`): in-process gate на `lane_id` (ожидание не держит соединения пула) → `atomic` → `SET LOCAL lock_timeout` → захват полос → поиск квитанции `idempotency_key` → тело → `LaneCommit`. Один вызов — одна транзакция — один `LaneCommit`.
 3. `run_in_lanes` зовётся только из `@classmethod` модели — это граница транзакции; сервис передаёт план данными. Тело не открывает свой `atomic` и не публикует события.
 4. Идемпотентность: повтор с тем же `(company_id, idempotency_key)` возвращает `result_payload` квитанции без повторного исполнения; тот же ключ с другим `command_type` — `conflict idempotency_key_reused`. `lock_timeout` — `unavailable lane_busy`, безопасный повтор с тем же ключом.
-5. `LaneCommit` — одновременно квитанция идемпотентности, упорядоченный outbox и аудит: `events` (сериализованные `PlatformEvent`) публикуются после commit быстрым путём `publish_lane_run`, потерянные догоняет `relay_lane_commits`; доставка at-least-once, дедупликация в bus по `event_id`. `list_unpublished_by_lane_seq(*, created_before, limit, using, lane_id=None) -> list[LaneCommit]` — неопубликованные коммиты старше `created_before`, `ORDER BY lane_id, lane_seq`, не больше `limit`. `lane_id is None` не фильтрует. `limit < 1` — `ValueError`.
+5. `LaneCommit` — одновременно квитанция идемпотентности, упорядоченный outbox и аудит: `events` (сериализованные `PlatformEvent`) публикуются после commit быстрым путём `publish_lane_run`, потерянные догоняет `relay_lane_commits`; доставка at-least-once, дедупликация в bus по `event_id`. `list_unpublished_by_lane_id_and_lane_seq_asc(*, created_before, limit, using, lane_id=None) -> list[LaneCommit]` — неопубликованные коммиты старше `created_before`, `ORDER BY lane_id, lane_seq ASC`, не больше `limit`. `lane_id is None` не фильтрует. `limit < 1` — `ValueError`.
 6. Таблицы полос живут в базах из `core/lanes/databases.py::LANE_DATABASES`; сервис добавляет свой алиас туда, а не свою копию таблицы. Redis-локи для сериализации доменных команд не используются — это кэш-примитивы, не источник истины.
 
 ### Redis
@@ -93,13 +94,15 @@ alwaysApply: false
 
 ## Исключения
 
-- Исключение: `redis.from_url` — только `redis_client_from_url` в `core/clients/redis_from_url.py` (allowlist `scripts/check_redis_ttl_canon.py`). Вызовы: session lock, invites, брокер TaskIQ, шина событий, sync presence и lock транскрипции.
-- Исключение: `StorageEntry` (таблица `storage`, алиасы `shared` и `tracing`) — KV-конверт платежей, биллинга, устройств и OAuth; новые виды данных в него не добавляются. Ключи `agent_pairing:`, `agent_device:`, `agent_tunnel_online:`, `agent_token_deny:`, `agent_token_jti_deny:`, `flows:`, `mail:notify:`, `mail_attachment:`, `calendar:notify:`, `billing:`, `payment:`, `payment_external:`, `payment_notification:`, `integration_oauth_state:` и `integration_ext_author:` не префиксуются `company_id` (`Storage._company_key`): идентификатор уже внутри ключа. Ключ `company:` тоже не префиксуется повторно. `[без гейта]`
+- Исключение: `redis.from_url` — только `redis_client_from_url` в `core/clients/redis_from_url.py` (allowlist `scripts/gates/backend/redis_ttl.py`). Вызовы: session lock, invites, брокер TaskIQ, шина событий, sync presence и lock транскрипции.
+- Исключение: `StorageEntry` (таблица `storage`, алиасы `shared` и `tracing`) — KV-конверт платежей, биллинга и OAuth; новые виды данных в него не добавляются. Ключи `flows:`, `mail:notify:`, `mail_attachment:`, `calendar:notify:`, `billing:`, `payment:`, `payment_external:`, `payment_notification:`, `integration_oauth_state:` и `integration_ext_author:` не префиксуются `company_id` (`Storage._company_key`): идентификатор уже внутри ключа. Ключ `company:` тоже не префиксуется повторно. `StorageEntry.list_unordered_by_keys(keys, *, alias) -> list[StorageEntry]` — строки по ключам. Порядка и предела нет. Пустой список ключей в теле не отсекается. Отсутствующие ключи не входят. `StorageEntry.list_unordered_by_key_prefix(prefix, *, alias, limit) -> list[StorageEntry]` — строки по префиксу ключа. Порядка нет. `limit` обязателен и в теле не проверяется. `StorageEntry.list_by_key_prefix_updated_at_desc(prefix, *, alias, limit, offset) -> list[StorageEntry]` — строки по префиксу ключа, `ORDER BY updated_at DESC`. `limit` и `offset` обязательны и в теле не проверяются. `StorageEntry.json_text_values_by_prefix_equals_created_at_asc_or_desc(prefix, *, field, equals, limit, newest_first, alias, created_after=None, created_before=None) -> list[str]` — тексты `value` по префиксу ключа и равенству поля JSON. `newest_first` — `ORDER BY created_at DESC`, иначе `ASC`. `limit` обязателен и в теле не проверяется. `created_after` и `created_before` равные `None` не фильтруют. Нестроковый `value` — `TypeError`. `[без гейта]`
 
 ## Гейты
 
-- `scripts/check_migration_files_canon.py` (`make lint`) — цепочка `migrations/<db>/NNNN_<name>.py` от `0001_initial.py` без разрывов.
-- `scripts/check_redis_ttl_canon.py` (`make lint`) — TTL у каждой записи, `from_url` только в allowlist.
-- `scripts/check_ratchet_counts.py` (`make lint`) — ratchet `raw_storage_in_services`, `force_global`.
+- `scripts/gates/backend/model_files.py` (`make lint`) — не больше одного `PlatformModel` на файл в `core/` и `apps/`.
+- `scripts/gates/backend/model_method_order_names.py` (`make lint`) — публичный метод, который сортирует строки, показывает порядок или ранг в имени. `op_*` и методы с `_` пропускаются.
+- `scripts/gates/backend/migration_files.py` (`make lint`) — цепочка `migrations/<db>/NNNN_<name>.py` от `0001_initial.py` без разрывов.
+- `scripts/gates/backend/redis_ttl.py` (`make lint`) — TTL у каждой записи, `from_url` только в allowlist.
+- `scripts/gates/backend/ratchet_counts.py` (`make lint`) — ratchet `raw_storage_in_services`, `force_global`.
 - `tests/core/db/` — фильтрация по компании и контракты моделей identity.
 - `tests/core/db/test_migration_chain.py` — следующий файл не переписывает `0001_initial`; `upgrade` накатывает только отсутствующие записи `oxyde_migrations`; база с таблицами без `0001_initial` не накатывается; гейт отвергает разрыв номеров.

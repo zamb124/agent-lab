@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import cast
 
-import httpx
+import httpx2
 import pytest
 
 from core.ai.adapters import (
@@ -137,8 +137,8 @@ async def test_live_provider_chat_completion_smoke(provider: str) -> None:
     service = await live_model_service()
     prompt = live_chat_smoke_prompt(EXPECTED_CHAT_MARKER)
     candidate_models = await live_smoke_model_candidates(provider, service)
-    last_rate_limit: httpx.HTTPStatusError | None = None
-    last_unavailable: httpx.HTTPStatusError | None = None
+    last_rate_limit: httpx2.HTTPStatusError | None = None
+    last_unavailable: httpx2.HTTPStatusError | None = None
 
     for model in candidate_models:
         with disable_testing_mode():
@@ -155,7 +155,7 @@ async def test_live_provider_chat_completion_smoke(provider: str) -> None:
 
         try:
             result = await llm.invoke([smoke_message(prompt)], max_tokens=SMOKE_MAX_TOKENS)
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             error_class = classify_http_status_error(provider, exc)
             if error_class == AIProviderErrorClass.RATE_LIMITED:
                 last_rate_limit = exc
@@ -241,7 +241,7 @@ async def test_live_openrouter_rerank_catalog_and_request_work() -> None:
 
     try:
         records = await service.discover_model_records_by_provider("openrouter")
-    except httpx.HTTPStatusError as exc:
+    except httpx2.HTTPStatusError as exc:
         skip_provider_rate_limit("openrouter", exc)
         raise
 

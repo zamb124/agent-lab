@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping
 from types import MappingProxyType
 
-import httpx
+import httpx2
 
 from apps.flows.src.models.mcp import (
     MCPCallResult,
@@ -185,7 +185,7 @@ class MCPClient:
         return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
 
     @staticmethod
-    async def _read_response_text(response: httpx.Response) -> str:
+    async def _read_response_text(response: httpx2.Response) -> str:
         _ = await response.aread()
         return response.text
 
@@ -197,7 +197,7 @@ class MCPClient:
         include_session: bool,
         include_protocol_version: bool,
         notification: bool,
-    ) -> tuple[JsonObject | None, httpx.Headers, int, str]:
+    ) -> tuple[JsonObject | None, httpx2.Headers, int, str]:
         headers = self._resolve_headers(
             include_session=include_session,
             include_protocol_version=include_protocol_version,
@@ -240,7 +240,7 @@ class MCPClient:
                         json=payload,
                         headers=headers,
                     )
-                except httpx.RequestError as exc:
+                except httpx2.RequestError as exc:
                     raise MCPClientError(f"MCP connection error: {exc}") from exc
                 response_headers = response.headers
                 text = await self._read_response_text(response)
@@ -273,7 +273,7 @@ class MCPClient:
         *,
         include_session: bool = True,
         include_protocol_version: bool = True,
-    ) -> tuple[JsonValue, httpx.Headers]:
+    ) -> tuple[JsonValue, httpx2.Headers]:
         request_id = self._next_request_id()
         payload: JsonObject = {
             "jsonrpc": "2.0",

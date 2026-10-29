@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse, urlunparse
 
-import httpx
+import httpx2
 
 from core.types import parse_json_object
 
@@ -24,7 +24,7 @@ async def fetch_browser_web_socket_debugger_url(
     if base == "":
         raise ValueError("http_base for CDP discovery must not be empty")
     version_url = f"{base}/json/version"
-    async with httpx.AsyncClient(timeout=http_timeout_s) as client:
+    async with httpx2.AsyncClient(timeout=http_timeout_s) as client:
         response = await client.get(version_url)
         _ = response.raise_for_status()
         try:

@@ -120,7 +120,14 @@ export class FrontendCrawlDomainEditModal extends PlatformFormModal {
     }
 
     override async handleSubmit() {
-        const payload = {
+        const payload: {
+            crawl_domain_id: string;
+            crawl_profile_id: string;
+            status: string;
+            include_url_patterns: string[];
+            exclude_url_patterns: string[];
+            refresh_interval_seconds?: number;
+        } = {
             crawl_domain_id: this.crawl_domain_id,
             crawl_profile_id: this.crawl_profile_id,
             status: this._status,
@@ -128,7 +135,7 @@ export class FrontendCrawlDomainEditModal extends PlatformFormModal {
             exclude_url_patterns: this._patternsList(this._excludePatterns),
         };
         if (this._refreshInterval !== '') {
-            (payload as Record<string, any>).refresh_interval_seconds = Number(this._refreshInterval);
+            payload.refresh_interval_seconds = Number(this._refreshInterval);
         }
         this._patchOp.run(payload);
         this.closeAfterSave();

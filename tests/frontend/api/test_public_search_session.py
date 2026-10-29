@@ -6,7 +6,7 @@ import hashlib
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.frontend.api.public_session_security import (
     PUBLIC_SEARCH_ANONYMOUS_DAILY_LIMIT,

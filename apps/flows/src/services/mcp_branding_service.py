@@ -70,7 +70,7 @@ class MCPServerBrandingService:
             updated_by_user_id=branding.updated_by_user_id,
         )
 
-    async def list_branding(
+    async def list_branding_by_server_id_asc(
         self,
         *,
         search: str,

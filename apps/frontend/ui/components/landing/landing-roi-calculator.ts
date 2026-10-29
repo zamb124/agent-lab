@@ -11,6 +11,14 @@ function _clamp(n: number, lo: number, hi: number) {
     return Math.min(hi, Math.max(lo, n));
 }
 
+function rangeValue(event: Event): number {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        throw new Error('landing-roi-calculator: range input required');
+    }
+    return Number(input.value);
+}
+
 export class LandingRoiCalculator extends PlatformElement {
     static i18nNamespace = 'landing';
 
@@ -162,7 +170,7 @@ export class LandingRoiCalculator extends PlatformElement {
                         step="10"
                         .value=${String(this._headcount)}
                         @input=${(e: Event) => {
-                            this._headcount = Number((e.target as Record<string, any>).value);
+                            this._headcount = rangeValue(e);
                         }}
                     />
                 </div>
@@ -178,7 +186,7 @@ export class LandingRoiCalculator extends PlatformElement {
                         step="50000"
                         .value=${String(this._monthlySpendRub)}
                         @input=${(e: Event) => {
-                            this._monthlySpendRub = Number((e.target as Record<string, any>).value);
+                            this._monthlySpendRub = rangeValue(e);
                         }}
                     />
                 </div>

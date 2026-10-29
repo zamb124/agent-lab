@@ -161,10 +161,10 @@ async def _wipe_local_binding_state(
     *,
     mailbox_binding_id: str,
 ) -> None:
-    folders = await StoredMailboxFolder.list_for_binding(mailbox_binding_id)
+    folders = await StoredMailboxFolder.list_for_binding_by_sort_index_and_folder_name_asc(mailbox_binding_id)
     folder_names = {item.folder_name for item in folders} | set(_SWEEP_FOLDERS)
     for folder_name in folder_names:
-        _ = await StoredMailMessage.delete_folder(
+        _ = await StoredMailMessage.delete_by_binding_and_folder(
             mailbox_binding_id, folder=folder_name
         )
         _ = await MailboxSyncCursor.delete_by_mailbox_binding_and_folder(

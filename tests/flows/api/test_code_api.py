@@ -13,7 +13,7 @@
 from collections.abc import Mapping
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.src.models import FlowConfig
 from tests.capabilities.code_lsp_helpers import create_code_lsp_session, session_request

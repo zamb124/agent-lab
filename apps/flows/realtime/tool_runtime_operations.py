@@ -102,7 +102,7 @@ async def collect_tool_runtime_capabilities(
         )
     context = get_context()
     if context is not None and context.active_company is not None:
-        for tool in await ToolReference.list_in_tool_id_order(limit=10000):
+        for tool in await ToolReference.list_by_tool_id_asc(limit=10000):
             if tool.parameters_schema is None:
                 continue
             capabilities[f"tools.{tool.tool_id}"] = _tool_capability_definition(

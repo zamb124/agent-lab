@@ -12,7 +12,8 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
-import { asArray } from '../_helpers/flows-resolvers.js';
+import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
 export class FlowsFlowEditModal extends PlatformFormModal {
@@ -88,8 +89,8 @@ export class FlowsFlowEditModal extends PlatformFormModal {
             this._cardImageUrl = '';
         }
         if (!this._hydrated && this.flowId) {
-            const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
-            if (item) {
+            const item = asArray(this._flows.items).find((f) => isPlainObject(f) && f.flow_id === this.flowId);
+            if (isPlainObject(item)) {
                 this._name = typeof item.name === 'string' ? item.name : '';
                 this._description = typeof item.description === 'string' ? item.description : '';
                 const c = item.store_card_image_url;
@@ -151,7 +152,10 @@ export class FlowsFlowEditModal extends PlatformFormModal {
                         ?disabled=${this._fileUpload.busy}
                         @click=${() => {
             const el = this.renderRoot.querySelector('#flows-flow-edit-card-input');
-            if (el) (el as Record<string, any>).click();
+            if (!(el instanceof HTMLInputElement)) {
+                throw new Error('flows-flow-edit-modal: card file input required');
+            }
+            el.click();
         }}
                     >${this.t('flow_edit_modal.action_upload_image')}</platform-button>
                     ${cardUrl.length > 0
@@ -185,14 +189,17 @@ export class FlowsFlowEditModal extends PlatformFormModal {
 
     async _onCardFile(e: Event) {
         const input = e.target;
-        const files = (input as Record<string, any>).files;
-        const file = files && files.length > 0 ? files[0] : null;
-        if (!file) {
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('flows-flow-edit-modal: card file input required');
+        }
+        const files = input.files;
+        const file = files === null ? null : files.item(0);
+        if (file === null) {
             return;
         }
         if (typeof file.type !== 'string' || !file.type.startsWith('image/')) {
             this.toast('flow_edit_modal.toast_image_type', { type: 'error' });
-            (input as Record<string, any>).value = '';
+            input.value = '';
             return;
         }
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
@@ -200,17 +207,21 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         }
         const spec = buildFlowAssetFileCreateSpecJson({ flowId: this.flowId });
         const result = await this._fileUpload.run({ file, spec });
-        if (!result || typeof result !== 'object' || typeof (result as Record<string, any>).url !== 'string' || (result as Record<string, any>).url.length === 0) {
+        if (!isPlainRecord(result)) {
             throw new Error('flows-flow-edit-modal: file upload missing result.url');
         }
-        this._cardImageUrl = (result as Record<string, any>).url;
+        const url = result.url;
+        if (typeof url !== 'string' || url.length === 0) {
+            throw new Error('flows-flow-edit-modal: file upload missing result.url');
+        }
+        this._cardImageUrl = url;
         this.isDirty = true;
-        (input as Record<string, any>).value = '';
+        input.value = '';
     }
 
     override async _onSubmit(): Promise<void> {
         if (!this.flowId) return;
-        const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
+        const item = asArray(this._flows.items).find((f) => isPlainObject(f) && f.flow_id === this.flowId);
         if (!item) return;
         const trimmedCard = (this._cardImageUrl.trim() as any);
         const body = {

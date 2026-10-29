@@ -31,7 +31,7 @@ OBSERVABILITY_LOGGERS: tuple[str, ...] = (
     "core.realtime.command_http",
     "core.tasks.logging_middleware",
     "platform.task",
-    "apps.idle_worker.tasks.span_billing_settlement_tasks",
+    "apps.idle.tasks.span_billing_settlement_tasks",
     "apps.rag.api.search",
     "core.rag.post_retrieval_rerank",
     "apps.flows.src.services.mcp_client",

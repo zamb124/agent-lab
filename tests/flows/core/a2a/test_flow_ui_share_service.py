@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.models.flow_ui_share import FlowUIShareCreateRequest, FlowUIShareGrant
 from core.utils.tokens import TokenType, get_token_service

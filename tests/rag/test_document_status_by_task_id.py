@@ -64,13 +64,13 @@ async def test_by_namespace_and_document_ids_returns_found_rows(unique_id: str) 
         foreign_id, f"task_c_{unique_id}", other_namespace_id, "c.txt"
     )
 
-    found = await DocumentProcessingStatus.by_namespace_and_document_ids(
+    found = await DocumentProcessingStatus.found_by_namespace_and_document_ids(
         namespace_id,
         [first_id, second_id, foreign_id, f"missing_{unique_id}"],
     )
     assert set(found) == {first_id, second_id}
     assert found[first_id].namespace_id == namespace_id
-    assert await DocumentProcessingStatus.by_namespace_and_document_ids(namespace_id, []) == {}
+    assert await DocumentProcessingStatus.found_by_namespace_and_document_ids(namespace_id, []) == {}
 
 
 @pytest.mark.asyncio

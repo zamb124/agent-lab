@@ -380,7 +380,7 @@ class PaymentService:
 
         return None
 
-    async def get_company_transactions(
+    async def get_company_transactions_by_created_at_desc(
         self, company_id: str, limit: int = 50, offset: int = 0, provider_name: str | None = None
     ) -> list[Transaction]:
         if provider_name:

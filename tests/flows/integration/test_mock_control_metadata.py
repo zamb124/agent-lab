@@ -16,7 +16,7 @@ import json
 import uuid
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 _MOCK_GROUPS = ["admin", "developers"]
 

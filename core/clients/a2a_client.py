@@ -7,7 +7,7 @@ import time
 import uuid
 from collections.abc import Sequence
 
-import httpx
+import httpx2
 from pydantic import Field
 
 from core.a2a.methods import CANCEL_TASK, GET_TASK, SEND_MESSAGE
@@ -120,7 +120,7 @@ class A2AClient:
                         f"Failed to get agent-card from {url}: {response.status_code}"
                     )
                 return parse_json_object(response.content, "A2A agent-card")
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise A2AClientError(f"HTTP error getting agent card from {url}: {exc}") from exc
         except ValueError as exc:
             raise A2AClientError(f"Invalid JSON response from {url}: {exc}") from exc
@@ -310,7 +310,7 @@ class A2AClient:
                 if "error" in result:
                     raise A2AClientError(f"A2A error: {result['error']}")
                 return self._parse_a2a_response(result)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             error_str = str(exc) or type(exc).__name__
             raise A2AClientError(
                 f"HTTP error {rpc_label} to {url}: {error_str}"
@@ -401,5 +401,5 @@ class A2AClient:
         try:
             _ = await self.get_agent_card(base_url, headers)
             return True
-        except (A2AClientError, httpx.HTTPError, ValueError):
+        except (A2AClientError, httpx2.HTTPError, ValueError):
             return False

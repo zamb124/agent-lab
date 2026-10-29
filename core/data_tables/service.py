@@ -38,10 +38,10 @@ from core.data_tables.sqlite_format import (
     execute_user_sql,
     initialize_platform_schema,
     insert_rows,
-    list_table_rows,
+    list_table_rows_by_row_id_asc,
     open_sqlite,
-    page_rows,
-    read_schema_snapshot,
+    page_rows_by_sort_then_row_id,
+    read_schema_snapshot_by_table_name_asc,
     update_row,
 )
 from core.documents.placement import DocumentPlacement
@@ -183,7 +183,7 @@ class DataTableService:
         record = await self._require_record(file_id)
         async with self._sqlite_file(record) as prepared:
             connection, path, original = prepared
-            snapshot = read_schema_snapshot(connection)
+            snapshot = read_schema_snapshot_by_table_name_asc(connection)
             mutated = path.read_bytes()
         if hashlib.sha256(original).digest() != hashlib.sha256(mutated).digest():
             async with data_table_mutation_lock(self._redis_client, file_id):
@@ -310,7 +310,7 @@ class DataTableService:
         record = await self._require_record(file_id)
         async with self._sqlite_file(record) as prepared:
             connection, _path, _original = prepared
-            return page_rows(
+            return page_rows_by_sort_then_row_id(
                 connection,
                 table_name=table_name,
                 limit=limit,
@@ -333,7 +333,7 @@ class DataTableService:
                 record = await self._require_record(file_id)
 
                 def _write(connection: sqlite3.Connection) -> None:
-                    snapshot = read_schema_snapshot(connection)
+                    snapshot = read_schema_snapshot_by_table_name_asc(connection)
                     allowed = frozenset(table.name for table in snapshot.tables)
                     guarded = validate_user_sql(sql, allowed_tables=allowed)
                     columns, rows = execute_user_sql(connection, guarded)
@@ -345,7 +345,7 @@ class DataTableService:
             return result
         async with self._sqlite_file(record) as prepared:
             connection, _path, _original = prepared
-            snapshot = read_schema_snapshot(connection)
+            snapshot = read_schema_snapshot_by_table_name_asc(connection)
             allowed = frozenset(table.name for table in snapshot.tables)
             guarded = validate_user_sql(sql, allowed_tables=allowed)
             columns, rows = execute_user_sql(connection, guarded)
@@ -362,7 +362,7 @@ class DataTableService:
         record = await self._require_record(file_id)
         async with self._sqlite_file(record) as prepared:
             connection, _path, _original = prepared
-            columns, rows = list_table_rows(connection, table_name=ident)
+            columns, rows = list_table_rows_by_row_id_asc(connection, table_name=ident)
             payload = dump_tabular_bytes(
                 columns,
                 rows,
@@ -506,7 +506,7 @@ class DataTableService:
         async with self._sqlite_file(record) as prepared:
             connection, path, _original = prepared
             writer(connection)
-            snapshot = read_schema_snapshot(connection)
+            snapshot = read_schema_snapshot_by_table_name_asc(connection)
             payload = path.read_bytes()
         _ = await self._upload_replaced(record, payload)
         return snapshot

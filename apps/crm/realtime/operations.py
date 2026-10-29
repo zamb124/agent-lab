@@ -286,7 +286,7 @@ def _normalize_allowed_type_ids(raw_value: list[str]) -> list[str]:
 
 async def _collect_company_type_ids(di: Di) -> set[str]:
     _ = di
-    rows = await EntityType.catalog()
+    rows = await EntityType.catalog_by_is_system_desc_and_type_id_asc()
     return {item.type_id for item in rows}
 
 
@@ -457,14 +457,14 @@ async def op_templates_list(
     _ = user
     _ = di
     company_id = _company_scope().company_id
-    page = await NamespaceTemplate.page_for_company(
+    page = await NamespaceTemplate.page_for_company_by_created_at_and_template_id_desc(
         company_id,
         limit=payload.limit,
         offset=payload.offset,
     )
     responses: list[NamespaceTemplateResponse] = []
     for template in page.items:
-        template_types = await NamespaceTemplateType.list_for_template(template.template_key)
+        template_types = await NamespaceTemplateType.list_for_template_by_type_id_asc(template.template_key)
         responses.append(
             _template_response(template, [item.type_id for item in template_types])
         )
@@ -528,7 +528,7 @@ async def op_templates_item(
     template = await NamespaceTemplate.by_template_id(company_id, payload.template_id)
     if template is None:
         raise_not_found(PlatformNotFoundError(f"Template {payload.template_id} not found"))
-    template_types = await NamespaceTemplateType.list_for_template(template.template_key)
+    template_types = await NamespaceTemplateType.list_for_template_by_type_id_asc(template.template_key)
     crm_detail: NamespaceCRMSettings | None = None
     raw_crm = template.crm_settings
     if raw_crm is not None and len(raw_crm) > 0:
@@ -576,7 +576,7 @@ async def op_templates_update(
         crm_settings=crm_settings,
         crm_settings_is_set=payload.crm_settings is not None,
     )
-    template_types = await NamespaceTemplateType.list_for_template(updated.template_key)
+    template_types = await NamespaceTemplateType.list_for_template_by_type_id_asc(updated.template_key)
     return _template_response(updated, [item.type_id for item in template_types])
 
 
@@ -643,7 +643,7 @@ async def op_templates_type_remove(
     template = await NamespaceTemplate.by_template_id(company_id, payload.template_id)
     if template is None:
         raise_not_found(PlatformNotFoundError(f"Template {payload.template_id} not found"))
-    current_ids = {t.type_id for t in await NamespaceTemplateType.list_for_template(template.template_key)}
+    current_ids = {t.type_id for t in await NamespaceTemplateType.list_for_template_by_type_id_asc(template.template_key)}
     after_remove = current_ids - {payload.type_id}
     if not REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS <= after_remove:
         raise_invalid(
@@ -731,7 +731,7 @@ async def _parent_maps_for_types(
     namespaces = {item.namespace for item in rows if item.namespace.strip()}
     out: dict[str, dict[str, str | None]] = {}
     for namespace in sorted(namespaces):
-        catalog = await EntityType.catalog(
+        catalog = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
             namespace=namespace,
         )
         out[namespace] = {row.type_id: row.parent_type_id for row in catalog}
@@ -793,7 +793,7 @@ async def _require_entity_type(
     type_id: str,
     namespace: str,
 ) -> EntityType:
-    entity_type = await EntityType.by_company_namespace_and_type_id(
+    entity_type = await EntityType.query_by_company_namespace_and_type_id(
         company_id=_company_scope().company_id,
         namespace=namespace,
         type_id=type_id,
@@ -849,7 +849,7 @@ async def op_entity_types_item(
             patch={"color": assigned_color},
         )
         entity_type.color = assigned_color
-    parent_rows = await EntityType.catalog(
+    parent_rows = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace)
     parent_map = {row.type_id: row.parent_type_id for row in parent_rows}
     return _entity_type_to_response(entity_type, parent_map)
@@ -865,7 +865,7 @@ async def op_entity_types_create(
     scope = _company_scope()
     _ = di
     namespace = _normalize_namespace(payload.namespace)
-    existing = await EntityType.by_company_namespace_and_type_id(
+    existing = await EntityType.query_by_company_namespace_and_type_id(
         company_id=scope.company_id,
         namespace=namespace,
         type_id=payload.type_id,
@@ -876,7 +876,7 @@ async def op_entity_types_create(
                 f"EntityType {payload.type_id!r} already exists in namespace {namespace!r}"
             )
         )
-    existing_types = await EntityType.catalog()
+    existing_types = await EntityType.catalog_by_is_system_desc_and_type_id_asc()
     used_colors = _used_type_colors(existing_types)
     resolved_color = payload.color
     if resolved_color is None or not resolved_color.strip():
@@ -907,7 +907,7 @@ async def op_entity_types_create(
         auto_resolve_suggests=payload.auto_resolve_suggests,
     )
     refreshed = await EntityType.create(created)
-    parent_rows = await EntityType.catalog(
+    parent_rows = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace)
     parent_map = {row.type_id: row.parent_type_id for row in parent_rows}
     return _entity_type_to_response(refreshed, parent_map)
@@ -956,7 +956,7 @@ async def op_entity_types_update(
             payload.type_id, namespace=namespace, patch=fields
         )
     refreshed = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
-    parent_rows = await EntityType.catalog(
+    parent_rows = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace)
     parent_map = {row.type_id: row.parent_type_id for row in parent_rows}
     return _entity_type_to_response(refreshed, parent_map)
@@ -979,7 +979,7 @@ async def op_entity_types_public_fields(
         patch={"public_fields": payload.public_fields},
     )
     refreshed = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
-    parent_rows = await EntityType.catalog(
+    parent_rows = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
         namespace=namespace)
     parent_map = {row.type_id: row.parent_type_id for row in parent_rows}
     return _entity_type_to_response(refreshed, parent_map)
@@ -1315,7 +1315,7 @@ async def op_entities_query(
             raise_invalid(ValueError("cursor is not supported for search query mode"))
         query = payload.query.strip()
         if payload.search_mode == "hybrid":
-            hybrid_rows = await di.entity_service.hybrid_search(
+            hybrid_rows = await di.entity_service.hybrid_search_by_score_desc(
                 query=query,
                 entity_type=payload.entity_type,
                 entity_subtype=payload.entity_subtype,
@@ -1948,7 +1948,7 @@ async def op_entities_relationships(
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
-    rows = await Relationship.touching_in_company(
+    rows = await Relationship.query_touching_in_company(
         payload.entity_id,
         scope.company_id,
     ).all()
@@ -2023,7 +2023,7 @@ async def op_relationships_list(
     if payload.namespace is not None and payload.namespace.strip() == "":
         raise_invalid(ValueError("namespace must not be empty"))
     if payload.entity_id is not None and payload.entity_id != "":
-        relationships = await Relationship.touching_in_company(
+        relationships = await Relationship.query_touching_in_company(
             payload.entity_id,
             _company_scope().company_id,
         ).all()
@@ -2034,7 +2034,7 @@ async def op_relationships_list(
             next_cursor=None,
             has_more=False,
         )
-    page = await Relationship.graph_page(
+    page = await Relationship.graph_page_by_created_at_and_relationship_id_asc(
         limit=payload.limit,
         cursor=payload.cursor,
     )
@@ -2123,15 +2123,9 @@ async def op_relationship_types_list(
     _ = user
     _ = di
     company_id = _company_scope().company_id
-    rows = RelationshipType.query_by_system_in_company(
+    return await RelationshipType.page_by_type_id_asc(
         company_id,
         include_system=True,
-    )
-    total = await rows.count()
-    types = await rows.order_by("type_id").limit(payload.limit).offset(payload.offset).all()
-    return OffsetPage[RelationshipType](
-        items=types,
-        total=total,
         limit=payload.limit,
         offset=payload.offset,
     )
@@ -2186,7 +2180,7 @@ async def op_suggests_list(
 ) -> OffsetPage[CRMSuggest]:
     _ = user
     _ = _company_scope()
-    return await di.suggest_service.list_suggests(
+    return await di.suggest_service.list_suggests_by_created_at_desc(
         payload.namespace, payload.status, payload.limit, payload.offset
     )
 
@@ -2313,7 +2307,7 @@ async def op_access_requests_list(
     _ = user
     scope = _company_scope()
     rows, total = await asyncio.gather(
-        di.access_request_service.list_access_requests(
+        di.access_request_service.list_access_requests_by_created_at_desc(
             company_id=scope.company_id,
             status=payload.status,
             limit=payload.limit,
@@ -2481,7 +2475,7 @@ async def op_tasks_list(
     _ = user
     _ = _company_scope()
     rows, total = await asyncio.gather(
-        di.task_service.list_tasks(
+        di.task_service.list_tasks_by_created_at_desc(
             payload.namespace,
             task_type=payload.task_type,
             note_id=payload.note_id,

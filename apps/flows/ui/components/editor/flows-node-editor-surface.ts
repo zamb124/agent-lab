@@ -74,7 +74,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'llm_node':
             return html`<flows-llm-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -87,7 +87,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'code':
             return html`<flows-code-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -109,7 +109,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'resource':
             return html`<flows-resource-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -120,7 +120,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'channel':
             return html`<flows-channel-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -131,7 +131,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'flow':
             return html`<flows-flow-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -142,7 +142,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'mcp':
             return html`<flows-mcp-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -153,7 +153,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'datasource':
             return html`<flows-datasource-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -164,7 +164,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'hitl_node':
             return html`<flows-hitl-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -175,7 +175,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'reflection':
             return html`<flows-reflection-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -186,7 +186,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'external_api':
             return html`<flows-external-api-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -197,7 +197,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'remote_flow':
             return html`<flows-remote-flow-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -208,7 +208,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'code_agent':
             return html`<flows-code-agent-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
@@ -219,7 +219,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         default:
             return html`<flows-base-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${asString(node.type)}
+                .nodeConfig=${node} .flowNodeType=${asString(node.type)}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 
 from core.authz.errors import AuthzUnavailable
 from core.types import JsonObject, parse_json_object
@@ -18,7 +18,7 @@ def _auth_headers(api_token: str | None) -> dict[str, str]:
 async def create_store(*, api_url: str, name: str, api_token: str | None) -> str:
     url = f"{api_url.rstrip('/')}/stores"
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx2.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 url,
                 headers=_auth_headers(api_token),
@@ -26,7 +26,7 @@ async def create_store(*, api_url: str, name: str, api_token: str | None) -> str
             )
             _ = response.raise_for_status()
             payload = parse_json_object(response.text, "openfga.response")
-    except (httpx.HTTPError, OSError, TypeError, ValueError) as exc:
+    except (httpx2.HTTPError, OSError, TypeError, ValueError) as exc:
         raise AuthzUnavailable(f"OpenFGA create_store failed: {exc}") from exc
     store_id = payload.get("id")
     if not isinstance(store_id, str) or not store_id:
@@ -48,7 +48,7 @@ async def write_authorization_model(
         "type_definitions": list(type_definitions),
     }
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx2.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 url,
                 headers=_auth_headers(api_token),
@@ -56,7 +56,7 @@ async def write_authorization_model(
             )
             _ = response.raise_for_status()
             payload = parse_json_object(response.text, "openfga.response")
-    except (httpx.HTTPError, OSError, TypeError, ValueError) as exc:
+    except (httpx2.HTTPError, OSError, TypeError, ValueError) as exc:
         raise AuthzUnavailable(f"OpenFGA write_authorization_model failed: {exc}") from exc
     model_id = payload.get("authorization_model_id")
     if not isinstance(model_id, str) or not model_id:

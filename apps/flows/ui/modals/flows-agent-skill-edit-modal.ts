@@ -1,5 +1,5 @@
 /**
- * Edit Agent Skill in a modal — same <flows-agent-skill-editor> as Skill Library.
+ * Edit Agent Skill in a modal. The editor is the same component the Skill Library uses.
  */
 
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
@@ -10,6 +10,21 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/agent-skills/flows-agent-skill-editor.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+
+function eventDetail(event: Event): Record<string, unknown> | null {
+    if (!(event instanceof CustomEvent) || !isPlainObject(event.detail)) {
+        return null;
+    }
+    return event.detail;
+}
+
+function skillName(skill: unknown): string | null {
+    if (!isPlainObject(skill)) {
+        return null;
+    }
+    const name = skill.name;
+    return typeof name === 'string' && name.length > 0 ? name : null;
+}
 import { AGENT_SKILL_ICON, mapAgentSkillItem } from '../_helpers/agent-skill-map.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
@@ -102,7 +117,7 @@ export class FlowsAgentSkillEditModal extends PlatformModal {
             return;
         }
         this._loadPhase = 'loading';
-        const fromList = asArray(this._skills.items).find((item) => item.agent_skill_id === id);
+        const fromList = asArray(this._skills.items).find((item) => isPlainObject(item) && item.agent_skill_id === id);
         if (fromList) {
             this._skill = fromList;
         }
@@ -127,17 +142,23 @@ export class FlowsAgentSkillEditModal extends PlatformModal {
     }
 
     _onSaved(e: Event) {
-        const item = (e as Record<string, any>)?.detail?.item;
-        if (item && typeof item.agent_skill_id === 'string') {
-            this._skill = item;
-            if (typeof this.onSaved === 'function') {
-                this.onSaved({ agent_skill_id: item.agent_skill_id, item });
-            }
+        const detail = eventDetail(e);
+        if (detail === null || !isPlainObject(detail.item)) {
+            return;
+        }
+        const skillId = detail.item.agent_skill_id;
+        if (typeof skillId !== 'string') {
+            return;
+        }
+        this._skill = detail.item;
+        if (typeof this.onSaved === 'function') {
+            this.onSaved({ agent_skill_id: skillId, item: detail.item });
         }
     }
 
     _onDeleted(e: Event) {
-        const id = (e as Record<string, any>)?.detail?.agent_skill_id;
+        const detail = eventDetail(e);
+        const id = detail === null ? undefined : detail.agent_skill_id;
         if (typeof this.onDeleted === 'function' && typeof id === 'string') {
             this.onDeleted({ agent_skill_id: id });
         }
@@ -145,8 +166,8 @@ export class FlowsAgentSkillEditModal extends PlatformModal {
     }
 
     async _onDuplicated(e: Event) {
-        const detail = (e as Record<string, any>)?.detail;
-        if (!isPlainObject(detail)) {
+        const detail = eventDetail(e);
+        if (detail === null) {
             return;
         }
         const fromId = asString(detail.fromId);
@@ -162,9 +183,8 @@ export class FlowsAgentSkillEditModal extends PlatformModal {
     }
 
     override renderHeader() {
-        const name = this._skill && typeof (this._skill as Record<string, any>).name === 'string' && (this._skill as Record<string, any>).name.length > 0
-            ? (this._skill as Record<string, any>).name
-            : asString(this._activeSkillId);
+        const named = skillName(this._skill);
+        const name = named === null ? asString(this._activeSkillId) : named;
         return html`
             <span class="skill-edit-title">
                 <platform-icon name=${AGENT_SKILL_ICON} size="18"></platform-icon>

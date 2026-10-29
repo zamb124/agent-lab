@@ -125,11 +125,14 @@ interface CrmTypeDraft {
     weight_coefficient: string;
 }
 
-function anyRecord(value: unknown): Record<string, any> | null {
-    if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
-    for (const [key, field] of Object.entries(value)) row[key] = field;
-    return row;
+function anyRecord(value: unknown): Record<string, unknown> | null {
+    return isPlainRecord(value) ? value : null;
+}
+
+function eventRecord(event: { payload: unknown }, field: 'result' | 'item'): Record<string, unknown> | null {
+    if (!isPlainRecord(event.payload)) return null;
+    const value = event.payload[field];
+    return isPlainRecord(value) ? value : null;
 }
 
 function schemaRows(value: unknown): SchemaFieldRow[] {
@@ -194,7 +197,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     declare _typeDraft: CrmTypeDraft;
     declare _editingTypeId: string;
     declare _typeFormOpen: boolean;
-    declare _schemaOptions: Record<string, any> | null;
+    declare _schemaOptions: Record<string, unknown> | null;
     declare _savingMeta: boolean;
     declare _savingAllowed: boolean;
     declare _savingType: boolean;
@@ -567,13 +570,13 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         super.connectedCallback();
         this._schemaOptionsOp.run(null);
         this.useEvent(this._schemaOptionsOp.op.events.SUCCEEDED, (event) => {
-            const result = event && (event.payload as any) && (event.payload as any).result;
-            if (!result || typeof result !== 'object') return;
+            const result = eventRecord(event, 'result');
+            if (result === null) return;
             this._schemaOptions = result;
         });
         this.useEvent(this._namespaces.resource.events.ITEM_LOADED, (event) => {
-            const item = event && (event.payload as any) && (event.payload as any).item;
-            if (!item || item.name !== this.itemId) return;
+            const item = eventRecord(event, 'item');
+            if (item === null || item.name !== this.itemId) return;
             this._hydrateFromNamespace(item);
         });
         this.useEvent(this._namespaces.resource.events.LIST_LOADED, () => {
@@ -581,9 +584,8 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             if (item !== undefined) this._hydrateFromNamespace(item);
         });
         this.useEvent(this._editabilityOp.op.events.SUCCEEDED, (event) => {
-            const result = event && (event.payload as any) && (event.payload as any).result;
-            if (!result || typeof result !== 'object') return;
-            if (result.namespace !== this.itemId) return;
+            const result = eventRecord(event, 'result');
+            if (result === null || result.namespace !== this.itemId) return;
             const ids = result.current_allowed_type_ids;
             if (!Array.isArray(ids)) {
                 throw new Error('namespace_editability: current_allowed_type_ids must be an array');
@@ -595,8 +597,8 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             this._savingAllowed = false;
             this._sidebarMenuBusy = false;
             this._suggestsSaveBusy = false;
-            const result = event && (event.payload as any) && (event.payload as any).result;
-            if (result && result.name === this.itemId) {
+            const result = eventRecord(event, 'result');
+            if (result !== null && result.name === this.itemId) {
                 this._hydrateFromNamespace(result);
             }
         });
@@ -620,8 +622,8 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             this._typeFormOpen = false;
             this._typeDraft = makeTypeDraft();
             this._editingTypeId = '';
-            const item = event && (event.payload as any) && (event.payload as any).item;
-            if (!item || typeof item.type_id !== 'string') return;
+            const item = eventRecord(event, 'item');
+            if (item === null || typeof item.type_id !== 'string') return;
             const next = this._allowedTypeIds.includes(item.type_id)
                 ? this._allowedTypeIds
                 : [...this._allowedTypeIds, item.type_id];
@@ -635,26 +637,26 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             this._creatingType = false;
         });
         this.useEvent(CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN, (event) => {
-            const p = (event.payload as any);
-            if (!p || typeof p !== 'object') {
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            if (payload === null) {
                 throw new Error('CRMNamespaceDetailPage: create_mode_chosen payload required');
             }
-            if (p.mode === 'blank') {
+            if (payload.mode === 'blank') {
                 this._openNewTypeForm();
                 return;
             }
-            if (p.mode === 'from_presets') {
+            if (payload.mode === 'from_presets') {
                 this.openModal('crm.entity_type_preset_picker');
                 return;
             }
             throw new Error('CRMNamespaceDetailPage: create_mode_chosen unknown mode');
         });
         this.useEvent(CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED, (event) => {
-            const p = (event.payload as any);
-            if (!p || typeof p !== 'object') {
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            if (payload === null) {
                 throw new Error('CRMNamespaceDetailPage: preset_picker_applied payload required');
             }
-            const snap = anyRecord(p.type_snapshot);
+            const snap = anyRecord(payload.type_snapshot);
             if (snap === null || typeof snap.type_id !== 'string') {
                 throw new Error('CRMNamespaceDetailPage: preset_picker_applied type_snapshot required');
             }
@@ -696,22 +698,17 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._entityTypes.load({ namespace: this.itemId });
     }
 
-    _namespace(): Record<string, any> | null {
+    _namespace(): Record<string, unknown> | null {
         return anyRecord(this._namespaces.byId[this.itemId]);
     }
 
-    _hydrateFromNamespace(item: Record<string, any>): void {
+    _hydrateFromNamespace(item: Record<string, unknown>): void {
         this._description = typeof item.description === 'string' ? item.description : '';
-        const cs =
-            item.crm_settings !== undefined
-            && item.crm_settings !== null
-            && typeof item.crm_settings === 'object'
-                ? item.crm_settings
-                : null;
-        const parsed = parseNoteVoiceDefaultsFromCrmSettings(cs);
+        const crmSettings = isPlainRecord(item.crm_settings) ? item.crm_settings : null;
+        const parsed = parseNoteVoiceDefaultsFromCrmSettings(crmSettings);
         this._defaultNoteVoiceMode = parsed.defaultNoteVoiceMode;
         this._showNoteVoiceUi = parsed.showNoteVoiceUi;
-        const suggests = parseSuggestsSettingsFromCrmSettings(cs);
+        const suggests = parseSuggestsSettingsFromCrmSettings(crmSettings);
         this._suggestsEnabled = suggests.enabled;
         this._suggestsCron = suggests.cron;
         this._suggestsScheduleTaskId = suggests.scheduleTaskId;
@@ -858,16 +855,18 @@ export class CRMNamespaceDetailPage extends PlatformPage {
 
     _namespaceEntityTypeCatalogRows(): { type_id: string; parent_type_id: string }[] {
         const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
-        return items.map((row: any) => ({
-            type_id: typeof row.type_id === 'string' ? row.type_id : '',
-            parent_type_id:
-                typeof row.parent_type_id === 'string' && row.parent_type_id.length > 0
-                    ? row.parent_type_id
-                    : '',
-        }));
+        return items.flatMap((row) => {
+            if (!isPlainRecord(row) || typeof row.type_id !== 'string' || row.type_id.length === 0) {
+                return [];
+            }
+            const parentTypeId = typeof row.parent_type_id === 'string' && row.parent_type_id.length > 0
+                ? row.parent_type_id
+                : '';
+            return [{ type_id: row.type_id, parent_type_id: parentTypeId }];
+        });
     }
 
-    _editType(item: Record<string, any>): void {
+    _editType(item: Record<string, unknown>): void {
         if (!item || typeof item.type_id !== 'string') {
             throw new Error('CRMNamespaceDetailPage._editType: item.type_id required');
         }
@@ -981,7 +980,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
     _getParentTypeOptions(): string[] {
         const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
         const ids = items
-            .map((item: any) => (typeof item.type_id === 'string' ? item.type_id : null))
+            .map((item) => (isPlainRecord(item) && typeof item.type_id === 'string' ? item.type_id : null))
             .filter((id): id is string => typeof id === 'string' && id.length > 0);
         return [...new Set(['note', 'task', ...ids])];
     }
@@ -1047,7 +1046,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         `;
     }
 
-    _renderLeftPanel(ns: Record<string, any>): TemplateResult {
+    _renderLeftPanel(ns: Record<string, unknown>): TemplateResult {
         const editabilityResult = this._editabilityOp.lastResult;
         const editability = anyRecord(editabilityResult);
         return html`
@@ -1143,11 +1142,11 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         `;
     }
 
-    _renderSidebarMenuPanel(ns: Record<string, any>): TemplateResult {
-        const crm = ns && ns.crm_settings && typeof ns.crm_settings === 'object' ? ns.crm_settings : null;
-        const custom = crm !== null
-            && Array.isArray(crm.sidebar_navigation)
-            && crm.sidebar_navigation.length > 0;
+    _renderSidebarMenuPanel(ns: Record<string, unknown>): TemplateResult {
+        const crmSettings = isPlainRecord(ns.crm_settings) ? ns.crm_settings : null;
+        const custom = crmSettings !== null
+            && Array.isArray(crmSettings.sidebar_navigation)
+            && crmSettings.sidebar_navigation.length > 0;
         const modeHint = custom
             ? this.t('namespace_detail_page.sidebar_menu_mode_custom')
             : this.t('namespace_detail_page.sidebar_menu_mode_derived');
@@ -1254,7 +1253,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         return this._renderTypesListPanel(items);
     }
 
-    _renderTypesListPanel(allTypes: Record<string, any>[]): TemplateResult {
+    _renderTypesListPanel(allTypes: Record<string, unknown>[]): TemplateResult {
         return html`
             <div class="panel">
                 <div class="panel-header">
@@ -1282,17 +1281,21 @@ export class CRMNamespaceDetailPage extends PlatformPage {
                     ? html`<div class="empty">${this.t('namespace_detail_page.no_types')}</div>`
                     : html`
                         <div class="types-grid">
-                            ${allTypes.map((item: any) => this._renderTypeCard(item))}
+                            ${allTypes.map((item) => this._renderTypeCard(item))}
                         </div>
                     `}
             </div>
         `;
     }
 
-    _renderTypeCard(item: Record<string, any>): TemplateResult {
-        const allowed = this._allowedTypeIds.includes(item.type_id);
-        const locked = this._typeIsLocked(item.type_id);
-        const allNamespaces = this._typeIsAllNamespaces(item.type_id);
+    _renderTypeCard(item: Record<string, unknown>): TemplateResult {
+        const typeId = item.type_id;
+        if (typeof typeId !== 'string' || typeId.length === 0) {
+            throw new Error('CRMNamespaceDetailPage: type_id required');
+        }
+        const allowed = this._allowedTypeIds.includes(typeId);
+        const locked = this._typeIsLocked(typeId);
+        const allNamespaces = this._typeIsAllNamespaces(typeId);
         const classes = ['type-card'];
         if (allowed) classes.push('allowed');
         if (locked) classes.push('locked');
@@ -1303,7 +1306,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
                     <platform-icon name=${typeof item.icon === 'string' && item.icon.length > 0 ? item.icon : 'circle'} size="16"></platform-icon>
                     <span>${item.name}</span>
                 </div>
-                <div class="hint mono">${item.type_id}</div>
+                <div class="hint mono">${typeId}</div>
                 ${item.description ? html`<div class="hint">${item.description}</div>` : ''}
                 <div class="actions-row">
                     <button
@@ -1312,7 +1315,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
                         title=${allNamespaces ? this.t('namespace_detail_page.type_all_namespaces_hint') : ''}
                         ?disabled=${this._savingAllowed || (locked && allowed) || allNamespaces}
                         @click=${() => (allowed
-                            ? this._onRequestDisallowType(item.type_id)
+                            ? this._onRequestDisallowType(typeId)
                             : this._onToggleType(item.type_id, true))}
                     >
                         ${allowed

@@ -637,12 +637,13 @@ class FlowConfig(CompanyScopedModel):
         return cls.model_validate(payload)
 
     @classmethod
-    async def list_company_identifiers(
+    async def list_distinct_current_company_ids_by_company_id_asc(
         cls,
         *,
         limit: int = 10_000,
         offset: int = 0,
     ) -> list[str]:
+        """Различные company_id текущих flow, ORDER BY company_id ASC. limit по умолчанию 10000, offset по умолчанию 0."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if offset < 0:
@@ -708,7 +709,8 @@ class FlowConfig(CompanyScopedModel):
         return cls.objects.filter(is_current=True).order_by("-created_at", "flow_id")
 
     @classmethod
-    async def latest_by_flow_ids(cls, flow_ids: list[str]) -> dict[str, Self]:
+    async def found_current_by_flow_ids(cls, flow_ids: list[str]) -> dict[str, Self]:
+        """Найденные текущие flow компании по flow_id. Пустой список — {}. Пустой flow_id — ValueError с текстом flow_id is required. Отсутствующие id не входят. Несколько текущих строк одного flow_id: какая осталась, не задано. Порядка нет."""
         if len(flow_ids) == 0:
             return {}
         for flow_id in flow_ids:
@@ -718,7 +720,8 @@ class FlowConfig(CompanyScopedModel):
         return {row.flow_id: row for row in rows}
 
     @classmethod
-    async def list_current(cls, *, limit: int, offset: int = 0) -> list[Self]:
+    async def list_current_by_created_at_desc(cls, *, limit: int, offset: int = 0) -> list[Self]:
+        """Текущие flow, ORDER BY created_at DESC, flow_id. Окно limit и offset. limit < 1 и offset < 0 — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if offset < 0:
@@ -726,7 +729,7 @@ class FlowConfig(CompanyScopedModel):
         return await cls._current_flows().limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_current_flow_index(cls) -> list[FlowListIndexItem]:
+    async def list_current_flow_index_by_created_at_desc(cls) -> list[FlowListIndexItem]:
         """Все текущие flow, ORDER BY created_at DESC, flow_id. Читается страницами до конца. Предела у вызывающего нет. Элемент — flow_id и type."""
         items: list[FlowListIndexItem] = []
         offset = 0
@@ -740,7 +743,8 @@ class FlowConfig(CompanyScopedModel):
             offset += _PAGE
 
     @classmethod
-    async def list_for_tool_picker(cls, *, limit: int, offset: int = 0) -> list[FlowToolPickerItem]:
+    async def list_tool_picker_by_created_at_desc(cls, *, limit: int, offset: int = 0) -> list[FlowToolPickerItem]:
+        """Окно элементов picker, ORDER BY created_at DESC, flow_id. Элемент — flow_id, name, description, tags. limit < 1 и offset < 0 — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if offset < 0:
@@ -757,11 +761,12 @@ class FlowConfig(CompanyScopedModel):
         ]
 
     @classmethod
-    async def list_picker_index(cls) -> list[FlowToolPickerItem]:
+    async def list_tool_picker_index_by_created_at_desc(cls) -> list[FlowToolPickerItem]:
+        """Все элементы picker, ORDER BY created_at DESC, flow_id. Читается страницами до конца. Предела у вызывающего нет. Элемент — flow_id, name, description, tags."""
         items: list[FlowToolPickerItem] = []
         offset = 0
         while True:
-            page = await cls.list_for_tool_picker(limit=_PAGE, offset=offset)
+            page = await cls.list_tool_picker_by_created_at_desc(limit=_PAGE, offset=offset)
             items.extend(page)
             if len(page) < _PAGE:
                 return items

@@ -1,3 +1,5 @@
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
 /**
  * Хелперы для разрешения id и отображаемых имён в Sync UI.
  *
@@ -26,13 +28,14 @@ export function resolveDisplayName(member: Record<string, unknown> | null | unde
  * Заголовок канала: для `direct` — `peer.display_name | peer.user_id`,
  * иначе — `channel.name | channel.channel_id`. Никогда не undefined.
  */
-export function resolveChannelTitle(channel: Record<string, any> | null | undefined) {
-    if (!channel || typeof channel !== 'object') return '';
-    if (channel.type === 'direct' && channel.peer && typeof channel.peer === 'object') {
-        if (typeof channel.peer.display_name === 'string' && channel.peer.display_name !== '') {
-            return channel.peer.display_name;
+export function resolveChannelTitle(channel: unknown) {
+    if (!isPlainRecord(channel)) return '';
+    const peer = channel.peer;
+    if (channel.type === 'direct' && isPlainRecord(peer)) {
+        if (typeof peer.display_name === 'string' && peer.display_name !== '') {
+            return peer.display_name;
         }
-        if (typeof channel.peer.user_id === 'string') return channel.peer.user_id;
+        if (typeof peer.user_id === 'string') return peer.user_id;
     }
     if (typeof channel.name === 'string' && channel.name !== '') return channel.name;
     if (typeof channel.channel_id === 'string') return channel.channel_id;

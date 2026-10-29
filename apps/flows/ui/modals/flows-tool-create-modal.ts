@@ -12,7 +12,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/schema/platform-schema-editor.js';
 import '../components/editors/flows-code-editor.js';
-import { asString } from '../_helpers/flows-resolvers.js';
+import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import {
     FLOW_CODE_LANGUAGES,
     isKnownStarterCode,
@@ -44,9 +44,9 @@ export class FlowsToolCreateModal extends PlatformFormModal {
     declare _toolId: string;
     declare _name: string;
     declare _description: string;
-    declare _code: any;
+    declare _code: string;
     declare _language: string;
-    declare _parametersSchema: Record<string, any>;
+    declare _parametersSchema: Record<string, unknown>;
     declare _schemaValid: boolean;
     declare _codeValidationStatus: string;
     declare _codeValidationMessage: string;
@@ -143,7 +143,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
         }
     }
 
-    _setLanguage(language: any) {
+    _setLanguage(language: unknown) {
         const normalized = normalizeFlowCodeLanguage(language);
         if (this._language === normalized) {
             return;
@@ -170,7 +170,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
             window.clearTimeout(this._codeValidationTimer);
             this._codeValidationTimer = 0;
         }
-        if ((this._code.trim() as any).length === 0) {
+        if (this._code.trim().length === 0) {
             this._codeValidationSeq += 1;
             this._codeValidationStatus = 'idle';
             this._codeValidationMessage = '';
@@ -201,10 +201,14 @@ export class FlowsToolCreateModal extends PlatformFormModal {
         if (seq !== this._codeValidationSeq) {
             return;
         }
-        if (!result || typeof result !== 'object' || (result as Record<string, any>).valid !== true) {
-            const message = result && typeof result === 'object' && typeof (result as Record<string, any>).error === 'string'
-                ? (result as Record<string, any>).error
-                : this.t('code_workbench.validation_invalid');
+        if (!isPlainObject(result) || result.valid !== true) {
+            let message = this.t('code_workbench.validation_invalid');
+            if (isPlainObject(result)) {
+                const error = result.error;
+                if (typeof error === 'string') {
+                    message = error;
+                }
+            }
             this._codeValidationStatus = 'invalid';
             this._codeValidationMessage = message;
             return;
@@ -304,15 +308,15 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                     .value=${this._parametersSchema}
                     @schema-change=${(e: CustomEvent) => {
                         const detail = e.detail;
-                        if (!detail || typeof detail !== 'object' || !('valid' in detail)) {
+                        if (!isPlainObject(detail) || !('valid' in detail)) {
                             throw new Error('flows-tool-create-modal: schema-change detail');
                         }
                         this._schemaValid = detail.valid === true;
                         if (detail.valid === true) {
-                            this._parametersSchema =
-                                detail.value && typeof detail.value === 'object'
-                                    ? detail.value
-                                    : { ...EMPTY_PARAMETERS_SCHEMA, properties: {} };
+                            const value = detail.value;
+                            this._parametersSchema = isPlainObject(value)
+                                ? value
+                                : { ...EMPTY_PARAMETERS_SCHEMA, properties: {} };
                         }
                         this.isDirty = true;
                     }}
@@ -323,7 +327,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
 
     override renderFooter() {
         const valid = TOOL_ID_PATTERN.test(this._toolId)
-            && (this._name.trim() as any)
+            && this._name.trim().length > 0
             && this._schemaValid
             && this._codeValidationStatus !== 'pending'
             && this._codeValidationStatus !== 'invalid';
@@ -341,23 +345,15 @@ export class FlowsToolCreateModal extends PlatformFormModal {
             return;
         }
         const parameters_schema = this._parametersSchema;
-        if (!parameters_schema || typeof parameters_schema !== 'object' || Array.isArray(parameters_schema)) {
-            this.toast('flows:tool_create_modal.toast_schema_invalid', { type: 'error' });
-            return;
-        }
-        if (
-            (parameters_schema as Record<string, any>).type !== 'object'
-            || !(parameters_schema as Record<string, any>).properties
-            || typeof (parameters_schema as Record<string, any>).properties !== 'object'
-            || Array.isArray((parameters_schema as Record<string, any>).properties)
-        ) {
+        const properties = parameters_schema.properties;
+        if (parameters_schema.type !== 'object' || !isPlainObject(properties)) {
             this.toast('flows:tool_create_modal.toast_schema_invalid', { type: 'error' });
             return;
         }
         this._tools.create({
-            tool_id: (this._toolId.trim() as any),
-            name: (this._name.trim() as any),
-            title: (this._name.trim() as any),
+            tool_id: this._toolId.trim(),
+            name: this._name.trim(),
+            title: this._name.trim(),
             description: this._description,
             code: this._code,
             language: this._language,

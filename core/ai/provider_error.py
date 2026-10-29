@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timezone
 from enum import StrEnum
 
-import httpx
+import httpx2
 
 from core.models import StrictBaseModel
 
@@ -43,7 +43,7 @@ AI_PROVIDER_IO_ERRORS: tuple[type[BaseException], ...] = (
     OSError,
     ValueError,
     json.JSONDecodeError,
-    httpx.HTTPError,
+    httpx2.HTTPError,
 )
 
 
@@ -111,7 +111,7 @@ def classify_ai_provider_http(
     return AIProviderErrorClass.HTTP_ERROR
 
 
-def _http_error_text(exc: httpx.HTTPStatusError) -> str:
+def _http_error_text(exc: httpx2.HTTPStatusError) -> str:
     return truncate_llm_provider_error_text(
         f"HTTP {exc.response.status_code}: {exc.response.text}"
     )
@@ -131,7 +131,7 @@ def classify_ai_provider_error(
             error_text="",
             set_at=set_at,
         )
-    if isinstance(error, httpx.HTTPStatusError):
+    if isinstance(error, httpx2.HTTPStatusError):
         error_class = classify_ai_provider_http(
             provider,
             error.response.status_code,
@@ -143,7 +143,7 @@ def classify_ai_provider_error(
             error_text=redact_secret_from_text(_http_error_text(error), api_key),
             set_at=set_at,
         )
-    if isinstance(error, (TimeoutError, httpx.TimeoutException)):
+    if isinstance(error, (TimeoutError, httpx2.TimeoutException)):
         return AIProviderErrorRecord(
             error_class=AIProviderErrorClass.TIMEOUT,
             http_status=None,
@@ -153,7 +153,7 @@ def classify_ai_provider_error(
             ),
             set_at=set_at,
         )
-    if isinstance(error, (httpx.HTTPError, OSError)):
+    if isinstance(error, (httpx2.HTTPError, OSError)):
         return AIProviderErrorRecord(
             error_class=AIProviderErrorClass.TRANSPORT,
             http_status=None,

@@ -58,9 +58,9 @@ import { CoreEvents } from '@platform/lib/events/contract.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function createEmptyChannelData(): SyncChannelMessagesData {
-    const items: Record<string, any>[] = [];
+    const items: Record<string, unknown>[] = [];
     Object.freeze(items);
-    const pendingByLocalId: Record<string, Record<string, any>> = {};
+    const pendingByLocalId: Record<string, Record<string, unknown>> = {};
     Object.freeze(pendingByLocalId);
     const pagination = {
         hasOlder: false,
@@ -99,7 +99,7 @@ function payloadRecord(event: { payload: unknown }): Record<string, unknown> | n
     return isPlainRecord(event.payload) ? event.payload : null;
 }
 
-function _normalizeMessage(message: unknown): Record<string, any> | null {
+function _normalizeMessage(message: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(message)) return null;
     const messageId = typeof message.message_id === 'string' && message.message_id !== ''
         ? message.message_id
@@ -112,9 +112,9 @@ function _normalizeMessage(message: unknown): Record<string, any> | null {
     });
 }
 
-function _normalizeMessages(items: unknown): Record<string, any>[] {
+function _normalizeMessages(items: unknown): Record<string, unknown>[] {
     if (!Array.isArray(items)) return [];
-    const messages: Record<string, any>[] = [];
+    const messages: Record<string, unknown>[] = [];
     for (const item of items) {
         const message = _normalizeMessage(item);
         if (message === null) {
@@ -418,8 +418,8 @@ export const messagesStoreSlice = createSlice({
                 if (!Array.isArray(p.items)) return state;
                 const newItems = _normalizeMessages(p.items);
                 return updateChannel(p.channelId, (cur) => {
-                    const seen = new Set(cur.items.map((x: Record<string, any>) => x.message_id));
-                    const merged = [...newItems.filter((x: Record<string, any>) => !seen.has(x.message_id)), ...cur.items];
+                    const seen = new Set(cur.items.map((x: Record<string, unknown>) => x.message_id));
+                    const merged = [...newItems.filter((x: Record<string, unknown>) => !seen.has(x.message_id)), ...cur.items];
                     return {
                         ...cur,
                         items: Object.freeze(merged),
@@ -438,8 +438,8 @@ export const messagesStoreSlice = createSlice({
                 if (!Array.isArray(p.items)) return state;
                 const newItems = _normalizeMessages(p.items);
                 return updateChannel(p.channelId, (cur) => {
-                    const seen = new Set(cur.items.map((x: Record<string, any>) => x.message_id));
-                    const merged = [...cur.items, ...newItems.filter((x: Record<string, any>) => !seen.has(x.message_id))];
+                    const seen = new Set(cur.items.map((x: Record<string, unknown>) => x.message_id));
+                    const merged = [...cur.items, ...newItems.filter((x: Record<string, unknown>) => !seen.has(x.message_id))];
                     return {
                         ...cur,
                         items: Object.freeze(merged),
@@ -479,7 +479,7 @@ export const messagesStoreSlice = createSlice({
                 const localId = localIdFromConfirm
                     || (typeof m.local_id === 'string' && m.local_id !== '' ? m.local_id : null);
                 return updateChannel(m.channel_id, (cur) => {
-                    let pending: Record<string, Record<string, any>> = { ...cur.pendingByLocalId };
+                    let pending: Record<string, Record<string, unknown>> = { ...cur.pendingByLocalId };
                     if (localId !== null && pending[localId]) {
                         delete pending[localId];
                     }
@@ -572,12 +572,13 @@ export const messagesStoreSlice = createSlice({
                 const p = payloadRecord(event);
                 if (!p || typeof p.channelId !== 'string' || !p.item) return state;
                 const item = _normalizeMessage(p.item);
-                if (!item || typeof item.local_id !== 'string') return state;
+                const localId = item !== null ? item.local_id : null;
+                if (item === null || typeof localId !== 'string' || localId === '') return state;
                 return updateChannel(p.channelId, (cur) => ({
                     ...cur,
                     pendingByLocalId: Object.freeze({
                         ...cur.pendingByLocalId,
-                        [item.local_id]: Object.freeze({ ...item, _pending: true }),
+                        [localId]: Object.freeze({ ...item, _pending: true }),
                     }),
                 }));
             }

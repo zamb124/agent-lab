@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from core.ai.provider_error import AIProviderErrorClass
@@ -40,10 +40,10 @@ def _groq_settings(*, api_key: str, base_url: str, smoke_model: str) -> LLMConfi
     )
 
 
-def _http_status_error(status: int, body: str) -> httpx.HTTPStatusError:
-    request = httpx.Request("POST", "https://example.test/v1/chat/completions")
-    response = httpx.Response(status, text=body, request=request)
-    return httpx.HTTPStatusError(f"HTTP {status}", request=request, response=response)
+def _http_status_error(status: int, body: str) -> httpx2.HTTPStatusError:
+    request = httpx2.Request("POST", "https://example.test/v1/chat/completions")
+    response = httpx2.Response(status, text=body, request=request)
+    return httpx2.HTTPStatusError(f"HTTP {status}", request=request, response=response)
 
 
 @pytest.mark.asyncio

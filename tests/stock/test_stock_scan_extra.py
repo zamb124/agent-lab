@@ -109,7 +109,7 @@ async def _reserved_move(env: StockEnv, qty: Decimal) -> StockMove:
     _ = await env.di.move_engine.assign_transfer(
         company_id=env.company_id, transfer_id=transfer.transfer_id
     )
-    moves = await StockMove.list_for_transfer(
+    moves = await StockMove.list_for_transfer_by_created_at_asc(
         env.company_id, transfer.transfer_id
     )
     return moves[0]

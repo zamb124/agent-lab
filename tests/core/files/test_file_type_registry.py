@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.app.file_types_route import register_platform_file_types_route
 from core.files.types import (

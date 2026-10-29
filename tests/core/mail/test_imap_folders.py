@@ -10,7 +10,7 @@ from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source
 from core.mail.exceptions import MailMailboxNotFoundError
 from core.mail.imap_folders import (
-    build_mail_folder_list_result,
+    build_mail_folder_list_result_by_role_and_name_asc,
     parse_imap_list_lines,
     parse_namespace_personal_prefix,
     role_from_flags,
@@ -47,7 +47,7 @@ def test_parse_aioimaplib_stripped_list_and_namespace() -> None:
     )
     assert prefix == ""
     assert delim == "."
-    result = build_mail_folder_list_result(
+    result = build_mail_folder_list_result_by_role_and_name_asc(
         list_entries=entries,
         namespace_prefix=prefix,
         namespace_delimiter=delim,
@@ -67,7 +67,7 @@ def test_parse_aioimaplib_stripped_list_and_namespace() -> None:
     ]
 
     entries = parse_imap_list_lines(_load_fixture("dovecot_special_use.txt"))
-    result = build_mail_folder_list_result(
+    result = build_mail_folder_list_result_by_role_and_name_asc(
         list_entries=entries,
         namespace_prefix="",
         namespace_delimiter="/",
@@ -87,7 +87,7 @@ def test_parse_courier_canonical_names_without_special_use() -> None:
     prefix, delim = parse_namespace_personal_prefix(lines)
     assert prefix == "INBOX."
     assert delim == "."
-    result = build_mail_folder_list_result(
+    result = build_mail_folder_list_result_by_role_and_name_asc(
         list_entries=entries,
         namespace_prefix=prefix,
         namespace_delimiter=delim,
@@ -108,7 +108,7 @@ def test_sent_exists_without_special_use_not_missing() -> None:
             '* LIST (\\HasNoChildren) "/" Sent',
         ]
     )
-    result = build_mail_folder_list_result(
+    result = build_mail_folder_list_result_by_role_and_name_asc(
         list_entries=entries,
         namespace_prefix="",
         namespace_delimiter="/",
@@ -123,7 +123,7 @@ def test_sent_exists_without_special_use_not_missing() -> None:
 
 def test_parse_regru_cyrillic_special_use() -> None:
     entries = parse_imap_list_lines(_load_fixture("regru_cyrillic_special_use.txt"))
-    result = build_mail_folder_list_result(
+    result = build_mail_folder_list_result_by_role_and_name_asc(
         list_entries=entries,
         namespace_prefix="",
         namespace_delimiter="/",
@@ -136,7 +136,7 @@ def test_parse_regru_cyrillic_special_use() -> None:
 
 def test_parse_noselect_parent() -> None:
     entries = parse_imap_list_lines(_load_fixture("noselect_parent.txt"))
-    result = build_mail_folder_list_result(
+    result = build_mail_folder_list_result_by_role_and_name_asc(
         list_entries=entries,
         namespace_prefix="",
         namespace_delimiter="/",

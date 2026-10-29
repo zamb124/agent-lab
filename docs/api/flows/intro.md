@@ -2621,12 +2621,12 @@ console.log(task.status.state);
 ```python
 import os
 import uuid
-import httpx
+import httpx2
 
 
 async def call_flow_a2a(flow_id: str, method: str, params: dict) -> dict:
     url = f"https://linnex.io/flows/api/v1/{flow_id}"
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx2.AsyncClient(timeout=60) as client:
         response = await client.post(
             url,
             headers={

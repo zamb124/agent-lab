@@ -43,7 +43,6 @@ EXPLORER_OBJECT_TYPES: tuple[AuthzObjectType, ...] = (
     AuthzObjectType.WORK_QUEUE,
     AuthzObjectType.MAILBOX_BINDING,
     AuthzObjectType.PLATFORM_NAMESPACE,
-    AuthzObjectType.AGENT_DEVICE,
     AuthzObjectType.FLOW_UI_SHARE,
     AuthzObjectType.FLOW_BRANCH,
 )

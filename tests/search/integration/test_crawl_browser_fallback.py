@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 from aiohttp import web
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.search.config import get_search_settings
 from apps.search.services.crawl.fetch_service import CrawlFetchService

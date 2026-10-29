@@ -262,7 +262,7 @@ class WarehouseService:
     async def list_warehouses(
         self, *, company_id: str, limit: int, offset: int
     ) -> OffsetPage[StockWarehouse]:
-        rows = await StockWarehouse.list_by_code(
+        rows = await StockWarehouse.list_by_code_asc(
             company_id, limit=limit, offset=offset
         )
         total = await StockWarehouse.count_for_company(company_id)
@@ -281,7 +281,7 @@ class WarehouseService:
     async def list_operation_types(
         self, *, company_id: str, warehouse_id: str
     ) -> list[StockOperationType]:
-        return await StockOperationType.list_by_code_for_warehouse(company_id, warehouse_id)
+        return await StockOperationType.list_for_warehouse_by_code_asc(company_id, warehouse_id)
 
     async def update_operation_type(
         self,
@@ -357,8 +357,8 @@ class WarehouseService:
         transfer = await StockTransfer.by_id(company_id, transfer_id)
         if transfer is None:
             raise _not_found("Transfer not found", "transfer_not_found")
-        moves = await StockMove.list_for_transfer(company_id, transfer_id)
-        lines = await StockMoveLine.list_for_moves(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(company_id, transfer_id)
+        lines = await StockMoveLine.list_for_moves_by_created_at_asc(
             company_id, [m.move_id for m in moves]
         )
         return transfer, moves, lines

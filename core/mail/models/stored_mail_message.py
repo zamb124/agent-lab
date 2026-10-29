@@ -139,13 +139,14 @@ class StoredMailMessage(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_folder(
+    async def list_for_folder_by_date_at_and_uid_desc(
         cls,
         mailbox_binding_id: str,
         *,
         folder: str,
         limit: int,
     ) -> list[StoredMailMessage]:
+        """Письма папки, ORDER BY date_at DESC NULLS LAST, uid DESC, не больше limit."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         rows = await execute_raw(
@@ -162,14 +163,14 @@ class StoredMailMessage(PlatformModel):
         return _mail_messages(rows)
 
     @classmethod
-    async def list_by_date_at_and_uid(
+    async def list_for_thread_by_date_at_and_uid_asc(
         cls,
         mailbox_binding_id: str,
         *,
         thread_id: str,
         limit: int = 200,
     ) -> list[StoredMailMessage]:
-        """Письма ящика в треде, ORDER BY date_at ASC NULLS LAST, uid ASC, не больше limit. Пустой thread_id и limit < 1 — ValueError."""
+        """Письма треда, ORDER BY date_at ASC NULLS LAST, uid ASC, не больше limit. limit по умолчанию 200. Пустой thread_id и limit < 1 — ValueError."""
         if thread_id.strip() == "":
             raise ValueError("thread_id is required")
         if limit < 1:
@@ -237,14 +238,16 @@ class StoredMailMessage(PlatformModel):
         ).delete()
 
     @classmethod
-    async def delete_folder(cls, mailbox_binding_id: str, *, folder: str) -> int:
+    async def delete_by_binding_and_folder(cls, mailbox_binding_id: str, *, folder: str) -> int:
+        """Письма папки. Возвращает число удалённых строк. Нет писем — 0."""
         return await cls.objects.filter(
             mailbox_binding_id=mail_required(mailbox_binding_id, "mailbox_binding_id"),
             folder=mail_required(folder, "folder"),
         ).delete()
 
     @classmethod
-    async def list_uids(cls, mailbox_binding_id: str, *, folder: str) -> list[int]:
+    async def list_unordered_uids_for_folder(cls, mailbox_binding_id: str, *, folder: str) -> list[int]:
+        """Uid папки. Порядка и предела нет."""
         rows = await execute_raw(
             """
             SELECT uid
@@ -264,7 +267,7 @@ class StoredMailMessage(PlatformModel):
         return uids
 
     @classmethod
-    async def list_folder_page(
+    async def list_for_folder_by_date_at_and_uid_desc_over_limit(
         cls,
         mailbox_binding_id: str,
         *,
@@ -273,6 +276,7 @@ class StoredMailMessage(PlatformModel):
         before_date: datetime | None = None,
         before_uid: int | None = None,
     ) -> list[StoredMailMessage]:
+        """Письма папки, ORDER BY date_at DESC NULLS LAST, uid DESC, LIMIT limit + 1."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if (before_date is None) != (before_uid is None):
@@ -308,7 +312,7 @@ class StoredMailMessage(PlatformModel):
         return _mail_messages(rows)
 
     @classmethod
-    async def list_query_page(
+    async def list_query_matches_by_date_at_and_uid_desc_over_limit(
         cls,
         mailbox_binding_id: str,
         *,
@@ -318,7 +322,7 @@ class StoredMailMessage(PlatformModel):
         before_date: datetime | None = None,
         before_uid: int | None = None,
     ) -> list[StoredMailMessage]:
-        """Письма ящика, где subject, from_address, snippet, body_text или to_addresses содержит q. Порядок — date_at по убыванию, затем uid. Не больше limit+1."""
+        """Совпадения q в subject, from_address, snippet, body_text или to_addresses. folder is None папку не сужает. ORDER BY date_at DESC NULLS LAST, uid DESC, LIMIT limit + 1."""
         if q.strip() == "":
             raise ValueError("q is required")
         if limit < 1:

@@ -216,7 +216,8 @@ class PlatformScheduledTask(PlatformModel):
         return await cls._filtered_schedule_tasks(company_id, filters).count()
 
     @classmethod
-    async def list_all_schedule_ids(cls) -> frozenset[str]:
+    async def schedule_id_set(cls) -> frozenset[str]:
+        """Множество schedule_id. None и строка из пробелов пропускаются. Предела нет."""
         rows = await cls.objects.exclude(schedule_id=None).all()
         schedule_ids: list[str] = []
         for row in rows:

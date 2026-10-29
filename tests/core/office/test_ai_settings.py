@@ -32,8 +32,8 @@ def test_onlyoffice_ai_browser_cors_origins_cover_cdn_and_ds() -> None:
 
 def test_build_onlyoffice_ai_settings_fills_all_actions() -> None:
     settings = build_onlyoffice_ai_settings(
-        llm_api_base_url="https://example.com/flows/api/v1/agent/llm",
-        proxy_url="https://example.com/flows/api/v1/agent/llm/v1/proxy",
+        llm_api_base_url="https://example.com/flows/api/v1/llm",
+        proxy_url="https://example.com/flows/api/v1/llm/v1/proxy",
         provider_display_name="Platform LLMs",
         allowed_cors_origins=[
             "https://onlyoffice.github.io",
@@ -53,7 +53,7 @@ def test_build_onlyoffice_ai_settings_fills_all_actions() -> None:
 def test_build_onlyoffice_ai_settings_rejects_trailing_v1() -> None:
     with pytest.raises(ValueError, match="must not include trailing /v1"):
         build_onlyoffice_ai_settings(
-            llm_api_base_url="https://example.com/flows/api/v1/agent/llm/v1",
+            llm_api_base_url="https://example.com/flows/api/v1/llm/v1",
             proxy_url="https://example.com/proxy",
             provider_display_name="X",
             allowed_cors_origins=["https://onlyoffice.github.io"],
@@ -72,8 +72,8 @@ def test_fixture_matches_builder() -> None:
         "fixture",
     )
     built = build_onlyoffice_ai_settings(
-        llm_api_base_url="https://example.com/flows/api/v1/agent/llm",
-        proxy_url="https://example.com/flows/api/v1/agent/llm/v1/proxy",
+        llm_api_base_url="https://example.com/flows/api/v1/llm",
+        proxy_url="https://example.com/flows/api/v1/llm/v1/proxy",
         provider_display_name="Platform LLMs",
         allowed_cors_origins=[
             "https://onlyoffice.github.io",

@@ -18,7 +18,7 @@ from core.billing.settlement_rules import (
     SettlementRulesDocument,
     parse_settlement_rules_json,
     quantity_from_span,
-    resolve_matched_rules,
+    resolve_matched_rules_by_priority_asc,
     rule_matches_span,
 )
 from core.tracing.models import Span
@@ -259,7 +259,7 @@ def test_billing_settlement_span_rejects_non_string_operation_name() -> None:
 
 def test_resolve_matched_rules_empty_rules() -> None:
     doc = SettlementRulesDocument(rules=[])
-    assert resolve_matched_rules(doc, _span()) == []
+    assert resolve_matched_rules_by_priority_asc(doc, _span()) == []
 
 
 def test_resolve_matched_rules_no_match() -> None:
@@ -273,7 +273,7 @@ def test_resolve_matched_rules_no_match() -> None:
             )
         ],
     )
-    assert resolve_matched_rules(doc, _span(operation_name="yes.op")) == []
+    assert resolve_matched_rules_by_priority_asc(doc, _span(operation_name="yes.op")) == []
 
 
 def test_resolve_disabled_rule_excluded() -> None:
@@ -294,7 +294,7 @@ def test_resolve_disabled_rule_excluded() -> None:
             ),
         ],
     )
-    out = resolve_matched_rules(doc, _span(operation_name="z.q"))
+    out = resolve_matched_rules_by_priority_asc(doc, _span(operation_name="z.q"))
     assert len(out) == 1
     assert out[0].rule_id == "on"
 
@@ -320,7 +320,7 @@ def test_resolve_first_win() -> None:
         ],
     )
     span = _span(operation_name="x.y")
-    out = resolve_matched_rules(doc, span)
+    out = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(out) == 1
     assert out[0].rule_id == "a"
 
@@ -347,7 +347,7 @@ def test_resolve_first_win_across_two_exclusive_groups_picks_best_priority() -> 
             ),
         ],
     )
-    out = resolve_matched_rules(doc, _span(operation_name="m.x"))
+    out = resolve_matched_rules_by_priority_asc(doc, _span(operation_name="m.x"))
     assert len(out) == 1
     assert out[0].rule_id == "gb"
 
@@ -382,7 +382,7 @@ def test_resolve_exclusive_group_one_winner() -> None:
         ],
     )
     span = _span(operation_name="z.q")
-    out = resolve_matched_rules(doc, span)
+    out = resolve_matched_rules_by_priority_asc(doc, span)
     ids = {r.rule_id for r in out}
     assert ids == {"high", "solo"}
 
@@ -424,7 +424,7 @@ def test_resolve_two_exclusive_groups_both_winners_plus_standalone() -> None:
             ),
         ],
     )
-    out = resolve_matched_rules(doc, _span(operation_name="q.x"))
+    out = resolve_matched_rules_by_priority_asc(doc, _span(operation_name="q.x"))
     ids = {r.rule_id for r in out}
     assert ids == {"a1", "b1", "standalone"}
 

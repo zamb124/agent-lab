@@ -11,6 +11,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 
@@ -63,7 +64,8 @@ export class RagProviderBadge extends PlatformElement {
     }
 
     override render() {
-        const current = (this._providers.state as Record<string, unknown>).current;
+        const state = this._providers.state;
+        const current = isPlainRecord(state) ? state.current : null;
         const loading = this._providers.busy && !current;
         return html`
             <div class="badge">

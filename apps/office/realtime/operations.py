@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal, Never
 from urllib.parse import quote
 
-from httpx import HTTPError, HTTPStatusError
+from httpx2 import HTTPError, HTTPStatusError
 from pydantic import Field
 
 from apps.office.config import get_office_settings
@@ -1034,7 +1034,7 @@ async def op_catalogs_items(
     )
     if catalog is None:
         raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
-    children = await DocumentCatalog.children_page(
+    children = await DocumentCatalog.list_children_by_title_key_asc(
         company_id=scope.company_id,
         namespace=scope.namespace,
         parent_catalog_id=payload.catalog_id,
@@ -1056,7 +1056,7 @@ async def op_catalogs_items(
                 current_user_id=scope.user_id,
             )
         )
-    rows = await FileRecord.alive_in_catalog(
+    rows = await FileRecord.list_alive_in_catalog_by_updated_at_desc(
         company_id=scope.company_id,
         catalog_id=payload.catalog_id,
     )
@@ -1431,7 +1431,7 @@ async def op_documents_list(
     rows: list[FileRecord] = []
     for catalog_id in resolved_ids:
         rows.extend(
-            await FileRecord.alive_in_catalog(company_id=scope.company_id, catalog_id=catalog_id)
+            await FileRecord.list_alive_in_catalog_by_updated_at_desc(company_id=scope.company_id, catalog_id=catalog_id)
         )
     items = await records_to_items(rows, di.catalog_rag_index_service)
     if payload.q is not None and payload.q.strip() != "":
@@ -1860,8 +1860,8 @@ async def op_documents_deleted_list(
 ) -> OfficeDocumentListResponse:
     _ = payload, user
     scope = await namespace_scope(di)
-    catalogs = await DocumentCatalog.list_by_title_key_in_namespace(scope.company_id, scope.namespace)
-    rows = await FileRecord.trashed_in_namespace(
+    catalogs = await DocumentCatalog.list_by_title_key_in_namespace_asc(scope.company_id, scope.namespace)
+    rows = await FileRecord.trashed_in_namespace_by_deleted_at_desc(
         scope.company_id,
         [catalog.catalog_id for catalog in catalogs],
     )
@@ -2041,8 +2041,8 @@ async def op_documents_search(
     if needle == "":
         rows = []
     else:
-        catalogs = await DocumentCatalog.list_by_title_key_in_namespace(scope.company_id, scope.namespace)
-        rows = await FileRecord.list_alive_by_original_name(
+        catalogs = await DocumentCatalog.list_by_title_key_in_namespace_asc(scope.company_id, scope.namespace)
+        rows = await FileRecord.list_alive_matching_original_name_by_updated_at_desc(
             scope.company_id,
             [catalog.catalog_id for catalog in catalogs],
             needle,

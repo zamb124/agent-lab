@@ -7,6 +7,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -70,9 +71,12 @@ export class FlowsPreviewShareModal extends PlatformModal {
     }
 
     _onGuestCapChange(e: Event) {
-        const d = (e as Record<string, any>)?.detail;
-        const v = d && typeof d === 'object' && 'value' in d ? d.value : null;
-        this._guestCap = typeof v === 'number' && Number.isFinite(v) ? v : null;
+        if (!(e instanceof CustomEvent) || !isPlainRecord(e.detail)) {
+            this._guestCap = null;
+            return;
+        }
+        const value = e.detail.value;
+        this._guestCap = typeof value === 'number' && Number.isFinite(value) ? value : null;
     }
 
     async _createLink() {
@@ -93,8 +97,11 @@ export class FlowsPreviewShareModal extends PlatformModal {
             payload.guest_max_user_messages = n;
         }
         const out = await this._previewShare.run(payload);
-        if (out && typeof (out as Record<string, any>).share_url === 'string' && (out as Record<string, any>).share_url.length > 0) {
-            this._localShareUrl = (out as Record<string, any>).share_url;
+        if (isPlainRecord(out)) {
+            const shareUrl = out.share_url;
+            if (typeof shareUrl === 'string' && shareUrl.length > 0) {
+                this._localShareUrl = shareUrl;
+            }
         }
         this.requestUpdate();
     }

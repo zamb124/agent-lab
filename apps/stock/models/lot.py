@@ -86,10 +86,10 @@ class StockLot(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_all_by_name(
+    async def list_by_name_asc(
         cls, company_id: str, *, product_id: str | None
     ) -> list[Self]:
-        """Партии компании, ORDER BY name, без предела. product_id None не фильтрует."""
+        """Партии компании, ORDER BY name ASC, без предела. product_id None не фильтрует."""
         query = cls.objects.filter(company_id=company_id)
         if product_id is not None:
             query = query.filter(product_id=product_id)

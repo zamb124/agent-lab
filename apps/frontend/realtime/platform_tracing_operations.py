@@ -171,10 +171,10 @@ async def _resolve_user_id_query_to_exact_match(
     if user is not None:
         return user.user_id
     if "@" in stripped:
-        one = await User.find_by_email(stripped)
+        one = await User.find_first_by_user_id_for_email_ci(stripped)
         if one is not None:
             return one.user_id
-        many = await User.list_by_email_ci(stripped)
+        many = await User.list_containing_email_ci_by_user_id_asc(stripped)
         if len(many) == 1:
             return many[0].user_id
     return None
@@ -274,7 +274,7 @@ async def op_platform_tracing_facet_users(
                 max_ids=5000, company_id=payload.company_id, namespace=payload.namespace
             )
         )
-        search_hits = await User.list_by_query(frag, limit=200)
+        search_hits = await User.list_matching_query_by_user_id_asc(frag, limit=200)
         meta = [hit for hit in search_hits if hit.user_id in in_tracing]
         meta.sort(key=lambda hit: _user_facet_match_sort_key(frag, hit))
         ordered_ids = []
@@ -354,7 +354,7 @@ async def op_platform_tracing_spans(
             user_id_for_search = resolved_user
             user_id_query_for_search = None
     try:
-        items, next_cursor = await Span.admin_span_page_and_cursor(
+        items, next_cursor = await Span.admin_span_page_and_cursor_by_start_time_and_span_id_desc(
             service_name=payload.service_name,
             company_id=company_id_for_search,
             user_id=user_id_for_search,
@@ -381,6 +381,6 @@ async def op_platform_tracing_trace_tree(
 ) -> TracingTraceTree:
     _ = user
     await _require_tracing_admin(di)
-    spans = await Span.list_for_trace(payload.trace_id)
+    spans = await Span.list_for_trace_by_start_time_asc(payload.trace_id)
     enriched = await _enrich_span_items(spans)
     return TracingTraceTree(trace_id=payload.trace_id, spans_count=len(spans), tree=build_span_tree(enriched))

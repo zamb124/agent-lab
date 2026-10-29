@@ -11,7 +11,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-code-workbench.js';
-import { asString } from '../../_helpers/flows-resolvers.js';
+import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { normalizeFlowCodeLanguage } from '../../_helpers/flows-code-languages.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
@@ -23,7 +23,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -34,12 +34,12 @@ export class FlowsCodeNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
     declare _hydrateKey: string;
 ;
@@ -67,7 +67,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'code';
+        this.flowNodeType = 'code';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -93,7 +93,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
 
     async _maybeHydrateCodeFromTool() {
         const cfg = this.nodeConfig;
-        if (!cfg || typeof cfg !== 'object') {
+        if (!isPlainObject(cfg)) {
             return;
         }
         const tid = cfg.tool_id;
@@ -110,15 +110,13 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         }
         this._hydrateKey = key;
         const result = await this._toolSource.run({ tool_path: tid });
-        const source = result && typeof result === 'object' && result !== null && 'source' in result
-            ? asString(result.source)
-            : '';
+        const source = isPlainObject(result) ? asString(result.source) : '';
         if (source.length > 0) {
             this._emitPatch({ code: source, tool_id: null });
         }
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
@@ -139,7 +137,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
             if (typeof d.language !== 'string' || d.language.length === 0) {
                 throw new Error('flows-code-node-editor: language required');
             }
-            const patch: any = { language: normalizeFlowCodeLanguage(d.language) };
+            const patch: Record<string, unknown> = { language: normalizeFlowCodeLanguage(d.language) };
             if (typeof d.code === 'string') {
                 patch.code = d.code;
                 patch.tool_id = null;
@@ -151,18 +149,14 @@ export class FlowsCodeNodeEditor extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const cfg = this.nodeConfig && typeof this.nodeConfig === 'object' ? this.nodeConfig : {};
+        const cfg = isPlainObject(this.nodeConfig) ? this.nodeConfig : {};
         const code = typeof cfg.code === 'string' ? cfg.code : '';
-        const parametersSchema = cfg.parameters_schema && typeof cfg.parameters_schema === 'object' && !Array.isArray(cfg.parameters_schema)
-            ? cfg.parameters_schema
+        const schema = cfg.parameters_schema;
+        const parametersSchema = isPlainObject(schema)
+            ? schema
             : { type: 'object', properties: {}, required: [] };
         const language = normalizeFlowCodeLanguage(cfg.language);
-        const fv =
-            this.flowVariables &&
-            typeof this.flowVariables === 'object' &&
-            !Array.isArray(this.flowVariables)
-                ? this.flowVariables
-                : {};
+        const fv = isPlainObject(this.flowVariables) ? this.flowVariables : {};
         const completionVariableKeys = Object.keys(fv);
         const bid = typeof this.branchId === 'string' && this.branchId.length > 0 ? this.branchId : '';
         const fid = typeof this.flowId === 'string' ? this.flowId : '';
@@ -172,7 +166,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'code'}
+                .flowNodeType=${this.flowNodeType.length > 0 ? this.flowNodeType : 'code'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

@@ -13,7 +13,7 @@
 ненулевого чанка — ``502`` и лог ``voice.synthesize.empty_audio_body``.
 HTTP ``4xx`` от Humanitec Voice (``TTSLitserveHttpError``) пробрасываются
 клиенту с тем же кодом и ``detail``; ответы ``5xx`` апстрима — ``502``.
-Сетевые сбои до HTTP-ответа апстрима (``httpx.RequestError``, в т.ч. нет TCP) —
+Сетевые сбои до HTTP-ответа апстрима (``httpx2.RequestError``, в т.ч. нет TCP) —
 ``503`` с пояснением, не ``500``.
 """
 
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-import httpx
+import httpx2
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -173,7 +173,7 @@ async def synthesize(body: SynthesizeRequest, di: Di) -> StreamingResponse:
         if detail == "":
             detail = f"TTS provider returned HTTP {exc.status_code}"
         raise WsCommandError(transport, detail, error_code=error_code) from exc
-    except httpx.RequestError as exc:
+    except httpx2.RequestError as exc:
         logger.warning(
             "voice.synthesize.tts_upstream_unreachable",
             company_id=company_id,

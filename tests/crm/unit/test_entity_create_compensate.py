@@ -102,7 +102,7 @@ async def test_create_entity_compensate_deletes_row_when_fga_write_fails(
             )
 
         rows = (
-            await CRMEntity.cursor_page(
+            await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
                 entity_type="note",
                 namespace=namespace,
                 company_id=company_id,

@@ -9,7 +9,8 @@ from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 
 from core.logging import get_logger
 from core.types import JsonObject, JsonValue, require_json_object
@@ -49,7 +50,7 @@ def get_token_info(
                 ]
             },
         )
-    except JWTError as e:
+    except PyJWTError as e:
         logger.warning("auth.jwt.invalid", error=str(e))
         return None
 
@@ -94,15 +95,21 @@ def generate_access_token(
     grps: list[str] | None = None,
 ) -> str:
     """Генерирует access token"""
+    user_id = user["id"]
+    issuer = user["iss"]
+    email = user["email"]
+    if isinstance(user_id, bool) or not isinstance(user_id, str | int):
+        raise ValueError("access token user id must be str or int")
+    if not isinstance(issuer, str) or not isinstance(email, str):
+        raise ValueError("access token user claims must be strings")
     expire = datetime.now(timezone.utc) + timedelta(minutes=token_exp_minutes)
-    payload = {
-        "id": user["id"],
-        "iss": user["iss"],
-        "email": user["email"],
+    payload: dict[str, str | int | datetime | list[str]] = {
+        "id": user_id,
+        "iss": issuer,
+        "email": email,
         "session_id": session_id,
         "exp": expire,
     }
-
     if grps:
         payload["grps"] = grps
 

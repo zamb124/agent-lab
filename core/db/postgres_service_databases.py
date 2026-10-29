@@ -1,7 +1,7 @@
 """
 Идемпотентное создание сервисных БД и расширений по migrations/services.json.
 
-Перед `scripts.db_migrate upgrade` вызывается автоматически: на старом томе Postgres
+Перед `scripts.db.migrate upgrade` вызывается автоматически: на старом томе Postgres
 init.sql не перезапускается, поэтому новые БД (например platform_wiki) создаются здесь.
 На каждую БД из postgres.databases ставится pg_stat_statements; vector — на БД из
 postgres.vector_extensions (как migrations/postgres/init.sql).

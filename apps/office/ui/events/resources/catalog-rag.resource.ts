@@ -4,8 +4,18 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-type EventPayload = Record<string, unknown>;
+function catalogIdOf(payload: unknown, label: string): string {
+    if (!isPlainRecord(payload)) {
+        throw new Error(`${label}: payload.catalog_id required`);
+    }
+    const catalogId = payload.catalog_id;
+    if (typeof catalogId !== 'string' || catalogId.length === 0) {
+        throw new Error(`${label}: payload.catalog_id required`);
+    }
+    return catalogId;
+}
 
 export const catalogRagStatusOp = createAsyncOp({
     name: 'office/catalog_rag_status',
@@ -25,10 +35,10 @@ export const catalogRagEnableOp = createAsyncOp({
     commandType: 'office/catalogs/rag_enable_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/catalogs/:catalog_id/rag-index/enable' },
     onSuccess: (ctx, _result, event: PlatformEvent) => {
-        const payload = event.payload as EventPayload | null;
+        const catalogId = catalogIdOf(event.payload, 'office/catalog_rag_enable');
         ctx.dispatch(
             catalogRagStatusOp.events.REQUESTED,
-            { catalog_id: payload && payload.catalog_id },
+            { catalog_id: catalogId },
             { causation_id: event.id, source: 'local' },
         );
     },
@@ -43,10 +53,10 @@ export const catalogRagDisableOp = createAsyncOp({
     commandType: 'office/catalogs/rag_disable_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/catalogs/:catalog_id/rag-index/disable' },
     onSuccess: (ctx, _result, event: PlatformEvent) => {
-        const payload = event.payload as EventPayload | null;
+        const catalogId = catalogIdOf(event.payload, 'office/catalog_rag_disable');
         ctx.dispatch(
             catalogRagStatusOp.events.REQUESTED,
-            { catalog_id: payload && payload.catalog_id },
+            { catalog_id: catalogId },
             { causation_id: event.id, source: 'local' },
         );
     },
@@ -61,10 +71,10 @@ export const catalogRagRebuildOp = createAsyncOp({
     commandType: 'office/catalogs/rag_rebuild_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/catalogs/:catalog_id/rag-index/rebuild' },
     onSuccess: (ctx, _result, event: PlatformEvent) => {
-        const payload = event.payload as EventPayload | null;
+        const catalogId = catalogIdOf(event.payload, 'office/catalog_rag_rebuild');
         ctx.dispatch(
             catalogRagStatusOp.events.REQUESTED,
-            { catalog_id: payload && payload.catalog_id },
+            { catalog_id: catalogId },
             { causation_id: event.id, source: 'local' },
         );
     },
@@ -82,10 +92,10 @@ export const catalogRagSettingsOp = createAsyncOp({
         path: '/documents/api/v1/catalogs/:catalog_id/rag-index/settings',
     },
     onSuccess: (ctx, _result, event: PlatformEvent) => {
-        const payload = event.payload as EventPayload | null;
+        const catalogId = catalogIdOf(event.payload, 'office/catalog_rag_settings');
         ctx.dispatch(
             catalogRagStatusOp.events.REQUESTED,
-            { catalog_id: payload && payload.catalog_id },
+            { catalog_id: catalogId },
             { causation_id: event.id, source: 'local' },
         );
     },

@@ -1,6 +1,6 @@
 services:
   redis-realtime:
-    image: redis:7-alpine
+    image: redis:8.8.4-alpine
     container_name: platform_redis_realtime
     ports:
       - "8098:6379"
@@ -19,7 +19,7 @@ services:
       retries: 10
 
   centrifugo:
-    image: centrifugo/centrifugo:v6.9.3
+    image: centrifugo/centrifugo:v6.10.2
     container_name: platform_centrifugo
     depends_on:
       redis-realtime:

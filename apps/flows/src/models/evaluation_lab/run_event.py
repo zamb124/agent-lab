@@ -42,20 +42,21 @@ class EvaluationRunEvent(CompanyScopedModel):
     case_run_id: str | None = DbField(default=None)
 
     @classmethod
-    async def list_by_sequence(cls, run_id: str) -> list[Self]:
-        """События запуска, ORDER BY sequence. Предела нет. Пустой run_id — ValueError."""
+    async def list_by_sequence_asc(cls, run_id: str) -> list[Self]:
+        """События запуска, ORDER BY sequence ASC. Предела нет. Пустой run_id — ValueError."""
         if run_id == "":
             raise ValueError("run_id is required")
         return await cls.objects.filter(run_id=run_id).order_by("sequence").all()
 
     @classmethod
-    async def list_after(
+    async def list_after_sequence_by_sequence_asc(
         cls,
         run_id: str,
         *,
         after_sequence: int,
         limit: int,
     ) -> list[Self]:
+        """События с sequence больше after_sequence, ORDER BY sequence ASC, не больше limit. Пустой run_id — ValueError run_id is required. limit < 1 — ValueError limit must be positive."""
         if run_id == "":
             raise ValueError("run_id is required")
         if limit < 1:
@@ -68,7 +69,8 @@ class EvaluationRunEvent(CompanyScopedModel):
         )
 
     @classmethod
-    async def next_sequence(cls, run_id: str) -> int:
+    async def next_after_latest_sequence_desc(cls, run_id: str) -> int:
+        """Следующий sequence: последняя строка ORDER BY sequence DESC, плюс 1. Нет строк — 1. Пустой run_id — ValueError."""
         if run_id == "":
             raise ValueError("run_id is required")
         latest = await cls.objects.filter(run_id=run_id).order_by("-sequence").first()
@@ -86,7 +88,7 @@ class EvaluationRunEvent(CompanyScopedModel):
             )
             if locked is None:
                 raise ValueError(f"Evaluation run not found: {event.run_id}")
-            stored = event.model_copy(update={"sequence": await cls.next_sequence(event.run_id)})
+            stored = event.model_copy(update={"sequence": await cls.next_after_latest_sequence_desc(event.run_id)})
             _ = await cls.set(stored)
         return stored
 

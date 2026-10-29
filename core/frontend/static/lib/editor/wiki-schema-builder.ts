@@ -458,7 +458,8 @@ function isPmBundle(value: unknown): value is PmBundleLike {
     const editorState = value.EditorState;
     const editorView = value.EditorView;
     return typeof schema === 'function'
-        && isPlainRecord(editorState)
+        && typeof editorState === 'function'
+        && 'create' in editorState
         && typeof editorState.create === 'function'
         && typeof editorView === 'function';
 }

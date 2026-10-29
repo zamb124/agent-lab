@@ -41,7 +41,6 @@ class FlowCreateRequest(BaseModel):
     speech: FlowSpeechSettings | None = None
     interface: FlowUIDocument | None = None
     employee: FlowEmployeeConfig = Field(default_factory=FlowEmployeeConfig)
-    agent_toolkit_ids: list[str] = Field(default_factory=list)
 
     @field_validator("store_card_image_url", mode="before")
     @classmethod
@@ -88,7 +87,6 @@ class FlowResponse(StrictBaseModel):
     speech: JsonObject | None = None
     interface: FlowUIDocument = Field(default_factory=default_chat_document)
     employee: FlowEmployeeConfig = Field(default_factory=FlowEmployeeConfig)
-    agent_toolkit_ids: list[str] = Field(default_factory=list)
 
 
 class FlowDeletedResponse(StrictBaseModel):

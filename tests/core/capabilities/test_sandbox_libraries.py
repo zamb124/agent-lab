@@ -21,6 +21,7 @@ def test_python_import_allowlist_rejects_net_fs_and_platform() -> None:
     assert is_allowed_python_import("urllib.request") is False
     assert is_allowed_python_import("requests") is False
     assert is_allowed_python_import("httpx") is False
+    assert is_allowed_python_import("httpx2") is False
     assert is_allowed_python_import("os") is False
     assert is_allowed_python_import("apps.flows.src.runtime.exceptions") is False
     assert is_allowed_python_import("core.capabilities") is False

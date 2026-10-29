@@ -9,7 +9,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.tools.sync.sync_tools import sync_list_messages, sync_send_message
 from core.clients.service_client import ServiceClientError

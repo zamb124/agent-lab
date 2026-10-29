@@ -10,6 +10,7 @@
 import { createAsyncOp, createFacets } from '@platform/lib/events/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const BASE_BILLING = '/frontend/api/platform-billing';
 const WS_TIMEOUT_MS = 15_000;
@@ -24,10 +25,10 @@ const _COMPANY_OVERVIEW_REQUIRED_KEYS = Object.freeze([
     'current_month_spent',
 ]);
 
-function _assertCompanyOverviewItemsShape(items: Record<string, any>[]) {
+function _assertCompanyOverviewItemsShape(items: unknown[]) {
     for (let i = 0; i < items.length; i += 1) {
         const row = items[i];
-        if (!row || typeof row !== 'object') {
+        if (!isPlainRecord(row)) {
             throw new Error(`companies_billing_overview: items[${i}] must be an object`);
         }
         for (const k of _COMPANY_OVERVIEW_REQUIRED_KEYS) {
@@ -47,11 +48,37 @@ function _toastError(ctx: Record<string, any>, key: string) {
 }
 
 function _offsetPage(event: PlatformEvent) {
-    const page = (event.payload as Record<string, any>) && typeof (event.payload as Record<string, any>) === 'object' ? (event.payload as Record<string, any>).result : null;
-    if (!page || !Array.isArray(page.items) || typeof page.total !== 'number' || typeof page.offset !== 'number') {
+    if (!isPlainRecord(event.payload)) {
         throw new Error(`${event.type}: OffsetPage { items, total, limit, offset } required`);
     }
-    return page;
+    const page = event.payload.result;
+    if (!isPlainRecord(page)) {
+        throw new Error(`${event.type}: OffsetPage { items, total, limit, offset } required`);
+    }
+    const items = page.items;
+    const total = page.total;
+    const offset = page.offset;
+    const limit = page.limit;
+    if (!Array.isArray(items) || typeof total !== 'number' || typeof offset !== 'number') {
+        throw new Error(`${event.type}: OffsetPage { items, total, limit, offset } required`);
+    }
+    return {
+        items,
+        total,
+        offset,
+        limit: typeof limit === 'number' ? limit : undefined,
+    };
+}
+
+function _companyId(payload: unknown): string {
+    if (!isPlainRecord(payload)) {
+        throw new Error('billing-admin: payload.company_id required');
+    }
+    const id = payload.company_id;
+    if (typeof id !== 'string' || id.length === 0) {
+        throw new Error('billing-admin: payload.company_id required');
+    }
+    return id;
 }
 
 function _terminalOf(failurePayload: any) {
@@ -84,7 +111,13 @@ export const companiesOverviewLoadOp = createAsyncOp({
         if (event.type === events.SUCCEEDED) {
             const page = _offsetPage(event);
             _assertCompanyOverviewItemsShape(page.items);
-            const items = page.offset > 0 ? [...(state.items as unknown[]), ...page.items] : page.items;
+            const previous = state.items;
+            if (page.offset > 0 && !Array.isArray(previous)) {
+                throw new Error('companies_billing_overview: items must be an array');
+            }
+            const items = page.offset > 0 && Array.isArray(previous)
+                ? [...previous, ...page.items]
+                : page.items;
             return {
                 ...state,
                 items,
@@ -167,7 +200,7 @@ export const companyPricesUpdateOp = createAsyncOp({
     commandType: 'frontend/platform_billing/company_prices_update_requested',
     restMirror: { method: 'PUT', path: '/frontend/api/platform-billing/prices/company/:company_id' },
     onSuccess: (ctx, _result, event) => {
-        const id = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).company_id;
+        const id = _companyId(event.payload);
         ctx.dispatch(companyPricesLoadOp.events.REQUESTED, { company_id: id }, { source: 'local' });
     },
 });
@@ -193,7 +226,7 @@ export const settlementRulesUpdateOp = createAsyncOp({
     commandType: 'frontend/platform_billing/settlement_rules_update_requested',
     restMirror: { method: 'PUT', path: '/frontend/api/platform-billing/settlement-rules/:company_id' },
     onSuccess: (ctx, _result, event) => {
-        const id = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).company_id;
+        const id = _companyId(event.payload);
         ctx.dispatch(settlementRulesLoadOp.events.REQUESTED, { company_id: id }, { source: 'local' });
     },
 });

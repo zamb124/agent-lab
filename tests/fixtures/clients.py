@@ -24,15 +24,15 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from tests.fixtures.service_processes import ServiceProcesses, import_service_app
 
 # ASGI-клиенты с Host: humanitec.ru получают 307 на apex домен; base_url должен
-# совпадать с Host, иначе httpx сбрасывает Authorization при cross-host redirect.
+# совпадать с Host, иначе httpx2 сбрасывает Authorization при cross-host redirect.
 _PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
 _PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
-# Real HTTP e2e: очередь granian под -n10. httpx default 5s → ReadTimeout на enable/enqueue.
+# Real HTTP e2e: очередь granian под -n10. httpx2 default 5s → ReadTimeout на enable/enqueue.
 # Длинный граф всё равно SendMessage returnImmediately + GetTask poll (a2a.mdc § Клиенты).
 _E2E_HTTP_TIMEOUT_SECONDS = 60.0
 
@@ -58,7 +58,7 @@ def patch_service_clients_asgi(
     if not isinstance(monkeypatch, pytest.MonkeyPatch):
         raise TypeError("monkeypatch fixture must be pytest.MonkeyPatch")
 
-    from httpx import ASGITransport, AsyncClient
+    from httpx2 import ASGITransport, AsyncClient
 
     from core.clients.service_client import ServiceClient
     from core.config import get_settings, set_settings

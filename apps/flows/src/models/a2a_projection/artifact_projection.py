@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from oxyde import Field as DbField
 from oxyde import Index
@@ -41,3 +41,8 @@ class A2AArtifactProjection(PlatformModel):
     updated_at: datetime = DbField()
     revision: int = DbField(default=1, ge=1)
     is_closed: bool = DbField(default=False)
+
+    @classmethod
+    async def list_for_task_by_ordinal_asc(cls, task_id: str) -> list[Self]:
+        """Артефакты задачи, ORDER BY ordinal ASC. Предела нет."""
+        return await cls.objects.filter(task_id=task_id).order_by("ordinal").all()

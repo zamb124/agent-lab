@@ -11,7 +11,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-segmented-control.js';
-import { asObject, getBranchNodes } from '../_helpers/flows-resolvers.js';
+import { getBranchNodes, isPlainObject } from '../_helpers/flows-resolvers.js';
 import {
     buildNodeRunChangeRows,
     buildNodeRunHeadline,
@@ -46,7 +46,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
     declare nodeId: string;
     declare runIndex: number;
     declare selectedPath: string;
-    declare _selectedRunIndex: any;
+    declare _selectedRunIndex: number | null;
     declare _selectedPath: string;
     declare _diffQuery: string;
     declare _valueSide: string;
@@ -234,7 +234,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
      * @param {KeyboardEvent} event
      * @param {() => void} handler
      */
-    _onSelectableKeydown(event: KeyboardEvent, handler: any) {
+    _onSelectableKeydown(event: KeyboardEvent, handler: () => void) {
         if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
@@ -242,13 +242,29 @@ export class FlowsNodeRunResultModal extends PlatformModal {
         handler.call(this);
     }
 
-    _requireResults() {
+    _translate(key: string, params: unknown): string {
+        if (params === undefined || params === null) {
+            return this.t(key);
+        }
+        if (!isPlainObject(params)) {
+            throw new Error('flows-node-run-result-modal: translation params required');
+        }
+        const vars: Record<string, string | number> = {};
+        for (const [name, value] of Object.entries(params)) {
+            if (typeof value !== 'string' && typeof value !== 'number') {
+                throw new Error('flows-node-run-result-modal: translation param must be string or number');
+            }
+            vars[name] = value;
+        }
+        return this.t(key, vars);
+    }
+
+    _requireResults(): unknown[] {
         if (typeof this.nodeId !== 'string' || this.nodeId.length === 0) {
             throw new Error('flows-node-run-result-modal: nodeId is required');
         }
-        const state = asObject(this._editor.state);
-        const resultsMap = (state as any).nodeRunResults;
-        if (resultsMap === null || typeof resultsMap !== 'object' || Array.isArray(resultsMap)) {
+        const resultsMap = this._editor.state.nodeRunResults;
+        if (!isPlainObject(resultsMap)) {
             throw new Error(`flows-node-run-result-modal: no runs for node ${this.nodeId}`);
         }
         const results = resultsMap[this.nodeId];
@@ -261,13 +277,13 @@ export class FlowsNodeRunResultModal extends PlatformModal {
     /**
      * @param {Record<string, unknown>} result
      */
-    _ensurePathForResult(result: any) {
+    _ensurePathForResult(result: Record<string, unknown>) {
         if (result.kind === 'error') {
             this._selectedPath = '';
             return;
         }
-        const rows = buildNodeRunChangeRows(result, (key: string, params: any) => this.t(key, params));
-        if ((this._selectedPath.length as any) > 0 && nodeRunDiffHasPath(result, this._selectedPath)) {
+        const rows = buildNodeRunChangeRows(result, (key: string, params: unknown) => this._translate(key, params));
+        if (this._selectedPath.length > 0 && nodeRunDiffHasPath(result, this._selectedPath)) {
             return;
         }
         if (typeof this.selectedPath === 'string' && this.selectedPath.length > 0 && nodeRunDiffHasPath(result, this.selectedPath)) {
@@ -285,7 +301,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
      * @param {unknown[]} results
      * @param {boolean} forceInit
      */
-    _syncRuns(results: any, forceInit: any) {
+    _syncRuns(results: unknown[], forceInit: boolean) {
         if (forceInit || this._selectedRunIndex === null) {
             if (typeof this.runIndex === 'number' && Number.isFinite(this.runIndex)) {
                 this._selectedRunIndex = Math.floor(this.runIndex);
@@ -338,7 +354,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
     /**
      * @param {number} runIndex
      */
-    _selectRun(runIndex: any) {
+    _selectRun(runIndex: number) {
         const results = this._requireResults();
         findNodeRunResult(results, runIndex);
         this._selectedRunIndex = runIndex;
@@ -351,14 +367,14 @@ export class FlowsNodeRunResultModal extends PlatformModal {
      * @param {unknown[]} results
      * @param {number} delta
      */
-    _stepRun(results: any, delta: any) {
+    _stepRun(results: readonly unknown[], delta: number) {
         if (this._selectedRunIndex === null) {
             throw new Error('flows-node-run-result-modal: run is not selected');
         }
         let current = -1;
         for (let i = 0; i < results.length; i += 1) {
             const item = results[i];
-            if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+            if (!isPlainObject(item)) {
                 throw new Error('flows-node-run-result-modal: result must be an object');
             }
             if (item.run_index === this._selectedRunIndex) {
@@ -373,11 +389,11 @@ export class FlowsNodeRunResultModal extends PlatformModal {
         if (next < 0 || next >= results.length) {
             return;
         }
-        const item = results[next];
-        if (typeof item.run_index !== 'number' || !Number.isFinite(item.run_index)) {
+        const nextItem = results[next];
+        if (!isPlainObject(nextItem) || typeof nextItem.run_index !== 'number' || !Number.isFinite(nextItem.run_index)) {
             throw new Error('flows-node-run-result-modal: run_index is required');
         }
-        this._selectRun(Math.floor(item.run_index));
+        this._selectRun(Math.floor(nextItem.run_index));
     }
 
     /**
@@ -423,7 +439,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
             }
             text = result.error;
         } else {
-            if ((this._selectedPath.length as any) === 0) {
+            if (this._selectedPath.length === 0) {
                 throw new Error('flows-node-run-result-modal: no field selected');
             }
             const entry = findDiffEntryByPath(result, this._selectedPath);
@@ -436,10 +452,10 @@ export class FlowsNodeRunResultModal extends PlatformModal {
         });
     }
 
-    _nodeTitle(result: any) {
-        const nodes = getBranchNodes(asObject(this._editor.state));
+    _nodeTitle(result: Record<string, unknown>) {
+        const nodes = getBranchNodes(this._editor.state);
         const node = nodes[this.nodeId];
-        if (node && typeof node.name === 'string' && node.name.length > 0) {
+        if (isPlainObject(node) && typeof node.name === 'string' && node.name.length > 0) {
             return node.name;
         }
         if (typeof result.node_id === 'string' && result.node_id.length > 0) {
@@ -477,7 +493,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
     /**
      * @param {unknown[]} results
      */
-    _renderRunsRail(results: any) {
+    _renderRunsRail(results: readonly unknown[]) {
         if (results.length < 2) {
             return '';
         }
@@ -508,8 +524,8 @@ export class FlowsNodeRunResultModal extends PlatformModal {
                 </div>
                 <div class="content-panel-body">
                     <div class="runs-list">
-                        ${results.map((item: any, index: number) => {
-                            if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+                        ${results.map((item, index) => {
+                            if (!isPlainObject(item)) {
                                 throw new Error('flows-node-run-result-modal: result must be an object');
                             }
                             const runIndex = item.run_index;
@@ -518,7 +534,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
                             }
                             const active = runIndex === this._selectedRunIndex;
                             const tone = item.kind === 'error' ? 'error' : 'ok';
-                            const headline = buildNodeRunHeadline(item, (key: string, params: any) => this.t(key, params));
+                            const headline = buildNodeRunHeadline(item, (key: string, params: unknown) => this._translate(key, params));
                             const durationMs = item.duration_ms;
                             const meta = [];
                             meta.push(this.t('node_run_result_modal.run_label', {
@@ -555,9 +571,9 @@ export class FlowsNodeRunResultModal extends PlatformModal {
     /**
      * @param {Record<string, unknown>} result
      */
-    _renderFields(result: any) {
-        const rows = buildNodeRunChangeRows(result, (key: string, params: any) => this.t(key, params));
-        const query = (this._diffQuery.trim() as any).toLowerCase();
+    _renderFields(result: Record<string, unknown>) {
+        const rows = buildNodeRunChangeRows(result, (key: string, params: unknown) => this._translate(key, params));
+        const query = this._diffQuery.trim().toLowerCase();
         const visible = query.length === 0
             ? rows
             : rows.filter((row) => row.path.toLowerCase().includes(query) || row.label.toLowerCase().includes(query));
@@ -603,7 +619,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
     /**
      * @param {Record<string, unknown>} result
      */
-    _renderViewer(result: any) {
+    _renderViewer(result: Record<string, unknown>) {
         if (result.kind === 'error') {
             const errorText = typeof result.error === 'string' ? result.error : '';
             return html`
@@ -615,7 +631,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
                 </div>
             `;
         }
-        if ((this._selectedPath.length as any) === 0) {
+        if (this._selectedPath.length === 0) {
             return html`
                 <div class="content-panel viewer-pane">
                     <p class="content-panel-empty">${this.t('node_run_result_modal.no_selection')}</p>
@@ -679,10 +695,10 @@ export class FlowsNodeRunResultModal extends PlatformModal {
     /**
      * @param {unknown[]} results
      */
-    _runPosition(results: any) {
+    _runPosition(results: readonly unknown[]) {
         for (let i = 0; i < results.length; i += 1) {
             const item = results[i];
-            if (item !== null && typeof item === 'object' && !Array.isArray(item) && item.run_index === this._selectedRunIndex) {
+            if (isPlainObject(item) && item.run_index === this._selectedRunIndex) {
                 return i;
             }
         }

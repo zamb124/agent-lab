@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.config import get_settings
 from core.files.types import ext_to_mime
@@ -242,7 +242,7 @@ def guest_proxy_urls() -> tuple[str, str]:
         raise RuntimeError("flows service url is required")
     if gateway.strip() == "":
         raise RuntimeError("capability_gateway service url is required")
-    return f"{flows_base}/flows/api/v1/agent/llm/v1", gateway
+    return f"{flows_base}/flows/api/v1/llm/v1", gateway
 
 
 async def code_agent_status_files(

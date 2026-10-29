@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.authz.factory import build_authz_service
 from core.authz.models import AuthzObject, AuthzTuple

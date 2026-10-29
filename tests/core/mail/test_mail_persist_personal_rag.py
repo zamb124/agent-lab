@@ -86,7 +86,7 @@ async def test_sync_bootstrap_persists_inbox_into_mail_messages_and_personal_ns(
     assert result.bootstrap is True
     assert result.new_messages == []
 
-    stored = await StoredMailMessage.list_folder(
+    stored = await StoredMailMessage.list_for_folder_by_date_at_and_uid_desc(
         binding.mailbox_binding_id,
         folder="INBOX",
         limit=50,
@@ -165,7 +165,7 @@ async def test_sync_incremental_persists_new_inbox_message(
     assert second.bootstrap is False
     assert len(second.new_messages) == 1
 
-    stored = await StoredMailMessage.list_folder(
+    stored = await StoredMailMessage.list_for_folder_by_date_at_and_uid_desc(
         binding.mailbox_binding_id,
         folder="INBOX",
         limit=50,
@@ -224,7 +224,7 @@ async def test_sync_sent_persists_without_inbox_notify(
     assert first.bootstrap is True
     assert first.new_messages == []
 
-    sent_rows = await StoredMailMessage.list_folder(
+    sent_rows = await StoredMailMessage.list_for_folder_by_date_at_and_uid_desc(
         binding.mailbox_binding_id,
         folder="Sent",
         limit=20,

@@ -55,17 +55,12 @@ import {
     worktrackerWorkItemFactories,
     createWorktrackerWorkItemCountsAuthEffect,
 } from '../events/resources/work-items.resource.js';
-import {
-    platformAgentDeviceFactories,
-    createPlatformAgentDevicesAuthEffect,
-} from '../events/resources/agent-devices.resource.js';
 import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import { prefersReducedMotion } from '../utils/motion.js';
 import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
 import { PLATFORM_LARA_TOGGLE_EVENT } from '../flow-ui/shell/preferences.js';
 import { setPlatformFilesRouteSegment } from '../utils/platform-files-url.js';
 import type { SelectController } from '../events/select-controller.js';
-import type { OpController } from './use-resource.js';
 import type { SliceDef } from '../events/reducers/index.js';
 import type { EventEffect } from '../events/bus.js';
 import type { RouterRoute } from '../events/reducers/router.js';
@@ -73,7 +68,6 @@ import type { AuthStatus, AuthUser } from '../events/reducers/auth.js';
 import type { NotifyToast } from '../events/reducers/notify.js';
 import type { LauncherPosition } from '../flow-ui/shell/drawer-geometry.js';
 
-const AGENT_DEVICES_POLL_MS = 45000;
 import '../components/pwa-install-banner.js';
 import '../components/platform-spinner.js';
 import { GlassToast } from '../components/glass-toast.js';
@@ -269,8 +263,6 @@ export class PlatformApp extends PlatformElement {
     _i18nReadySelect: SelectController<boolean>;
     _authSelect: SelectController<AuthSelection>;
     _routerSelect: SelectController<RouteSelection>;
-    _agentDevicesOp: OpController;
-    _agentDevicesPollTimer: number | null;
     _platformAssistantContextProvider: () => Promise<Record<string, unknown>>;
 
     constructor() {
@@ -281,13 +273,11 @@ export class PlatformApp extends PlatformElement {
         }
         const factories: CollectableFactory[] = [
             ...collectableFactories(worktrackerWorkItemFactories, 'worktrackerWorkItemFactories'),
-            ...collectableFactories(platformAgentDeviceFactories, 'platformAgentDeviceFactories'),
             ...(Array.isArray(ctor.factories) ? ctor.factories : []),
         ];
         const factorySlices: Record<string, SliceDef> = {};
         const factoryEffects: EventEffect[] = [
             createWorktrackerWorkItemCountsAuthEffect(),
-            createPlatformAgentDevicesAuthEffect(),
         ];
         if (factories.length > 0) {
             for (const factory of factories) {
@@ -341,8 +331,6 @@ export class PlatformApp extends PlatformElement {
             params: s.router.params,
             notFound: s.router.notFound,
         }));
-        this._agentDevicesOp = this.useOp('platform/agent_devices_load');
-        this._agentDevicesPollTimer = null;
         this._platformAssistantContextProvider = async () => {
             const routeValue = this._routerSelect.value;
             const routeKey = routeValue ? routeValue.routeKey : null;
@@ -402,7 +390,6 @@ export class PlatformApp extends PlatformElement {
     override async connectedCallback(): Promise<void> {
         super.connectedCallback();
         this._ensureRouteMotionSubscription();
-        this._ensureAgentDevicesPoll();
         if (this._userLoadDispatched) return;
         this._userLoadDispatched = true;
         if (this.shouldRequestUserLoadOnConnect()) {
@@ -421,40 +408,9 @@ export class PlatformApp extends PlatformElement {
     }
 
     override disconnectedCallback(): void {
-        this._clearAgentDevicesPoll();
         this._routeMotionSubscribed = false;
         this._activeRouteTransition = null;
         super.disconnectedCallback();
-    }
-
-    _ensureAgentDevicesPoll(): void {
-        if (this._agentDevicesPollTimer !== null) {
-            return;
-        }
-        this._agentDevicesPollTimer = window.setInterval(() => {
-            const auth = this._authSelect ? this._authSelect.value : null;
-            if (!auth || auth.status !== 'authenticated') {
-                return;
-            }
-            this._agentDevicesOp.run(null);
-        }, AGENT_DEVICES_POLL_MS);
-    }
-
-    _clearAgentDevicesPoll(): void {
-        if (this._agentDevicesPollTimer === null) {
-            return;
-        }
-        window.clearInterval(this._agentDevicesPollTimer);
-        this._agentDevicesPollTimer = null;
-    }
-
-    _activeAgentDeviceName(): string {
-        const state = this._agentDevicesOp ? this._agentDevicesOp.state : null;
-        if (!isPlainRecord(state)) {
-            return '';
-        }
-        const name = state.online_device_name;
-        return typeof name === 'string' ? name : '';
     }
 
     _ensureRouteMotionSubscription(): void {
@@ -602,7 +558,6 @@ export class PlatformApp extends PlatformElement {
         }
         const voiceBaseUrl = resolveVoiceHttpOrigin();
         const voiceEnabled = voiceBaseUrl !== '';
-        const activeDeviceName = this._activeAgentDeviceName();
         const launcherPosition = config.launcherPosition === 'bottom-left'
             ? 'bottom-left'
             : 'bottom-right';
@@ -621,7 +576,6 @@ export class PlatformApp extends PlatformElement {
                     companyId: companyId.trim(),
                     voiceEnabled,
                     voiceBaseUrl,
-                    activeDeviceName,
                     getExtraMetadataVariables: this._platformAssistantContextProvider,
                     toggleEventName: PLATFORM_LARA_TOGGLE_EVENT,
                 }}

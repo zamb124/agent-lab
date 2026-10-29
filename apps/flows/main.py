@@ -24,22 +24,17 @@ from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
-from apps.agent.tunnel_bus import (  # noqa: E402
-    configure_tunnel_bus_storage,
-    start_tunnel_bus_listener,
-)
 from apps.flows.config import FlowSettings, get_settings  # noqa: E402
 from apps.flows.di import FlowsDi  # noqa: E402
 from apps.flows.realtime.command_router import FLOWS_OPERATIONS  # noqa: E402
-from apps.flows.src.agent import llm_proxy as agent_llm_proxy  # noqa: E402
 from apps.flows.src.api import (  # noqa: E402
     a2a_router,
     websocket_router,
 )
 from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
-from apps.flows.src.api.v1.agent_llm import router as agent_llm_router  # noqa: E402
-from apps.flows.src.api.v1.platform_mcp import router as agent_platform_mcp_router  # noqa: E402
+from apps.flows.src.api.v1.llm_proxy import router as llm_proxy_router  # noqa: E402
 from apps.flows.src.db.bundle_seed_lock import flows_bundle_seed_lock  # noqa: E402
+from apps.flows.src.llm_proxy import proxy as llm_proxy  # noqa: E402
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
 from apps.flows.src.services.demo_company_variables import seed_demo_company_variables  # noqa: E402
 from apps.flows.src.services.flow_access_service import FlowAccessService  # noqa: E402
@@ -189,9 +184,6 @@ async def boot_flows(
                 logger.error("flows.failed.connect.redis.startup")
                 raise
 
-    configure_tunnel_bus_storage(shared_storage)
-    await start_tunnel_bus_listener(redis_client)
-
     if settings.server.env == "development" and not is_testing():
         await sync_landing_public_demo_flows_from_bundles(
             flow_access_service, settings, files_service
@@ -297,7 +289,7 @@ if "*" in _flow_settings.cors_allow_origins:
 if _cors_regex is None and _flow_settings.server.debug and not is_testing():
     _cors_regex = _FLOWS_DEV_CORS_ORIGIN_REGEX
 
-# OnlyOffice AI plugin (CDN/DS) → browser fetch на /agent/llm; без этих Origin UI: «Ошибка: [provider]».
+# OnlyOffice AI plugin (CDN/DS) → browser fetch на /llm; без этих Origin UI: «Ошибка: [provider]».
 _flows_cors_origins = list(
     dict.fromkeys(
         [
@@ -322,8 +314,7 @@ app = create_service_app(
         api_v1_router,
         websocket_router,
         a2a_router,
-        agent_platform_mcp_router,
-        agent_llm_router,
+        llm_proxy_router,
     ],
     extra_middlewares=[
         (
@@ -342,7 +333,7 @@ app = create_service_app(
         if _flow_settings.dynamic_embed_cors_enabled
         else None
     ),
-    extra_exception_handlers=agent_llm_proxy.LLM_PROXY_EXCEPTION_HANDLERS,
+    extra_exception_handlers=llm_proxy.LLM_PROXY_EXCEPTION_HANDLERS,
     cors_origins=_flows_cors_origins,
     cors_allow_origin_regex=_cors_regex,
     api_version="v1",

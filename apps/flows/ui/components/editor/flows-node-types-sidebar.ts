@@ -35,13 +35,13 @@ import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../_helpers/node-icons.js';
 import { getTriggerTypeRowVisual } from '../../_helpers/trigger-types.js';
-import { asArray, asString } from '../../_helpers/flows-resolvers.js';
+import { asArray, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 const NODE_CATEGORY_ORDER = Object.freeze(['core', 'tools', 'sources', 'integrations', 'channels']);
 
-const CATEGORY_TO_TOKEN_KEY = Object.freeze({
+const CATEGORY_TO_TOKEN_KEY: Record<string, string> = Object.freeze({
     core: 'core',
     tools: 'core',
     sources: 'sources',
@@ -49,6 +49,13 @@ const CATEGORY_TO_TOKEN_KEY = Object.freeze({
     channels: 'flow',
     resources: 'flow',
 });
+
+function dragTransfer(event: Event): DataTransfer {
+    if (!(event instanceof DragEvent) || event.dataTransfer === null) {
+        throw new Error('FlowsNodeTypesSidebar: drag event has no dataTransfer');
+    }
+    return event.dataTransfer;
+}
 
 export class FlowsNodeTypesSidebar extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -296,60 +303,59 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         }
     }
 
-    _matchQuery(text: any) {
-        if ((this._query.length as any) === 0) return true;
-        return asString(text).toLowerCase().includes((this._query.toLowerCase() as any));
+    _matchQuery(text: unknown) {
+        if (this._query.length === 0) return true;
+        return asString(text).toLowerCase().includes(this._query.toLowerCase());
     }
 
-    _filterItems(items: Record<string, any>[]) {
-        if ((this._query.length as any) === 0) return items;
+    _filterItems(items: readonly Record<string, unknown>[]): readonly Record<string, unknown>[] {
+        if (this._query.length === 0) return items;
         return items.filter(
-            (it: any) => this._matchQuery(this._paletteName(it))
+            (it) => this._matchQuery(this._paletteName(it))
                 || this._matchQuery(it.description)
                 || this._matchQuery(it.type)
                 || this._matchQuery(it.connector_id),
         );
     }
 
-    _paletteName(it: any) {
+    _paletteName(it: Record<string, unknown>) {
         if (it.type === 'code_agent') {
             return this.t('node_types.code_agent');
         }
         if (typeof it.name === 'string' && it.name.length > 0) {
             return it.name;
         }
+        if (typeof it.type !== 'string' || it.type.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar: palette item type required');
+        }
         return it.type;
     }
 
-    _onDragNodeType(e: Event, item: any) {
-        if (item === null || typeof item !== 'object') {
-            throw new Error('FlowsNodeTypesSidebar._onDragNodeType: item object required');
-        }
+    _onDragNodeType(e: Event, item: Record<string, unknown>) {
         const type = asString(item.type);
         if (type.length === 0) {
             throw new Error('FlowsNodeTypesSidebar._onDragNodeType: item.type required');
         }
-        (e as Record<string, any>).dataTransfer.setData('application/x-flow-node-type', type);
+        const transfer = dragTransfer(e);
+        transfer.setData('application/x-flow-node-type', type);
         if (type === 'datasource') {
             const connectorId = asString(item.connector_id);
             if (connectorId.length === 0) {
                 throw new Error('FlowsNodeTypesSidebar._onDragNodeType: connector_id required for datasource');
             }
-            (e as Record<string, any>).dataTransfer.setData('application/x-flow-connector-id', connectorId);
+            transfer.setData('application/x-flow-connector-id', connectorId);
         }
-        (e as Record<string, any>).dataTransfer.effectAllowed = 'copy';
+        transfer.effectAllowed = 'copy';
     }
 
-    _onDragResourceType(e: Event, item: any) {
-        if (item === null || typeof item !== 'object') {
-            throw new Error('FlowsNodeTypesSidebar._onDragResourceType: item object required');
-        }
+    _onDragResourceType(e: Event, item: Record<string, unknown>) {
         const type = asString(item.type);
         if (type.length === 0) {
             throw new Error('FlowsNodeTypesSidebar._onDragResourceType: item.type required');
         }
-        (e as Record<string, any>).dataTransfer.setData('application/x-flow-resource-type', type);
-        (e as Record<string, any>).dataTransfer.effectAllowed = 'copy';
+        const transfer = dragTransfer(e);
+        transfer.setData('application/x-flow-resource-type', type);
+        transfer.effectAllowed = 'copy';
     }
 
     _addTrigger() {
@@ -357,17 +363,17 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger: null });
     }
 
-    _editTrigger(tr: any) {
+    _editTrigger(tr: Record<string, unknown>) {
         if (!this.flowId) return;
-        if (!tr || typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
+        if (typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
             throw new Error('FlowsNodeTypesSidebar._editTrigger: trigger with trigger_id required');
         }
         this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger: tr });
     }
 
-    async _deleteTrigger(tr: any) {
+    async _deleteTrigger(tr: Record<string, unknown>) {
         if (!this.flowId) return;
-        if (!tr || typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
+        if (typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
             throw new Error('FlowsNodeTypesSidebar._deleteTrigger: trigger with trigger_id required');
         }
         const ok = await platformConfirm(
@@ -443,12 +449,16 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
     _renderTriggers() {
         const result = this._triggersOp.lastResult;
-        let triggerItems = [];
+        let triggerItems: unknown[] = [];
         if (result !== null && result !== undefined) {
-            if (typeof result !== 'object' || !Array.isArray((result as Record<string, any>).items)) {
+            if (!isPlainObject(result)) {
                 throw new Error('flows/triggers_list: lastResult.items must be an array');
             }
-            triggerItems = (result as Record<string, any>).items;
+            const items = result.items;
+            if (!Array.isArray(items)) {
+                throw new Error('flows/triggers_list: lastResult.items must be an array');
+            }
+            triggerItems = items;
         }
         return html`
             <div class="triggers-section">
@@ -475,8 +485,18 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 </div>
                 ${triggerItems.length === 0
                     ? html`<div class="triggers-empty glass-subtle">${this.t('node_types_sidebar.no_triggers')}</div>`
-                    : triggerItems.map((tr: any) => {
+                    : triggerItems.map((tr) => {
+                        if (!isPlainObject(tr)) {
+                            throw new Error('flows/triggers_list: trigger must be an object');
+                        }
+                        if (typeof tr.type !== 'string' || tr.type.length === 0) {
+                            throw new Error('flows/triggers_list: trigger type required');
+                        }
+                        if (typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
+                            throw new Error('flows/triggers_list: trigger_id required');
+                        }
                         const tv = getTriggerTypeRowVisual(tr.type);
+                        const triggerLabel = typeof tr.name === 'string' && tr.name.length > 0 ? tr.name : tr.trigger_id;
                         return html`
                         <div class="trigger-row glass-subtle">
                             <div class="trigger-row-main">
@@ -487,7 +507,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                                 >
                                     <platform-icon name=${tv.icon} size="12"></platform-icon>
                                 </div>
-                                <span class="trigger-row-label">${tr.name || tr.trigger_id}</span>
+                                <span class="trigger-row-label">${triggerLabel}</span>
                             </div>
                             <div class="trigger-row-actions" @click=${(e: Event) => e.stopPropagation()}>
                                 <platform-button
@@ -546,9 +566,14 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         `;
     }
 
-    _renderCategory(titleKey: any, items: Record<string, any>[], dragHandler: any, categoryKey: any) {
+    _renderCategory(
+        titleKey: string,
+        items: readonly unknown[],
+        dragHandler: (this: FlowsNodeTypesSidebar, event: Event, item: Record<string, unknown>) => void,
+        categoryKey: string,
+    ) {
         if (items.length === 0) return '';
-        const tokenKey = (CATEGORY_TO_TOKEN_KEY as any)[categoryKey];
+        const tokenKey = CATEGORY_TO_TOKEN_KEY[categoryKey];
         const categoryToken = getCategoryToken(typeof tokenKey === 'string' && tokenKey.length > 0 ? tokenKey : 'core');
         return html`
             <div class="category">
@@ -565,10 +590,16 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                     ></platform-help-hint>
                 </div>
                 <div class="category-items">
-                    ${items.map((it: any) => {
+                    ${items.map((it) => {
+                        if (!isPlainObject(it)) {
+                            throw new Error('FlowsNodeTypesSidebar: palette item must be an object');
+                        }
+                        if (typeof it.type !== 'string' || it.type.length === 0) {
+                            throw new Error('FlowsNodeTypesSidebar: palette item type required');
+                        }
                         const meta = getNodeTypeMeta(it.type);
                         const isDatasource = it.type === 'datasource';
-                        let iconName;
+                        let iconName: string;
                         if (isDatasource) {
                             if (typeof it.icon !== 'string' || it.icon.length === 0) {
                                 throw new Error('FlowsNodeTypesSidebar: datasource palette icon required');
@@ -583,13 +614,14 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                             : categoryToken;
                         const style = `background: color-mix(in oklab, ${tokenColor} 14%, transparent); color: ${tokenColor};`;
                         const paletteName = this._paletteName(it);
+                        const description = typeof it.description === 'string' ? it.description : '';
                         return html`
                             <div
                                 class="node-item"
                                 data-node-type=${it.type}
                                 data-node-category=${categoryKey}
                                 draggable="true"
-                                title=${it.description || paletteName}
+                                title=${description.length > 0 ? description : paletteName}
                                 aria-label=${paletteName}
                                 @dragstart=${(e: Event) => dragHandler.call(this, e, it)}
                             >
@@ -609,28 +641,36 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         return `node_types_sidebar.category_${category}`;
     }
 
-    _paletteCards(raw: any, factoryName: any) {
+    _paletteCards(raw: unknown, factoryName: string): Record<string, unknown>[] {
         if (raw === null) {
             return [];
         }
-        if (typeof raw !== 'object' || !Array.isArray(raw.items)) {
+        if (!isPlainObject(raw) || !Array.isArray(raw.items)) {
             throw new Error(`${factoryName}: lastResult.items must be an array`);
         }
-        return raw.items;
+        const cards: Record<string, unknown>[] = [];
+        for (const item of raw.items) {
+            if (!isPlainObject(item)) {
+                throw new Error(`${factoryName}: palette item must be an object`);
+            }
+            cards.push(item);
+        }
+        return cards;
     }
 
     override render(): TemplateResult {
         const nodeTypes = this._paletteCards(this._nodeTypesOp.lastResult, 'flows/node_types');
         const resourceTypes = this._paletteCards(this._resourceTypesOp.lastResult, 'flows/resource_types');
-        const paletteNodeTypes = nodeTypes.filter((it: any) => it && it.type !== 'resource');
+        const paletteNodeTypes = nodeTypes.filter((it) => it.type !== 'resource');
         const filteredNodes = this._filterItems(paletteNodeTypes);
         const filteredResources = this._filterItems(resourceTypes);
 
-        const grouped = new Map();
+        const grouped = new Map<string, Record<string, unknown>[]>();
         for (const item of filteredNodes) {
             const cat = typeof item.category === 'string' && item.category !== '' ? item.category : 'core';
-            if (!grouped.has(cat)) grouped.set(cat, []);
-            grouped.get(cat).push(item);
+            const bucket = grouped.get(cat);
+            if (bucket === undefined) grouped.set(cat, [item]);
+            else bucket.push(item);
         }
 
         return html`

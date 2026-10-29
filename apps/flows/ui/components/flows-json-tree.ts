@@ -7,6 +7,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import { jsonTreeChildPath, nodeRunValueKindLabel, classifyNodeRunValue } from '../_helpers/flows-node-run-result.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 export class FlowsJsonTree extends PlatformElement {
@@ -18,10 +19,10 @@ export class FlowsJsonTree extends PlatformElement {
         selectedPath: { type: String, attribute: 'selected-path' },
         _expanded: { state: true },
     }
-    declare value: any;
+    declare value: unknown;
     declare rootPath: string;
     declare selectedPath: string;
-    declare _expanded: Set<any>;
+    declare _expanded: Set<string>;
 ;
 
     static override styles: CSSResultGroup = [
@@ -90,14 +91,14 @@ export class FlowsJsonTree extends PlatformElement {
         this.value = null;
         this.rootPath = '';
         this.selectedPath = '';
-        this._expanded = new Set();
+        this._expanded = new Set<string>();
     }
 
     /**
      * @param {KeyboardEvent} event
      * @param {() => void} handler
      */
-    _onSelectableKeydown(event: KeyboardEvent, handler: any) {
+    _onSelectableKeydown(event: KeyboardEvent, handler: () => void) {
         if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
@@ -141,11 +142,11 @@ export class FlowsJsonTree extends PlatformElement {
      * @param {unknown} childValue
      * @param {string} path
      */
-    _renderRow(label: string, childValue: any, path: string) {
+    _renderRow(label: string, childValue: unknown, path: string) {
         const expandable = this._isExpandable(childValue);
-        const expanded = (this._expanded.has(path) as any);
+        const expanded = this._expanded.has(path);
         const classified = classifyNodeRunValue(childValue);
-        const kindLabel = nodeRunValueKindLabel(classified, (key: string, params: any) => this.t(key, params));
+        const kindLabel = nodeRunValueKindLabel(classified, (key: string, params?: Record<string, string | number> | null) => this.t(key, params));
         const selected = this.selectedPath === path;
         return html`
             <article
@@ -171,21 +172,22 @@ export class FlowsJsonTree extends PlatformElement {
      * @param {unknown} value
      * @param {string} parentPath
      */
-    _renderChildren(value: unknown, parentPath: any): TemplateResult[] {
+    _renderChildren(value: unknown, parentPath: string): TemplateResult[] {
         if (Array.isArray(value)) {
-            return value.map((item, index) => this._renderRow(
+            const items: unknown[] = [];
+            for (const item of value) items.push(item);
+            return items.map((item, index) => this._renderRow(
                 String(index),
                 item,
                 jsonTreeChildPath(parentPath, index, true),
             ));
         }
-        if (value === null || typeof value !== 'object') {
+        if (!isPlainRecord(value)) {
             throw new Error('flows-json-tree: children require object or array');
         }
-        const keys = Object.keys(value);
-        return keys.map((key) => this._renderRow(
+        return Object.keys(value).map((key) => this._renderRow(
             key,
-            (value as any)[key],
+            value[key],
             jsonTreeChildPath(parentPath, key, false),
         ));
     }

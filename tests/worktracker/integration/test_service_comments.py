@@ -31,11 +31,11 @@ async def test_add_comment_and_list_ordered(worktracker_service, unique_id: str)
         role=WorkItemCommentRole.SYSTEM,
         text="second",
     )
-    comments = await WorkItemComment.list_for_work_item("system", item.work_item_id)
+    comments = await WorkItemComment.list_for_work_item_by_created_at_asc("system", item.work_item_id)
     assert len(comments) >= 2
     assert comments[0].comment_id == first.comment_id
     assert comments[1].comment_id == second.comment_id
-    assert await WorkItemComment.list_for_work_item("system", f"missing-{unique_id}") == []
+    assert await WorkItemComment.list_for_work_item_by_created_at_asc("system", f"missing-{unique_id}") == []
 
 
 async def test_comment_with_files_roundtrip(worktracker_service, unique_id: str) -> None:
@@ -58,5 +58,5 @@ async def test_comment_with_files_roundtrip(worktracker_service, unique_id: str)
         files=[file_ref],
     )
     assert saved.files[0].file_id == file_ref.file_id
-    listed = await WorkItemComment.list_for_work_item("system", item.work_item_id)
+    listed = await WorkItemComment.list_for_work_item_by_created_at_asc("system", item.work_item_id)
     assert listed[-1].files[0].original_name == "note.pdf"

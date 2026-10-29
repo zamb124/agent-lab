@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from apps.crm_worker.tasks.task_names import (
+from apps.crm.tasks.task_names import (
     CRM_GENERATE_NAMESPACE_SUGGESTS,
     CRM_RECONCILE_DAILY_SUMMARY,
     CRM_REEMBED_STALE_DOCUMENTS,
@@ -23,16 +23,16 @@ pytestmark = pytest.mark.real_taskiq
 _ = wire_worker("crm")
 _ = wire_worker("crm_summary")
 
-from apps.crm_worker.tasks.daily_summary_tasks import (  # noqa: E402
+from apps.crm.tasks.daily_summary_tasks import (  # noqa: E402
     reconcile_daily_summary_task,
 )
-from apps.crm_worker.tasks.reembed_tasks import (  # noqa: E402
+from apps.crm.tasks.reembed_tasks import (  # noqa: E402
     crm_reembed_stale_documents_tick,
 )
-from apps.crm_worker.tasks.scheduled_integration_sync_tasks import (  # noqa: E402
+from apps.crm.tasks.scheduled_integration_sync_tasks import (  # noqa: E402
     scheduled_namespace_integration_unified_sync,
 )
-from apps.crm_worker.tasks.suggest_tasks import (  # noqa: E402
+from apps.crm.tasks.suggest_tasks import (  # noqa: E402
     crm_generate_namespace_suggests_tick,
 )
 

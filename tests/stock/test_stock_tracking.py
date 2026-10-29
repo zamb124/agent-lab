@@ -105,11 +105,11 @@ async def _receipt_lot(
             company_id=env.company_id,
             transfer_id=transfer.transfer_id,
         )
-    lines = await StockMoveLine.list_for_moves(
+    lines = await StockMoveLine.list_for_moves_by_created_at_asc(
         env.company_id,
         [
             m.move_id
-            for m in await StockMove.list_for_transfer(
+            for m in await StockMove.list_for_transfer_by_created_at_asc(
                 env.company_id, transfer.transfer_id
             )
         ],
@@ -174,8 +174,8 @@ class TestLotBasics:
         _ = await _receipt_lot(env, product.product_id, Decimal("3"), lot_b.lot_id)
         env.product = product
         delivery_id = await _delivery(env, Decimal("4"))
-        moves = await StockMove.list_for_transfer(env.company_id, delivery_id)
-        lines = await StockMoveLine.list_all_for_move(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, delivery_id)
+        lines = await StockMoveLine.list_for_move_by_created_at_asc(
             env.company_id, moves[0].move_id
         )
         by_lot = {line.lot_id: line.done_quantity for line in lines}
@@ -275,10 +275,10 @@ class TestSerial:
                 company_id=env.company_id,
                 transfer_id=transfer.transfer_id,
             )
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             env.company_id, transfer.transfer_id
         )
-        lines = await StockMoveLine.list_all_for_move(
+        lines = await StockMoveLine.list_for_move_by_created_at_asc(
             env.company_id, moves[0].move_id
         )
         # Движок сам выбрал SN по FIFO (sn1 пришёл первым).
@@ -405,10 +405,10 @@ class TestFefo:
                 company_id=env.company_id,
                 transfer_id=transfer.transfer_id,
             )
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             env.company_id, transfer.transfer_id
         )
-        lines = await StockMoveLine.list_all_for_move(
+        lines = await StockMoveLine.list_for_move_by_created_at_asc(
             env.company_id, moves[0].move_id
         )
         assert lines[0].lot_id == near.lot_id

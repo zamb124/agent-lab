@@ -18,6 +18,23 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
+import { isPlainObject } from '../_helpers/flows-resolvers.js';
+
+function triggerId(row: Record<string, unknown>): string {
+    const id = row.trigger_id;
+    if (typeof id !== 'string' || id === '') {
+        throw new Error('flows-triggers-modal: trigger_id required');
+    }
+    return id;
+}
+
+function triggerText(row: Record<string, unknown>, field: string): string {
+    const value = row[field];
+    if (typeof value !== 'string') {
+        throw new Error(`flows-triggers-modal: ${field} must be a string`);
+    }
+    return value;
+}
 
 export class FlowsTriggersModal extends PlatformModal {
     static modalKind = 'flows.triggers';
@@ -103,13 +120,13 @@ export class FlowsTriggersModal extends PlatformModal {
         this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger: null });
     }
 
-    _edit(t: any) {
-        this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger: t });
+    _edit(trigger: Record<string, unknown>) {
+        this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger });
     }
 
-    async _delete(t: any) {
+    async _delete(trigger: Record<string, unknown>) {
         const ok = await platformConfirm(
-            this.t('triggers_modal.delete_message', { id: t.trigger_id }),
+            this.t('triggers_modal.delete_message', { id: triggerId(trigger) }),
             {
                 title: this.t('triggers_modal.delete_title'),
                 variant: 'danger',
@@ -119,11 +136,11 @@ export class FlowsTriggersModal extends PlatformModal {
             },
         );
         if (!ok) return;
-        await this._removeOp.run({ flow_id: this.flowId, trigger_id: t.trigger_id });
+        await this._removeOp.run({ flow_id: this.flowId, trigger_id: triggerId(trigger) });
         await this._listOp.run({ flow_id: this.flowId });
     }
 
-    async _test(t: any) {
+    async _test(trigger: Record<string, unknown>) {
         const raw = this._testSampleJson;
         if (typeof raw !== 'string') {
             throw new Error('flows-triggers-modal: test sample must be a string');
@@ -145,12 +162,12 @@ export class FlowsTriggersModal extends PlatformModal {
         if (body !== null && typeof body === 'object' && !Array.isArray(body)) {
             await this._testOp.run({
                 flow_id: this.flowId,
-                trigger_id: t.trigger_id,
+                trigger_id: triggerId(trigger),
                 payload: body,
             });
             const lr = this._testOp.lastResult;
             this._testResultText = JSON.stringify(lr, null, 2);
-            this._lastTestTriggerId = t.trigger_id;
+            this._lastTestTriggerId = triggerId(trigger);
         } else {
             this._testResultText = '';
             this._lastTestTriggerId = '';
@@ -174,45 +191,49 @@ export class FlowsTriggersModal extends PlatformModal {
         this._query = rawValue;
     }
 
-    _filteredItems() {
+    _filteredItems(): Record<string, unknown>[] {
         const listed = this._listOp.lastResult;
         if (listed === null || listed === undefined) {
             return [];
         }
-        if (typeof listed !== 'object' || !Array.isArray((listed as Record<string, any>).items)) {
+        if (!isPlainObject(listed)) {
             throw new Error('flows-triggers-modal: triggers_list lastResult.items must be an array');
         }
-        const items = (listed as Record<string, any>).items;
-        const query = (this._query.trim() as any).toLocaleLowerCase();
+        const rawItems = listed.items;
+        if (!Array.isArray(rawItems)) {
+            throw new Error('flows-triggers-modal: triggers_list lastResult.items must be an array');
+        }
+        const items: Record<string, unknown>[] = [];
+        for (const item of rawItems) {
+            if (!isPlainObject(item)) {
+                throw new Error('flows-triggers-modal: trigger must be an object');
+            }
+            items.push(item);
+        }
+        const query = this._query.trim().toLocaleLowerCase();
         if (query.length === 0) {
             return items;
         }
-        return items.filter((item: any) => {
-            if (!item || typeof item !== 'object') {
-                return false;
-            }
-            const triggerId = typeof item.trigger_id === 'string' ? item.trigger_id : '';
-            const name = typeof item.name === 'string' ? item.name : '';
-            const type = typeof item.type === 'string' ? item.type : '';
-            const haystack = `${triggerId} ${name} ${type}`.toLocaleLowerCase();
+        return items.filter((item) => {
+            const haystack = `${triggerText(item, 'trigger_id')} ${triggerText(item, 'name')} ${triggerText(item, 'type')}`.toLocaleLowerCase();
             return haystack.includes(query);
         });
     }
 
     _renderRows() {
         const items = this._filteredItems();
-        if (this._listOp.busy && items.length === 0 && (this._query.trim() as any).length === 0) {
+        if (this._listOp.busy && items.length === 0 && this._query.trim().length === 0) {
             return html`<tr><td colspan="5"><glass-spinner></glass-spinner></td></tr>`;
         }
         if (items.length === 0) {
             return html`<tr><td colspan="5" class="trg-empty">${this.t('triggers_modal.empty')}</td></tr>`;
         }
-        return items.map((t: any) => html`
+        return items.map((trigger) => html`
             <tr>
-                <td><code>${t.trigger_id}</code></td>
-                <td>${t.name}</td>
-                <td>${t.type}</td>
-                <td>${t.enabled ? this.t('triggers_modal.status_enabled') : this.t('triggers_modal.status_disabled')}</td>
+                <td><code>${triggerText(trigger, 'trigger_id')}</code></td>
+                <td>${triggerText(trigger, 'name')}</td>
+                <td>${triggerText(trigger, 'type')}</td>
+                <td>${trigger.enabled === true ? this.t('triggers_modal.status_enabled') : this.t('triggers_modal.status_disabled')}</td>
                 <td>
                     <div class="trg-row-actions">
                         <platform-button
@@ -220,7 +241,7 @@ export class FlowsTriggersModal extends PlatformModal {
                             icon-only
                             density="dense"
                             aria-label=${this.t('triggers_modal.action_test')}
-                            @click=${() => this._test(t)}
+                            @click=${() => this._test(trigger)}
                         >
                             <platform-icon name="play" size="16"></platform-icon>
                         </platform-button>
@@ -229,7 +250,7 @@ export class FlowsTriggersModal extends PlatformModal {
                             icon-only
                             density="dense"
                             aria-label=${this.t('triggers_modal.action_edit')}
-                            @click=${() => this._edit(t)}
+                            @click=${() => this._edit(trigger)}
                         >
                             <platform-icon name="edit" size="16"></platform-icon>
                         </platform-button>
@@ -238,7 +259,7 @@ export class FlowsTriggersModal extends PlatformModal {
                             icon-only
                             density="dense"
                             aria-label=${this.t('triggers_modal.action_delete')}
-                            @click=${() => this._delete(t)}
+                            @click=${() => this._delete(trigger)}
                         >
                             <platform-icon name="trash" size="16"></platform-icon>
                         </platform-button>
@@ -269,7 +290,7 @@ export class FlowsTriggersModal extends PlatformModal {
 
     override renderBody() {
         const resultBlock =
-            (this._testResultText.length as any) > 0
+            this._testResultText.length > 0
                 ? html`
                       <p class="trg-test-hint" style="margin: 0 0 var(--space-1) 0; font-size: var(--text-sm); color: var(--text-secondary);">
                           ${this.t('triggers_modal.test_result_title')}

@@ -31,6 +31,14 @@ import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResul
 
 const SAVE_DEBOUNCE_MS = 400;
 
+function nextDomAncestor(node: Node): Node | null {
+    const parent = node.parentNode;
+    if (parent instanceof ShadowRoot) {
+        return parent.host;
+    }
+    return parent;
+}
+
 export class FlowsResourcePropertyPanel extends PlatformElement {
     static i18nNamespace = 'flows';
 
@@ -48,10 +56,10 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
     ];
     private _editor: ControllerFor<'flows/editor'>;
     private _resources: ResourceController;
-    private _catalogPending: Map<any, any>;
-    private _branchPending: Map<any, any>;
-    private _timers: Map<any, any>;
-    private _headerDeleteBtn: any;
+    private _catalogPending: Map<string, Record<string, unknown>>;
+    private _branchPending: Map<string, Record<string, unknown>>;
+    private _timers: Map<string, ReturnType<typeof setTimeout>>;
+    private _headerDeleteBtn: HTMLButtonElement | null;
 
     constructor() {
         super();
@@ -88,26 +96,21 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
     /**
      * ShadowRoot → host, как у flows-base-node-editor до flows-floating-panel.
      */
-    _findFlowsFloatingPanel() {
-        let n: any = this;
-        for (let d = 0; d < 128; d += 1) {
-            if (!n) {
+    _findFlowsFloatingPanel(): HTMLElement | null {
+        let node: Node | null = this;
+        for (let depth = 0; depth < 128; depth += 1) {
+            if (node === null) {
                 return null;
             }
-            if (n.nodeName === 'FLOWS-FLOATING-PANEL') {
-                return n;
+            if (node instanceof HTMLElement && node.nodeName === 'FLOWS-FLOATING-PANEL') {
+                return node;
             }
-            const p = n.parentNode;
-            if (p instanceof ShadowRoot) {
-                n = p.host;
-            } else {
-                n = p;
-            }
+            node = nextDomAncestor(node);
         }
         return null;
     }
 
-    _floatingPanelHeaderActionsHost(panel: any) {
+    _floatingPanelHeaderActionsHost(panel: HTMLElement): Element | null {
         const root = panel.shadowRoot;
         if (!root) {
             return null;
@@ -188,7 +191,7 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
         this._timers.delete(key);
     }
 
-    _scheduleCatalogSave(resourceId: string, body: any) {
+    _scheduleCatalogSave(resourceId: string, body: Record<string, unknown>) {
         const key = `catalog:${resourceId}`;
         this._catalogPending.set(resourceId, body);
         this._clearTimer(key);
@@ -218,7 +221,7 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
         return isPlainObject(ref) ? { ...ref } : null;
     }
 
-    _flushBranchResource(resourceId: string, nextRef: any) {
+    _flushBranchResource(resourceId: string, nextRef: Record<string, unknown>) {
         const state = this._editor.state;
         if (!isPlainObject(state) || !isPlainObject(state.branchData)) {
             throw new Error('flows-resource-property-panel: branchData missing for flush');
@@ -226,12 +229,12 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
         const data = state.branchData;
         const resources = { ...branchDataResources(data), [resourceId]: nextRef };
         const snapshot = { ...data, resources };
-        (this._editor.updateBranchData({ data: snapshot }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.pushHistory({ snapshot }) as any);
+        this._editor.updateBranchData({ data: snapshot });
+        this._editor.setDirty({ dirty: true });
+        this._editor.pushHistory({ snapshot });
     }
 
-    _scheduleBranchSave(resourceId: string, patch: any) {
+    _scheduleBranchSave(resourceId: string, patch: Record<string, unknown>) {
         const key = `branch:${resourceId}`;
         const existingTimer = this._timers.get(key);
         if (existingTimer) clearTimeout(existingTimer);
@@ -262,13 +265,15 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
             return;
         }
         const items = Array.isArray(this._resources.items) ? this._resources.items : [];
-        const catalogItem = items.find((r: any) => r && r.resource_id === resourceId);
+        const catalogItem = items.find((item): item is Record<string, unknown> => (
+            isPlainObject(item) && item.resource_id === resourceId
+        ));
         if (catalogItem) {
-            const body: any = { ...catalogItem };
+            const body: Record<string, unknown> = { ...catalogItem };
             for (const [k, v] of Object.entries(patch)) {
                 if (k === 'config' && isPlainObject(v)) {
                     const baseCfg = isPlainObject(catalogItem.config) ? catalogItem.config : {};
-                    body.config = { ...baseCfg, ...(v as Record<string, any>) };
+                    body.config = { ...baseCfg, ...v };
                 } else {
                     body[k] = v;
                 }
@@ -299,14 +304,14 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
             const nextRes = { ...resources };
             delete nextRes[resourceId];
             const snapshot = { ...data, resources: nextRes };
-            (this._editor.updateBranchData({ data: snapshot }) as any);
-            (this._editor.setDirty({ dirty: true }) as any);
-            (this._editor.pushHistory({ snapshot }) as any);
-            (this._editor.selectResource({ resourceId: null }) as any);
+            this._editor.updateBranchData({ data: snapshot });
+            this._editor.setDirty({ dirty: true });
+            this._editor.pushHistory({ snapshot });
+            this._editor.selectResource({ resourceId: null });
             return;
         }
         await this._resources.remove(resourceId);
-        (this._editor.selectResource({ resourceId: null }) as any);
+        this._editor.selectResource({ resourceId: null });
     }
 
     override render(): TemplateResult {

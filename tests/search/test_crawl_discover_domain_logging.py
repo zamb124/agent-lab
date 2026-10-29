@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import httpx
+import httpx2
 import pytest
 
-from apps.search.di import SearchDi
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainCreateRequest,
@@ -19,7 +18,7 @@ from core.search.index_models import SearchIndexDefinition
 
 @pytest.mark.asyncio
 async def test_discover_domain_records_sitemap_failure(
-    search_di: SearchDi,
+    search_di,
     unique_id: str,
 ) -> None:
     now = datetime.now(UTC)
@@ -49,7 +48,7 @@ async def test_discover_domain_records_sitemap_failure(
         next_crawl_after=now,
     )
 
-    with pytest.raises(httpx.ConnectError):
+    with pytest.raises(httpx2.ConnectError):
         await search_di.crawl_orchestrator_service.discover_domain(
             domain.crawl_domain_id,
             f"job-{unique_id}",

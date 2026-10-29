@@ -20,7 +20,7 @@ export function mergeBranchResourceRef(ref: any, patch: any) {
     for (const [k, v] of Object.entries(patch)) {
         if (k === 'config' && isPlainObject(v)) {
             const base = isPlainObject(out.config) ? out.config : {};
-            out.config = { ...base, ...(v as Record<string, any>) };
+            out.config = { ...base, ...v };
         } else {
             out[k] = v;
         }

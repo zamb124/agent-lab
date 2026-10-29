@@ -249,7 +249,7 @@ class StockQuant(PlatformModel):
             return raced
 
     @classmethod
-    async def fifo_candidates(
+    async def list_available_by_in_date_and_quant_id_asc_locked(
         cls,
         *,
         company_id: str,
@@ -257,13 +257,7 @@ class StockQuant(PlatformModel):
         location_ids: list[str],
         owner_entity_id: str | None,
     ) -> list[Self]:
-        """Кандидаты на списание в порядке FIFO — «что лежит дольше».
-
-        Сортирует по ``in_date`` (когда строка впервые появилась на
-        остатках): самое «старое» поступление списывается первым. Именно
-        эта очередь реализует правило «первым пришёл — первым ушёл».
-        Берутся только строки с ``available > 0`` — обещанного уже нет.
-        """
+        """Доступные остатки, ORDER BY in_date, quant_id ASC, под SELECT FOR UPDATE. Пустой location_ids — []. owner_entity_id is None оставляет строки без владельца. available_quantity > 0 отсекается в Python."""
         if not location_ids:
             return []
         query = cls.objects.filter(
@@ -279,30 +273,7 @@ class StockQuant(PlatformModel):
         return [row for row in rows if row.available_quantity > STOCK_ZERO]
 
     @classmethod
-    async def removal_candidates(
-        cls,
-        *,
-        company_id: str,
-        product_id: str,
-        location_ids: list[str],
-        owner_entity_id: str | None,
-    ) -> list[Self]:
-        """Все доступные остатки товара под локациями — без привязки порядка.
-
-        То же множество, что ``fifo_candidates`` (``available > 0``,
-        ``FOR UPDATE``), но порядок — дефолтный FIFO; реальная
-        стратегия отбора применяется поверх чистыми функциями
-        ``models/removal.py`` внутри той же транзакции.
-        """
-        return await cls.fifo_candidates(
-            company_id=company_id,
-            product_id=product_id,
-            location_ids=location_ids,
-            owner_entity_id=owner_entity_id,
-        )
-
-    @classmethod
-    async def list_by_product_and_location(
+    async def list_by_product_and_location_asc(
         cls,
         company_id: str,
         *,
@@ -312,7 +283,7 @@ class StockQuant(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
-        """Окно остатков компании, ORDER BY product_id, location_id. location_id, product_id и owner_entity_id равные None не фильтруют."""
+        """Окно остатков компании, ORDER BY product_id, location_id ASC. location_id, product_id и owner_entity_id равные None не фильтруют."""
         query = cls.objects.filter(company_id=company_id)
         if location_id is not None:
             query = query.filter(location_id=location_id)
@@ -353,9 +324,10 @@ class StockQuant(PlatformModel):
         ).all()
 
     @classmethod
-    async def list_for_locations(
+    async def list_unordered_for_locations(
         cls, company_id: str, location_ids: list[str], *, for_update: bool = False
     ) -> list[Self]:
+        """Остатки в этих локациях. Пустой location_ids — []. Порядка нет. for_update=True блокирует строки."""
         if not location_ids:
             return []
         query = cls.objects.filter(

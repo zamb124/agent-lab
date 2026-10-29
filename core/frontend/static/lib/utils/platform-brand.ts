@@ -11,7 +11,6 @@ export interface PlatformBrandProductLabels {
     logoPath: string;
     apexOrigin: string;
     supportedDomains: string[];
-    agentProductName: string;
     modelsProductName: string;
     voiceProductName: string;
     llmsDisplayLabel: string;
@@ -32,7 +31,6 @@ export interface PlatformBrandApiPayload {
     logo_path: string;
     apex_origin: string;
     supported_domains: string[];
-    agent_product_name: string;
     models_product_name: string;
     voice_product_name: string;
     llms_display_label: string;
@@ -56,7 +54,6 @@ let cachedPlatformBrand: PlatformBrandBootstrap | null = null;
  *   logo_path: string,
  *   apex_origin: string,
  *   supported_domains: string[],
- *   agent_product_name: string,
  *   models_product_name: string,
  *   voice_product_name: string,
  *   llms_display_label: string,
@@ -81,7 +78,6 @@ export function buildPlatformBrandBootstrapFromApiPayload(payload: PlatformBrand
         logoPath: payload.logo_path,
         apexOrigin: payload.apex_origin,
         supportedDomains: payload.supported_domains,
-        agentProductName: payload.agent_product_name,
         modelsProductName: payload.models_product_name,
         voiceProductName: payload.voice_product_name,
         llmsDisplayLabel: payload.llms_display_label,
@@ -106,7 +102,6 @@ export function setPlatformBrandBootstrap(brand: PlatformBrandBootstrap): void {
         logoPath: brand.logoPath,
         supportedDomains: brand.supportedDomains,
         apexOrigin: brand.apexOrigin,
-        agentProductName: brand.agentProductName,
         modelsProductName: brand.modelsProductName,
         voiceProductName: brand.voiceProductName,
         llmsDisplayLabel: brand.llmsDisplayLabel,

@@ -47,23 +47,26 @@ type CrawlRowSnapshots = {
     jobs: Map<unknown, unknown>;
 };
 
-function listedItems(result: unknown): Record<string, any>[] {
-    if (result == null) {
+function requireText(value: unknown, label: string): string {
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`crawl-report-page: ${label} required`);
+    }
+    return value;
+}
+
+function listedItems(result: unknown): Record<string, unknown>[] {
+    if (result === null || result === undefined) {
         return [];
     }
     if (!isPlainRecord(result) || !Array.isArray(result.items)) {
         throw new Error('crawl-report-page: items array required');
     }
-    const items: Record<string, any>[] = [];
+    const items: Record<string, unknown>[] = [];
     for (const item of result.items) {
         if (!isPlainRecord(item)) {
             throw new Error('crawl-report-page: profile item must be an object');
         }
-        const row: Record<string, any> = {};
-        for (const [key, field] of Object.entries(item)) {
-            row[key] = field;
-        }
-        items.push(row);
+        items.push(item);
     }
     return items;
 }
@@ -391,10 +394,10 @@ export class FrontendCrawlReportPage extends PlatformPage {
     declare _urlEnrichedOnlyFilter: boolean;
     declare _domainStatusFilter: string;
     declare _urlDomainFilter: string;
-    declare _runningDomainId: any;
+    declare _runningDomainId: string | null;
     declare _loaded: boolean;
-    declare _rowHighlightIds: any[];
-    declare _confirmDeleteDomainId: any;
+    declare _rowHighlightIds: string[];
+    declare _confirmDeleteDomainId: string | null;
 ;
 
     constructor() {
@@ -409,7 +412,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._domainPatch = this.useOp('search/crawl_domain_patch');
         this._domainDelete = this.useOp('search/crawl_domain_delete');
         this._urlRecrawl = this.useOp('search/crawl_url_recrawl');
-        this._localeSel = this.select((state: Record<string, any>) => {
+        this._localeSel = this.select((state) => {
             const locale = state.i18n.locale;
             if (typeof locale !== 'string' || locale.length === 0) {
                 throw new Error('crawl-report-page: i18n.locale is required');
@@ -445,8 +448,8 @@ export class FrontendCrawlReportPage extends PlatformPage {
     private _domainPatch: OpController;
     private _domainDelete: OpController;
     private _urlRecrawl: OpController;
-    private _localeSel: SelectController<any>;
-    private _pollIntervalId: any;
+    private _localeSel: SelectController<string>;
+    private _pollIntervalId: number | null;
     private _rowSnapshots: CrawlRowSnapshots;
 
 
@@ -506,8 +509,11 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _formatDt(value: unknown) {
-        if (!value) return '—';
-        return formatPlatformDateTime(value as string | number | Date, this._localeSel.value);
+        if (value === null || value === undefined || value === '') return '—';
+        if (typeof value !== 'string' && typeof value !== 'number' && !(value instanceof Date)) {
+            throw new Error('crawl-report-page: datetime must be a string, number, or Date');
+        }
+        return formatPlatformDateTime(value, this._localeSel.value);
     }
 
     _profileOptions() {
@@ -515,15 +521,23 @@ export class FrontendCrawlReportPage extends PlatformPage {
         if (items.length === 0) {
             return [{ value: this._profileId, label: this._profileId }];
         }
-        return items.map((item: Record<string, any>) => ({
-            value: item.profile.crawl_profile_id,
-            label: `${item.profile.crawl_profile_id} · ${item.search_index.display_name}`,
-        }));
+        return items.map((item) => {
+            if (!isPlainRecord(item.profile) || typeof item.profile.crawl_profile_id !== 'string') {
+                throw new Error('crawl-report-page: crawl_profile_id required');
+            }
+            const displayName = isPlainRecord(item.search_index) && typeof item.search_index.display_name === 'string'
+                ? item.search_index.display_name
+                : '';
+            return {
+                value: item.profile.crawl_profile_id,
+                label: `${item.profile.crawl_profile_id} · ${displayName}`,
+            };
+        });
     }
 
     _selectedProfileBundle() {
         const items = listedItems(this._profilesOp.state.lastResult);
-        const found = items.find((item: Record<string, any>) => item.profile.crawl_profile_id === this._profileId);
+        const found = items.find((item) => isPlainRecord(item.profile) && item.profile.crawl_profile_id === this._profileId);
         return found === undefined ? null : found;
     }
 
@@ -613,21 +627,24 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._urls.load(this._urlListPayload());
     }
 
-    _viewDomainUrls(domain: any) {
+    _viewDomainUrls(domain: unknown) {
         this._activeTab = 'urls';
+        if (typeof domain !== 'string') {
+            throw new Error('crawl-report-page: domain must be a string');
+        }
         this._urlDomainFilter = domain;
         this._urls.load(this._urlListPayload());
     }
 
-    _openUrlDetail(row: Record<string, any>) {
+    _openUrlDetail(row: Record<string, unknown>) {
         this.openModal(FrontendCrawlUrlDetailModal, {
             crawl_url_id: row.crawl_url_id,
             crawl_profile_id: this._profileId,
         });
     }
 
-    _runDomain(row: Record<string, any>) {
-        this._runningDomainId = row.crawl_domain_id;
+    _runDomain(row: Record<string, unknown>) {
+        this._runningDomainId = requireText(row.crawl_domain_id, 'crawl_domain_id');
         this._domainRun.run({
             crawl_domain_id: row.crawl_domain_id,
             crawl_profile_id: this._profileId,
@@ -649,7 +666,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         });
     }
 
-    _openEditDomain(row: Record<string, any>) {
+    _openEditDomain(row: Record<string, unknown>) {
         this.openModal(FrontendCrawlDomainEditModal, {
             crawl_profile_id: this._profileId,
             crawl_domain_id: row.crawl_domain_id,
@@ -661,7 +678,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         });
     }
 
-    _openAddUrl(row: Record<string, any>) {
+    _openAddUrl(row: Record<string, unknown>) {
         this.openModal(FrontendCrawlUrlAddModal, {
             crawl_profile_id: this._profileId,
             crawl_domain_id: row.crawl_domain_id,
@@ -669,7 +686,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         });
     }
 
-    _toggleDomainPause(row: Record<string, any>) {
+    _toggleDomainPause(row: Record<string, unknown>) {
         const nextStatus = row.status === 'paused' ? 'active' : 'paused';
         this._domainPatch.run({
             crawl_domain_id: row.crawl_domain_id,
@@ -678,15 +695,15 @@ export class FrontendCrawlReportPage extends PlatformPage {
         });
     }
 
-    _requestDeleteDomain(row: Record<string, any>) {
-        this._confirmDeleteDomainId = row.crawl_domain_id;
+    _requestDeleteDomain(row: Record<string, unknown>) {
+        this._confirmDeleteDomainId = requireText(row.crawl_domain_id, 'crawl_domain_id');
     }
 
     _cancelDeleteDomain() {
         this._confirmDeleteDomainId = null;
     }
 
-    _confirmDeleteDomain(row: Record<string, any>) {
+    _confirmDeleteDomain(row: Record<string, unknown>) {
         this._confirmDeleteDomainId = null;
         this._domainDelete.run({
             crawl_domain_id: row.crawl_domain_id,
@@ -694,7 +711,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         });
     }
 
-    _recrawlUrl(row: Record<string, any>) {
+    _recrawlUrl(row: Record<string, unknown>) {
         this._urlRecrawl.run({
             crawl_url_id: row.crawl_url_id,
             crawl_profile_id: this._profileId,
@@ -727,7 +744,10 @@ export class FrontendCrawlReportPage extends PlatformPage {
         return this.t(`crawl_report_page.category_${normalized}`);
     }
 
-    _triggerLabel(trigger: any) {
+    _triggerLabel(trigger: unknown) {
+        if (typeof trigger !== 'string' || trigger.length === 0) {
+            throw new Error('crawl-report-page: trigger required');
+        }
         const key = `crawl_report_page.trigger_${trigger}`;
         const translated = this.t(key);
         if (translated === key) return trigger;
@@ -739,8 +759,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
         return html`<span class="status-tag ${s}">${this._statusLabel(s)}</span>`;
     }
 
-    _categoryTag(category: any) {
-        return html`<span class="status-tag category">${this._categoryLabel(category)}</span>`;
+    _categoryTag(category: unknown) {
+        const value = typeof category === 'string' ? category : 'unknown';
+        return html`<span class="status-tag category">${this._categoryLabel(value)}</span>`;
     }
 
     _transportTag(fetchTransport: string) {
@@ -750,7 +771,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         return html`<span class="status-tag ${fetchTransport}">${this.t(`crawl_report_page.transport_${fetchTransport}`)}</span>`;
     }
 
-    _enrichmentCell(row: Record<string, any>) {
+    _enrichmentCell(row: Record<string, unknown>) {
         return html`
             <crawl-report-enrichment-tags
                 .enrichmentSnapshot=${row.enrichment_snapshot}
@@ -766,10 +787,15 @@ export class FrontendCrawlReportPage extends PlatformPage {
         const rows = Array.isArray(topicCounts) ? topicCounts : [];
         return [
             { value: '', label: this.t('crawl_report_page.filter_all') },
-            ...rows.slice(0, 40).map((row: Record<string, any>) => ({
-                value: row.status,
-                label: `${this._topicLabel(row.status)} (${row.count})`,
-            })),
+            ...rows.slice(0, 40).map((row) => {
+                if (!isPlainRecord(row) || typeof row.status !== 'string') {
+                    throw new Error('crawl-report-page: topic status required');
+                }
+                return {
+                    value: row.status,
+                    label: `${this._topicLabel(row.status)} (${textOrDash(row.count)})`,
+                };
+            }),
         ];
     }
 
@@ -822,10 +848,10 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _trackRowHighlights() {
-        const highlights: any[] = [];
-        this._collectRowHighlights('domains', this._domains.items, 'crawl_domain_id', (row: Record<string, any>) => row.status, highlights);
-        this._collectRowHighlights('urls', this._urls.items, 'crawl_url_id', (row: Record<string, any>) => row.crawl_status, highlights);
-        this._collectRowHighlights('jobs', this._jobs.items, 'crawl_job_id', (row: Record<string, any>) => (
+        const highlights: string[] = [];
+        this._collectRowHighlights('domains', this._domains.items, 'crawl_domain_id', (row) => typeof row.status === 'string' ? row.status : '', highlights);
+        this._collectRowHighlights('urls', this._urls.items, 'crawl_url_id', (row) => typeof row.crawl_status === 'string' ? row.crawl_status : '', highlights);
+        this._collectRowHighlights('jobs', this._jobs.items, 'crawl_job_id', (row: Record<string, unknown>) => (
             `${row.status}:${row.urls_fetched}:${row.urls_indexed}:${row.urls_enriched}:${row.errors}`
         ), highlights);
         if (highlights.length > 0) {
@@ -836,7 +862,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         }
     }
 
-    _collectRowHighlights(scope: string, items: readonly Record<string, any>[] | undefined, idField: string, signatureFn: (row: Record<string, any>) => string, highlights: string[]) {
+    _collectRowHighlights(scope: string, items: readonly Record<string, unknown>[] | undefined, idField: string, signatureFn: (row: Record<string, unknown>) => string, highlights: string[]) {
         if (!items) return;
         const snapshot = rowSnapshot(this._rowSnapshots, scope);
         if (!snapshot) return;
@@ -851,7 +877,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         }
     }
 
-    _rowClass(scope: string, rowId: any) {
+    _rowClass(scope: string, rowId: unknown) {
         return this._rowHighlightIds.includes(`${scope}:${rowId}`) ? 'data-row row-updated' : 'data-row';
     }
 
@@ -952,7 +978,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         `;
     }
 
-    _renderDomainActions(row: Record<string, any>) {
+    _renderDomainActions(row: Record<string, unknown>) {
         if (this._confirmDeleteDomainId === row.crawl_domain_id) {
             return html`
                 <div class="actions-cell">
@@ -1068,7 +1094,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                             </td>
                             <td>${this._statusTag(row.crawl_status)}</td>
                             <td>${this._enrichmentCell(row)}</td>
-                            <td>${this._transportTag(row.fetch_transport as string)}</td>
+                            <td>${this._transportTag(typeof row.fetch_transport === 'string' ? row.fetch_transport : '')}</td>
                             <td>${this._formatDt(row.last_crawled_at)}</td>
                             <td class="mono">${textOrDash(row.last_error)}</td>
                             <td>
@@ -1146,8 +1172,15 @@ export class FrontendCrawlReportPage extends PlatformPage {
 
     override render(): TemplateResult {
         const profileBundle = this._selectedProfileBundle();
-        const indexName = profileBundle ? profileBundle.search_index.display_name : null;
-        const indexId = profileBundle ? profileBundle.search_index.search_index_id : null;
+        const searchIndex = profileBundle !== null && isPlainRecord(profileBundle.search_index)
+            ? profileBundle.search_index
+            : null;
+        const indexName = searchIndex !== null && typeof searchIndex.display_name === 'string'
+            ? searchIndex.display_name
+            : null;
+        const indexId = searchIndex !== null && typeof searchIndex.search_index_id === 'string'
+            ? searchIndex.search_index_id
+            : null;
         const summary = this._summaryOp.state.lastResult;
         const summaryRefreshing = this._summaryOp.state.busy && summary !== null;
         return html`

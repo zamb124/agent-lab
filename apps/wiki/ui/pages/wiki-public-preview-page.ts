@@ -15,6 +15,7 @@ import { html, css, nothing } from 'lit';
 import type { PropertyValues } from '@platform/lib/lit-shim.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface WikiPublicPage {
     title?: unknown;
@@ -49,6 +50,57 @@ import '@platform/lib/components/platform-tree.js';
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
     return String(value);
+}
+
+function publicPage(value: unknown): WikiPublicPage {
+    if (!isPlainRecord(value)) {
+        throw new Error('wiki public read: page response is empty');
+    }
+    const page: WikiPublicPage = {};
+    for (const [key, field] of Object.entries(value)) page[key] = field;
+    return page;
+}
+
+function treeItem(value: unknown): WikiPublicTreeItem {
+    if (!isPlainRecord(value)) {
+        throw new Error('wiki public read: tree item must be an object');
+    }
+    const item: WikiPublicTreeItem = {};
+    for (const [key, field] of Object.entries(value)) {
+        if (key === 'wiki_page_id') {
+            if (field !== undefined && typeof field !== 'string') {
+                throw new Error('wiki public read: tree item wiki_page_id must be a string');
+            }
+            if (typeof field === 'string') item.wiki_page_id = field;
+            continue;
+        }
+        item[key] = field;
+    }
+    return item;
+}
+
+function publicTree(value: unknown): WikiPublicTree {
+    if (!isPlainRecord(value)) {
+        throw new Error('wiki public read: tree response is empty');
+    }
+    const tree: WikiPublicTree = {};
+    if (value.root_page_id !== undefined) {
+        if (typeof value.root_page_id !== 'string') {
+            throw new Error('wiki public read: root_page_id must be a string');
+        }
+        tree.root_page_id = value.root_page_id;
+    }
+    if (value.items != null) {
+        if (!Array.isArray(value.items)) {
+            throw new Error('wiki public read: tree items must be an array');
+        }
+        tree.items = value.items.map(treeItem);
+    }
+    for (const [key, field] of Object.entries(value)) {
+        if (key === 'items' || key === 'root_page_id') continue;
+        tree[key] = field;
+    }
+    return tree;
 }
 
 
@@ -257,19 +309,13 @@ export class WikiPublicPreviewPage extends PlatformPage {
             document.title = this.t('public.not_found');
             return;
         }
-        if (page === null || typeof page !== 'object') {
-            throw new Error('wiki public read: page response is empty');
-        }
-        this._page = page as WikiPublicPage;
+        this._page = publicPage(page);
         const tree = await this._publicTree.run({ link_token: this.token });
         if (this._publicReadMissed(this._publicTree)) {
             document.title = this.t('public.not_found');
             return;
         }
-        if (tree === null || typeof tree !== 'object') {
-            throw new Error('wiki public read: tree response is empty');
-        }
-        this._tree = tree as WikiPublicTree;
+        this._tree = publicTree(tree);
         document.title = this._pageTitle();
     }
 

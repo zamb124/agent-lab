@@ -42,12 +42,24 @@ function eventPayload(event: unknown): Record<string, unknown> | null {
 
 const FLOW_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
+interface FlowIdentity {
+    flow_id: string;
+    name: string;
+    description: string;
+}
+
+interface FlowBundle {
+    bundle_id: string;
+    name: unknown;
+    description: unknown;
+}
+
 const FLOW_PRESETS = Object.freeze([
     {
         id: 'react',
         icon: 'sparkle',
         defaultIdPrefix: 'react_flow',
-        buildConfig: ({ flow_id, name, description }: any) => ({
+        buildConfig: ({ flow_id, name, description }: FlowIdentity) => ({
             flow_id, name, description,
             entry: 'agent',
             nodes: {
@@ -65,7 +77,7 @@ const FLOW_PRESETS = Object.freeze([
         id: 'graph',
         icon: 'workflow',
         defaultIdPrefix: 'graph_flow',
-        buildConfig: ({ flow_id, name, description }: any) => ({
+        buildConfig: ({ flow_id, name, description }: FlowIdentity) => ({
             flow_id, name, description,
             entry: 'start',
             nodes: {
@@ -88,7 +100,7 @@ const FLOW_PRESETS = Object.freeze([
         id: 'multi',
         icon: 'agent',
         defaultIdPrefix: 'multi_flow',
-        buildConfig: ({ flow_id, name, description }: any) => ({
+        buildConfig: ({ flow_id, name, description }: FlowIdentity) => ({
             flow_id, name, description,
             entry: 'orchestrator',
             nodes: {
@@ -106,7 +118,7 @@ const FLOW_PRESETS = Object.freeze([
         id: 'code',
         icon: 'code',
         defaultIdPrefix: 'code_flow',
-        buildConfig: ({ flow_id, name, description }: any) => ({
+        buildConfig: ({ flow_id, name, description }: FlowIdentity) => ({
             flow_id, name, description,
             entry: 'compute',
             nodes: {
@@ -127,7 +139,7 @@ const FLOW_PRESETS = Object.freeze([
         id: 'external',
         icon: 'cloud',
         defaultIdPrefix: 'external_flow',
-        buildConfig: ({ flow_id, name, description }: any) => ({
+        buildConfig: ({ flow_id, name, description }: FlowIdentity) => ({
             flow_id, name, description,
             entry: 'start',
             nodes: {
@@ -146,6 +158,15 @@ const FLOW_PRESETS = Object.freeze([
     },
 ]);
 
+type FlowPreset = (typeof FLOW_PRESETS)[number];
+type FlowCreateSelection =
+    | { kind: 'preset'; preset: FlowPreset }
+    | { kind: 'bundle'; bundle: FlowBundle };
+
+function isFlowBundle(value: unknown): value is FlowBundle {
+    return isPlainRecord(value) && typeof value.bundle_id === 'string' && value.bundle_id.length > 0;
+}
+
 export class FlowsFlowCreateModal extends PlatformFormModal {
     static modalKind = 'flows.flow_create';
     static i18nNamespace = 'flows';
@@ -160,7 +181,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         _description: { state: true },
     }
     declare _step: number;
-    declare _selection: Record<string, any> | null;
+    declare _selection: FlowCreateSelection | null;
     declare _query: string;
     declare _flowId: string;
     declare _name: string;
@@ -270,33 +291,33 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         void this._bundlesOp.run({});
     }
 
-    _matchQuery(text: any) {
-        if ((this._query.length as any) === 0) return true;
-        return String(text).toLowerCase().includes((this._query.toLowerCase() as any));
+    _matchQuery(text: unknown) {
+        if (this._query.length === 0) return true;
+        return String(text).toLowerCase().includes(this._query.toLowerCase());
     }
 
     _filteredPresets() {
-        if ((this._query.length as any) === 0) return FLOW_PRESETS;
-        return FLOW_PRESETS.filter((p) => {
-            const title = this.t(`flow_create_modal.preset_${p.id}_title`);
-            const desc = this.t(`flow_create_modal.preset_${p.id}_desc`);
-            return this._matchQuery(title) || this._matchQuery(desc) || this._matchQuery(p.id);
+        if (this._query.length === 0) return FLOW_PRESETS;
+        return FLOW_PRESETS.filter((preset) => {
+            const title = this.t(`flow_create_modal.preset_${preset.id}_title`);
+            const desc = this.t(`flow_create_modal.preset_${preset.id}_desc`);
+            return this._matchQuery(title) || this._matchQuery(desc) || this._matchQuery(preset.id);
         });
     }
 
-    _bundles() {
+    _bundles(): FlowBundle[] {
         const result = this._bundlesOp.lastResult;
         if (!isPlainRecord(result) || !Array.isArray(result.items)) return [];
-        return result.items;
+        return result.items.filter(isFlowBundle);
     }
 
     _filteredBundles() {
         const items = this._bundles();
-        if ((this._query.length as any) === 0) return items;
-        return items.filter((b: any) => this._matchQuery(b.name) || this._matchQuery(b.bundle_id) || this._matchQuery(b.description));
+        if (this._query.length === 0) return items;
+        return items.filter((bundle) => this._matchQuery(bundle.name) || this._matchQuery(bundle.bundle_id) || this._matchQuery(bundle.description));
     }
 
-    _selectPreset(preset: any) {
+    _selectPreset(preset: FlowPreset) {
         this._selection = { kind: 'preset', preset };
         this._flowId = `${preset.defaultIdPrefix}_${Date.now().toString(36)}`;
         this._name = this.t(`flow_create_modal.preset_${preset.id}_title`);
@@ -305,7 +326,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         this.isDirty = true;
     }
 
-    _selectBundle(bundle: any) {
+    _selectBundle(bundle: FlowBundle) {
         this._selection = { kind: 'bundle', bundle };
         this._flowId = bundle.bundle_id;
         this._name = typeof bundle.name === 'string' && bundle.name !== '' ? bundle.name : bundle.bundle_id;
@@ -380,7 +401,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         `;
     }
 
-    _renderStore(bundles: any) {
+    _renderStore(bundles: readonly FlowBundle[]) {
         if (this._bundlesOp.busy && bundles.length === 0) {
             return html`<div style="padding: var(--space-4); text-align: center"><glass-spinner></glass-spinner></div>`;
         }
@@ -389,14 +410,14 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         }
         return html`
             <div class="grid">
-                ${bundles.map((b: any) => html`
+                ${bundles.map((bundle) => html`
                     <platform-picker-card
-                        value=${b.bundle_id}
-                        title=${typeof b.name === 'string' && b.name !== '' ? b.name : b.bundle_id}
-                        subtitle=${typeof b.description === 'string' ? b.description : b.bundle_id}
-                        @select=${() => this._selectBundle(b)}
+                        value=${bundle.bundle_id}
+                        title=${typeof bundle.name === 'string' && bundle.name !== '' ? bundle.name : bundle.bundle_id}
+                        subtitle=${typeof bundle.description === 'string' ? bundle.description : bundle.bundle_id}
+                        @select=${() => this._selectBundle(bundle)}
                     >
-                        <div slot="icon" class="picker-card-icon" style=${`background:${resolveFlowCoverGradient(b.bundle_id)};`}>
+                        <div slot="icon" class="picker-card-icon" style=${`background:${resolveFlowCoverGradient(bundle.bundle_id)};`}>
                             <platform-icon name="box" size="28"></platform-icon>
                         </div>
                     </platform-picker-card>
@@ -413,7 +434,9 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             : null;
         const pickedTitle = titleKey !== null
             ? this.t(titleKey)
-            : (sel !== null && sel.kind === 'bundle' ? (sel.bundle.name || sel.bundle.bundle_id) : '');
+            : (sel !== null && sel.kind === 'bundle'
+                ? (typeof sel.bundle.name === 'string' && sel.bundle.name !== '' ? sel.bundle.name : sel.bundle.bundle_id)
+                : '');
         const pickedSub = sel !== null && sel.kind === 'bundle'
             ? this.t('flow_create_modal.picked_bundle')
             : this.t('flow_create_modal.picked_preset');
@@ -489,7 +512,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             `;
         }
         const validId = FLOW_ID_PATTERN.test(this._flowId);
-        const valid = validId && (this._name.trim() as any).length > 0;
+        const valid = validId && this._name.trim().length > 0;
         const isBundle = this._selection !== null && this._selection.kind === 'bundle';
         return html`
             <platform-button @click=${this._backToStep1}>${this.t('flow_create_modal.action_back')}</platform-button>
@@ -501,7 +524,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         `;
     }
 
-    _waitForFlowCreated(flowId: any, triggerCreate: any) {
+    _waitForFlowCreated(flowId: string, triggerCreate: () => unknown) {
         const events = this._flows.resource.events;
         return new Promise((resolve, reject) => {
             let finished = false;
@@ -513,11 +536,11 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 if (offFailed) offFailed();
                 if (timer) window.clearTimeout(timer);
             };
-            const settle = (fn: any, value: unknown) => {
+            const settle = (finish: (value: unknown) => void, value: unknown) => {
                 if (finished) return;
                 finished = true;
                 cleanup();
-                fn(value);
+                finish(value);
             };
             offCreated = this.bus.subscribeType(events.CREATED, (event) => {
                 const payload = eventPayload(event);
@@ -550,8 +573,8 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         if (this.loading) return;
         const sel = this._selection;
         if (!sel) return;
-        const flow_id = (this._flowId.trim() as any);
-        const name = (this._name.trim() as any);
+        const flow_id = this._flowId.trim();
+        const name = this._name.trim();
         this.loading = true;
         try {
             if (sel.kind === 'preset') {

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.capabilities.models import CAPABILITY_LANGUAGES, CapabilityLanguage
 from tests.capabilities.code_lsp_helpers import (

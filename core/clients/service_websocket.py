@@ -35,7 +35,7 @@ def _websocket_close_code(exc: ConnectionClosed) -> int:
 
 
 async def proxy_service_websocket(client_ws: WebSocket, service: str, path: str) -> None:
-    """Проксирует JSON-текст кадры на peer-сервис. Не httpx."""
+    """Проксирует JSON-текст кадры на peer-сервис. Не httpx2."""
     settings = get_settings()
     base = settings.server.get_service_url(service).rstrip("/")
     parsed = urlparse(base)

@@ -2,6 +2,8 @@
  * Поля фоновых AI-suggest-ов из `NamespaceCRMSettings`.
  */
 
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
 export const DEFAULT_SUGGESTS_CRON = '0 2 * * *';
 
 /**
@@ -14,19 +16,19 @@ export function parseSuggestsSettingsFromCrmSettings(cs: Record<string, unknown>
         cron: DEFAULT_SUGGESTS_CRON,
         scheduleTaskId: '',
     };
-    if (cs === undefined || cs === null || typeof cs !== 'object') {
+    if (!isPlainRecord(cs)) {
         return result;
     }
-    const s = (cs as Record<string, unknown>).suggests as Record<string, unknown> | null | undefined;
-    if (s === undefined || s === null || typeof s !== 'object') {
+    const suggests = cs.suggests;
+    if (!isPlainRecord(suggests)) {
         return result;
     }
-    result.enabled = s.enabled === true;
-    if (typeof s.cron === 'string' && s.cron.trim().length > 0) {
-        result.cron = s.cron.trim();
+    result.enabled = suggests.enabled === true;
+    if (typeof suggests.cron === 'string' && suggests.cron.trim().length > 0) {
+        result.cron = suggests.cron.trim();
     }
-    if (typeof s.schedule_task_id === 'string' && s.schedule_task_id.length > 0) {
-        result.scheduleTaskId = s.schedule_task_id;
+    if (typeof suggests.schedule_task_id === 'string' && suggests.schedule_task_id.length > 0) {
+        result.scheduleTaskId = suggests.schedule_task_id;
     }
     return result;
 }

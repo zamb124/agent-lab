@@ -7,7 +7,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
-import '@platform/lib/components/layout/platform-service-sidebar.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
@@ -110,8 +110,17 @@ export class FrontendSidebar extends PlatformElement {
     private _authSel: SelectController<any>;
 
 
-    _shell() { return this.renderRoot?.querySelector('platform-service-sidebar'); }
-    closeMobile() { (this._shell() as { closeMobile?: () => void } | null)?.closeMobile?.(); }
+    _shell() {
+        const root = this.renderRoot;
+        if (!root) return null;
+        const shell = root.querySelector('platform-service-sidebar');
+        if (shell === null) return null;
+        if (!(shell instanceof PlatformServiceSidebar)) {
+            throw new Error('frontend-sidebar: service sidebar required');
+        }
+        return shell;
+    }
+    closeMobile() { this._shell()?.closeMobile(); }
 
     _navigate(routeKey: string) {
         this.navigate(routeKey);

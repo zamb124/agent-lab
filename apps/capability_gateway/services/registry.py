@@ -14,7 +14,7 @@ from hashlib import sha256
 from typing import Literal
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 from a2a.types import Message, Part, Role
 
 from apps.capability_gateway.services.context_service import CapabilityContextService
@@ -732,7 +732,7 @@ class CapabilityRegistry:
             lines.extend(
                 [
                     "`import wiki` / `import crm` / `import rag` / `import worktracker` / `from files import read` resolve to the same SDK objects as the injected globals.",
-                    "HTTP is only `await http.get(url=...)` / `http.request` — `requests`, `httpx`, and `urllib.request` are rejected.",
+                    "HTTP is only `await http.get(url=...)` / `http.request` — `requests`, `httpx`, `httpx2`, and `urllib.request` are rejected.",
                     "`pathlib.Path` supports path math (`.suffix`, `/`); `Path.read_text()` / `open()` are forbidden — platform files go through `files.*`.",
                     '`raise FlowInterrupt(question="...")` is a sandbox builtin; `from apps.flows...` is rejected.',
                     "Playground POST `/flows/api/v1/code/execute` accepts `args`; without it the entrypoint receives `{}`. Graph runs fill `args` from node inputs.",
@@ -1944,7 +1944,7 @@ class CapabilityRegistry:
             raise ValueError("timeout_seconds must be between 1 and 120")
         if json_body is not None and body is not None:
             raise ValueError("Pass either json or body, not both")
-        async with httpx.AsyncClient(
+        async with httpx2.AsyncClient(
             timeout=float(timeout_seconds), follow_redirects=True
         ) as client:
             response = await client.request(

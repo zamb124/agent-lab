@@ -185,21 +185,21 @@ async def test_list_for_company_scope_orders_and_hides_other_scope(unique_id: st
     other = await _insert(other_company_id, f"other-{unique_id}")
     platform = await _insert(None, f"platform-{unique_id}")
 
-    company_rows = await PronunciationRule.list_for_company_scope(company_id=company_id)
+    company_rows = await PronunciationRule.list_for_company_scope_by_created_at_asc(company_id=company_id)
     assert [row.pronunciation_rule_id for row in company_rows] == [
         first.pronunciation_rule_id,
         second.pronunciation_rule_id,
     ]
-    enabled_rows = await PronunciationRule.list_enabled_for_company_scope(company_id=company_id)
+    enabled_rows = await PronunciationRule.list_enabled_for_company_scope_by_created_at_asc(company_id=company_id)
     assert [row.pronunciation_rule_id for row in enabled_rows] == [first.pronunciation_rule_id]
     platform_ids = {
         row.pronunciation_rule_id
-        for row in await PronunciationRule.list_for_company_scope(company_id=None)
+        for row in await PronunciationRule.list_for_company_scope_by_created_at_asc(company_id=None)
     }
     assert platform.pronunciation_rule_id in platform_ids
     assert first.pronunciation_rule_id not in platform_ids
     with pytest.raises(ValueError, match="company_id cannot be empty"):
-        _ = await PronunciationRule.list_for_company_scope(company_id="")
+        _ = await PronunciationRule.list_for_company_scope_by_created_at_asc(company_id="")
     for scope, rule in (
         (company_id, first),
         (company_id, second),

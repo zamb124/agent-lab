@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from tests.realtime.centrifugo_ws import (
     assert_no_platform_event,

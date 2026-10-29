@@ -8,6 +8,17 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { TeamMemberRecord } from '@platform/lib/events/reducers/team.js';
+import { TEAM_EVENTS } from '@platform/lib/events/index.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
+import '@platform/lib/components/platform-user-chip.js';
+import '../components/worktracker-work-item-card.js';
+import '../components/worktracker-list-section.js';
+import '../components/worktracker-page-header.js';
+import '@platform/lib/components/fields/platform-field.js';
+import type { PropertyValues } from 'lit';
 
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
@@ -20,31 +31,19 @@ function listOrEmpty(value: unknown, label: string): unknown[] {
     return value;
 }
 
-interface TeamMemberLike {
-    user_id?: unknown;
-    name?: unknown;
-    email?: unknown;
-    [key: string]: unknown;
+function queueMemberUserIds(items: unknown[]): string[] {
+    const ids: string[] = [];
+    for (const row of items) {
+        if (!isPlainRecord(row)) continue;
+        const member = row.member;
+        if (!isPlainRecord(member)) continue;
+        if (member.actor_kind !== 'user') continue;
+        const userId = member.user_id;
+        if (typeof userId !== 'string' || userId.length === 0) continue;
+        ids.push(userId);
+    }
+    return ids;
 }
-
-interface TeamSlice {
-    members?: TeamMemberLike[];
-    loading?: boolean;
-}
-
-interface QueueMemberRow {
-    member?: { actor_kind?: string; user_id?: unknown };
-    [key: string]: unknown;
-}
-import { TEAM_EVENTS } from '@platform/lib/events/index.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
-import '@platform/lib/components/platform-user-chip.js';
-import '../components/worktracker-work-item-card.js';
-import '../components/worktracker-list-section.js';
-import '../components/worktracker-page-header.js';
-import '@platform/lib/components/fields/platform-field.js';
-import type { PropertyValues } from 'lit';
 
 export class WorktrackerQueueDetailPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
@@ -114,8 +113,8 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
     private _membersOp: OpController;
     private _addMemberOp: OpController;
     private _removeMemberOp: OpController;
-    private _teamMembersSel: SelectController<TeamMemberLike[] | undefined>;
-    private _teamLoadingSel: SelectController<boolean | undefined>;
+    private _teamMembersSel: SelectController<TeamMemberRecord[]>;
+    private _teamLoadingSel: SelectController<boolean>;
 
     constructor() {
         super();
@@ -126,8 +125,8 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         this._membersOp = this.useOp('worktracker/work_queue_members_list');
         this._addMemberOp = this.useOp('worktracker/work_queue_member_add');
         this._removeMemberOp = this.useOp('worktracker/work_queue_member_remove');
-        this._teamMembersSel = this.select((s) => (s.team as TeamSlice).members);
-        this._teamLoadingSel = this.select((s) => (s.team as TeamSlice).loading);
+        this._teamMembersSel = this.select((s) => s.team.members);
+        this._teamLoadingSel = this.select((s) => s.team.loading);
     }
 
     override connectedCallback() {
@@ -146,7 +145,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
     private _ensureTeamMembers() {
         const members = this._teamMembersSel.value;
         const loading = this._teamLoadingSel.value;
-        if ((!Array.isArray(members) || members.length === 0) && !loading) {
+        if (members.length === 0 && loading === false) {
             this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
         }
     }
@@ -171,25 +170,11 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
     }
 
     private _memberUserIds(): Set<string> {
-        const members = listOrEmpty(this._membersOp.state.items, 'worktracker queue members');
-        const ids = new Set<string>();
-        if (!Array.isArray(members)) {
-            return ids;
-        }
-        for (const row of members as QueueMemberRow[]) {
-            const member = row && row.member;
-            if (member && member.actor_kind === 'user' && typeof member.user_id === 'string' && member.user_id.length > 0) {
-                ids.add(member.user_id);
-            }
-        }
-        return ids;
+        return new Set(queueMemberUserIds(listOrEmpty(this._membersOp.state.items, 'worktracker queue members')));
     }
 
-    private _candidateMembers(): TeamMemberLike[] {
+    private _candidateMembers(): TeamMemberRecord[] {
         const team = this._teamMembersSel.value;
-        if (!Array.isArray(team)) {
-            return [];
-        }
         const already = this._memberUserIds();
         const q = this._membersFilter.trim().toLowerCase();
         return team
@@ -226,29 +211,20 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
     }
 
     private _renderMembers() {
-        const members = listOrEmpty(this._membersOp.state.items, 'worktracker queue members');
-        if (!Array.isArray(members) || members.length === 0) {
+        const members = queueMemberUserIds(listOrEmpty(this._membersOp.state.items, 'worktracker queue members'));
+        if (members.length === 0) {
             return html`<div class="empty">${this.t('queue_detail_page.empty_members')}</div>`;
         }
         return html`
             <div class="members">
-                ${(members as QueueMemberRow[]).map((row) => {
-                    const member = row.member;
-                    const userId = member && member.actor_kind === 'user' && typeof member.user_id === 'string'
-                        ? member.user_id
-                        : '';
-                    if (!userId) {
-                        return null;
-                    }
-                    return html`
-                        <div class="member-row">
-                            <platform-user-chip user-id=${userId} size="sm" .interactive=${false}></platform-user-chip>
-                            <button class="btn btn-secondary" @click=${() => this._removeMember(userId)}>
-                                ${this.t('queue_detail_page.remove_member')}
-                            </button>
-                        </div>
-                    `;
-                })}
+                ${members.map((userId) => html`
+                    <div class="member-row">
+                        <platform-user-chip user-id=${userId} size="sm" .interactive=${false}></platform-user-chip>
+                        <button class="btn btn-secondary" @click=${() => this._removeMember(userId)}>
+                            ${this.t('queue_detail_page.remove_member')}
+                        </button>
+                    </div>
+                `)}
             </div>
         `;
     }
@@ -264,7 +240,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         }
         return html`
             <div class="candidates">
-                ${candidates.map((m: TeamMemberLike) => html`
+                ${candidates.map((m: TeamMemberRecord) => html`
                     <button
                         type="button"
                         class="candidate-row"

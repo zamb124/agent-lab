@@ -19,7 +19,7 @@ from apps.search.config import (
     get_search_settings,
 )
 from apps.search.di import Di
-from apps.search_worker.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS, CRAWL_ORCHESTRATOR_TICK
+from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS, CRAWL_ORCHESTRATOR_TICK
 from core.ai.company_settings import encrypt_secret, mask_encrypted_secret
 from core.company_search import (
     COMPANY_SEARCH_METADATA_KEY,
@@ -443,7 +443,7 @@ async def op_indexes_list(
 ) -> OffsetPage[SearchIndexDefinition]:
     _ = user
     scope = await require_system_admin(di.authz_service)
-    return await SearchIndexDefinition.page_by_search_index_id(
+    return await SearchIndexDefinition.page_by_search_index_id_asc(
         company_id=scope.company_id,
         enabled=payload.enabled,
         limit=payload.limit,
@@ -553,7 +553,7 @@ async def op_query_providers_snapshot(
 ) -> SearchProvidersSnapshot:
     _ = payload, user, di
     config = get_search_settings().search
-    index_page = await SearchIndexDefinition.page_by_search_index_id(
+    index_page = await SearchIndexDefinition.page_by_search_index_id_asc(
         company_id="system",
         enabled=True,
         limit=100,

@@ -42,15 +42,57 @@ import {
     smsConfigMatchesPresetSkeleton,
 } from '../../_helpers/flows-sms-presets.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
-import { MAIL_EVENTS } from '@platform/lib/events/reducers/mail.js';
+import { MAIL_EVENTS, type MailBindingRecord, type MailState } from '@platform/lib/events/reducers/mail.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
+
+function copyRecord(value: unknown): Record<string, unknown> | null {
+    if (!isPlainObject(value)) {
+        return null;
+    }
+    const row: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(value)) {
+        row[key] = field;
+    }
+    return row;
+}
+
+function channelConfigOf(value: unknown): Record<string, unknown> {
+    if (!isPlainObject(value)) {
+        return {};
+    }
+    return value;
+}
+
+function preferredMailboxBinding(bindings: readonly MailBindingRecord[]): MailBindingRecord {
+    const preferred = bindings.find((binding) => binding.is_default === true);
+    if (preferred !== undefined) {
+        return preferred;
+    }
+    const first = bindings[0];
+    if (first === undefined) {
+        throw new Error('flows-channel-node-editor: mailbox binding required');
+    }
+    return first;
+}
+
+function mailboxBindingId(binding: MailBindingRecord): string {
+    if (typeof binding.mailbox_binding_id !== 'string' || binding.mailbox_binding_id.length === 0) {
+        throw new Error('flows-channel-node-editor: mailbox_binding_id required');
+    }
+    return binding.mailbox_binding_id;
+}
+
+interface MessageSectionOptions {
+    includeSubject?: boolean;
+    bodyField?: 'text' | 'caption';
+    recipientPlaceholderKey?: string;
+}
 
 const CHANNELS = Object.freeze(['telegram', 'email', 'sms', 'webhook']);
 const PARSE_MODES = Object.freeze(['', 'HTML', 'MarkdownV2']);
 const HTTP_METHODS = Object.freeze(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
-/** @type {Readonly<Record<string, string>>} */
-const HTTP_METHOD_TONES = Object.freeze({
+const HTTP_METHOD_TONES: Record<string, string> = Object.freeze({
     GET: 'success',
     POST: 'accent-secondary',
     PUT: 'warning',
@@ -87,12 +129,10 @@ function actionsForChannel(channel: string) {
     return BASE_ACTIONS;
 }
 
-/**
- * @param {string} channel
- * @param {string} action
- * @returns {string}
- */
-function resolveAction(channel: string, action: any) {
+function resolveAction(channel: string, action: unknown) {
+    if (typeof action !== 'string') {
+        return 'send_message';
+    }
     const allowed = actionsForChannel(channel);
     if (allowed.includes(action)) {
         return action;
@@ -106,7 +146,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -116,12 +156,12 @@ export class FlowsChannelNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
 ;
 
@@ -217,7 +257,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             }
         `,
     ];
-    private _mailSelect: SelectController<any>;
+    private _mailSelect: SelectController<MailState>;
 
     constructor() {
         super();
@@ -225,7 +265,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'channel';
+        this.flowNodeType = 'channel';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -263,7 +303,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         this.dispatch(MAIL_EVENTS.CONNECTION_LOAD_REQUESTED, null);
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
@@ -303,7 +343,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             ? this.nodeConfig.action
             : 'send_message';
         const nextAction = resolveAction(v, currentAction);
-        const patch: any = { channel: v, channel_config: {} };
+        const patch: Record<string, unknown> = { channel: v, channel_config: {} };
         if (nextAction !== currentAction) {
             patch.action = nextAction;
         }
@@ -317,13 +357,12 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             if (mappingChanged) {
                 patch.input_mapping = mapping;
             }
-            const mail = this._mailSelect.value;
-            const bindings = Array.isArray(mail?.bindings) ? mail.bindings : [];
+            const bindings = this._mailSelect.value.bindings;
             if (bindings.length > 0) {
-                const preferred = bindings.find((b: any) => b.is_default === true) || bindings[0];
+                const preferred = preferredMailboxBinding(bindings);
                 patch.channel_config = {
                     delivery: 'mailbox',
-                    mailbox_binding_id: preferred.mailbox_binding_id,
+                    mailbox_binding_id: mailboxBindingId(preferred),
                 };
             } else {
                 patch.channel_config = {
@@ -377,10 +416,9 @@ export class FlowsChannelNodeEditor extends PlatformElement {
     }
 
     _onChannelConfig(field: string, value: unknown) {
-        const current = this.nodeConfig?.channel_config && typeof this.nodeConfig.channel_config === 'object'
-            ? this.nodeConfig.channel_config
-            : {};
-        const next: any = { ...current, [field]: value };
+        const rawConfig = this.nodeConfig === null ? undefined : this.nodeConfig.channel_config;
+        const current = channelConfigOf(rawConfig);
+        const next: Record<string, unknown> = { ...current, [field]: value };
         this._emitPatch({ channel_config: next });
     }
 
@@ -455,15 +493,15 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         this._onChannelConfig('body_template', JSON.stringify(parsed, null, 2));
     }
 
-    async _onApplySmsPreset(presetId: any) {
+    async _onApplySmsPreset(presetId: unknown) {
         if (typeof presetId !== 'string' || presetId.length === 0) {
             throw new Error('flows-channel-node-editor: sms preset_id required');
         }
         const preset = getSmsPreset(presetId);
-        const current = this.nodeConfig?.channel_config && typeof this.nodeConfig.channel_config === 'object'
-            ? this.nodeConfig.channel_config
-            : {};
-        const currentPresetId = typeof (current as Record<string, any>).preset_id === 'string' ? (current as Record<string, any>).preset_id : '';
+        const rawConfig = this.nodeConfig === null ? undefined : this.nodeConfig.channel_config;
+        const current: Record<string, unknown> = isPlainObject(rawConfig) ? rawConfig : {};
+        const presetValue = current.preset_id;
+        const currentPresetId = typeof presetValue === 'string' ? presetValue : '';
         if (Object.keys(current).length > 0) {
             let matchesCurrentSkeleton = false;
             if (currentPresetId.length > 0) {
@@ -515,12 +553,11 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             throw new Error('flows-channel-node-editor: delivery must be mailbox|smtp');
         }
         if (v === 'mailbox') {
-            const mail = this._mailSelect.value;
-            const bindings = Array.isArray(mail?.bindings) ? mail.bindings : [];
-            const preferred = bindings.find((b: any) => b.is_default === true) || bindings[0];
-            const next: any = { delivery: 'mailbox' };
-            if (preferred && typeof preferred.mailbox_binding_id === 'string') {
-                next.mailbox_binding_id = preferred.mailbox_binding_id;
+            const bindings = this._mailSelect.value.bindings;
+            const next: Record<string, unknown> = { delivery: 'mailbox' };
+            if (bindings.length > 0) {
+                const preferred = preferredMailboxBinding(bindings);
+                next.mailbox_binding_id = mailboxBindingId(preferred);
             }
             this._emitPatch({ channel_config: next });
             return;
@@ -546,9 +583,9 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         if (v !== 'true' && v !== 'false') {
             throw new Error('flows-channel-node-editor: smtp_use_tls must be true|false string');
         }
-        const current: Record<string, any> = isPlainObject(this.nodeConfig?.channel_config)
-            ? { ...(this.nodeConfig.channel_config as Record<string, any>) }
-            : { delivery: 'smtp' };
+        const rawConfig = this.nodeConfig === null ? undefined : this.nodeConfig.channel_config;
+        const copied = copyRecord(rawConfig);
+        const current: Record<string, unknown> = copied === null ? { delivery: 'smtp' } : copied;
         current.delivery = 'smtp';
         current.smtp_use_tls = v === 'true';
         delete current.mailbox_binding_id;
@@ -559,9 +596,9 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         if (typeof field !== 'string' || field.length === 0) {
             throw new Error('flows-channel-node-editor: smtp field required');
         }
-        const current: Record<string, any> = isPlainObject(this.nodeConfig?.channel_config)
-            ? { ...this.nodeConfig.channel_config! }
-            : {};
+        const rawConfig = this.nodeConfig === null ? undefined : this.nodeConfig.channel_config;
+        const copied = copyRecord(rawConfig);
+        const current: Record<string, unknown> = copied === null ? {} : copied;
         current.delivery = 'smtp';
         delete current.mailbox_binding_id;
         if (field === 'smtp_port') {
@@ -582,11 +619,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         this._emitPatch({ channel_config: current });
     }
 
-    /**
-     * @param {Record<string, unknown>} cfg
-     * @returns {'mailbox'|'smtp'}
-     */
-    _resolveDelivery(cfg: any) {
+    _resolveDelivery(cfg: Record<string, unknown>): 'mailbox' | 'smtp' {
         if (cfg.delivery === 'smtp') {
             return 'smtp';
         }
@@ -603,17 +636,15 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         if (this.nodeConfig?.channel !== 'email') {
             return;
         }
-        const cfg = isPlainObject(this.nodeConfig?.channel_config)
-            ? this.nodeConfig.channel_config
-            : {};
+        const rawConfig = this.nodeConfig === null ? undefined : this.nodeConfig.channel_config;
+        const cfg = channelConfigOf(rawConfig);
         const delivery = this._resolveDelivery(cfg);
         if (delivery !== 'mailbox') {
             return;
         }
-        const mail = this._mailSelect.value;
-        const bindings = Array.isArray(mail?.bindings) ? mail.bindings : [];
+        const bindings = this._mailSelect.value.bindings;
         if (bindings.length === 0) {
-            if ((cfg as any).delivery !== 'mailbox' && (cfg as any).delivery !== 'smtp') {
+            if (cfg.delivery !== 'mailbox' && cfg.delivery !== 'smtp') {
                 this._emitPatch({
                     channel_config: {
                         delivery: 'smtp',
@@ -624,10 +655,10 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             }
             return;
         }
-        const patch: any = { delivery: 'mailbox' };
-        const current = typeof (cfg as any).mailbox_binding_id === 'string' ? (cfg as any).mailbox_binding_id : '';
-        if (current.length > 0 && bindings.some((b: any) => b.mailbox_binding_id === current)) {
-            if ((cfg as any).delivery !== 'mailbox') {
+        const patch: Record<string, unknown> = { delivery: 'mailbox' };
+        const current = typeof cfg.mailbox_binding_id === 'string' ? cfg.mailbox_binding_id : '';
+        if (current.length > 0 && bindings.some((binding) => binding.mailbox_binding_id === current)) {
+            if (cfg.delivery !== 'mailbox') {
                 this._emitPatch({
                     channel_config: {
                         delivery: 'mailbox',
@@ -637,12 +668,8 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             }
             return;
         }
-        const preferred = bindings.find((b: any) => b.is_default === true);
-        const next = preferred || bindings[0];
-        if (!next || typeof next.mailbox_binding_id !== 'string') {
-            return;
-        }
-        patch.mailbox_binding_id = next.mailbox_binding_id;
+        const next = preferredMailboxBinding(bindings);
+        patch.mailbox_binding_id = mailboxBindingId(next);
         this._emitPatch({ channel_config: patch });
     }
 
@@ -653,7 +680,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
     _variableContext() {
         return buildPromptVariableContext({
             flowVariables: this.flowVariables,
-            nodeLocalVariables: this.nodeConfig?.local_variables,
+            nodeLocalVariables: isPlainObject(this.nodeConfig?.local_variables) ? this.nodeConfig.local_variables : null,
             dataflowNode: this.dataflowNode,
             previewExecutionState: this.previewExecutionState,
         });
@@ -678,11 +705,12 @@ export class FlowsChannelNodeEditor extends PlatformElement {
      * Facade над input_mapping: Кому + (Тема) + тело/caption в markdown-editor.
      * @param {{ includeSubject?: boolean, bodyField?: 'text'|'caption', recipientPlaceholderKey?: string }} opts
      */
-    _renderMessageSection(opts = {}) {
-        const includeSubject = (opts as Record<string, any>).includeSubject === true;
-        const bodyField = (opts as Record<string, any>).bodyField === 'caption' ? 'caption' : 'text';
-        const recipientPlaceholderKey = typeof (opts as Record<string, any>).recipientPlaceholderKey === 'string'
-            ? (opts as Record<string, any>).recipientPlaceholderKey
+    _renderMessageSection(opts: MessageSectionOptions = {}) {
+        const includeSubject = opts.includeSubject === true;
+        const bodyField = opts.bodyField === 'caption' ? 'caption' : 'text';
+        const placeholderKey = opts.recipientPlaceholderKey;
+        const recipientPlaceholderKey = typeof placeholderKey === 'string'
+            ? placeholderKey
             : 'channel_node_editor.message_to_placeholder';
         const mapping = this._inputMapping();
         const recipient = typeof mapping.recipient === 'string' ? mapping.recipient : '';
@@ -775,7 +803,11 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         return null;
     }
 
-    _renderEmailMailboxSection(cfg: any, bindings: any, connection: any) {
+    _renderEmailMailboxSection(
+        cfg: Record<string, unknown>,
+        bindings: readonly MailBindingRecord[],
+        connection: Record<string, unknown> | null,
+    ) {
         const selectedId = typeof cfg.mailbox_binding_id === 'string' ? cfg.mailbox_binding_id : '';
         const noConnection = connection === null || connection === undefined;
         if (bindings.length === 0) {
@@ -797,12 +829,16 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             `;
         }
         const mailboxEnumConfig = {
-            values: bindings.map((binding: any) => ({
-                value: binding.mailbox_binding_id,
-                label: binding.is_default
-                    ? `${binding.email_address} (${this.t('channel_node_editor.mailbox_default_badge')})`
-                    : binding.email_address,
-            })),
+            values: bindings.map((binding) => {
+                const address = binding.email_address;
+                if (typeof address !== 'string' || address.length === 0) {
+                    throw new Error('flows-channel-node-editor: mailbox email_address required');
+                }
+                const label = binding.is_default === true
+                    ? `${address} (${this.t('channel_node_editor.mailbox_default_badge')})`
+                    : address;
+                return { value: mailboxBindingId(binding), label };
+            }),
         };
         return html`
             <platform-field
@@ -823,7 +859,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderEmailSmtpSection(cfg: any) {
+    _renderEmailSmtpSection(cfg: Record<string, unknown>) {
         const useTls = cfg.smtp_use_tls === false ? 'false' : 'true';
         return html`
             <platform-variable-input
@@ -882,10 +918,10 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderEmail(cfg: any) {
+    _renderEmail(cfg: Record<string, unknown>) {
         const mail = this._mailSelect.value;
-        const bindings = Array.isArray(mail?.bindings) ? mail.bindings : [];
-        const connection = mail?.connection;
+        const bindings = mail.bindings;
+        const connection = mail.connection;
         const delivery = this._resolveDelivery(cfg);
 
         return html`
@@ -919,7 +955,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderTelegram(cfg: any) {
+    _renderTelegram(cfg: Record<string, unknown>) {
         return html`
             <div class="channel-stack">
                 <platform-variable-input
@@ -945,11 +981,8 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderWebhook(cfg: any) {
-        const headers =
-            cfg.headers && typeof cfg.headers === 'object' && !Array.isArray(cfg.headers)
-                ? cfg.headers
-                : {};
+    _renderWebhook(cfg: Record<string, unknown>) {
+        const headers = channelConfigOf(cfg.headers);
         return html`
             <div class="channel-stack">
                 <platform-field
@@ -988,22 +1021,21 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderSms(cfg: any) {
+    _renderSms(cfg: Record<string, unknown>) {
         const selectedPresetId = typeof cfg.preset_id === 'string' ? cfg.preset_id : '';
-        const headers =
-            cfg.headers && typeof cfg.headers === 'object' && !Array.isArray(cfg.headers)
-                ? cfg.headers
-                : {};
+        const headers = channelConfigOf(cfg.headers);
         const bodyTemplate = typeof cfg.body_template === 'string' && cfg.body_template.length > 0
             ? cfg.body_template
             : '{}';
-        const method = HTTP_METHODS.includes(cfg.method) ? cfg.method : 'POST';
+        const method = typeof cfg.method === 'string' && HTTP_METHODS.includes(cfg.method) ? cfg.method : 'POST';
         const timeout = typeof cfg.timeout === 'number' ? cfg.timeout : 30;
-        const methodItems = HTTP_METHODS.map((m) => ({
-            value: m,
-            label: m,
-            tone: (HTTP_METHOD_TONES as any)[m],
-        }));
+        const methodItems = HTTP_METHODS.map((methodName) => {
+            const tone = HTTP_METHOD_TONES[methodName];
+            if (typeof tone !== 'string') {
+                throw new Error(`flows-channel-node-editor: missing tone for ${methodName}`);
+            }
+            return { value: methodName, label: methodName, tone };
+        });
         return html`
             <div class="channel-stack">
                 <p class="section-title">${this.t('channel_node_editor.sms_presets')}</p>
@@ -1101,7 +1133,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderChannelBody(channel: string, cfg: any) {
+    _renderChannelBody(channel: string, cfg: Record<string, unknown>) {
         if (channel === 'telegram') return this._renderTelegram(cfg);
         if (channel === 'email') return this._renderEmail(cfg);
         if (channel === 'webhook') return this._renderWebhook(cfg);
@@ -1120,15 +1152,15 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             channel,
             typeof this.nodeConfig?.action === 'string' ? this.nodeConfig.action : 'send_message',
         );
-        const cfg = this.nodeConfig?.channel_config && typeof this.nodeConfig.channel_config === 'object'
-            ? this.nodeConfig.channel_config : {};
+        const rawConfig = this.nodeConfig === null ? undefined : this.nodeConfig.channel_config;
+        const cfg = channelConfigOf(rawConfig);
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'channel'}
+                .flowNodeType=${this.flowNodeType.length > 0 ? this.flowNodeType : 'channel'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

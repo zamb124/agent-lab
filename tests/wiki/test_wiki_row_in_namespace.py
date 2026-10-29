@@ -76,9 +76,9 @@ async def test_comment_and_revision_in_namespace_are_optional(unique_id: str) ->
             body_markdown="later",
         )
     )
-    comments = await WikiComment.list_for_page(company_id, namespace, page_id)
+    comments = await WikiComment.list_for_page_by_created_at_asc(company_id, namespace, page_id)
     assert [row.wiki_comment_id for row in comments] == [comment_id, later_comment_id]
-    assert await WikiComment.list_for_page(company_id, other_namespace, page_id) == []
+    assert await WikiComment.list_for_page_by_created_at_asc(company_id, other_namespace, page_id) == []
     assert await WikiComment.delete_in_namespace(company_id, other_namespace, later_comment_id) == 0
     assert await WikiComment.delete_in_namespace(company_id, namespace, later_comment_id) == 1
     assert await WikiComment.delete_in_namespace(company_id, namespace, later_comment_id) == 0
@@ -96,9 +96,9 @@ async def test_comment_and_revision_in_namespace_are_optional(unique_id: str) ->
             title="Later",
         )
     )
-    recent = await WikiRevision.list_recent_for_page(company_id, namespace, page_id, limit=1)
+    recent = await WikiRevision.list_for_page_by_created_at_desc(company_id, namespace, page_id, limit=1)
     assert [row.wiki_revision_id for row in recent] == [later_revision_id]
-    assert await WikiRevision.list_recent_for_page(company_id, other_namespace, page_id, limit=10) == []
+    assert await WikiRevision.list_for_page_by_created_at_desc(company_id, other_namespace, page_id, limit=10) == []
 
     stored_page = await WikiPage.create(
         WikiPage(
@@ -116,20 +116,20 @@ async def test_comment_and_revision_in_namespace_are_optional(unique_id: str) ->
     )
     assert await WikiPage.ancestors_toward_root(company_id, namespace, page_id) == []
     assert await WikiPage.ancestors_toward_root(company_id, namespace, f"missing-{unique_id}") == []
-    assert [row.wiki_page_id for row in await WikiPage.list_subtree(company_id, namespace, page_id)] == [
+    assert [row.wiki_page_id for row in await WikiPage.list_unordered_subtree(company_id, namespace, page_id)] == [
         page_id
     ]
-    assert await WikiPage.list_subtree(company_id, namespace, f"missing-{unique_id}") == []
+    assert await WikiPage.list_unordered_subtree(company_id, namespace, f"missing-{unique_id}") == []
     assert await WikiPage.next_position(company_id, namespace, None) == 1
     assert await WikiPage.next_position(company_id, other_namespace, None) == 0
-    tree = await WikiPage.tree_summaries(company_id, namespace)
+    tree = await WikiPage.list_alive_summaries_by_depth_position_and_title_asc(company_id, namespace)
     assert page_id in [item.wiki_page_id for item in tree]
-    assert await WikiPage.tree_summaries(company_id, other_namespace) == []
-    published = await WikiPage.published_subtree_summaries(company_id, namespace, page_id)
+    assert await WikiPage.list_alive_summaries_by_depth_position_and_title_asc(company_id, other_namespace) == []
+    published = await WikiPage.list_published_subtree_summaries_breadth_first(company_id, namespace, page_id)
     assert [item.wiki_page_id for item in published] == [page_id]
     stored_page.is_published = False
     _ = await stored_page.save()
-    assert await WikiPage.published_subtree_summaries(company_id, namespace, page_id) == []
+    assert await WikiPage.list_published_subtree_summaries_breadth_first(company_id, namespace, page_id) == []
     stored_page.is_published = True
     _ = await stored_page.save()
     await WikiPage.update_link(
@@ -213,18 +213,18 @@ async def test_comment_and_revision_in_namespace_are_optional(unique_id: str) ->
     assert deepened is not None
     assert deepened.depth == 2
     assert deepened.root_page_id == f"root-{unique_id}"[:64]
-    alive_ids = [row.wiki_page_id for row in await WikiPage.alive_by_created_at(limit=None)]
+    alive_ids = [row.wiki_page_id for row in await WikiPage.alive_by_created_at_asc(limit=None)]
     assert page_id in alive_ids
-    alive_by_id = await WikiPage.list_alive(company_id, [page_id, f"missing-{unique_id}"])
+    alive_by_id = await WikiPage.list_unordered_alive(company_id, [page_id, f"missing-{unique_id}"])
     assert [row.wiki_page_id for row in alive_by_id] == [page_id]
-    assert await WikiPage.list_alive(company_id, []) == []
-    assert await WikiPage.list_alive(f"other-{unique_id}", [page_id]) == []
+    assert await WikiPage.list_unordered_alive(company_id, []) == []
+    assert await WikiPage.list_unordered_alive(f"other-{unique_id}", [page_id]) == []
     with pytest.raises(ValueError, match="limit must be >= 1"):
-        _ = await WikiPage.alive_by_created_at(limit=0)
-    found_by_title = await WikiPage.list_alive_by_title(company_id, "page", 10)
+        _ = await WikiPage.alive_by_created_at_asc(limit=0)
+    found_by_title = await WikiPage.list_alive_by_title_asc(company_id, "page", 10)
     assert page_id in [row.wiki_page_id for row in found_by_title]
-    assert await WikiPage.list_alive_by_title(f"other-{unique_id}", "page", 10) == []
-    assert await WikiPage.list_search_hits(company_id, namespace, "page", 10, []) == []
+    assert await WikiPage.list_alive_by_title_asc(f"other-{unique_id}", "page", 10) == []
+    assert await WikiPage.list_alive_search_hits_by_rank_desc_and_updated_at_desc(company_id, namespace, "page", 10, []) == []
     await WikiPage.mark_deleted(
         company_id=company_id,
         namespace=namespace,
@@ -238,12 +238,12 @@ async def test_comment_and_revision_in_namespace_are_optional(unique_id: str) ->
     ).get_or_none()
     assert marked is not None
     assert marked.deleted_at == later
-    assert await WikiPage.list_alive(company_id, [page_id]) == []
+    assert await WikiPage.list_unordered_alive(company_id, [page_id]) == []
     assert await WikiPage.next_position(company_id, namespace, None) == 0
-    deleted = await WikiPage.list_deleted(company_id, namespace)
+    deleted = await WikiPage.list_deleted_by_deleted_at_desc(company_id, namespace)
     assert [row.wiki_page_id for row in deleted] == [page_id]
-    assert await WikiPage.list_deleted(company_id, other_namespace) == []
-    hidden_ids = [row.wiki_page_id for row in await WikiPage.alive_by_created_at(limit=None)]
+    assert await WikiPage.list_deleted_by_deleted_at_desc(company_id, other_namespace) == []
+    hidden_ids = [row.wiki_page_id for row in await WikiPage.alive_by_created_at_asc(limit=None)]
     assert page_id not in hidden_ids
     await WikiPage.update_deleted_at(
         company_id=company_id,
@@ -345,14 +345,14 @@ async def test_replace_outgoing_replaces_the_source_set(unique_id: str) -> None:
         source_page_id=other_source_id,
     ).all()
     assert [row.wiki_page_link_id for row in other_rows] == [other.wiki_page_link_id]
-    incoming = await WikiPageLink.list_for_target(
+    incoming = await WikiPageLink.list_unordered_for_target(
         company_id,
         WikiLinkTargetKind.URL,
         "https://example.test/c",
     )
     assert [row.wiki_page_link_id for row in incoming] == [other.wiki_page_link_id]
     assert (
-        await WikiPageLink.list_for_target(
+        await WikiPageLink.list_unordered_for_target(
             company_id,
             WikiLinkTargetKind.URL,
             "https://example.test/missing",

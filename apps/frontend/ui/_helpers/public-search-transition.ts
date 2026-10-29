@@ -1,3 +1,5 @@
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
 const PUBLIC_SEARCH_TRANSITION_STORAGE_KEY = 'platform:public_search_landing_transition';
 const PUBLIC_SEARCH_TRANSITION_TTL_MS = 5000;
 
@@ -17,22 +19,21 @@ function _requireSearchMode(value: unknown, label: string) {
 }
 
 function _requireTransitionPayload(value: unknown) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    if (!isPlainRecord(value)) {
         throw new Error('public search transition payload must be object');
     }
-    const record = value as Record<string, unknown>;
-    const source = _requireNonEmptyString(record.source, 'transition.source');
+    const source = _requireNonEmptyString(value.source, 'transition.source');
     if (source !== 'landing') {
         throw new Error('transition.source is invalid');
     }
-    const createdAt = record.created_at;
+    const createdAt = value.created_at;
     if (typeof createdAt !== 'number' || !Number.isFinite(createdAt)) {
         throw new Error('transition.created_at must be finite number');
     }
     return {
         source,
-        query: _requireNonEmptyString(record.query, 'transition.query'),
-        mode: _requireSearchMode(record.mode, 'transition.mode'),
+        query: _requireNonEmptyString(value.query, 'transition.query'),
+        mode: _requireSearchMode(value.mode, 'transition.mode'),
         created_at: createdAt,
     };
 }

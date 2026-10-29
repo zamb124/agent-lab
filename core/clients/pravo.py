@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 from bs4 import BeautifulSoup
 
 from core.clients.rag_client import RagClient
@@ -317,7 +317,7 @@ class PravoClient:
             **raw_second,
         }
 
-    async def _get(self, url: str) -> httpx.Response:
+    async def _get(self, url: str) -> httpx2.Response:
         try:
             async with get_httpx_client(
                 timeout=self._timeout,
@@ -325,17 +325,17 @@ class PravoClient:
                 follow_redirects=True,
             ) as client:
                 response = await client.get(url, headers=self._headers)
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             detail = str(exc).strip() or type(exc).__name__
             raise PravoClientError(f"IPS network request error: {detail} ({url})") from exc
 
         try:
             _ = response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             raise PravoClientError(f"HTTP {response.status_code} while requesting IPS: {url}") from exc
         return response
 
-    async def _post_form(self, url: str, *, headers: dict[str, str], data: dict[str, str]) -> httpx.Response:
+    async def _post_form(self, url: str, *, headers: dict[str, str], data: dict[str, str]) -> httpx2.Response:
         try:
             async with get_httpx_client(
                 timeout=self._timeout,
@@ -343,13 +343,13 @@ class PravoClient:
                 follow_redirects=True,
             ) as client:
                 response = await client.post(url, headers=headers, data=data)
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             detail = str(exc).strip() or type(exc).__name__
             raise PravoClientError(f"IPS network request error: {detail} ({url})") from exc
 
         try:
             _ = response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             raise PravoClientError(f"HTTP {response.status_code} while requesting IPS: {url}") from exc
         return response
 

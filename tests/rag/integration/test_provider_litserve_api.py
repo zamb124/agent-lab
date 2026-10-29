@@ -1,5 +1,5 @@
 """
-Интеграционные тесты HTTP ``provider_litserve`` через ASGI (``httpx.ASGITransport``).
+Интеграционные тесты HTTP ``provider_litserve`` через ASGI (``httpx2.ASGITransport``).
 
 Приложение: ``apps.provider_litserve.provider_litserve_asgi.create_provider_litserve_asgi_app``
 (те же ``EmbeddingLitAPI`` / ``RerankerLitAPI``, что и LitServe в ``main``).
@@ -21,7 +21,7 @@ from collections.abc import Iterator
 import numpy as np
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 import apps.provider_litserve.embedding.engines as embedding_engines
 import apps.provider_litserve.reranker.engines as reranker_engines

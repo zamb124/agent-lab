@@ -37,6 +37,132 @@ import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResul
 const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 const LSP_LANGUAGES = new Set(['python', 'javascript', 'typescript', 'go', 'csharp']);
 
+interface CodeMirrorDoc {
+    toString(): string;
+    length: number;
+}
+
+interface CodeMirrorEditorStateView {
+    doc: CodeMirrorDoc;
+    readOnly: boolean;
+    replaceSelection(text: string): unknown;
+}
+
+interface CodeMirrorEditorView {
+    state: CodeMirrorEditorStateView;
+    dispatch(spec: unknown): void;
+    destroy(): void;
+    requestMeasure(): void;
+}
+
+interface CodeMirrorUpdate {
+    docChanged: boolean;
+    state: { doc: CodeMirrorDoc };
+}
+
+interface CodeMirrorCompartment {
+    of(extension: unknown): unknown;
+    reconfigure(extension: unknown): unknown;
+}
+
+interface CodeMirrorFacet<T> {
+    of(value: T): unknown;
+}
+
+interface CodeMirrorEditorStateApi {
+    readOnly: CodeMirrorFacet<boolean>;
+    tabSize: CodeMirrorFacet<number>;
+    create(config: { doc: string; extensions: unknown[] }): unknown;
+}
+
+interface CodeMirrorEditorViewApi {
+    new (config: { state: unknown; parent: HTMLElement }): CodeMirrorEditorView;
+    updateListener: { of(handler: (update: CodeMirrorUpdate) => void): unknown };
+    theme(spec: Record<string, unknown>): unknown;
+    lineWrapping: unknown;
+}
+
+interface CodeMirrorKeymapApi {
+    of(bindings: readonly unknown[]): unknown;
+}
+
+interface LspClient {
+    disconnect(): void;
+    connect(transport: LspTransport): void;
+    plugin(documentUri: string, languageId: string): unknown;
+}
+
+interface LspTransport {
+    send(message: string): void;
+    subscribe(handler: (data: unknown) => void): void;
+    unsubscribe(handler: (data: unknown) => void): void;
+}
+
+interface CodeMirrorModule {
+    Compartment: new () => CodeMirrorCompartment;
+    EditorState: CodeMirrorEditorStateApi;
+    EditorView: CodeMirrorEditorViewApi;
+    history(): unknown;
+    lineNumbers(): unknown;
+    tooltips(options: { parent: HTMLElement; position: 'absolute' }): unknown;
+    keymap: CodeMirrorKeymapApi;
+    defaultKeymap: readonly unknown[];
+    historyKeymap: readonly unknown[];
+    python?(): unknown;
+    javascript?(options: { typescript: boolean }): unknown;
+    go?(): unknown;
+    csharp?(): unknown;
+    json?(): unknown;
+    oneDark?: unknown;
+    syntaxHighlighting(style: unknown, options: { fallback: boolean }): unknown;
+    defaultHighlightStyle: unknown;
+    LSPClient?: new (options: { rootUri: string; timeout: number; extensions: unknown }) => LspClient;
+    languageServerExtensions?(): unknown;
+}
+
+interface LspSession {
+    wsPath: string;
+    documentUri: string;
+    rootUri: string;
+    languageId: string;
+}
+
+function isCodeMirrorModule(value: unknown): value is CodeMirrorModule {
+    if (!isPlainObject(value)) {
+        return false;
+    }
+    if (typeof value.Compartment !== 'function' || typeof value.EditorView !== 'function' || typeof value.EditorState !== 'function') {
+        return false;
+    }
+    if (typeof value.history !== 'function' || typeof value.lineNumbers !== 'function' || typeof value.tooltips !== 'function') {
+        return false;
+    }
+    if (typeof value.syntaxHighlighting !== 'function' || !isPlainObject(value.keymap) || typeof value.keymap.of !== 'function') {
+        return false;
+    }
+    return Array.isArray(value.defaultKeymap) && Array.isArray(value.historyKeymap);
+}
+
+function lspSession(value: Record<string, unknown>): LspSession {
+    const wsPath = value.ws_path;
+    const documentUri = value.document_uri;
+    const rootUri = value.root_uri;
+    const languageId = value.language_id;
+    if (typeof wsPath !== 'string' || !wsPath.startsWith('/')) {
+        throw new Error('code lsp ws_path required');
+    }
+    if (typeof documentUri !== 'string' || documentUri.length === 0) {
+        throw new Error('code lsp document_uri required');
+    }
+    if (typeof rootUri !== 'string' || rootUri.length === 0) {
+        throw new Error('code lsp root_uri required');
+    }
+    if (typeof languageId !== 'string' || languageId.length === 0) {
+        throw new Error('code lsp language_id required');
+    }
+    return { wsPath, documentUri, rootUri, languageId };
+}
+
 const FLOWS_CM_TOOLTIP_MOUNT_ID = 'flows-cm-tooltip-mount';
 
 /**
@@ -58,11 +184,16 @@ function ensureFlowsCmTooltipMount() {
     return el;
 }
 
-let _cmPromise: Promise<any> | null = null;
-function loadCodeMirror() {
-    if (!_cmPromise) {
+let _cmPromise: Promise<CodeMirrorModule> | null = null;
+function loadCodeMirror(): Promise<CodeMirrorModule> {
+    if (_cmPromise === null) {
         _cmPromise = import(CODEMIRROR_URL).then(
-            (mod) => mod,
+            (mod) => {
+                if (!isCodeMirrorModule(mod)) {
+                    throw new Error('flows-code-editor: codemirror bundle required');
+                }
+                return mod;
+            },
             (err) => {
                 _cmPromise = null;
                 throw err;
@@ -97,8 +228,8 @@ export class FlowsCodeEditor extends PlatformElement {
     declare fillParent: boolean;
     declare fullscreen: boolean;
     declare lineWrapping: boolean;
-    declare completionContext: Record<string, any> | null;
-    declare completionVariableKeys: any[];
+    declare completionContext: Record<string, unknown> | null;
+    declare completionVariableKeys: string[];
 ;
 
     static override styles: CSSResultGroup = [
@@ -285,21 +416,21 @@ export class FlowsCodeEditor extends PlatformElement {
         `,
     ];
     private _lspSessionOp: OpController;
-    private _themeSel: SelectController<any>;
-    private _editorView: any;
-    private _cm: any;
-    private _readonlyCompartment: any;
-    private _languageCompartment: any;
-    private _themeCompartment: any;
-    private _wrappingCompartment: any;
-    private _lspCompartment: any;
-    private _lspClient: any;
-    private _lspSocket: any;
+    private _themeSel: SelectController<'dark' | 'light'>;
+    private _editorView: CodeMirrorEditorView | null;
+    private _cm: CodeMirrorModule | null;
+    private _readonlyCompartment: CodeMirrorCompartment | null;
+    private _languageCompartment: CodeMirrorCompartment | null;
+    private _themeCompartment: CodeMirrorCompartment | null;
+    private _wrappingCompartment: CodeMirrorCompartment | null;
+    private _lspCompartment: CodeMirrorCompartment | null;
+    private _lspClient: LspClient | null;
+    private _lspSocket: WebSocket | null;
     private _lspGeneration: number;
     private _lspRestartTimer: number;
-    private _lastTheme: any;
-    private _initInFlight: any;
-    private _onWindowKeydown: any;
+    private _lastTheme: 'dark' | 'light' | undefined;
+    private _initInFlight: Promise<void> | null;
+    private _onWindowKeydown: (event: KeyboardEvent) => void;
 
     constructor() {
         super();
@@ -326,7 +457,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this._lspSocket = null;
         this._lspGeneration = 0;
         this._lspRestartTimer = 0;
-        this._themeSel = this.select((s) => (isPlainObject(s.theme) && (s as any).theme.mode === 'light' ? 'light' : 'dark'));
+        this._themeSel = this.select((state) => state.theme.mode);
         this._lastTheme = undefined;
         this._initInFlight = null;
         this._onWindowKeydown = (e: KeyboardEvent) => {
@@ -481,7 +612,10 @@ export class FlowsCodeEditor extends PlatformElement {
         return this._initInFlight;
     }
 
-    async _init(host: any) {
+    async _init(host: Element) {
+        if (!(host instanceof HTMLElement)) {
+            throw new Error('flows-code-editor: host element required');
+        }
         const cm = await loadCodeMirror();
         if (!this.isConnected || this._editorView || this.headerOnly) {
             return;
@@ -497,7 +631,7 @@ export class FlowsCodeEditor extends PlatformElement {
         const keymapForTab = [
             {
                 key: 'Tab',
-                run: (view: any) => {
+                run: (view: CodeMirrorEditorView) => {
                     if (view.state.readOnly) {
                         return false;
                     }
@@ -510,7 +644,11 @@ export class FlowsCodeEditor extends PlatformElement {
             {
                 key: 'Mod-s',
                 run: () => {
-                    this.emit('save', { value: this._editorView.state.doc.toString() });
+                    const editorView = this._editorView;
+                    if (editorView === null) {
+                        throw new Error('flows-code-editor: editor view required');
+                    }
+                    this.emit('save', { value: editorView.state.doc.toString() });
                     return true;
                 },
             },
@@ -526,7 +664,7 @@ export class FlowsCodeEditor extends PlatformElement {
             this._lspCompartment.of([]),
             cm.EditorState.tabSize.of(4),
             cm.keymap.of(keymapForTab),
-            cm.EditorView.updateListener.of((update: any) => {
+            cm.EditorView.updateListener.of((update: CodeMirrorUpdate) => {
                 if (update.docChanged) {
                     const next = update.state.doc.toString();
                     if (next !== this.value) {
@@ -676,23 +814,14 @@ export class FlowsCodeEditor extends PlatformElement {
         if (!isPlainObject(session)) {
             throw new Error('code lsp session must be an object');
         }
-        if (typeof (session as any).ws_path !== 'string' || !(session as any).ws_path.startsWith('/')) {
-            throw new Error('code lsp ws_path required');
-        }
-        if (typeof (session as any).document_uri !== 'string' || (session as any).document_uri.length === 0) {
-            throw new Error('code lsp document_uri required');
-        }
-        if (typeof (session as any).root_uri !== 'string' || (session as any).root_uri.length === 0) {
-            throw new Error('code lsp root_uri required');
-        }
-        if (typeof (session as any).language_id !== 'string' || (session as any).language_id.length === 0) {
-            throw new Error('code lsp language_id required');
-        }
-        if (typeof this._cm.LSPClient !== 'function' || typeof this._cm.languageServerExtensions !== 'function') {
+        const lsp = lspSession(session);
+        const LspClientCtor = this._cm.LSPClient;
+        const languageServerExtensions = this._cm.languageServerExtensions;
+        if (typeof LspClientCtor !== 'function' || typeof languageServerExtensions !== 'function') {
             throw new Error('codemirror lsp-client is required');
         }
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const socket = new WebSocket(`${protocol}//${window.location.host}${(session as any).ws_path}`);
+        const socket = new WebSocket(`${protocol}//${window.location.host}${lsp.wsPath}`);
         await new Promise((resolve, reject) => {
             socket.addEventListener('open', () => resolve(undefined), { once: true });
             socket.addEventListener('error', () => reject(new Error('code lsp websocket failed')), { once: true });
@@ -701,38 +830,41 @@ export class FlowsCodeEditor extends PlatformElement {
             socket.close();
             return;
         }
-        const listeners = new Map();
-        const transport = {
-            send(message: any) {
+        const listeners = new Map<(data: unknown) => void, (event: Event) => void>();
+        const transport: LspTransport = {
+            send(message: string) {
                 socket.send(message);
             },
-            subscribe(handler: any) {
+            subscribe(handler: (data: unknown) => void) {
                 const listener = (event: Event) => {
-                    handler((event as Record<string, any>).data);
+                    if (!(event instanceof MessageEvent)) {
+                        throw new Error('lsp transport message required');
+                    }
+                    handler(event.data);
                 };
                 listeners.set(handler, listener);
                 socket.addEventListener('message', listener);
             },
-            unsubscribe(handler: any) {
+            unsubscribe(handler: (data: unknown) => void) {
                 const listener = listeners.get(handler);
-                if (!listener) {
+                if (listener === undefined) {
                     throw new Error('lsp transport handler is not subscribed');
                 }
                 socket.removeEventListener('message', listener);
                 listeners.delete(handler);
             },
         };
-        const client = new this._cm.LSPClient({
-            rootUri: (session as any).root_uri,
+        const client = new LspClientCtor({
+            rootUri: lsp.rootUri,
             timeout: 20000,
-            extensions: this._cm.languageServerExtensions(),
+            extensions: languageServerExtensions(),
         });
         client.connect(transport);
         this._lspClient = client;
         this._lspSocket = socket;
         this._editorView.dispatch({
             effects: this._lspCompartment.reconfigure(
-                client.plugin((session as any).document_uri, (session as any).language_id),
+                client.plugin(lsp.documentUri, lsp.languageId),
             ),
         });
     }

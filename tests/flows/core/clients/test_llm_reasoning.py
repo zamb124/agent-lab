@@ -177,7 +177,7 @@ class TestReasoningArtifactsInBuildTask:
                 task_id=task_id,
                 status=TaskStatus(
                     state=TASK_STATE_FAILED,
-                    message=Message(message_id="msg", role=ROLE_AGENT, parts=[Part(text="httpx.ReadTimeout")]),
+                    message=Message(message_id="msg", role=ROLE_AGENT, parts=[Part(text="httpx2.ReadTimeout")]),
                 ),
             ),
         ]

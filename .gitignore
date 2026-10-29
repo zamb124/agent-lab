@@ -41,7 +41,7 @@ docs/scenarios/**/index.md
 
 /server.log
 
-# Тяжёлые тестовые файлы корпуса (>5MB), скачиваются через scripts/download_example_docs.py --large
+# Тяжёлые тестовые файлы корпуса (>5MB), скачиваются через scripts/generate/example_docs.py --large
 tests/.cache/
 
 # Видеофайлы
@@ -74,7 +74,7 @@ core/frontend/pwa/assetlinks.json
 # Сгенерированные скриншоты App Store (исходники в mobile/screens/source/)
 mobile/screens/generated/
 
-# Объединённые JSON переводов (генерируются scripts/build_i18n.py)
+# Объединённые JSON переводов (генерируются scripts/build/i18n.py)
 core/i18n/generated/
 
 # FileWriter: выход тестов (перезапись при прогоне)

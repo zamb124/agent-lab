@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
 from apps.crm.models.suggest import CRMSuggest
@@ -241,7 +241,7 @@ async def test_missed_entity_dismissed_same_draft_is_not_recreated(
         )
         assert summary["missed_entity_created"] == 1
 
-        page = await crm_di.suggest_service.list_suggests(ns, status="pending")
+        page = await crm_di.suggest_service.list_suggests_by_created_at_desc(ns, status="pending")
         created = next(
             item
             for item in page.items
@@ -259,14 +259,14 @@ async def test_missed_entity_dismissed_same_draft_is_not_recreated(
         )
         assert second_summary["missed_entity_created"] == 0
 
-        pending_page = await crm_di.suggest_service.list_suggests(ns, status="pending")
+        pending_page = await crm_di.suggest_service.list_suggests_by_created_at_desc(ns, status="pending")
         assert not any(
             item.suggest_type == "missed_entity"
             and item.target_entity_ids == [note_id]
             for item in pending_page.items
         )
 
-        all_page = await crm_di.suggest_service.list_suggests(ns, status=None)
+        all_page = await crm_di.suggest_service.list_suggests_by_created_at_desc(ns, status=None)
         dismissed = [
             item
             for item in all_page.items

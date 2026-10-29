@@ -1,6 +1,6 @@
 """Интеграционное покрытие fallback кандидатов LLMClient.
 
-Эти тесты намеренно проходят через реальный путь httpx/OpenAI-compatible.
+Эти тесты намеренно проходят через реальный путь httpx2/OpenAI-compatible.
 Локальный сервер ниже — маленький детерминированный endpoint, а не патченный клиент.
 
 Короткие first_token_timeout используются только там, где таймаут ДОЛЖЕН
@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from typing import Any, Callable
 
-import httpx
+import httpx2
 import pytest
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
@@ -1229,7 +1229,7 @@ async def test_all_free_and_paid_fail_raises_last_http_error(unique_id: str) -> 
             platform_default_free_pool=True,
             platform_paid_fallback_enabled=True,
         )
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(httpx2.HTTPStatusError):
             await client.chat([_message("hello")])
         assert [request.model for request in server.requests] == [free_model, paid_model]
     finally:

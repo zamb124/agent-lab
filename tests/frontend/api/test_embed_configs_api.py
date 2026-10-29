@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.models.flow_config import FlowConfig

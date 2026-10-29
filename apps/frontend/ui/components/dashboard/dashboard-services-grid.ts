@@ -13,6 +13,7 @@ import '@platform/lib/components/platform-services-launcher.js';
 import './dashboard-service-card.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
 const DASHBOARD_SERVICES = PLATFORM_SERVICES.filter((s) => s.id !== 'frontend');
@@ -128,8 +129,8 @@ export class DashboardServicesGrid extends PlatformElement {
             return '—';
         }
         const stats = this._stats.lastResult;
-        if (!stats) return '—';
-        const count = (stats as Record<string, any>)[metricField];
+        if (!isPlainRecord(stats)) return '—';
+        const count = stats[metricField];
         if (typeof count !== 'number') return '—';
         return this.t(metricKey, { count });
     }

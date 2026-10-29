@@ -114,7 +114,7 @@ class TaskService:
         limit: int = 100,
     ) -> list[StockMoveLine]:
         """Открытая очередь склада (или «моя очередь» оператора)."""
-        return await StockMoveLine.list_queue(
+        return await StockMoveLine.list_open_queue_by_priority_desc_stop_sequence_and_created_at(
             company_id,
             warehouse_id,
             assigned_user_id=assigned_user_id,
@@ -140,7 +140,7 @@ class TaskService:
         той же полосе, чтобы два ТСД не забрали одно поручение.
         ``zone_location_id`` сужает выбор до поддерева зоны оператора.
         """
-        lines = await StockMoveLine.list_queue(
+        lines = await StockMoveLine.list_open_queue_by_priority_desc_stop_sequence_and_created_at(
             company_id, warehouse_id, zone_location_id=zone_location_id,
             limit=200,
         )

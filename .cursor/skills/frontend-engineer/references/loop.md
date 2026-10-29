@@ -13,7 +13,7 @@ python3 .cursor/skills/refactor-engineer/scripts/rules_drift.py
 
 - Файлы из `/tmp/ui_preflight_status.txt` — чужие правки: не трогаются, не откатываются, не форматируются, не коммитятся.
 - `gates_report.py` — все шаги `make lint` без остановки на первом падении (5–10 минут из-за basedpyright); красный шаг до среза — baseline, а не повод его скрыть.
-- `ui_audit.py` — около минуты: tsc, конвейер, сигнатуры `scripts/ui_canon_rules.py`, скрытые исключениями находки, слепые ссылки, мосты, нормы без гейта.
+- `ui_audit.py` — около минуты: tsc, конвейер, сигнатуры `scripts/gates/frontend/ui_canon_rules.py`, скрытые исключениями находки, слепые ссылки, мосты, нормы без гейта.
 
 ## Чтение `ui_audit.py`
 
@@ -21,7 +21,7 @@ python3 .cursor/skills/refactor-engineer/scripts/rules_drift.py
 |---|---|---|
 | tsc | ошибка компиляции | P0 |
 | Конвейер | звено toolchain вне эталона (`target-architecture.md` § Toolchain) | P0 |
-| Сигнатуры `hard` | рост — красный `scripts/check_ui_kit_canon.py`; остаток — долг слоя | рост P0, остаток P4 (`ui_js_files` в `tests/` — P5) |
+| Сигнатуры `hard` | рост — красный `scripts/gates/frontend/ui_kit_canon.py`; остаток — долг слоя | рост P0, остаток P4 (`ui_js_files` в `tests/` — P5) |
 | Сигнатуры `soft` `ts_*` | долг типов и замалчивания без ratchet | перевод в ratchet — P0; находки — P1 (`ts_silent_catch`, `ts_console`, `ts_literal_fallback`), P2 (`ts_explicit_any`, `ts_type_assertion`, `ts_double_cast`, `ts_non_null_assertion`) |
 | Сигнатуры `soft` прочие | визуал и мелкие отступления канона | P6 |
 | Скрытое | exemption или pragma прячет находку | P0 |
@@ -56,8 +56,8 @@ rg -n "\[(key|action|methodName): string\]: unknown" core/frontend/static/lib -g
 
 ## Детектор
 
-- Сигнатура по содержимому файла — правило `scripts/ui_canon_rules.py`: `soft` — только отчёт `scripts/report_ui_kostyli.py`; `hard` — ratchet `scripts/check_ui_kit_canon.py` с baseline `scripts/ui_canon_baseline.json`.
-- Структурная норма — гейт-владелец: `scripts/check_ui_canon.sh`, `scripts/check_core_frontend_canon.py`, `scripts/check_ui_factories.py`, `scripts/check_command_rest_mirror.py`, `scripts/check_field_canon.sh`, `scripts/check_platform_events_canon.py`.
+- Сигнатура по содержимому файла — правило `scripts/gates/frontend/ui_canon_rules.py`: `soft` — только отчёт `scripts/tools/report_ui_kostyli.py`; `hard` — ratchet `scripts/gates/frontend/ui_kit_canon.py` с baseline `scripts/gates/frontend/ui_canon_baseline.json`.
+- Структурная норма — гейт-владелец: `scripts/gates/frontend/ui_canon.sh`, `scripts/gates/frontend/core_frontend_canon.py`, `scripts/gates/frontend/ui_factories.py`, `scripts/gates/backend/command_rest_mirror.py`, `scripts/gates/frontend/field_canon.sh`, `scripts/gates/backend/platform_events.py`.
 - Детектор падает на текущем нарушении в границе — иначе он ничего не ловит; пустой набор сканируемых файлов и отсутствующий ожидаемый файл — падение, а не «OK».
 - Долг больше одного среза — hard-правило с текущим числом; срез снижает число, `--update` фиксирует только снижение.
 - В правиле-владельце снять `[без гейта]` и вписать гейт в раздел «Гейты».
@@ -72,7 +72,7 @@ rg -n "\[(key|action|methodName): string\]: unknown" core/frontend/static/lib -g
 
 1. Детектор среза — 0 в границе; повторный `ui_audit.py` не находит старого имени, пути, моста или исключения.
 2. `make ui`; затронуты Python, гейты или правила — `make lint` или `gates_report.py` без новых падений относительно preflight.
-3. Ratchet снизился — `uv run python scripts/check_ui_kit_canon.py --update`.
+3. Ratchet снизился — `uv run python -m scripts.gates.frontend.ui_kit_canon --update`.
 4. Затронут экран — визуальная проверка (`../SKILL.md` § Визуальная проверка).
 5. Красное из-за среза чинится до зелёного; красное не из-за среза показывается отдельно с доказательством из preflight.
 

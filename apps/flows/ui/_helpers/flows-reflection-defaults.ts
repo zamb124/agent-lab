@@ -60,7 +60,7 @@ const QUALITY_THREE_EXITS = Object.freeze([
     }),
 ]);
 
-const REFLECTION_POLICY_PRESETS = Object.freeze({
+const REFLECTION_POLICY_PRESETS: Record<string, unknown> = Object.freeze({
     final_answer: Object.freeze({
         policy_id: 'final_answer_quality_gate',
         gate: 'final_answer',
@@ -128,6 +128,10 @@ const REFLECTION_POLICY_PRESETS = Object.freeze({
     }),
 });
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function cloneJson(value: unknown) {
     return JSON.parse(JSON.stringify(value));
 }
@@ -136,15 +140,30 @@ export function getDefaultPassFailExits() {
     return cloneJson(DEFAULT_PASS_FAIL_EXITS);
 }
 
+function defaultExitViews(): Array<{ id: string; label: string }> {
+    const exits = getDefaultPassFailExits();
+    if (!Array.isArray(exits)) {
+        throw new Error('reflection defaults: exits must be an array');
+    }
+    const views: Array<{ id: string; label: string }> = [];
+    for (const item of exits) {
+        if (!isPlainRecord(item) || typeof item.exit_id !== 'string' || item.exit_id.length === 0 || typeof item.label !== 'string') {
+            throw new Error('reflection defaults: exit requires exit_id and label');
+        }
+        views.push({ id: item.exit_id, label: item.label });
+    }
+    return views;
+}
+
 export function getReflectionPolicyTemplate() {
     return cloneJson(REFLECTION_POLICY_PRESETS.final_answer);
 }
 
-export function getReflectionPolicyPreset(presetId: any) {
+export function getReflectionPolicyPreset(presetId: unknown) {
     if (typeof presetId !== 'string' || !(presetId in REFLECTION_POLICY_PRESETS)) {
-        throw new Error(`getReflectionPolicyPreset: unknown preset ${presetId}`);
+        throw new Error(`getReflectionPolicyPreset: unknown preset ${String(presetId)}`);
     }
-    return cloneJson((REFLECTION_POLICY_PRESETS as any)[presetId]);
+    return cloneJson(REFLECTION_POLICY_PRESETS[presetId]);
 }
 
 export function getReflectionLlmTemplate() {
@@ -165,40 +184,24 @@ export function getBlankReflectionNodeConfig() {
  * @param {unknown} policy
  * @returns {{ id: string, label: string }[]}
  */
-export function listReflectionExits(policy: any) {
-    if (!policy || typeof policy !== 'object' || Array.isArray(policy)) {
-        return getDefaultPassFailExits().map((exitItem: any) => ({
-            id: exitItem.exit_id,
-            label: exitItem.label,
-        }));
+export function listReflectionExits(policy: unknown) {
+    if (!isPlainRecord(policy)) {
+        return defaultExitViews();
     }
-    const typed = /** @type {Record<string, unknown>} */ (policy);
-    const exits = typed.exits;
+    const exits = policy.exits;
     if (!Array.isArray(exits) || exits.length === 0) {
-        return getDefaultPassFailExits().map((exitItem: any) => ({
-            id: exitItem.exit_id,
-            label: exitItem.label,
-        }));
+        return defaultExitViews();
     }
-    const listed = [];
+    const listed: Array<{ id: string; label: string }> = [];
     for (const raw of exits) {
-        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        if (!isPlainRecord(raw) || typeof raw.exit_id !== 'string' || raw.exit_id.length === 0) {
             continue;
         }
-        const item = /** @type {Record<string, unknown>} */ (raw);
-        if (typeof item.exit_id !== 'string' || item.exit_id.length === 0) {
-            continue;
-        }
-        const label = typeof item.label === 'string' && item.label.length > 0
-            ? item.label
-            : item.exit_id;
-        listed.push({ id: item.exit_id, label });
+        const label = typeof raw.label === 'string' && raw.label.length > 0 ? raw.label : raw.exit_id;
+        listed.push({ id: raw.exit_id, label });
     }
     if (listed.length === 0) {
-        return getDefaultPassFailExits().map((exitItem: any) => ({
-            id: exitItem.exit_id,
-            label: exitItem.label,
-        }));
+        return defaultExitViews();
     }
     return listed;
 }
@@ -206,7 +209,7 @@ export function listReflectionExits(policy: any) {
 /**
  * @param {string} exitId
  */
-export function reflectionExitCondition(exitId: any) {
+export function reflectionExitCondition(exitId: unknown) {
     if (typeof exitId !== 'string' || exitId.length === 0) {
         throw new Error('reflectionExitCondition: exitId required');
     }
@@ -218,7 +221,7 @@ export function reflectionExitCondition(exitId: any) {
     };
 }
 
-export function buildReflectionExitEdge(fromNodeId: any, toNodeId: any, exitId: any) {
+export function buildReflectionExitEdge(fromNodeId: unknown, toNodeId: unknown, exitId: unknown) {
     if (typeof fromNodeId !== 'string' || fromNodeId.length === 0) {
         throw new Error('buildReflectionExitEdge: fromNodeId required');
     }
@@ -242,37 +245,36 @@ export function buildReflectionExitEdge(fromNodeId: any, toNodeId: any, exitId: 
  * @param {Iterable<string>|null|undefined} allowedExitIds
  * @returns {string|null}
  */
-export function inferReflectionExitPortFromCondition(condition: any, allowedExitIds = null) {
-    if (!condition || typeof condition !== 'object' || Array.isArray(condition)) {
+export function inferReflectionExitPortFromCondition(condition: unknown, allowedExitIds: readonly string[] | null = null) {
+    if (!isPlainRecord(condition)) {
         return null;
     }
-    const typed = /** @type {Record<string, unknown>} */ (condition);
-    if (typed.type !== 'simple') {
+    if (condition.type !== 'simple') {
         return null;
     }
-    if (typed.operator !== '==') {
+    if (condition.operator !== '==') {
         return null;
     }
     const allowed = allowedExitIds == null
         ? null
         : new Set(Array.from(allowedExitIds));
-    if (typed.variable === 'validation.exit_id') {
-        if (typeof typed.value !== 'string' || typed.value.length === 0) {
+    if (condition.variable === 'validation.exit_id') {
+        if (typeof condition.value !== 'string' || condition.value.length === 0) {
             return null;
         }
-        if (allowed !== null && !allowed.has(typed.value)) {
+        if (allowed !== null && !allowed.has(condition.value)) {
             return null;
         }
-        return typed.value;
+        return condition.value;
     }
-    if (typed.variable === 'validation.approved') {
-        if (typed.value === true) {
+    if (condition.variable === 'validation.approved') {
+        if (condition.value === true) {
             if (allowed !== null && !allowed.has('approved')) {
                 return null;
             }
             return 'approved';
         }
-        if (typed.value === false) {
+        if (condition.value === false) {
             if (allowed !== null && !allowed.has('blocked')) {
                 return null;
             }
@@ -289,8 +291,8 @@ export function inferReflectionExitPortFromCondition(condition: any, allowedExit
  * @param {Iterable<string>|null|undefined} allowedExitIds
  * @returns {Record<string, unknown>}
  */
-export function syncReflectionEdgeFromPort(edge: any, condition: any, allowedExitIds = null) {
-    if (!edge || typeof edge !== 'object') {
+export function syncReflectionEdgeFromPort(edge: unknown, condition: unknown, allowedExitIds: readonly string[] | null = null) {
+    if (!isPlainRecord(edge)) {
         throw new Error('syncReflectionEdgeFromPort: edge object required');
     }
     const inferred = inferReflectionExitPortFromCondition(condition, allowedExitIds);
@@ -310,8 +312,8 @@ export function syncReflectionEdgeFromPort(edge: any, condition: any, allowedExi
  * @param {{ id: string }[]|null|undefined} exits
  * @returns {number}
  */
-export function reflectionOutPortYFraction(port: any, exits = null) {
-    const list = Array.isArray(exits) && (exits as Record<string, any>).length > 0
+export function reflectionOutPortYFraction(port: unknown, exits: unknown = null) {
+    const list = Array.isArray(exits) && exits.length > 0
         ? exits
         : [{ id: 'approved' }, { id: 'blocked' }];
     if (typeof port !== 'string' || port.length === 0) {

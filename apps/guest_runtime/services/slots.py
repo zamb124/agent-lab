@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import assert_never
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 
 from core.config.models import GuestRuntimeFarmConfig
 from core.guest_runtime.models import GuestExecutorKind, GuestLanguage, GuestLease
@@ -116,7 +116,7 @@ async def _wait_health(url: str, *, attempts: int = 50) -> None:
     last_error: Exception | None = None
     for _ in range(attempts):
         try:
-            async with httpx.AsyncClient(timeout=1.0) as client:
+            async with httpx2.AsyncClient(timeout=1.0) as client:
                 response = await client.get(f"{url}/health")
                 if response.status_code == 200:
                     return

@@ -43,9 +43,10 @@ class StockValueLayerConsumption(PlatformModel):
         return await cls.objects.create(instance=consumption)
 
     @classmethod
-    async def list_for_out_layer(
+    async def list_unordered_for_out_layer(
         cls, company_id: str, out_layer_id: str
     ) -> list[Self]:
+        """Списания исходящего слоя. Порядка и limit нет. Пустые поля не проверяются."""
         return await cls.objects.filter(
             company_id=company_id, out_layer_id=out_layer_id
         ).all()

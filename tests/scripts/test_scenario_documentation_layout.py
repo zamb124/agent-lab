@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.check_scenario_docs_quality import check_readme_quality
-from scripts.docs_prepare import (
+from scripts.docs.prepare import (
     _page_title,
     _render_pages_yaml,
     _titled_nav_link,
     copy_scenario_images,
 )
+from scripts.gates.repo.scenario_docs_quality import check_readme_quality
 from tests.ui.scenario_doc import build_screenshot_filename, prepare_flat_screenshot_output
 
 

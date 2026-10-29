@@ -37,7 +37,7 @@ async def op_flows_agent_skills_list(
 ) -> OffsetPage[AgentSkill]:
     _ = user
     _ = await require_company_member(di)
-    items = await AgentSkill.list_skills(
+    items = await AgentSkill.list_by_agent_skill_id_asc(
         limit=payload.limit, offset=payload.offset
     )
     total = await AgentSkill.count_skills()

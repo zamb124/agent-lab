@@ -11,6 +11,10 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
+function hasOwnKey<T extends object>(catalog: T, key: string): key is Extract<keyof T, string> {
+    return Object.prototype.hasOwnProperty.call(catalog, key);
+}
+
 const TONE_COLORS = {
     accent: 'var(--accent)',
     success: 'var(--success)',
@@ -110,7 +114,7 @@ export class DashboardQuickActionCard extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const tone = (TONE_COLORS as Record<string, string>)[this.tone] === undefined ? TONE_COLORS.accent : (TONE_COLORS as Record<string, string>)[this.tone];
+        const tone = hasOwnKey(TONE_COLORS, this.tone) ? TONE_COLORS[this.tone] : TONE_COLORS.accent;
         return html`
             <button type="button"
                     style="--card-tone: ${tone}"

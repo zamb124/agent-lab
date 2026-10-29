@@ -83,7 +83,8 @@ class Board(PlatformModel):
         return board
 
     @classmethod
-    async def company_boards(cls, company_id: str, *, namespace: str | None) -> list[Self]:
+    async def list_for_company_by_created_at_asc(cls, company_id: str, *, namespace: str | None) -> list[Self]:
+        """Доски компании, ORDER BY created_at ASC. namespace is None не фильтрует. Предела нет. Пустые поля не проверяются."""
         rows = cls.objects.filter(company_id=company_id)
         if namespace is not None:
             rows = rows.filter(namespace=namespace)

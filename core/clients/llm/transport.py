@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
 from typing import NamedTuple, Protocol
 
-import httpx
+import httpx2
 from a2a.helpers.proto_helpers import new_text_message
 from a2a.types import (
     Artifact,
@@ -483,7 +483,7 @@ async def stream_once(
                                                 function_arguments
                                             )
                     except (
-                        httpx.HTTPError,
+                        httpx2.HTTPError,
                         OSError,
                         json.JSONDecodeError,
                         ValueError,
@@ -522,7 +522,7 @@ async def stream_once(
                     _ = idle_watch_task.cancel()
                     with suppress(asyncio.CancelledError, RuntimeError):
                         await idle_watch_task
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             logger.error(
                 "llm.api_http_error",
                 error=str(exc),

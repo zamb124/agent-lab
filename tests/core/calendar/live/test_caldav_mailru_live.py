@@ -232,7 +232,7 @@ async def test_manual_calendar_password_links_mailbox_and_imports_events(
         )
         assert result["imported"] > 0
 
-        events = await di.calendar_service.list_events(
+        events = await di.calendar_service.list_events_by_start_at_asc(
             company_id=company_id,
             user_id=user_id,
             start_at=now - timedelta(days=365),

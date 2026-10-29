@@ -25,7 +25,45 @@ const SQL_PARAM_RE = /(?<!:):([A-Za-z_][A-Za-z0-9_]*)/g;
  * @param {string} connectorId
  * @returns {number | null}
  */
-function defaultPortForConnector(connectorId: any) {
+interface DatasourceTestSummary {
+    ok: boolean;
+    latencyMs: number;
+    serverVersion: string | null;
+}
+
+interface SchemaColumn {
+    name: string;
+    dataType: string;
+}
+
+interface SchemaTable {
+    tableName: string;
+    columns: SchemaColumn[];
+}
+
+interface CredentialValues {
+    name: string;
+    host: string;
+    port: number | null;
+    databaseName: string;
+    username: string;
+    password: string;
+    sslMode: string;
+    allowedOperations: readonly string[];
+}
+
+interface CredentialHandlers {
+    name: (event: CustomEvent) => void;
+    host: (event: CustomEvent) => void;
+    port: (event: CustomEvent) => void;
+    databaseName: (event: CustomEvent) => void;
+    username: (event: CustomEvent) => void;
+    password: (event: CustomEvent) => void;
+    sslMode: (event: CustomEvent) => void;
+    allowedOperations: (event: CustomEvent) => void;
+}
+
+function defaultPortForConnector(connectorId: string) {
     if (connectorId === 'postgres') {
         return 5432;
     }
@@ -42,7 +80,7 @@ function defaultPortForConnector(connectorId: any) {
  * @param {string} host
  * @returns {boolean}
  */
-function isLocalhostHost(host: any) {
+function isLocalhostHost(host: string) {
     const normalized = host.trim().toLowerCase();
     return normalized === 'localhost' || normalized === '127.0.0.1';
 }
@@ -51,7 +89,7 @@ function isLocalhostHost(host: any) {
  * @param {string} sql
  * @returns {string[]}
  */
-function sqlNamedParams(sql: any) {
+function sqlNamedParams(sql: string) {
     const names = [];
     const seen = new Set();
     SQL_PARAM_RE.lastIndex = 0;
@@ -75,7 +113,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -110,38 +148,38 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
     declare _showCreate: boolean;
     declare _createName: string;
     declare _createHost: string;
-    declare _createPort: any;
+    declare _createPort: number | null;
     declare _createDatabaseName: string;
     declare _createUsername: string;
     declare _createPassword: string;
     declare _createSslMode: string;
-    declare _createAllowedOperations: any[];
+    declare _createAllowedOperations: string[];
     declare _editBoundId: string;
     declare _editHydrated: boolean;
     declare _editName: string;
     declare _editHost: string;
-    declare _editPort: any;
+    declare _editPort: number | null;
     declare _editDatabaseName: string;
     declare _editUsername: string;
     declare _editPassword: string;
     declare _editSslMode: string;
-    declare _editAllowedOperations: any[];
+    declare _editAllowedOperations: string[];
     declare _editStatementTimeoutMs: number;
     declare _editMaxRows: number;
-    declare _testSummary: Record<string, any> | null;
-    declare _testError: any;
-    declare _schemaTables: any;
-    declare _schemaError: any;
+    declare _testSummary: DatasourceTestSummary | null;
+    declare _testError: string | null;
+    declare _schemaTables: SchemaTable[] | null;
+    declare _schemaError: string | null;
 ;
 
     static override styles: CSSResultGroup = [
@@ -220,7 +258,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = '';
+        this.flowNodeType = '';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -274,16 +312,16 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
         }
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
     _selectedDatasourceId() {
         const cfg = asObject(this.nodeConfig);
-        return typeof (cfg as any).datasource_id === 'string' ? (cfg as any).datasource_id : '';
+        return typeof (cfg).datasource_id === 'string' ? (cfg).datasource_id : '';
     }
 
-    _connectionById(datasourceId: any) {
+    _connectionById(datasourceId: string) {
         if (datasourceId.length === 0) {
             return null;
         }
@@ -306,7 +344,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
      * @param {object | null} item
      * @param {string} datasourceId
      */
-    _hydrateEdit(item: any, datasourceId: any) {
+    _hydrateEdit(item: unknown, datasourceId: string) {
         this._editBoundId = datasourceId;
         if (item === null) {
             this._editHydrated = false;
@@ -322,17 +360,47 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
             this._editMaxRows = 1000;
             return;
         }
+        if (!isPlainObject(item)) {
+            throw new Error('flows-datasource-node-editor: connection item must be object');
+        }
+        const name = item.name;
+        const sslMode = item.ssl_mode;
+        const timeout = item.statement_timeout_ms;
+        const maxRows = item.max_rows;
+        const operations = item.allowed_operations;
+        if (typeof name !== 'string' || name.length === 0) {
+            throw new Error('flows-datasource-node-editor: connection name required');
+        }
+        if (typeof sslMode !== 'string' || sslMode.length === 0) {
+            throw new Error('flows-datasource-node-editor: connection ssl_mode required');
+        }
+        if (typeof timeout !== 'number' || !Number.isFinite(timeout)) {
+            throw new Error('flows-datasource-node-editor: connection statement_timeout_ms required');
+        }
+        if (typeof maxRows !== 'number' || !Number.isFinite(maxRows)) {
+            throw new Error('flows-datasource-node-editor: connection max_rows required');
+        }
+        if (!Array.isArray(operations)) {
+            throw new Error('flows-datasource-node-editor: connection allowed_operations required');
+        }
+        const allowed: string[] = [];
+        for (const operation of operations) {
+            if (typeof operation !== 'string') {
+                throw new Error('flows-datasource-node-editor: allowed_operations item');
+            }
+            allowed.push(operation);
+        }
         this._editHydrated = true;
-        this._editName = item.name;
+        this._editName = name;
         this._editHost = typeof item.host === 'string' ? item.host : '';
         this._editPort = typeof item.port === 'number' ? item.port : null;
         this._editDatabaseName = typeof item.database_name === 'string' ? item.database_name : '';
         this._editUsername = typeof item.username === 'string' ? item.username : '';
         this._editPassword = '';
-        this._editSslMode = item.ssl_mode;
-        this._editAllowedOperations = [...item.allowed_operations];
-        this._editStatementTimeoutMs = item.statement_timeout_ms;
-        this._editMaxRows = item.max_rows;
+        this._editSslMode = sslMode;
+        this._editAllowedOperations = allowed;
+        this._editStatementTimeoutMs = timeout;
+        this._editMaxRows = maxRows;
     }
 
     /**
@@ -344,7 +412,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
             throw new Error('flows-datasource-node-editor: datasources.items must be array');
         }
         const cfg = asObject(this.nodeConfig);
-        const connectorId = typeof (cfg as any).connector_id === 'string' ? (cfg as any).connector_id : '';
+        const connectorId = typeof (cfg).connector_id === 'string' ? (cfg).connector_id : '';
         const options = [];
         for (const item of items) {
             if (item === null || typeof item !== 'object') {
@@ -376,7 +444,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
 
     _resetCreateForm() {
         const cfg = asObject(this.nodeConfig);
-        const connectorId = typeof (cfg as any).connector_id === 'string' ? (cfg as any).connector_id : '';
+        const connectorId = typeof (cfg).connector_id === 'string' ? (cfg).connector_id : '';
         this._createName = '';
         this._createHost = '';
         this._createPort = defaultPortForConnector(connectorId);
@@ -602,7 +670,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
      * @param {string} failedType
      * @returns {Promise<object | null>}
      */
-    _waitForCausedEvent(controller: any, requestedId: any, successType: any, failedType: any) {
+    _waitForCausedEvent(controller: ResourceController, requestedId: string, successType: string, failedType: string) {
         const bus = controller.bus;
         return new Promise((resolve, reject) => {
             let offSuccess: (() => void) | null = null;
@@ -639,14 +707,14 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
 
     async _createConnection() {
         const cfg = asObject(this.nodeConfig);
-        const connectorId = typeof (cfg as any).connector_id === 'string' ? (cfg as any).connector_id.trim() : '';
+        const connectorId = typeof (cfg).connector_id === 'string' ? (cfg).connector_id.trim() : '';
         if (connectorId.length === 0) {
             throw new Error('flows-datasource-node-editor: connector_id required to create connection');
         }
-        const name = (this._createName.trim() as any);
-        const host = (this._createHost.trim() as any);
-        const databaseName = (this._createDatabaseName.trim() as any);
-        const username = (this._createUsername.trim() as any);
+        const name = (this._createName.trim());
+        const host = (this._createHost.trim());
+        const databaseName = (this._createDatabaseName.trim());
+        const username = (this._createUsername.trim());
         const password = this._createPassword;
         if (name.length === 0 || host.length === 0 || databaseName.length === 0 || username.length === 0) {
             this.toast('datasource_node_editor.create_required', { type: 'error' });
@@ -656,11 +724,11 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
             this.toast('datasource_node_editor.create_port_required', { type: 'error' });
             return;
         }
-        if ((password as any).length === 0) {
+        if ((password).length === 0) {
             this.toast('datasource_node_editor.create_password_required', { type: 'error' });
             return;
         }
-        if ((this._createAllowedOperations.length as any) === 0) {
+        if ((this._createAllowedOperations.length) === 0) {
             this.toast('datasource_node_editor.create_operations_required', { type: 'error' });
             return;
         }
@@ -713,10 +781,10 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
         if (this._datasources.isBusy(datasourceId)) {
             return;
         }
-        const name = (this._editName.trim() as any);
-        const host = (this._editHost.trim() as any);
-        const databaseName = (this._editDatabaseName.trim() as any);
-        const username = (this._editUsername.trim() as any);
+        const name = (this._editName.trim());
+        const host = (this._editHost.trim());
+        const databaseName = (this._editDatabaseName.trim());
+        const username = (this._editUsername.trim());
         if (name.length === 0 || host.length === 0 || databaseName.length === 0 || username.length === 0) {
             this.toast('datasource_node_editor.create_required', { type: 'error' });
             return;
@@ -725,11 +793,11 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
             this.toast('datasource_node_editor.create_port_required', { type: 'error' });
             return;
         }
-        if ((this._editAllowedOperations.length as any) === 0) {
+        if ((this._editAllowedOperations.length) === 0) {
             this.toast('datasource_node_editor.create_operations_required', { type: 'error' });
             return;
         }
-        const body: any = {
+        const body: Record<string, unknown> = {
             name,
             host,
             port: this._editPort,
@@ -740,7 +808,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
             statement_timeout_ms: this._editStatementTimeoutMs,
             max_rows: this._editMaxRows,
         };
-        if ((this._editPassword.length as any) > 0) {
+        if ((this._editPassword.length) > 0) {
             body.password = this._editPassword;
         }
         const requested = this._datasources.update(datasourceId, body);
@@ -789,7 +857,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
         this._datasources.load({});
     }
 
-    _requireOpError(op: any, label: string) {
+    _requireOpError(op: OpController, label: string) {
         const message = op.error;
         if (typeof message !== 'string' || message.length === 0) {
             throw new Error(`flows-datasource-node-editor: ${label} failed without error message`);
@@ -884,19 +952,19 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
         this._schemaTables = tables;
     }
 
-    _onSchemaTable(tableName: any) {
+    _onSchemaTable(tableName: string) {
         if (typeof tableName !== 'string' || tableName.length === 0) {
             throw new Error('flows-datasource-node-editor: tableName required');
         }
         this._emitPatch({ sql: `SELECT * FROM ${tableName} LIMIT 50` });
     }
 
-    _onSchemaColumn(columnName: any) {
+    _onSchemaColumn(columnName: string) {
         if (typeof columnName !== 'string' || columnName.length === 0) {
             throw new Error('flows-datasource-node-editor: columnName required');
         }
         const cfg = asObject(this.nodeConfig);
-        const current = typeof (cfg as any).sql === 'string' ? (cfg as any).sql : '';
+        const current = typeof (cfg).sql === 'string' ? (cfg).sql : '';
         const token = `:${columnName}`;
         if (current.length === 0) {
             this._emitPatch({ sql: token });
@@ -919,8 +987,9 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
             throw new Error('flows-datasource-node-editor: datasource_operation must be introspect|query|execute');
         }
         const cfg = asObject(this.nodeConfig);
-        const current = OPERATIONS.includes((cfg as any).datasource_operation)
-            ? (cfg as any).datasource_operation
+        const currentOperation = cfg.datasource_operation;
+        const current = typeof currentOperation === 'string' && OPERATIONS.includes(currentOperation)
+            ? currentOperation
             : 'query';
         if (v === 'execute' && current !== 'execute') {
             const confirmed = await platformConfirm(this.t('datasource_node_editor.execute_confirm_body'), {
@@ -959,7 +1028,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
         ];
     }
 
-    _credentialFields(prefix: string, values: any, handlers: any) {
+    _credentialFields(prefix: string, values: CredentialValues, handlers: CredentialHandlers) {
         return html`
             <platform-field
                 type="string"
@@ -1026,12 +1095,13 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
 
     override render(): TemplateResult {
         const cfg = asObject(this.nodeConfig);
-        const connectorId = typeof (cfg as any).connector_id === 'string' ? (cfg as any).connector_id : '';
-        const datasourceId = typeof (cfg as any).datasource_id === 'string' ? (cfg as any).datasource_id : '';
-        const operation = OPERATIONS.includes((cfg as any).datasource_operation)
-            ? (cfg as any).datasource_operation
+        const connectorId = typeof (cfg).connector_id === 'string' ? (cfg).connector_id : '';
+        const datasourceId = typeof (cfg).datasource_id === 'string' ? (cfg).datasource_id : '';
+        const operationValue = cfg.datasource_operation;
+        const operation = typeof operationValue === 'string' && OPERATIONS.includes(operationValue)
+            ? operationValue
             : 'query';
-        const sql = typeof (cfg as any).sql === 'string' ? (cfg as any).sql : '';
+        const sql = typeof (cfg).sql === 'string' ? (cfg).sql : '';
         const operationValues = [
             { value: 'introspect', label: this.t('datasource_node_editor.operation_introspect') },
             { value: 'query', label: this.t('datasource_node_editor.operation_query') },
@@ -1054,7 +1124,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'datasource'}
+                .flowNodeType=${typeof this.flowNodeType === 'string' && this.flowNodeType.length > 0 ? this.flowNodeType : 'datasource'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
@@ -1238,7 +1308,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
                         <p class="sql-params">${this.t('datasource_node_editor.schema_click_table')}</p>
                         <p class="sql-params">${this.t('datasource_node_editor.schema_click_column')}</p>
                         <ul class="schema-list">
-                            ${schemaTables.map((table: any) => html`
+                            ${schemaTables.map((table) => html`
                                 <li>
                                     <platform-button
                                         variant="ghost"
@@ -1248,7 +1318,7 @@ export class FlowsDatasourceNodeEditor extends PlatformElement {
                                         ${table.tableName}
                                     </platform-button>
                                     <ul class="schema-columns">
-                                        ${table.columns.map((column: any) => html`
+                                        ${table.columns.map((column) => html`
                                             <li>
                                                 <platform-button
                                                     variant="ghost"

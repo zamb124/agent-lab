@@ -4,7 +4,7 @@ import pytest
 
 from core.crawl.models import CrawlPageFilterMetadata
 from core.crawl.taxonomy import (
-    coerce_filter_metadata_for_taxonomy,
+    coerce_filter_metadata_for_taxonomy_by_tag_asc,
     validate_filter_metadata_against_taxonomy,
 )
 from core.search.index_models import SearchIndexCrawlTaxonomy
@@ -39,7 +39,7 @@ def _runet_taxonomy() -> SearchIndexCrawlTaxonomy:
 
 def test_coerce_accepts_domain_tag() -> None:
     taxonomy = _runet_taxonomy()
-    coerced = coerce_filter_metadata_for_taxonomy(
+    coerced = coerce_filter_metadata_for_taxonomy_by_tag_asc(
         _filter_metadata(primary_topic="directory", topic_tags=["domain", "directory"]),
         taxonomy,
     )
@@ -49,7 +49,7 @@ def test_coerce_accepts_domain_tag() -> None:
 
 def test_coerce_fixes_empty_category_path() -> None:
     taxonomy = _runet_taxonomy()
-    coerced = coerce_filter_metadata_for_taxonomy(
+    coerced = coerce_filter_metadata_for_taxonomy_by_tag_asc(
         _filter_metadata(primary_topic="other", topic_tags=["other", "reference"], category_path=[]),
         taxonomy,
     )
@@ -59,7 +59,7 @@ def test_coerce_fixes_empty_category_path() -> None:
 
 def test_coerce_fixes_lifestyle_hobbies_gardening_path() -> None:
     taxonomy = _runet_taxonomy()
-    coerced = coerce_filter_metadata_for_taxonomy(
+    coerced = coerce_filter_metadata_for_taxonomy_by_tag_asc(
         _filter_metadata(
             primary_topic="lifestyle",
             topic_tags=["lifestyle", "gardening"],
@@ -73,7 +73,7 @@ def test_coerce_fixes_lifestyle_hobbies_gardening_path() -> None:
 
 def test_coerce_strips_schema_field_names_from_topic_tags() -> None:
     taxonomy = _runet_taxonomy()
-    coerced = coerce_filter_metadata_for_taxonomy(
+    coerced = coerce_filter_metadata_for_taxonomy_by_tag_asc(
         _filter_metadata(
             primary_topic="tech",
             topic_tags=["category_path", "software"],
@@ -87,7 +87,7 @@ def test_coerce_strips_schema_field_names_from_topic_tags() -> None:
 
 def test_coerce_accepts_data_science_infrastructure_browser() -> None:
     taxonomy = _runet_taxonomy()
-    coerced = coerce_filter_metadata_for_taxonomy(
+    coerced = coerce_filter_metadata_for_taxonomy_by_tag_asc(
         _filter_metadata(
             primary_topic="data_science",
             topic_tags=["data_science", "machine_learning"],
@@ -96,7 +96,7 @@ def test_coerce_accepts_data_science_infrastructure_browser() -> None:
         taxonomy,
     )
     validate_filter_metadata_against_taxonomy(coerced, taxonomy)
-    coerced_infra = coerce_filter_metadata_for_taxonomy(
+    coerced_infra = coerce_filter_metadata_for_taxonomy_by_tag_asc(
         _filter_metadata(
             primary_topic="infrastructure",
             topic_tags=["infrastructure", "cloud"],
@@ -105,7 +105,7 @@ def test_coerce_accepts_data_science_infrastructure_browser() -> None:
         taxonomy,
     )
     validate_filter_metadata_against_taxonomy(coerced_infra, taxonomy)
-    coerced_browser = coerce_filter_metadata_for_taxonomy(
+    coerced_browser = coerce_filter_metadata_for_taxonomy_by_tag_asc(
         _filter_metadata(
             primary_topic="browser",
             topic_tags=["browser", "software"],
@@ -126,7 +126,7 @@ def test_coerce_pads_single_other_topic_tag() -> None:
         language="ru",
         audience="general",
     )
-    coerced = coerce_filter_metadata_for_taxonomy(filter_metadata, taxonomy)
+    coerced = coerce_filter_metadata_for_taxonomy_by_tag_asc(filter_metadata, taxonomy)
     validate_filter_metadata_against_taxonomy(coerced, taxonomy)
     assert len(coerced.topic_tags) >= 2
     assert "other" in coerced.topic_tags
@@ -135,7 +135,7 @@ def test_coerce_pads_single_other_topic_tag() -> None:
 
 def test_coerce_accepts_bare_metal_tag() -> None:
     taxonomy = _runet_taxonomy()
-    coerced = coerce_filter_metadata_for_taxonomy(
+    coerced = coerce_filter_metadata_for_taxonomy_by_tag_asc(
         _filter_metadata(
             primary_topic="hardware",
             topic_tags=["bare_metal", "hardware"],

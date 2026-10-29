@@ -7,8 +7,8 @@ from __future__ import annotations
 import pytest
 
 from core.clients.files_client import FilesClient
-from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.create_spec import FileCreateSpec
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.fixtures.s3 import require_s3_configured
 

@@ -4,6 +4,7 @@ globs:
   - "**/tasks/**"
   - "**/broker.py"
   - "**/worker.py"
+  - "**/worker_*.py"
   - "**/*_tasks.py"
   - "apps/worker_manifest.py"
   - "apps/scheduler/**"
@@ -20,9 +21,9 @@ alwaysApply: false
 
 1. Объявление — `SPEC = declare_task("<snake_case>", queue=..., scheduled=..., retry=...)` в declaration-модуле (`task_names.py`) и `@platform_task(SPEC)` в impl-модуле (`*_tasks.py`); имя глобально уникально, конфликт — `raise`; имя Spec — `TASK_*`/`CRM_*`/`CRAWL_*` без `_NAME`, строка — `SPEC.name`.
 2. Постановка — только `await enqueue(SPEC, **kwargs)` (`core.tasks`); `enqueue` пишет labels `request_id`, `trace_id`, `service_name`, `queue_name`, `priority`; фиксированный id — `taskiq_task_id=...`.
-3. Один брокер на очередь: `core/tasks/broker.py::create_broker` в thin-модуле `apps/<svc>_worker/broker.py` (sync — `apps/sync/realtime/broker.py`, `a2a_push` — `apps/idle_worker/a2a_push_broker.py`, `crm_summary` — `apps/crm_worker/summary_broker.py`). Middleware по порядку: `LoggingMiddleware`, `SessionLockMiddleware`, `SimpleRetryMiddleware`.
+3. Один брокер на очередь: `core/tasks/broker.py::create_broker` вызывает только `apps/worker_manifest.py` (`service_name` очереди — таблица манифеста). Middleware по порядку: `LoggingMiddleware`, `SessionLockMiddleware`, `SimpleRetryMiddleware`.
 4. Топология — только `apps/worker_manifest.py`: `wire_worker(queue)` (воркер), `wire_brokers()` (HTTP scheduler API), `wire_all()` (процесс scheduler); declaration импортируется producer'ами без runtime задачи.
-5. Воркер — `apps/<svc>_worker/worker.py`: `wire_worker(queue)` + `build_worker(broker, service_name=..., queue=..., settings=..., di_class=..., database=..., lifecycle=(...))` (`core/tasks/worker_bootstrap.py`: recovery сообщений, tracing, file processors, eager DI в `TaskiqState.di`, `set_billing_service`, MockLLM в TESTING, каталог событий, teardown). DI → `architecture.mdc` § Service Kit DI.
+5. Воркер — один файл `apps/<svc>/worker.py` (второй процесс — `worker_<name>.py`; `idle` — `apps/idle/worker.py` и `worker_a2a_push.py`): `wire_worker(queue)` + `build_worker(broker, service_name=..., queue=..., settings=..., di_class=..., database=..., lifecycle=(...))` (`core/tasks/worker_bootstrap.py`: recovery сообщений, tracing, file processors, eager DI в `TaskiqState.di`, `set_billing_service`, MockLLM в TESTING, каталог событий, teardown). DI → `architecture.mdc` § Service Kit DI.
 6. `@platform_task` — boundary: параметр `di: Di`, сразу `di.<service>`; per-task ресурс — generator dependency TaskIQ, process-ресурс — recipe.
 7. Взаимное исключение per `session_id` — `SessionLockMiddleware` (`core/tasks/session_lock.py`, lock в `database.redis_url`, TTL 300 с, ожидание до 60 с, таймаут — ошибка задачи, release по токену). Это мьютекс, а не FIFO-очередь: строгая сериализация команд — `core/lanes` (`database.mdc` § Полосы).
 8. `retry=True` — только для идемпотентного flaky IO; многоэтапная задача с UI/WS без идемпотентности шагов — без retry.
@@ -34,7 +35,7 @@ alwaysApply: false
 ### Scheduler
 
 1. Процесс — `apps/scheduler/scheduler.py` → `wire_all()` → `require_scheduled_tasks_registered()` → `create_scheduler(settings.tasks.broker_url)` (`apps/scheduler/dispatch.py`); dispatch — `QueueAwareTaskiqScheduler` кикает на брокере `TaskSpec.queue`.
-2. HTTP control-plane — `SchedulerDi` (`apps/scheduler/di.py`), команды `SCHEDULER_OPERATIONS` (`scheduler/schedule_tasks/*_requested`) + REST `/scheduler/api/v1/schedules*`; метаданные — shared таблица `scheduler_tasks` с `company_id`. `PlatformScheduledTask.update_status_schedule_runs_and_error(company_id, schedule_task_id, status, *, schedule_id=None, last_run_at=None, next_run_at=None, error_message=None) -> bool` пишет `status` и `updated_at`; остальные поля пишет только если аргумент не `None`, поэтому `None` поле не очищает. Нет строки — `False`. `PlatformScheduledTask.by_schedule_task_id(company_id, schedule_task_id) -> PlatformScheduledTask | None` — строка компании по `schedule_task_id`. Нет строки — `None`. Пустые `company_id` и `schedule_task_id` — `ValueError`. Системные cron — lifecycle `ensure_platform_schedules`. `PlatformScheduledTask.list_filtered_by_created_at_desc(company_id, filters) -> list[PlatformScheduledTask]` — окно по `PlatformScheduleFilter`, `ORDER BY created_at DESC`; `status`, `target_service` и `task_name` равные `None` не фильтруют, `limit` и `offset` берутся из `filters`, пустой `company_id` — `ValueError`. `PlatformScheduledTask.count_filtered(company_id, filters) -> int` — число строк того же фильтра. `status`, `target_service` и `task_name` равные `None` не фильтруют. Пустой `company_id` — `ValueError`.
+2. HTTP control-plane — `SchedulerDi` (`apps/scheduler/di.py`), команды `SCHEDULER_OPERATIONS` (`scheduler/schedule_tasks/*_requested`) + REST `/scheduler/api/v1/schedules*`; метаданные — shared таблица `scheduler_tasks` с `company_id`. `PlatformScheduledTask.update_status_schedule_runs_and_error(company_id, schedule_task_id, status, *, schedule_id=None, last_run_at=None, next_run_at=None, error_message=None) -> bool` пишет `status` и `updated_at`; остальные поля пишет только если аргумент не `None`, поэтому `None` поле не очищает. Нет строки — `False`. `PlatformScheduledTask.by_schedule_task_id(company_id, schedule_task_id) -> PlatformScheduledTask | None` — строка компании по `schedule_task_id`. Нет строки — `None`. Пустые `company_id` и `schedule_task_id` — `ValueError`. Системные cron — lifecycle `ensure_platform_schedules`. `PlatformScheduledTask.list_filtered_by_created_at_desc(company_id, filters) -> list[PlatformScheduledTask]` — окно по `PlatformScheduleFilter`, `ORDER BY created_at DESC`; `status`, `target_service` и `task_name` равные `None` не фильтруют, `limit` и `offset` берутся из `filters`, пустой `company_id` — `ValueError`. `PlatformScheduledTask.count_filtered(company_id, filters) -> int` — число строк того же фильтра. `status`, `target_service` и `task_name` равные `None` не фильтруют. Пустой `company_id` — `ValueError`. `PlatformScheduledTask.schedule_id_set() -> frozenset[str]` — множество `schedule_id`. `None` и строка из пробелов пропускаются. Предела нет.
 3. Из других сервисов — только `core/clients/scheduler_client.py`; recurring в сервисах — расписание scheduler, не `while True`.
 4. Обязательные расписания — все `TaskSpec.scheduled=True` из реестра; `scheduled=True` — только тики и реально планируемые задачи.
 5. Redis расписаний (`platform_schedules`) и стримы — один URL `settings.tasks.broker_url`; доменный Redis — `database.redis_url`.
@@ -49,11 +50,11 @@ alwaysApply: false
 
 ## Исключения
 
-- Исключение: `.kiq`/`AsyncKicker` внутри `core/tasks/**` (реализация `enqueue`), `apps/scheduler/dispatch.py` и `core/scheduler/service.py` (`run_now`); allowlist `scripts/check_logging_canon.sh` п.11 и `scripts/check_taskiq_canon.py`.
+- Исключение: `.kiq`/`AsyncKicker` внутри `core/tasks/**` (реализация `enqueue`), `apps/scheduler/dispatch.py` и `core/scheduler/service.py` (`run_now`); allowlist `scripts/gates/backend/logging_canon.sh` п.11 и `scripts/gates/backend/taskiq.py`.
 - Исключение: `enqueue(..., priority=...)` пишет label, очередь не меняет. `[без гейта]`
 
 ## Гейты
 
-- `scripts/check_taskiq_canon.py` (`make lint`) — каждая Spec на брокере, Spec ≠ str, литералы расписаний ⊆ реестр.
-- `scripts/check_logging_canon.sh` п.11 (`make check-logging`) — прямые `.kiq(`, `find_task(`, `AsyncKicker(`, `create_broker(`.
+- `scripts/gates/backend/taskiq.py` (`make lint`) — каждая Spec на брокере, Spec ≠ str, литералы расписаний ⊆ реестр.
+- `scripts/gates/backend/logging_canon.sh` п.11 (`make check-logging`) — прямые `.kiq(`, `find_task(`, `AsyncKicker(`, `create_broker(`.
 - `tests/realtime/test_scheduler_commands.py` — тождество WS ≡ REST команд scheduler.

@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-import httpx
+import httpx2
 from playwright.async_api import Locator, Page, expect
 
 from tests.fixtures.variables_helpers import upsert_static_variable_via_secrets_http
@@ -78,7 +78,7 @@ async def flows_seed_company_secret_var(
     *,
     secret: bool = True,
 ) -> None:
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url="http://localhost:9022",
         headers=auth_headers,
         timeout=60.0,

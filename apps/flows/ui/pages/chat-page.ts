@@ -6,7 +6,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/flow-ui/components/platform-flow-ui.js';
+import { PlatformFlowUI } from '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 function presentText(value: unknown): string {
@@ -98,7 +98,14 @@ export class ChatPage extends PlatformPage {
         void this._newContext();
     }
 
-    _renderer() { return this.renderRoot.querySelector('platform-flow-ui'); }
+    _renderer(): PlatformFlowUI | null {
+        const renderer = this.renderRoot.querySelector('platform-flow-ui');
+        if (renderer === null) return null;
+        if (!(renderer instanceof PlatformFlowUI)) {
+            throw new Error('chat-page: platform-flow-ui is required');
+        }
+        return renderer;
+    }
     _flow() {
         const found = this._flows.items.find((flow: any) => flow && flow.flow_id === this.flowId);
         return found === undefined ? null : found;
@@ -151,9 +158,7 @@ export class ChatPage extends PlatformPage {
     _back() { this.navigate('list', {}); }
     _sessionId() {
         const renderer = this._renderer();
-        const rendererContext = renderer !== null && typeof renderer === 'object' && 'contextId' in renderer
-            ? (renderer as Record<string, unknown>).contextId
-            : undefined;
+        const rendererContext = renderer === null ? undefined : renderer.contextId;
         const ownContext = presentText(this._contextId);
         const contextId = ownContext.length > 0 ? ownContext : presentText(rendererContext);
         return contextId ? `${this.flowId}:${contextId}` : '';
@@ -204,8 +209,8 @@ export class ChatPage extends PlatformPage {
         }
         this._openingNewContext = true;
         try {
-            await (renderer as Record<string, any>).startNewContext();
-            const contextId = (renderer as Record<string, any>).contextId;
+            await renderer.startNewContext();
+            const contextId = renderer.contextId;
             if (typeof contextId !== 'string' || !contextId.trim()) {
                 throw new Error('chat-page: New screen did not produce contextId');
             }
@@ -229,7 +234,12 @@ export class ChatPage extends PlatformPage {
     }
 
     _onReady(event: CustomEvent) {
-        const contextId = event.detail?.contextId || (this._renderer() as Record<string, any>)?.contextId;
+        const detail = event.detail;
+        const fromEvent = presentText(detail && typeof detail === 'object' ? detail.contextId : undefined);
+        const renderer = this._renderer();
+        const contextId = fromEvent.length > 0
+            ? fromEvent
+            : presentText(renderer === null ? undefined : renderer.contextId);
         if (!contextId) return;
         const sessionId = `${this.flowId}:${contextId}`;
         if (this.sessionId === sessionId) return;

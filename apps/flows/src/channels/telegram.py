@@ -6,7 +6,7 @@ import asyncio
 import time
 from typing import Unpack, override
 
-import httpx
+import httpx2
 
 from apps.flows.src.channels.telegram_api_base import get_telegram_api_base
 from apps.flows.src.models.enums import ChannelType
@@ -27,7 +27,7 @@ async def _telegram_post(
     *,
     timeout: float,
     **kwargs: Unpack[HttpRequestKwargs],
-) -> httpx.Response:
+) -> httpx2.Response:
     """
     Исходящий POST к Telegram Bot API: DIRECT_FIRST (прямое соединение, затем egress proxy
     при ConnectTimeout/ConnectError, см. request_with_strategy).

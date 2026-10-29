@@ -227,7 +227,7 @@ class WorktrackerClient:
         company_id: str,
         work_item_id: str,
     ) -> list[WorkItemComment]:
-        return await WorkItemComment.list_for_work_item(company_id, work_item_id)
+        return await WorkItemComment.list_for_work_item_by_created_at_asc(company_id, work_item_id)
 
     async def get_queue_by_slug(self, company_id: str, slug: str) -> WorkQueue:
         return await self._service.get_queue_by_slug(company_id, slug)

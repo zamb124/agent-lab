@@ -2,6 +2,10 @@ function _nonEmptyString(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 interface OfficeAssistantContext {
     service: string;
     route_key: string;
@@ -16,8 +20,8 @@ function _lookupDocumentType(items: unknown, fileId: string | null): string | nu
     if (!Array.isArray(items) || fileId === null) {
         return null;
     }
-    const item = (items as { file_id?: unknown; onlyoffice_document_type?: unknown }[]).find(
-        (candidate) => candidate && candidate.file_id === fileId,
+    const item = items.find(
+        (candidate) => isPlainRecord(candidate) && candidate.file_id === fileId,
     );
     return item ? _nonEmptyString(item.onlyoffice_document_type) : null;
 }

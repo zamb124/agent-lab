@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from typing import Annotated, Protocol
 
-import httpx
+import httpx2
 from fastapi import Depends, FastAPI, Request, Response
 
 
 class RerankUpstreamPort(Protocol):
     """Бэкенд реранка: принимает сырое тело POST, возвращает HTTP-ответ."""
 
-    async def post_predict(self, body: bytes, content_type: str) -> httpx.Response:
+    async def post_predict(self, body: bytes, content_type: str) -> httpx2.Response:
         ...
 
 

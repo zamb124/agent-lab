@@ -6,7 +6,7 @@
  *   - `header-mode="list"`: тот же ряд (меню, иконка, title/subtitle), без действий канала — список каналов, встречи, настройки
  *   - баннер активного звонка (свёрнутого) — открывает overlay.
  *
- * Источники: useResource('sync/channels') as ControllerFor<'sync/channels'>, useResource('sync/company_members'),
+ * Источники: useResource('sync/channels'), useResource('sync/company_members'),
  *            select syncPresence (typing), syncCallUi.
  * Действия: openModal('platform.user_info', ...), openModal('sync.channel_edit'),
  *           useOp('sync/calls_invite'), dispatch overlay_expanded.
@@ -18,6 +18,9 @@ import type { OpController, ResourceController, ControllerFor } from '@platform/
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import type { NetworkState } from '@platform/lib/events/reducers/network.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
@@ -29,6 +32,14 @@ import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
 import { mobileStickyHeaderSyncChatHostStyles } from '@platform/lib/styles/shared/mobile-sticky-header.styles.js';
+
+function isSyncPresenceSlice(value: unknown): value is SyncPresenceSlice {
+    return isPlainRecord(value);
+}
+
+function isSyncCallUiSlice(value: unknown): value is SyncCallUiSlice {
+    return isPlainRecord(value);
+}
 
 export class SyncChatHeader extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -283,11 +294,11 @@ export class SyncChatHeader extends PlatformElement {
     ];
     private _channels: ControllerFor<'sync/channels'>;
     private _members: ResourceController;
-    private _authSel: SelectController<Record<string, any> | null>;
+    private _authSel: SelectController<AuthUser | null>;
     private _presenceSel: SelectController<SyncPresenceSlice | undefined>;
     private _callUiSel: SelectController<SyncCallUiSlice | undefined>;
     private _callUi: ControllerFor<'sync/call_ui'>;
-    private _wsSel: SelectController<{ connected?: boolean; connecting?: boolean } | undefined>;
+    private _wsSel: SelectController<NetworkState>;
     private _callInvite: OpController;
     private _callHangup: OpController;
     private _headerAvatarSig: string;
@@ -310,15 +321,11 @@ export class SyncChatHeader extends PlatformElement {
         this._headerAvatarSig = '';
         this._channels = this.useResource('sync/channels', { autoload: true });
         this._members = this.useResource('sync/company_members');
-        this._authSel = this.select((s) => {
-            const auth = s.auth as { user?: Record<string, any> | null } | undefined;
-            if (!auth) return null;
-            return auth.user === undefined ? null : auth.user;
-        });
-        this._presenceSel = this.select((s) => s.syncPresence as SyncPresenceSlice | undefined);
-        this._callUiSel = this.select((s) => s.syncCallUi as SyncCallUiSlice | undefined);
+        this._authSel = this.select((s) => s.auth.user);
+        this._presenceSel = this.select((s) => isSyncPresenceSlice(s.syncPresence) ? s.syncPresence : undefined);
+        this._callUiSel = this.select((s) => isSyncCallUiSlice(s.syncCallUi) ? s.syncCallUi : undefined);
         this._callUi = this.useSlice('sync/call_ui');
-        this._wsSel = this.select((s) => s.network as { connected?: boolean; connecting?: boolean } | undefined);
+        this._wsSel = this.select((s) => s.network);
         this._callInvite = this.useOp('sync/calls_invite');
         this._callHangup = this.useOp('sync/calls_hangup');
         this._onDocClick = (e: Event) => {
@@ -420,18 +427,25 @@ export class SyncChatHeader extends PlatformElement {
     async _onInviteCall() {
         if (!this.channelId) return;
         await this._callInvite.run({ channel_id: this.channelId });
-        const result = this._callInvite.lastResult as Record<string, unknown> | null;
-        if (!result || typeof result.call_id !== 'string') return;
+        const result = this._callInvite.lastResult;
+        if (!isPlainRecord(result)) return;
+        const callId = result.call_id;
+        if (typeof callId !== 'string') return;
+        const channelId = result.channel_id;
+        const callType = result.call_type;
+        const roomName = result.livekit_room_name;
+        const livekitUrl = result.livekit_url;
+        const resolvedChannelId = typeof channelId === 'string' ? channelId : this.channelId;
         this._callUi.openOverlay({
-            call_id: result.call_id,
-            channel_id: typeof result.channel_id === 'string' ? result.channel_id : this.channelId,
-            call_type: typeof result.call_type === 'string' ? result.call_type : 'video',
-            livekit_room_name: typeof result.livekit_room_name === 'string' ? result.livekit_room_name : null,
-            livekit_url: typeof result.livekit_url === 'string' ? result.livekit_url : null,
+            call_id: callId,
+            channel_id: resolvedChannelId,
+            call_type: typeof callType === 'string' ? callType : 'video',
+            livekit_room_name: typeof roomName === 'string' ? roomName : null,
+            livekit_url: typeof livekitUrl === 'string' ? livekitUrl : null,
         });
         this.openModal('sync.call_overlay', {
-            callId: result.call_id,
-            channelId: typeof result.channel_id === 'string' ? result.channel_id : this.channelId,
+            callId,
+            channelId: resolvedChannelId,
         });
     }
 
@@ -464,9 +478,10 @@ export class SyncChatHeader extends PlatformElement {
     }
 
     _onPeerClick(channel: Record<string, any> | null) {
-        const peer = channel && channel.peer as Record<string, any> | undefined;
-        if (!peer || typeof peer.user_id !== 'string') return;
-        this.openModal('platform.user_info', { userId: peer.user_id });
+        if (channel === null || !isPlainRecord(channel.peer)) return;
+        const userId = channel.peer.user_id;
+        if (typeof userId !== 'string') return;
+        this.openModal('platform.user_info', { userId });
     }
 
     _onHeaderAvatarError() {
@@ -568,9 +583,9 @@ export class SyncChatHeader extends PlatformElement {
         const byTracker = ac !== null && trackerEntry !== undefined && trackerEntry.call_id === ac.call_id;
         const callActiveHere = ac !== null && callUi !== undefined && (byChannelId || byTracker);
         this.toggleAttribute('data-call-banner', callActiveHere && callUi.overlayMinimized);
-        const ws = this._wsSel.value;
-        const wsConnected = !!(ws && ws.connected === true);
-        const wsConnecting = !!(ws && ws.connecting === true);
+        const network = this._wsSel.value;
+        const wsConnected = network.ws.status === 'open';
+        const wsConnecting = network.ws.status === 'connecting';
         return html`
             <button class="back-btn" @click=${this._onBackClick} title=${this.t('chat_header.back')}>
                 <platform-icon name="arrow-left" size="20"></platform-icon>

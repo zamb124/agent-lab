@@ -1,6 +1,6 @@
 .PHONY: app kill-ports
 
-# Все локальные сервисы (ключи SERVICES в scripts/run.py) через mprocs —
+# Все локальные сервисы (ключи SERVICES в scripts/dev/run.py) через mprocs —
 # один TUI, логи смотришь по выбранному процессу (j/k).
 # Требует: brew install mprocs. Конфиг: mprocs.yaml.
 # Granian: --reload для HTTP (кроме provider_litserve/browser). APP_RELOAD=0 — без reload.
@@ -25,8 +25,8 @@ endif
 # APP_EXCLUDE=… — тот же эффект (через запятую), можно совмещать с make app --ex …
 app: runtime-bootstrap ui-build
 	@command -v mprocs >/dev/null 2>&1 || { echo "mprocs не найден. Установи: brew install mprocs"; exit 1; }
-	@APP_EXCLUDE="$(APP_EXCLUDE)" uv run python scripts/run.py from-make $(MAKECMDGOALS) $(if $(filter 1,$(APP_KILL)),--from-make-kill,)
+	@APP_EXCLUDE="$(APP_EXCLUDE)" uv run python -m scripts.dev.run from-make $(MAKECMDGOALS) $(if $(filter 1,$(APP_KILL)),--from-make-kill,)
 
 # Только освободить порты HTTP-сервисов (без запуска).
 kill-ports:
-	uv run python scripts/run.py kill-ports
+	uv run python -m scripts.dev.run kill-ports

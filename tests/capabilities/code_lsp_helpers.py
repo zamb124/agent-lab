@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Protocol, final
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.capabilities.models import (
     CapabilityLanguage,
@@ -386,7 +386,7 @@ def default_lsp_source(language: CapabilityLanguage, unique_id: str) -> str:
         return (
             f"# {unique_id}\n"
             "import json\n"
-            "import httpx\n"
+            "import httpx2\n"
             "\n"
             "async def run(args, state):\n"
             '    data = json.loads("{}")\n'

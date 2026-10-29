@@ -61,10 +61,10 @@ class StockWarehouse(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_by_code(
+    async def list_by_code_asc(
         cls, company_id: str, *, limit: int, offset: int
     ) -> list[Self]:
-        """Окно складов компании, ORDER BY code, limit и offset."""
+        """Окно складов компании, ORDER BY code ASC, limit и offset."""
         return await cls.objects.filter(company_id=company_id).order_by("code").limit(
             limit
         ).offset(offset).all()
@@ -74,8 +74,8 @@ class StockWarehouse(PlatformModel):
         return await cls.objects.filter(company_id=company_id).count()
 
     @classmethod
-    async def list_company_ids(cls) -> list[str]:
-        """Все компании, у которых есть склады — итератор фоновых тиков."""
+    async def list_distinct_company_ids_by_company_id_asc(cls) -> list[str]:
+        """Различные company_id складов для фоновых тиков, ORDER BY company_id ASC. Нестроковый и пустой id пропускаются."""
         rows = await execute_raw(
             "SELECT DISTINCT company_id FROM stock_warehouses ORDER BY company_id",
             [],

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.clients.flow_ui_client import (
     DEFAULT_BRANCH_ID,

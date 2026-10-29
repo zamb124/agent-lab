@@ -51,7 +51,7 @@ async def _env(stock_di, unique_id: str, valuation=ValuationMethod.FIFO):
 
 
 async def _moves(env: StockEnv, transfer_id: str) -> list[StockMove]:
-    return await StockMove.list_for_transfer(env.company_id, transfer_id)
+    return await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer_id)
 
 
 async def _delivered_move(env: StockEnv, transfer_id: str) -> StockMove:
@@ -91,7 +91,7 @@ async def _partial_delivery(
             transfer_id=transfer.transfer_id,
         )
     line = (
-        await StockMoveLine.list_for_moves(
+        await StockMoveLine.list_for_moves_by_created_at_asc(
             env.company_id,
             [m.move_id for m in await _moves(env, transfer.transfer_id)],
         )
@@ -453,7 +453,7 @@ class TestReturnTracking:
                 transfer_id=transfer.transfer_id,
             )
         line = (
-            await StockMoveLine.list_for_moves(
+            await StockMoveLine.list_for_moves_by_created_at_asc(
                 env.company_id,
                 [
                     m.move_id
@@ -486,7 +486,7 @@ class TestReturnTracking:
         delivery_id = await _delivery(env, Decimal("2"))
         # Отгрузка резервирует quant с партией — line.lot_id выставлен.
         origin_move = await _delivered_move(env, delivery_id)
-        origin_lines = await StockMoveLine.list_all_for_move(
+        origin_lines = await StockMoveLine.list_for_move_by_created_at_asc(
             env.company_id, origin_move.move_id
         )
         assert origin_lines[0].lot_id is not None
@@ -498,7 +498,7 @@ class TestReturnTracking:
             move_quantities=None,
         )
         ret_moves = await _moves(env, ret.transfer_id)
-        ret_lines = await StockMoveLine.list_all_for_move(
+        ret_lines = await StockMoveLine.list_for_move_by_created_at_asc(
             env.company_id, ret_moves[0].move_id
         )
         assert ret_lines[0].lot_id == lot_id
@@ -523,7 +523,7 @@ class TestReturnTracking:
         _ = await self._receipt_with_lot(env, Decimal("1"), "SN-1")
         delivery_id = await _delivery(env, Decimal("1"))
         origin_move = await _delivered_move(env, delivery_id)
-        origin_lines = await StockMoveLine.list_all_for_move(
+        origin_lines = await StockMoveLine.list_for_move_by_created_at_asc(
             env.company_id, origin_move.move_id
         )
         sn = origin_lines[0].lot_id
@@ -533,7 +533,7 @@ class TestReturnTracking:
             move_quantities=None,
         )
         ret_moves = await _moves(env, ret.transfer_id)
-        ret_lines = await StockMoveLine.list_all_for_move(
+        ret_lines = await StockMoveLine.list_for_move_by_created_at_asc(
             env.company_id, ret_moves[0].move_id
         )
         assert ret_lines[0].lot_id == sn

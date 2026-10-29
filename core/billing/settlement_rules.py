@@ -174,7 +174,7 @@ def rule_matches_span(rule: SettlementRule, span: Span) -> bool:
     return True
 
 
-def resolve_matched_rules(doc: SettlementRulesDocument, span: Span) -> list[SettlementRule]:
+def resolve_matched_rules_by_priority_asc(doc: SettlementRulesDocument, span: Span) -> list[SettlementRule]:
     matched = [r for r in doc.rules if r.enabled and rule_matches_span(r, span)]
     if not matched:
         return []

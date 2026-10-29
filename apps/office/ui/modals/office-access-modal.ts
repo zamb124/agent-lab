@@ -13,6 +13,26 @@ import '@platform/lib/components/glass-spinner.js';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function accessRecord(value: unknown): Record<string, unknown> | null {
+    if (value === null || value === undefined) return null;
+    if (!isPlainRecord(value)) {
+        throw new Error('office.access: response must be an object');
+    }
+    return value;
+}
+
+function companyMemberRows(items: unknown[]): Record<string, unknown>[] {
+    const rows: Record<string, unknown>[] = [];
+    for (const item of items) {
+        if (!isPlainRecord(item)) {
+            throw new Error('office.access: company member must be an object');
+        }
+        rows.push(item);
+    }
+    return rows;
+}
 
 const CATALOG_ACCESS_GET = 'office/catalog_access_get';
 const CATALOG_ACCESS_PATCH = 'office/catalog_access_update';
@@ -240,8 +260,8 @@ export class OfficeAccessModal extends PlatformFormModal {
         const payload = this.resourceKind === 'binding'
             ? { file_id: this.resourceId }
             : { catalog_id: this.resourceId };
-        const data = await this._requireAccessGet().run(payload) as Record<string, unknown> | null;
-        if (data) {
+        const data = accessRecord(await this._requireAccessGet().run(payload));
+        if (data !== null) {
             this._companyVisible = data.company_visible === true;
             this._linkEnabled = data.link_enabled === true;
             if (data.link_permission !== 'viewer' && data.link_permission !== 'editor') {
@@ -249,20 +269,23 @@ export class OfficeAccessModal extends PlatformFormModal {
             }
             this._linkPermission = data.link_permission;
             this._publicUrl = typeof data.public_url === 'string' ? data.public_url : '';
-            this._members = Array.isArray(data.members)
-                ? data.members
-                    .filter((member) => typeof member === 'object' && member !== null)
-                    .map((member) => {
-                        if (member.relation !== 'viewer' && member.relation !== 'editor') {
-                            throw new Error('office.access: member.relation must be viewer|editor');
-                        }
-                        return {
-                            user_id: typeof member.user_id === 'string' ? member.user_id : '',
-                            relation: member.relation,
-                        };
-                    })
-                    .filter((member) => member.user_id.length > 0)
-                : [];
+            const members = data.members;
+            const rows: { user_id: string; relation: 'viewer' | 'editor' }[] = [];
+            if (Array.isArray(members)) {
+                for (const member of members) {
+                    if (member === null || member === undefined) continue;
+                    if (!isPlainRecord(member)) {
+                        throw new Error('office.access: member must be an object');
+                    }
+                    if (member.relation !== 'viewer' && member.relation !== 'editor') {
+                        throw new Error('office.access: member.relation must be viewer|editor');
+                    }
+                    const userId = member.user_id;
+                    if (typeof userId !== 'string' || userId.length === 0) continue;
+                    rows.push({ user_id: userId, relation: member.relation });
+                }
+            }
+            this._members = rows;
         }
         this._loading = false;
     }
@@ -311,14 +334,18 @@ export class OfficeAccessModal extends PlatformFormModal {
     }
 
     private _companyMemberItems(): Array<Record<string, unknown>> {
-        const result = this._requireMembers().lastResult as { items?: unknown } | null;
-        if (result == null) {
+        const result = this._requireMembers().lastResult;
+        if (result === null || result === undefined) {
             return [];
         }
-        if (typeof result !== 'object' || !Array.isArray(result.items)) {
+        if (!isPlainRecord(result)) {
             throw new Error('office.access: company_members.lastResult.items required');
         }
-        return result.items;
+        const items = result.items;
+        if (!Array.isArray(items)) {
+            throw new Error('office.access: company_members.lastResult.items required');
+        }
+        return companyMemberRows(items);
     }
 
     private _filteredCandidates() {
@@ -346,11 +373,13 @@ export class OfficeAccessModal extends PlatformFormModal {
         const payload = this.resourceKind === 'binding'
             ? { file_id: this.resourceId, origin: window.location.origin }
             : { catalog_id: this.resourceId, origin: window.location.origin };
-        const result = await this._requireAccessRotate().run(payload) as Record<string, unknown> | null;
-        if (!result || typeof result.public_url !== 'string' || result.public_url.length === 0) {
+        const result = accessRecord(await this._requireAccessRotate().run(payload));
+        if (result === null) return;
+        const publicUrl = result.public_url;
+        if (typeof publicUrl !== 'string' || publicUrl.length === 0) {
             return;
         }
-        this._publicUrl = result.public_url;
+        this._publicUrl = publicUrl;
         await this.updateComplete;
         await this._copyPublicUrl();
     }
@@ -372,10 +401,11 @@ export class OfficeAccessModal extends PlatformFormModal {
                 link_permission: this._linkPermission,
                 members: this._companyVisible ? null : this._buildMembersPayload(),
             };
-        const result = await this._requireAccessPatch().run(patchPayload) as Record<string, unknown> | null;
-        if (result) {
-            if (typeof result.public_url === 'string' && result.public_url.length > 0) {
-                this._publicUrl = result.public_url;
+        const result = accessRecord(await this._requireAccessPatch().run(patchPayload));
+        if (result !== null) {
+            const publicUrl = result.public_url;
+            if (typeof publicUrl === 'string' && publicUrl.length > 0) {
+                this._publicUrl = publicUrl;
             }
             this._linkEnabled = result.link_enabled === true;
             if (result.link_permission !== 'viewer' && result.link_permission !== 'editor') {

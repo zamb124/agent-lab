@@ -27,7 +27,7 @@ _DEFAULT_EXCLUDED_PREFIXES: tuple[str, ...] = ("api/", "ui/static/", "ws", "asse
 def mount_core_frontend(app: FastAPI) -> None:
     """Монтирует `/static/core/lib` на собранный `core/frontend/embed-dist`, затем `/static/core` на `core/frontend/static`.
 
-    Порядок тот же, что у granian (`scripts/run.py`, Helm): под `/static/core/lib` браузер получает
+    Порядок тот же, что у granian (`scripts/dev/run.py`, Helm): под `/static/core/lib` браузер получает
     только результат `npm run build:ui` — embed-бандлы по стабильным URL для внешних сайтов и не-TS
     ассеты lib/ (css, AudioWorklet); `.ts`-исходники не отдаются. Без сборки приложение не стартует.
     """

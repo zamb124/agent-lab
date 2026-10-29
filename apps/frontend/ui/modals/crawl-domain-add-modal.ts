@@ -83,16 +83,22 @@ export class FrontendCrawlDomainAddModal extends PlatformFormModal {
     }
 
     override async handleSubmit() {
-        const payload = {
+        const payload: {
+            crawl_profile_id: string;
+            domain: string;
+            category: string;
+            refresh_interval_seconds?: number;
+            seed_urls?: string[];
+        } = {
             crawl_profile_id: this.crawl_profile_id,
             domain: this._domain.trim(),
             category: this._category.trim() || 'manual',
         };
         if (this._refreshInterval !== '') {
-            (payload as Record<string, any>).refresh_interval_seconds = Number(this._refreshInterval);
+            payload.refresh_interval_seconds = Number(this._refreshInterval);
         }
         const seedUrls = this._seedUrlsList();
-        if (seedUrls.length > 0) (payload as Record<string, any>).seed_urls = seedUrls;
+        if (seedUrls.length > 0) payload.seed_urls = seedUrls;
         this._createOp.run(payload);
         this.closeAfterSave();
     }

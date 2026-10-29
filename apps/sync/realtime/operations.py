@@ -952,7 +952,7 @@ async def op_company_members_list(
     di: Di,
 ) -> OffsetPage[CompanyMemberRead]:
     company_id = require_company().company_id
-    return await di.channel_service.list_company_members(
+    return await di.channel_service.list_company_members_by_name_asc(
         company_id=company_id,
         user_id=user.user_id,
         limit=payload.limit,

@@ -5,8 +5,8 @@
  * `<platform-flow-ui display="panel" profile="editor_test">` (весь чат, файлы,
  * voice/TTS и SSE A2A живут внутри компонента; в editor_test виден весь runtime
  * независимо от политики flow). Панель добавляет только editor-специфику:
- *   - useOp('flows/editor') as unknown as ControllerFor<'flows/editor'> — режим, currentBranchId, breakpointNodeIds;
- *   - useSlice('flows/execution_ui') as unknown as ControllerFor<'flows/execution_ui'> — persistContext (→ fresh-context-per-turn);
+ *   - useOp('flows/editor') — режим, currentBranchId, breakpointNodeIds;
+ *   - useSlice('flows/execution_ui') — persistContext (→ fresh-context-per-turn);
  *   - `flow-ui-submit-start` / `flow-ui-a2a-frame` / `flow-ui-submit-end` → bus
  *     `flows/run/*` — канвас читает только editor slice.
  *
@@ -30,10 +30,9 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
-import '@platform/lib/flow-ui/components/platform-flow-ui.js';
+import { PlatformFlowUI } from '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/flow-ui/components/flow-ui-run-trace.js';
 import {
-    asObject,
     asString,
     deriveRunPanelStatus,
     isPlainObject,
@@ -47,8 +46,21 @@ const PANEL_MIN_HEIGHT = 320;
 const PANEL_DEFAULT_HEIGHT = 620;
 const PANEL_COLLAPSED_HEIGHT = 64;
 
+interface PanelRect {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+}
+
+interface PanelPointerState {
+    startX: number;
+    startY: number;
+    startRect: PanelRect;
+}
+
 export class FlowsExecutionPanel extends PlatformElement {
-    private _boundPanelPointerMove: any;
+    private _boundPanelPointerMove: (event: MouseEvent) => void;
     static i18nNamespace = 'flows';
 
     static override properties: PropertyDeclarations = {
@@ -329,13 +341,13 @@ export class FlowsExecutionPanel extends PlatformElement {
     ];
     private _editor: ControllerFor<'flows/editor'>;
     private _ui: ControllerFor<'flows/execution_ui'>;
-    private _localeSel: SelectController<any>;
-    private _panelRect: any;
-    private _dragState: any;
-    private _resizeState: any;
+    private _localeSel: SelectController<string>;
+    private _panelRect: PanelRect | null;
+    private _dragState: PanelPointerState | null;
+    private _resizeState: PanelPointerState | null;
     private _restorePanelHeight: number;
-    private _boundPanelPointerUp: any;
-    private _boundPanelViewportResize: any;
+    private _boundPanelPointerUp: () => void;
+    private _boundPanelViewportResize: () => void;
 
     constructor() {
         super();
@@ -353,7 +365,13 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._boundPanelPointerMove = (e: MouseEvent) => this._onPanelPointerMove(e);
         this._boundPanelPointerUp = () => this._endPanelPointerInteraction();
         this._boundPanelViewportResize = () => this._clampFloatingPanelToViewport();
-        this._localeSel = this.select((s) => (s as any).i18n.locale);
+        this._localeSel = this.select((state) => {
+            const loc = state.i18n.locale.trim();
+            if (loc.length === 0) {
+                throw new Error('flows-execution-panel: locale required');
+            }
+            return loc;
+        });
     }
 
     override connectedCallback(): void {
@@ -371,30 +389,37 @@ export class FlowsExecutionPanel extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    _platformChat() {
+    _platformChat(): PlatformFlowUI {
         const el = this.renderRoot?.querySelector('platform-flow-ui');
-        if (!el) {
+        if (!(el instanceof PlatformFlowUI)) {
             throw new Error('flows-execution-panel: platform-flow-ui host required');
         }
         return el;
     }
 
-    _runSession(editorState: any) {
-        const session = editorState.runSession;
+    _runSession(): Record<string, unknown> {
+        const session = this._editor.state.runSession;
         if (!isPlainObject(session)) {
             throw new Error('flows-execution-panel: editor runSession required');
         }
         return session;
     }
 
+    _requireRunTrace(): unknown[] {
+        const runTrace = this._editor.state.runTrace;
+        if (!Array.isArray(runTrace)) {
+            throw new Error('flows-execution-panel: editor runTrace array required');
+        }
+        return runTrace;
+    }
+
     override updated(changedProperties: PropertyValues): void {
-        const editorState = asObject(this._editor.state);
-        const isOpen = Boolean((editorState as any).executionPanelOpen);
+        const isOpen = this._editor.state.executionPanelOpen === true;
         if (isOpen) {
             this.removeAttribute('data-panel-closed');
         } else {
             this.setAttribute('data-panel-closed', '');
-            void (this._platformChat() as Record<string, any>).stopVoice();
+            void this._platformChat().stopVoice();
         }
         super.updated(changedProperties);
     }
@@ -416,15 +441,11 @@ export class FlowsExecutionPanel extends PlatformElement {
             throw new Error('flows-execution-panel: flow-ui-a2a-frame contextId required');
         }
         const contextId = detail.contextId;
-        const editorState = asObject(this._editor.state);
-        const session = this._runSession(editorState);
+        const session = this._runSession();
         if (typeof session.contextId === 'string' && session.contextId.length > 0 && session.contextId !== contextId) {
             throw new Error('flows-execution-panel: a2a frame contextId does not match runSession');
         }
-        const runTrace = Array.isArray((editorState as any).runTrace) ? (editorState as any).runTrace : null;
-        if (runTrace === null) {
-            throw new Error('flows-execution-panel: editor runTrace array required');
-        }
+        const runTrace = this._requireRunTrace();
         const mapped = mapEditorA2aFrame(detail.frame, {
             contextId,
             currentTaskId: session.taskId,
@@ -449,11 +470,10 @@ export class FlowsExecutionPanel extends PlatformElement {
         if (typeof detail.contextId !== 'string' || detail.contextId.length === 0) {
             throw new Error('flows-execution-panel: flow-ui-submit-end contextId required');
         }
-        const editorState = asObject(this._editor.state);
-        if (!(editorState as any).agentExecutionRunning) {
+        if (this._editor.state.agentExecutionRunning !== true) {
             return;
         }
-        const payload: any = { context_id: detail.contextId };
+        const payload: Record<string, unknown> = { context_id: detail.contextId };
         if (typeof detail.taskId === 'string' && detail.taskId.length > 0) {
             payload.task_id = detail.taskId;
         }
@@ -474,7 +494,7 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     _onPersistChange(e: CustomEvent) {
         const value = Boolean(e.detail && e.detail.value);
-        (this._ui.togglePersistContext({ value }) as any);
+        this._ui.togglePersistContext({ value });
     }
 
     _panelViewport() {
@@ -501,7 +521,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         return Math.max(220, Math.min(PANEL_MIN_HEIGHT, viewport.height - PANEL_VIEWPORT_MARGIN * 2));
     }
 
-    _clampPanelRect(rect: any, collapsed = this._collapsed) {
+    _clampPanelRect(rect: PanelRect, collapsed = this._collapsed): PanelRect {
         const viewport = this._panelViewport();
         const margin = PANEL_VIEWPORT_MARGIN;
         const minWidth = this._panelMinWidth();
@@ -562,7 +582,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
     }
 
-    _applyFloatingPanelRect(rect: any, { bringToFront = false } = {}) {
+    _applyFloatingPanelRect(rect: PanelRect, { bringToFront = false } = {}): PanelRect {
         const clamped = this._clampPanelRect(rect);
         this._panelRect = clamped;
         this._layoutExpanded = false;
@@ -579,6 +599,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this.style.bottom = 'auto';
         this.style.width = `${Math.round(clamped.width)}px`;
         this.style.height = `${Math.round(clamped.height)}px`;
+        return clamped;
     }
 
     _clearFloatingPanelRect({ keepZIndex = false } = {}) {
@@ -603,7 +624,11 @@ export class FlowsExecutionPanel extends PlatformElement {
             ? (fromDefault ? this._defaultFloatingPanelRect() : this._readCurrentPanelRect())
             : this._panelRect;
         this._applyFloatingPanelRect(rect, { bringToFront });
-        return this._panelRect;
+        const applied = this._panelRect;
+        if (applied === null) {
+            throw new Error('flows-execution-panel: panel rect required');
+        }
+        return applied;
     }
 
     _clampFloatingPanelToViewport() {
@@ -613,7 +638,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._applyFloatingPanelRect(this._panelRect);
     }
 
-    _isPanelControlTarget(target: any) {
+    _isPanelControlTarget(target: EventTarget | null) {
         if (!(target instanceof Element)) {
             return false;
         }
@@ -751,9 +776,8 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     _toggleCanvasRunResults() {
-        const editorState = asObject(this._editor.state);
-        const next = !Boolean((editorState as any).showCanvasRunResults);
-        (this._editor.toggleCanvasRunResults({ value: next }) as any);
+        const next = this._editor.state.showCanvasRunResults !== true;
+        this._editor.toggleCanvasRunResults({ value: next });
     }
 
     _onClose() {
@@ -763,12 +787,11 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._syncPanelHostAttributes();
         this._clearFloatingPanelRect();
         this.removeAttribute('data-layout-expanded');
-        (this._editor.setExecutionPanelOpen({ open: false }) as any);
+        this._editor.setExecutionPanelOpen({ open: false });
     }
 
     _buildSessionId() {
-        const editorState = asObject(this._editor.state);
-        const session = this._runSession(editorState);
+        const session = this._runSession();
         const ctx = session.contextId;
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return '';
@@ -789,21 +812,20 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._openTracingModalFromDetail(null);
     }
 
-    _openTracingModalFromDetail(detail: any) {
+    _openTracingModalFromDetail(detail: unknown) {
         const sessionId = this._buildSessionId();
         if (!sessionId) return;
-        const props: any = { sessionId };
-        const taskId =
-            detail && typeof detail === 'object' && typeof detail.taskId === 'string' && detail.taskId.length > 0
-                ? detail.taskId
-                : '';
+        const record = isPlainObject(detail) ? detail : null;
+        const props: Record<string, unknown> = { sessionId };
+        const taskId = record !== null && typeof record.taskId === 'string' && record.taskId.length > 0
+            ? record.taskId
+            : '';
         if (taskId.length > 0) {
             props.taskId = taskId;
         }
-        const traceId =
-            detail && typeof detail === 'object' && typeof detail.traceId === 'string' && detail.traceId.length > 0
-                ? detail.traceId
-                : '';
+        const traceId = record !== null && typeof record.traceId === 'string' && record.traceId.length > 0
+            ? record.traceId
+            : '';
         if (traceId.length > 0) {
             props.traceId = traceId;
         }
@@ -813,9 +835,8 @@ export class FlowsExecutionPanel extends PlatformElement {
     _openLogs() {
         const sessionId = this._buildSessionId();
         if (!sessionId) return;
-        const editorState = asObject(this._editor.state);
-        const session = this._runSession(editorState);
-        const props: any = { sessionId };
+        const session = this._runSession();
+        const props: Record<string, unknown> = { sessionId };
         if (typeof session.taskId === 'string' && session.taskId.length > 0) {
             props.taskId = session.taskId;
         }
@@ -827,14 +848,14 @@ export class FlowsExecutionPanel extends PlatformElement {
      */
     async _onResetChat() {
         const host = this._platformChat();
-        if ((host as Record<string, any>).store.taskRunning) {
-            await (host as Record<string, any>).cancelActiveTask();
+        if (host.store.taskRunning) {
+            await host.cancelActiveTask();
         }
         this.dispatch('flows/run/session_cleared', {}, { source: 'http' });
-        (host as Record<string, any>).startNewContext();
+        host.startNewContext();
     }
 
-    _setPanelTab(tab: any) {
+    _setPanelTab(tab: unknown) {
         if (tab !== 'chat' && tab !== 'trace' && tab !== 'state') {
             throw new Error('flows-execution-panel: invalid tab');
         }
@@ -842,16 +863,12 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const editorState = asObject(this._editor.state);
-        const ui = this._ui.value as Record<string, any>;
-        const showCanvasRunResults = Boolean((editorState as any).showCanvasRunResults);
-        const session = this._runSession(editorState);
-        const runInFlight = Boolean((editorState as any).agentExecutionRunning);
+        const ui = this._ui.value;
+        const showCanvasRunResults = this._editor.state.showCanvasRunResults === true;
+        const session = this._runSession();
+        const runInFlight = this._editor.state.agentExecutionRunning === true;
         const hasContext = typeof session.contextId === 'string' && session.contextId.length > 0;
-        const runTrace = Array.isArray((editorState as any).runTrace) ? (editorState as any).runTrace : null;
-        if (runTrace === null) {
-            throw new Error('flows-execution-panel: editor runTrace array required');
-        }
+        const runTrace = this._requireRunTrace();
         const taskId = typeof session.taskId === 'string' && session.taskId.length > 0
             ? session.taskId
             : null;

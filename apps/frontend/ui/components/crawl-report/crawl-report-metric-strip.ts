@@ -92,9 +92,9 @@ export class CrawlReportMetricStrip extends PlatformElement {
         if (!this.summary) {
             return null;
         }
-        const dueCount = (this.countFromSummary as (...args: any[]) => any)('domains_due');
-        const fetchingCount = (this.countFromSummary as (...args: any[]) => any)('url_fetching');
-        const failedCount = (this.countFromSummary as (...args: any[]) => any)('url_failed');
+        const dueCount = this.countFromSummary('domains_due');
+        const fetchingCount = this.countFromSummary('url_fetching');
+        const failedCount = this.countFromSummary('url_failed');
         const enrichedRaw = this.summary.urls_enriched_total;
         const pendingRaw = this.summary.urls_enrichment_pending;
         const enrichedTotal = enrichedRaw === undefined || enrichedRaw === null ? 0 : enrichedRaw;
@@ -103,7 +103,7 @@ export class CrawlReportMetricStrip extends PlatformElement {
             <div class="summary-grid">
                 <platform-metric-card
                     label=${this.t('crawl_report_page.domains_total')}
-                    .value=${(this.countFromSummary as (...args: any[]) => any)('domains_total')}
+                    .value=${this.countFromSummary('domains_total')}
                     .locale=${this.locale}
                     .refreshing=${this.refreshing}
                 ></platform-metric-card>
@@ -116,7 +116,7 @@ export class CrawlReportMetricStrip extends PlatformElement {
                 ></platform-metric-card>
                 <platform-metric-card
                     label=${this.t('crawl_report_page.urls_indexed')}
-                    .value=${(this.countFromSummary as (...args: any[]) => any)('url_indexed')}
+                    .value=${this.countFromSummary('url_indexed')}
                     .locale=${this.locale}
                     .refreshing=${this.refreshing}
                 ></platform-metric-card>
@@ -143,7 +143,7 @@ export class CrawlReportMetricStrip extends PlatformElement {
                 ></platform-metric-card>
                 <platform-metric-card
                     label=${this.t('crawl_report_page.urls_pending')}
-                    .value=${(this.countFromSummary as (...args: any[]) => any)('url_pending')}
+                    .value=${this.countFromSummary('url_pending')}
                     .locale=${this.locale}
                     .refreshing=${this.refreshing}
                 ></platform-metric-card>

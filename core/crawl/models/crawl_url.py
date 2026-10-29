@@ -137,7 +137,8 @@ class CrawlUrl(PlatformModel):
         )
 
     @classmethod
-    async def claim_pending_batch(cls, crawl_domain_id: str, limit: int) -> list[Self]:
+    async def claim_pending_batch_by_sitemap_lastmod_and_created_at_desc(cls, crawl_domain_id: str, limit: int) -> list[Self]:
+        """Забирает pending URL домена, ORDER BY sitemap_lastmod DESC NULLS LAST, created_at DESC, не больше limit."""
         now = datetime.now(UTC)
         async with atomic(using="search"):
             id_rows = await execute_raw(
@@ -467,12 +468,13 @@ class CrawlUrl(PlatformModel):
         ).update(using="search", crawl_status="pending", updated_at=datetime.now(UTC))
 
     @classmethod
-    async def list_indexed_missing_enrichment(
+    async def list_indexed_missing_enrichment_ids_by_error_desc_and_updated_at_asc(
         cls,
         crawl_profile_id: str,
         *,
         limit: int,
     ) -> list[str]:
+        """Идентификаторы indexed URL без enrichment. Ошибки первыми, затем updated_at ASC, не больше limit."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         rows = await execute_raw(
@@ -495,11 +497,12 @@ class CrawlUrl(PlatformModel):
 
     @classmethod
     async def requeue_indexed_missing_enrichment(cls, crawl_profile_id: str) -> int:
-        crawl_url_ids = await cls.list_indexed_missing_enrichment(crawl_profile_id, limit=10_000)
+        crawl_url_ids = await cls.list_indexed_missing_enrichment_ids_by_error_desc_and_updated_at_asc(crawl_profile_id, limit=10_000)
         return len(crawl_url_ids)
 
     @classmethod
-    async def count_by_status_for_profile(cls, crawl_profile_id: str) -> list[CrawlStatusCount]:
+    async def status_counts_for_profile(cls, crawl_profile_id: str) -> list[CrawlStatusCount]:
+        """Группы crawl_status URL профиля. Порядка нет. Пустой ответ — []. Нестроковый статус и нецелый total — TypeError."""
         return await CrawlDomain.grouped_counts(
             "SELECT crawl_urls.crawl_status AS status, count(*)::int AS total FROM crawl_urls "
             + "JOIN crawl_domains ON crawl_urls.crawl_domain_id = crawl_domains.crawl_domain_id "
@@ -508,7 +511,7 @@ class CrawlUrl(PlatformModel):
         )
 
     @classmethod
-    async def list_page_for_profile(
+    async def page_for_profile_by_updated_at_desc(
         cls,
         *,
         crawl_profile_id: str,
@@ -520,6 +523,7 @@ class CrawlUrl(PlatformModel):
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlUrlListItem]:
+        """Страница URL профиля, ORDER BY updated_at DESC. None в фильтре его не сужает."""
         clauses = ["crawl_domains.crawl_profile_id = $1"]
         params: list[str | int | datetime] = [crawl_profile_id]
         if crawl_status is not None:
@@ -600,7 +604,8 @@ class CrawlUrl(PlatformModel):
         )
 
     @classmethod
-    async def count_by_enrichment_content_type(cls, crawl_profile_id: str) -> list[CrawlStatusCount]:
+    async def content_type_counts_by_count_desc(cls, crawl_profile_id: str) -> list[CrawlStatusCount]:
+        """Группы content_type URL профиля, ORDER BY count(*) DESC, не больше 12. Пустой снимок и пустой content_type не входят. Нестроковый статус и нецелый total — TypeError."""
         return await CrawlDomain.grouped_counts(
             "SELECT crawl_urls.enrichment_snapshot #>> '{filter_metadata,content_type}' AS status, "
             + "count(*)::int AS total FROM crawl_urls "
@@ -612,7 +617,8 @@ class CrawlUrl(PlatformModel):
         )
 
     @classmethod
-    async def count_by_enrichment_primary_topic(cls, crawl_profile_id: str) -> list[CrawlStatusCount]:
+    async def primary_topic_counts_by_count_desc(cls, crawl_profile_id: str) -> list[CrawlStatusCount]:
+        """Группы primary_topic URL профиля, ORDER BY count(*) DESC, не больше 12. Пустой снимок и пустой primary_topic не входят. Нестроковый статус и нецелый total — TypeError."""
         return await CrawlDomain.grouped_counts(
             "SELECT crawl_urls.enrichment_snapshot #>> '{filter_metadata,primary_topic}' AS status, "
             + "count(*)::int AS total FROM crawl_urls "

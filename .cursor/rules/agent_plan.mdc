@@ -33,4 +33,4 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_tool_contracts.py` (`make lint`) — контракт builtin tools `agent_plan_*`.
+- `scripts/gates/flows/tool_contracts.py` (`make lint`) — контракт builtin tools `agent_plan_*`.

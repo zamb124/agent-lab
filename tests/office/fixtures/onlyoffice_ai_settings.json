@@ -2,7 +2,7 @@
   "version": 4,
   "actionsOverride": true,
   "timeout": "5m",
-  "proxy": "https://example.com/flows/api/v1/agent/llm/v1/proxy",
+  "proxy": "https://example.com/flows/api/v1/llm/v1/proxy",
   "allowedCorsOrigins": [
     "https://onlyoffice.github.io",
     "https://onlyoffice-plugins.github.io"
@@ -10,7 +10,7 @@
   "providers": {
     "platform": {
       "name": "Platform LLMs",
-      "url": "https://example.com/flows/api/v1/agent/llm",
+      "url": "https://example.com/flows/api/v1/llm",
       "key": "",
       "addon": "v1",
       "models": [

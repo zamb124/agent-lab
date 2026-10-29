@@ -31,7 +31,8 @@ class WorkQueue(PlatformModel):
         unique_together: list[tuple[str, str]] = [("company_id", "work_queue_slug")]
 
     @classmethod
-    async def list_by_work_queue_id(cls, *, limit: int | None) -> list[Self]:
+    async def list_by_work_queue_id_asc(cls, *, limit: int | None) -> list[Self]:
+        """Все очереди, ORDER BY work_queue_id ASC. limit is None не ограничивает. limit < 1 — ValueError."""
         query = cls.objects.order_by("work_queue_id")
         if limit is not None:
             if limit < 1:
@@ -45,8 +46,8 @@ class WorkQueue(PlatformModel):
         return await cls.objects.filter(company_id=company_id).all()
 
     @classmethod
-    async def list_by_created_at(cls, company_id: str) -> list[Self]:
-        """Все очереди компании, ORDER BY created_at. Предела нет."""
+    async def list_by_created_at_asc(cls, company_id: str) -> list[Self]:
+        """Все очереди компании, ORDER BY created_at ASC. Предела нет."""
         return await (
             cls.objects.filter(company_id=company_id)
             .order_by("created_at")

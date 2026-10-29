@@ -136,7 +136,10 @@ export function inferToolRefLanguage(ref: any) {
     }
     const joined = pieces.join(' ');
     for (const [language, pattern] of LANGUAGE_PATTERNS) {
-        if ((pattern as Record<string, any>).test(joined)) {
+        if (!(pattern instanceof RegExp)) {
+            throw new Error('flows-tool-visual: language pattern must be a regexp');
+        }
+        if (pattern.test(joined)) {
             return language;
         }
     }

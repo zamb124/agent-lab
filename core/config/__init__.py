@@ -5,7 +5,6 @@
 from core.config.base import BaseSettings, get_settings, set_settings, settings
 from core.config.loader import load_merged_config
 from core.config.models import (
-    AgentSettings,
     AuthConfig,
     AuthProviderConfig,
     BothubProviderConfig,
@@ -56,7 +55,6 @@ __all__ = [
     "settings",
     "load_merged_config",
     "is_testing",
-    "AgentSettings",
     "AuthConfig",
     "AuthProviderConfig",
     "DemoAuthConfig",

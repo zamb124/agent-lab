@@ -80,7 +80,7 @@ from apps.crm.services.note_attachment_description import (
 )
 from apps.crm.services.saga import EntityDeletionSaga, SagaCompensationError, SagaStep
 from apps.crm.services.user_person_service import UserPersonService
-from apps.crm_worker.tasks.task_names import (
+from apps.crm.tasks.task_names import (
     CRM_REBUILD_DAILY_SUMMARY,
     CRM_REBUILD_PERIOD_SUMMARY,
 )
@@ -103,7 +103,10 @@ from core.namespace import NamespaceService
 from core.rag import BaseRAGProvider
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.models import RAGMetadataFilter, RAGSearchOptions
-from core.rag.post_retrieval_rerank import RerankScoreCache, apply_rerank_after_retrieve
+from core.rag.post_retrieval_rerank import (
+    RerankScoreCache,
+    apply_rerank_after_retrieve_by_score_desc,
+)
 from core.rag.search_options_resolver import resolve_platform_search_options
 from core.rag_indexing_schema import SearchChannelsDefaults
 from core.tasks import enqueue
@@ -463,7 +466,7 @@ class EntityService:
             if sub_clean == "":
                 return
 
-        entity_type_model = await EntityType.by_company_namespace_and_type_id(
+        entity_type_model = await EntityType.query_by_company_namespace_and_type_id(
             company_id=self._get_company_id(),
             namespace=namespace,
             type_id=entity_type,
@@ -473,7 +476,7 @@ class EntityService:
 
         sub_clean = entity_subtype.strip() if isinstance(entity_subtype, str) else ""
         if sub_clean:
-            subtype_model = await EntityType.by_company_namespace_and_type_id(
+            subtype_model = await EntityType.query_by_company_namespace_and_type_id(
                 company_id=self._get_company_id(),
                 namespace=namespace,
                 type_id=sub_clean,
@@ -499,7 +502,7 @@ class EntityService:
                 return
 
         type_id = entity_subtype or entity_type
-        entity_type_model = await EntityType.by_company_namespace_and_type_id(
+        entity_type_model = await EntityType.query_by_company_namespace_and_type_id(
             company_id=self._get_company_id(),
             namespace=namespace,
             type_id=type_id,
@@ -750,7 +753,7 @@ class EntityService:
         field_specs: dict[str, JsonObject] = {}
         type_id = entity_subtype or entity_type
         if type_id is not None:
-            entity_type_model = await EntityType.by_company_namespace_and_type_id(
+            entity_type_model = await EntityType.query_by_company_namespace_and_type_id(
                 company_id=self._get_company_id(),
                 namespace=namespace,
                 type_id=type_id,
@@ -830,7 +833,7 @@ class EntityService:
         ent = await CRMEntity.get(entity_id)
         if ent is None or ent.company_id != company_id:
             raise ValueError(f"Voice entity not found: {entity_id}")
-        et = await EntityType.by_company_namespace_and_type_id(
+        et = await EntityType.query_by_company_namespace_and_type_id(
             company_id=company_id,
             namespace=ent.namespace,
             type_id=ent.entity_type,
@@ -844,7 +847,7 @@ class EntityService:
         ent = await CRMEntity.get(entity_id)
         if ent is None or ent.company_id != company_id:
             raise ValueError(f"Context entity not found: {entity_id}")
-        et = await EntityType.by_company_namespace_and_type_id(
+        et = await EntityType.query_by_company_namespace_and_type_id(
             company_id=company_id,
             namespace=ent.namespace,
             type_id=ent.entity_type,
@@ -999,7 +1002,7 @@ class EntityService:
         if note is None:
             raise ValueError(f"Note not found: {note_id}")
         from_text = self.extract_linked_entity_ids_from_description(note.description or "")
-        rels = await Relationship.touching_in_company(
+        rels = await Relationship.query_touching_in_company(
             note_id,
             self._get_company_id(),
         ).all()
@@ -1066,7 +1069,7 @@ class EntityService:
             None,
             self._normalize_namespace(namespace),
         )
-        page = await CRMEntity.cursor_page(
+        page = await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
             entity_type=eff_type,
             entity_subtype=None,
             namespace=self._normalize_namespace(namespace),
@@ -1830,7 +1833,7 @@ class EntityService:
         db_has_more = True
 
         for _ in range(max_iterations):
-            page = await CRMEntity.cursor_page(
+            page = await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
                 entity_type=eff_entity_type,
                 entity_subtype=entity_subtype,
                 namespace=namespace,
@@ -1911,7 +1914,7 @@ class EntityService:
                 continue
             visited.add(entity_id)
 
-            relationships = await Relationship.touching_in_company(
+            relationships = await Relationship.query_touching_in_company(
                 entity_id,
                 self._get_company_id(),
             ).all()
@@ -2046,12 +2049,12 @@ class EntityService:
 
         async def delete_relationships() -> None:
             nonlocal deleted_relationships
-            relationships = await Relationship.touching_in_company(
+            relationships = await Relationship.query_touching_in_company(
                 entity_id,
                 self._get_company_id(),
             ).all()
             deleted_relationships = relationships.copy()
-            deleted = await Relationship.touching_in_company(
+            deleted = await Relationship.query_touching_in_company(
                 entity_id,
                 self._get_company_id(),
             ).delete()
@@ -2244,7 +2247,7 @@ class EntityService:
                 filters=search_filters,
                 search_options=resolved_search_options,
             )
-            search_results = await apply_rerank_after_retrieve(
+            search_results = await apply_rerank_after_retrieve_by_score_desc(
                 results=search_results,
                 query=query,
                 provider_name=RAG_IN_PROCESS_PROVIDER_ID,
@@ -2323,7 +2326,7 @@ class EntityService:
         readable_ids = {e.entity_id for e in readable}
         return [(e, score) for e, score in results if e.entity_id in readable_ids]
 
-    async def hybrid_search(
+    async def hybrid_search_by_score_desc(
         self,
         query: str,
         entity_type: str | None = None,
@@ -2336,7 +2339,7 @@ class EntityService:
         """Гибридный поиск RRF (tsvector + pgvector) с фильтрацией по грантам."""
         k = 60
         rrf_max = 2.0 / (k + 1)
-        fts_entities = await CRMEntity.list_fts_ranked_pairs(
+        fts_entities = await CRMEntity.list_fts_ranked_pairs_by_fts_rank_desc(
             query,
             entity_type,
             entity_subtype,
@@ -2400,7 +2403,7 @@ class EntityService:
         limit: int = 100,
     ) -> list[tuple[CRMEntity, float]]:
         """FTS поиск с ранжированием по ts_rank и фильтрацией по грантам."""
-        results = await CRMEntity.list_fts_ranked_pairs(
+        results = await CRMEntity.list_fts_ranked_pairs_by_fts_rank_desc(
             query=query,
             entity_type=entity_type,
             entity_subtype=entity_subtype,
@@ -2423,7 +2426,7 @@ class EntityService:
         namespace: str | None = None,
     ) -> JsonObject:
         """Фасетная агрегация: по entity_type, status, месяц создания."""
-        return await CRMEntity.counts_by_type_status_and_month(namespace=namespace)
+        return await CRMEntity.counts_by_type_status_and_month_asc(namespace=namespace)
 
     async def search_mentions(
         self,
@@ -2748,13 +2751,13 @@ class EntityService:
 
         ns_for_types = self._resolve_namespace_for_write(note.namespace)
 
-        entity_rows = await EntityType.catalog(
+        entity_rows = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
             namespace=ns_for_types
         )
-        rel_rows = await RelationshipType.query_by_system_in_company(
+        rel_rows = await RelationshipType.list_by_type_id_asc(
             self._get_company_id(),
             include_system=True,
-        ).order_by("type_id").all()
+        )
         parent_map = {row.type_id: row.parent_type_id for row in entity_rows}
 
         cleaned_failures: list[dict[str, str]] = []
@@ -3089,10 +3092,10 @@ class EntityService:
 
         valid_rel_type_ids = {
             t.type_id
-            for t in await RelationshipType.query_by_system_in_company(
+            for t in await RelationshipType.list_by_type_id_asc(
                 self._get_company_id(),
                 include_system=True,
-            ).order_by("type_id").all()
+            )
         }
 
         seen_new_rel: set[str] = set()
@@ -3291,10 +3294,10 @@ class EntityService:
         note, draft = await self._load_analysis_draft_from_note(note_id)
         namespace = self._resolve_namespace_for_write(note.namespace)
 
-        all_types = await RelationshipType.query_by_system_in_company(
+        all_types = await RelationshipType.list_by_type_id_asc(
             self._get_company_id(),
             include_system=True,
-        ).order_by("type_id").all()
+        )
         valid_type_ids = {t.type_id for t in all_types}
 
         draft_entity_ids = {e.draft_entity_id for e in draft.entities if e.draft_entity_id}
@@ -3443,7 +3446,7 @@ class EntityService:
         cur: str | None = leaf_type_id
         while cur and cur not in seen:
             seen.add(cur)
-            row = await EntityType.by_company_namespace_and_type_id(
+            row = await EntityType.query_by_company_namespace_and_type_id(
                 company_id=self._get_company_id(),
                 namespace=namespace,
                 type_id=cur,
@@ -3479,7 +3482,7 @@ class EntityService:
         """Возвращает множество type_id, принадлежащих ветке note (включая note и дочерние типы)."""
         all_types = entity_types
         if all_types is None:
-            all_types = await EntityType.catalog(
+            all_types = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
                 namespace=namespace
             )
         children_by_parent: dict[str | None, list[str]] = {}
@@ -3556,10 +3559,10 @@ class EntityService:
         """
         namespace = self._resolve_namespace_for_write(request.namespace)
         await self._ensure_namespace_exists(namespace)
-        entity_types = await EntityType.catalog(
+        entity_types = await EntityType.catalog_by_is_system_desc_and_type_id_asc(
             namespace=namespace
         )
-        relationship_types = await RelationshipType.list_with_prompt(
+        relationship_types = await RelationshipType.list_unordered_with_prompt(
             self._get_company_id(),
         )
 
@@ -3738,7 +3741,7 @@ class EntityService:
         return ai_result
 
     async def _load_all_entity_types_for_namespace(self, namespace: str) -> list[EntityType]:
-        return await EntityType.catalog(namespace=namespace)
+        return await EntityType.catalog_by_is_system_desc_and_type_id_asc(namespace=namespace)
 
     def _build_composite_prompt(
         self,
@@ -4755,7 +4758,7 @@ class EntityService:
             raise ValueError(f"Note not found: {note_id}")
         if not note.description:
             return
-        relationships = await Relationship.touching_in_company(
+        relationships = await Relationship.query_touching_in_company(
             note_id,
             note.company_id,
         ).all()
@@ -5880,7 +5883,7 @@ class EntityService:
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
 
-        relationships = await Relationship.touching_in_company(
+        relationships = await Relationship.query_touching_in_company(
                 entity_id,
                 self._get_company_id(),
             ).all()

@@ -91,9 +91,9 @@ async def test_list_by_title_orders_company_catalogs(unique_id: str) -> None:
         owner_user_id="test_user",
     )
 
-    found = await DocumentCatalog.list_by_title(company_id, unique_id, 10)
+    found = await DocumentCatalog.list_by_title_asc(company_id, unique_id, 10)
     assert [row.catalog_id for row in found] == [alpha.catalog_id, beta.catalog_id]
-    limited = await DocumentCatalog.list_by_title(company_id, "", 1)
+    limited = await DocumentCatalog.list_by_title_asc(company_id, "", 1)
     assert [row.catalog_id for row in limited] == [alpha.catalog_id]
-    other = await DocumentCatalog.list_by_title(other_company_id, unique_id, 10)
+    other = await DocumentCatalog.list_by_title_asc(other_company_id, unique_id, 10)
     assert [row.catalog_id for row in other] == [foreign.catalog_id]

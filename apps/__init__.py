@@ -1,8 +1,6 @@
 """Процессы платформы и библиотечные домены.
 
-- ``<svc>/`` — HTTP-процесс.
-- ``<svc>_worker/`` — TaskIQ-процесс этого владельца.
-- ``idle_worker/`` — общий TaskIQ-процесс без своего HTTP.
-- ``agent/`` — домен без процесса; роутеры монтируются во ``flows`` и ``frontend``.
+- ``<svc>/`` — HTTP-процесс; его TaskIQ — ``worker.py`` в том же каталоге.
+- ``idle/`` — TaskIQ без HTTP: очереди ``idle`` и ``a2a_push``.
 - ``worker_manifest.py`` — топология очередей TaskIQ.
 """

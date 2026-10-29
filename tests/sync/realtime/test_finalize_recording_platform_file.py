@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.sync.realtime.tasks import (
     _call_recording_s3_object_key,

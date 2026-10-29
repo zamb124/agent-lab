@@ -8,7 +8,7 @@
 Имя не ``task_id``: у ``process_flow`` это поле payload.
 
 Прямой TaskIQ kick / find_task вне whitelist запрещён CI-гейтами
-(``scripts/check_taskiq_canon.py``, ``scripts/check_logging_canon.sh``).
+(``scripts/gates/backend/taskiq.py``, ``scripts/gates/backend/logging_canon.sh``).
 """
 
 from __future__ import annotations

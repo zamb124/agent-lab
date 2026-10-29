@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import pytest
 
-from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.retention import FileRetentionKind, FileRetentionSpec
 from tests.fixtures.s3 import require_s3_configured
 

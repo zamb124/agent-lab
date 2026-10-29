@@ -7,6 +7,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { ResourceController, OpController } from '@platform/lib/base/use-resource.js';
 import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { readWorkItemFromParam } from '@platform/lib/utils/work-item-deeplink.js';
 import {
     truncateWorkItemId,
@@ -166,8 +167,8 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
             return null;
         }
         const cached = this._workItems.byId[this.workItemId];
-        if (cached && typeof cached === 'object') {
-            return cached as WorkItemLike;
+        if (isPlainRecord(cached)) {
+            return cached;
         }
         return null;
     }

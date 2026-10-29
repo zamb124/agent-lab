@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import core.tracing.attributes as trace_attr
 from core.billing.default_settlement_rules import default_settlement_rules_document
-from core.billing.settlement_rules import resolve_matched_rules
+from core.billing.settlement_rules import resolve_matched_rules_by_priority_asc
 from core.tracing.models import Span
 from core.types import JsonObject
 
@@ -36,7 +36,7 @@ def test_matches_llm_tracer_with_total_tokens() -> None:
         "llm.gpt-4o",
         {trace_attr.ATTR_LLM_TOTAL_TOKENS: 100},
     )
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "llm_tracer_tokens"
 
@@ -51,7 +51,7 @@ def test_matches_openrouter_llm_usd_to_rub_before_tokens() -> None:
             trace_attr.ATTR_LLM_TOTAL_TOKENS: 9999,
         },
     )
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "llm_openrouter_usd_to_rub"
     assert matched[0].resource_name == "billing:rub"
@@ -63,7 +63,7 @@ def test_matches_flows_llm_resource() -> None:
         "flows.llm_resource.chat",
         {trace_attr.ATTR_BILLING_QUANTITY: 1},
     )
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "flows_llm_resource_qty"
 
@@ -74,7 +74,7 @@ def test_matches_flows_llm_invoke() -> None:
         "flows.llm.invoke_task",
         {trace_attr.ATTR_BILLING_QUANTITY: 50},
     )
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "flows_llm_invoke_qty"
 
@@ -85,7 +85,7 @@ def test_matches_rag_embed() -> None:
         "rag.embed.batch",
         {trace_attr.ATTR_BILLING_QUANTITY: 120},
     )
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "rag_embed_tokens"
 
@@ -93,7 +93,7 @@ def test_matches_rag_embed() -> None:
 def test_matches_livekit_prefix() -> None:
     doc = default_settlement_rules_document()
     span = _span("livekit.room.create", {})
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "livekit_ops"
 
@@ -104,7 +104,7 @@ def test_matches_livekit_room_session_usage_minutes() -> None:
         "livekit.room.session_usage",
         {trace_attr.ATTR_BILLING_QUANTITY: 3},
     )
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "livekit_room_session_minutes"
     assert matched[0].resource_name == "livekit:room_minute"
@@ -116,7 +116,7 @@ def test_matches_livekit_egress_composite_usage_minutes() -> None:
         "livekit.egress.composite_usage",
         {trace_attr.ATTR_BILLING_QUANTITY: 2},
     )
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "livekit_egress_composite_minutes"
 
@@ -127,7 +127,7 @@ def test_matches_livekit_egress_segmented_usage_minutes() -> None:
         "livekit.egress.segmented_usage",
         {trace_attr.ATTR_BILLING_QUANTITY: 7},
     )
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "livekit_egress_segmented_minutes"
 
@@ -135,7 +135,7 @@ def test_matches_livekit_egress_segmented_usage_minutes() -> None:
 def test_matches_search_provider_call() -> None:
     doc = default_settlement_rules_document()
     span = _span("search.provider.tavily", {})
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "search_tavily_call"
     assert matched[0].resource_name == "search:tavily"
@@ -144,12 +144,12 @@ def test_matches_search_provider_call() -> None:
 def test_no_rule_for_sync_stt_observability_only() -> None:
     doc = default_settlement_rules_document()
     span = _span("sync.stt.transcribe_audio_message", {})
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 0
 
 
 def test_no_rule_for_flows_external_api_observability_only() -> None:
     doc = default_settlement_rules_document()
     span = _span("flows.external_api.call", {})
-    matched = resolve_matched_rules(doc, span)
+    matched = resolve_matched_rules_by_priority_asc(doc, span)
     assert len(matched) == 0

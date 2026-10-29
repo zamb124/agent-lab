@@ -31,7 +31,7 @@ from apps.crm.services.note_markdown_format_schedule import (
     ActiveTaskExistsError,
     begin_note_markdown_format,
 )
-from apps.crm_worker.tasks.task_names import (
+from apps.crm.tasks.task_names import (
     CRM_PROCESS_NOTE,
     CRM_REBUILD_DAILY_SUMMARY,
     CRM_REBUILD_PERIOD_SUMMARY,
@@ -188,7 +188,7 @@ class TaskService:
         namespace: str,
     ) -> None:
         """Бросает ValueError если уже есть активная (pending/running) задача того же типа с теми же ключами."""
-        existing = await CRMTask.active_by_data_keys(
+        existing = await CRMTask.latest_active_by_data_keys_created_at_desc(
             task_type, data_key_values, namespace, self._get_company_id()
         )
         if existing is not None:
@@ -564,7 +564,7 @@ class TaskService:
     async def get_task(self, task_id: str) -> CRMTask | None:
         return await CRMTask.by_company_and_task_id(self._get_company_id(), task_id)
 
-    async def list_tasks(
+    async def list_tasks_by_created_at_desc(
         self,
         namespace: str | None,
         *,
@@ -575,7 +575,7 @@ class TaskService:
     ) -> list[CRMTask]:
         ns = namespace.strip() if isinstance(namespace, str) and namespace.strip() else None
         if note_id is not None:
-            return await CRMTask.list_by_note_id(
+            return await CRMTask.list_for_note_by_created_at_desc(
                 company_id=self._get_company_id(),
                 namespace=ns,
                 task_type=task_type,
@@ -584,7 +584,7 @@ class TaskService:
                 offset=offset,
             )
         return await (
-            CRMTask.namespace_tasks(self._get_company_id(), ns, task_type)
+            CRMTask.query_namespace_tasks(self._get_company_id(), ns, task_type)
             .order_by("-created_at")
             .limit(limit)
             .offset(offset)
@@ -606,7 +606,7 @@ class TaskService:
                 task_type=task_type,
                 note_id=note_id,
             )
-        return await CRMTask.namespace_tasks(self._get_company_id(), ns, task_type).count()
+        return await CRMTask.query_namespace_tasks(self._get_company_id(), ns, task_type).count()
 
     async def request_cancel(self, task_id: str) -> CRMTask:
         row = await self.get_task(task_id)

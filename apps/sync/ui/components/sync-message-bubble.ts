@@ -38,10 +38,19 @@ import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { isSpeechOriginText, messageHasSpeechOriginText } from '../_helpers/sync-speech-origin.js';
 import { guestDisplayNameFromSenderId, isGuestSenderId } from '../_helpers/sync-guest-sender.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const LONG_PRESS_MS = 450;
 
 const EMOJI_QUICK = ['👍','👎','❤️', '😂', '🔥', '🎉', '👏'];
+
+function isMessagesStore(value: unknown): value is SyncMessagesStoreSlice {
+    return isPlainRecord(value) && isPlainRecord(value.byChannelId);
+}
+
+function isChannelsSlice(value: unknown): value is SyncChannelsSlice {
+    return isPlainRecord(value) && Array.isArray(value.items);
+}
 
 /** API хранит плоский список { user_id, emoji, created_at }; для UI — одна пилюля на emoji. */
 function _reactionsGroupedByEmoji(raw: unknown) {
@@ -62,6 +71,17 @@ function _reactionsGroupedByEmoji(raw: unknown) {
     return [...map.entries()].map(([emoji, user_ids]) => ({ emoji, user_ids }));
 }
 
+function contentRecord(content: Record<string, unknown>): Record<string, unknown> | null {
+    return isPlainRecord(content.data) ? content.data : null;
+}
+
+function messageSender(message: Record<string, unknown> | null): Record<string, unknown> | null {
+    if (message === null) {
+        return null;
+    }
+    return isPlainRecord(message.sender) ? message.sender : null;
+}
+
 
 export class SyncMessageBubble extends PlatformElement {
     static i18nNamespace = 'sync';
@@ -74,11 +94,11 @@ export class SyncMessageBubble extends PlatformElement {
         members: { type: Array },
         _senderAvatarFailed: { state: true },
     };
-    declare message: Record<string, any> | null;
+    declare message: Record<string, unknown> | null;
     declare myUserId: string;
     declare channelType: string;
     declare position: string;
-    declare members: Record<string, any>[];
+    declare members: Record<string, unknown>[];
     declare _senderAvatarFailed: boolean;
 
     static override styles: CSSResultGroup = css`
@@ -700,8 +720,14 @@ export class SyncMessageBubble extends PlatformElement {
         this._transcribeCall = this.useOp('sync/messages_transcribe_call');
         this._callAccept = this.useOp('sync/calls_accept');
         this._chatUi = this.useSlice('sync/chat_ui');
-        this._messagesStoreSel = this.select((s) => s.syncMessagesStore as SyncMessagesStoreSlice | undefined);
-        this._channelsSel = this.select((s) => s.syncChannels as SyncChannelsSlice | undefined);
+        this._messagesStoreSel = this.select((s) => {
+            const store = s.syncMessagesStore;
+            return isMessagesStore(store) ? store : undefined;
+        });
+        this._channelsSel = this.select((s) => {
+            const channels = s.syncChannels;
+            return isChannelsSlice(channels) ? channels : undefined;
+        });
         this._longPressTimer = null;
         this._longPressTriggered = false;
         this._senderAvatarFailed = false;
@@ -731,7 +757,8 @@ export class SyncMessageBubble extends PlatformElement {
     override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (changed.has('message') || changed.has('myUserId')) {
-            const own = !!(this.message && this.message.sender && this.message.sender.user_id === this.myUserId);
+            const sender = messageSender(this.message);
+            const own = sender !== null && sender.user_id === this.myUserId;
             this.toggleAttribute('data-own', own);
             const onlyCallBoundary = this._isCallBoundaryOnlyRow(
                 this.message && this.message.contents,
@@ -739,8 +766,7 @@ export class SyncMessageBubble extends PlatformElement {
             this.toggleAttribute('data-only-call-boundary', onlyCallBoundary);
             const showAvatar = !own && (this.position === 'first' || this.position === 'single');
             this.toggleAttribute('data-show-avatar', showAvatar);
-            const sender = this.message && this.message.sender;
-            if (sender && typeof sender.user_id === 'string') {
+            if (sender !== null && typeof sender.user_id === 'string') {
                 const au = typeof sender.avatar_url === 'string' ? sender.avatar_url : '';
                 const sig = `${sender.user_id}|${au}`;
                 if (this._senderAvatarSig !== sig) {
@@ -831,7 +857,8 @@ export class SyncMessageBubble extends PlatformElement {
     }
 
     _onSenderClick() {
-        const senderId = this.message && this.message.sender && this.message.sender.user_id;
+        const sender = messageSender(this.message);
+        const senderId = sender !== null && typeof sender.user_id === 'string' ? sender.user_id : '';
         if (typeof senderId !== 'string' || senderId === '') return;
         if (isGuestSenderId(senderId)) return;
         this.openModal('platform.user_info', { userId: senderId });
@@ -899,8 +926,8 @@ export class SyncMessageBubble extends PlatformElement {
         `;
     }
 
-    _renderText(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderText(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         const text = data && (typeof data.body === 'string' ? data.body : (typeof data.text === 'string' ? data.text : ''));
         if (typeof text !== 'string' || text === '') return '';
         const segments = parseMentionsToSegments(text, this.members);
@@ -916,16 +943,16 @@ export class SyncMessageBubble extends PlatformElement {
         return html`<div class=${bodyClass}><span class="body-text">${textNodes}</span></div>`;
     }
 
-    _renderCodeBlock(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderCodeBlock(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         const code = data && typeof data.code === 'string' ? data.code : '';
         const lang = data && typeof data.language === 'string' ? data.language : '';
         if (code === '') return '';
         return html`<pre><code data-lang=${lang}>${code}</code></pre>`;
     }
 
-    _renderImage(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderImage(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         if (!data) return '';
         let url = '';
         if (typeof data.url === 'string' && data.url !== '') url = data.url;
@@ -937,7 +964,7 @@ export class SyncMessageBubble extends PlatformElement {
         return html`<div class="image-wrap"><img src=${url} alt=${alt} loading="lazy" @click=${() => window.open(url, '_blank')} /></div>`;
     }
 
-    _openFileData(data: Record<string, any> | null, url: string, source: string) {
+    _openFileData(data: Record<string, unknown> | null, url: string, source: string) {
         if (!data || typeof data.file_id !== 'string' || data.file_id.length === 0) return;
         this.openFile({
             file_id: data.file_id,
@@ -948,14 +975,14 @@ export class SyncMessageBubble extends PlatformElement {
         }, { source });
     }
 
-    _onFileOpenKeydown(event: KeyboardEvent, data: Record<string, any> | null, url: string) {
+    _onFileOpenKeydown(event: KeyboardEvent, data: Record<string, unknown> | null, url: string) {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         this._openFileData(data, url, 'sync_message_file_keyboard');
     }
 
-    _renderFile(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderFile(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         const fileId = data ? data.file_id : null;
         if (typeof fileId !== 'string') return '';
         let name = '';
@@ -998,8 +1025,8 @@ export class SyncMessageBubble extends PlatformElement {
         `;
     }
 
-    _renderAudio(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderAudio(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         const fileId = data ? data.file_id : null;
         if (typeof fileId !== 'string') return '';
         const url =
@@ -1032,8 +1059,8 @@ export class SyncMessageBubble extends PlatformElement {
         `;
     }
 
-    _renderVideo(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderVideo(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         const fileId = data ? data.file_id : null;
         if (typeof fileId !== 'string') return '';
         const url =
@@ -1088,8 +1115,8 @@ export class SyncMessageBubble extends PlatformElement {
         `;
     }
 
-    _renderCallBoundary(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderCallBoundary(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         const phase = data ? data.phase : null;
         const callId = data ? data.call_id : null;
         if (phase === 'started') {
@@ -1123,14 +1150,14 @@ export class SyncMessageBubble extends PlatformElement {
         `;
     }
 
-    _renderTranscript(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderTranscript(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         const turns = data && Array.isArray(data.turns) ? data.turns : [];
         if (turns.length === 0) return html`<div class="body">${this.t('bubble.transcript_preview')}</div>`;
         return html`
             <div class="body">${this.t('bubble.transcript_preview')}</div>
             <div class="transcript">
-                ${turns.map((turn: Record<string, any>) => {
+                ${turns.map((turn: Record<string, unknown>) => {
                     const userId = typeof turn.user_id === 'string' ? turn.user_id : '';
                     return html`<div class="turn">
                         ${userId !== ''
@@ -1143,21 +1170,21 @@ export class SyncMessageBubble extends PlatformElement {
         `;
     }
 
-    _renderGitRef(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderGitRef(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         if (!data) return '';
         const label = typeof data.label === 'string' && data.label !== '' ? data.label : 'git';
         return html`<div class="file"><platform-icon name="git-branch" size="18"></platform-icon><div class="file-info"><div class="file-name">${label}</div></div></div>`;
     }
 
-    _renderToolResponse(content: Record<string, any>) {
-        const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
+    _renderToolResponse(content: Record<string, unknown>) {
+        const data = contentRecord(content);
         if (!data) return '';
         const text = typeof data.text === 'string' ? data.text : '';
         return html`<div class="file"><platform-icon name="zap" size="18"></platform-icon><div class="file-info"><div class="file-name">${text}</div></div></div>`;
     }
 
-    _renderContent(content: Record<string, any>) {
+    _renderContent(content: Record<string, unknown>) {
         if (!content || typeof content.type !== 'string') return '';
         switch (content.type) {
             case 'text/plain':       return this._renderText(content);
@@ -1179,13 +1206,13 @@ export class SyncMessageBubble extends PlatformElement {
     _renderReplyQuote() {
         const parentId = this.message && this.message.parent_message_id;
         if (typeof parentId !== 'string' || parentId === '') return '';
-        const channelId = this.message && this.message.channel_id;
+        const channelId = this.message !== null && typeof this.message.channel_id === 'string' ? this.message.channel_id : '';
         const messagesSlice = this._messagesStoreSel.value;
-        const channelData = messagesSlice && messagesSlice.byChannelId
+        const channelData = channelId !== '' && messagesSlice && messagesSlice.byChannelId
             ? messagesSlice.byChannelId[channelId]
             : null;
         const items = channelData && Array.isArray(channelData.items) ? channelData.items : [];
-        const parent = items.find((m: Record<string, any>) => m.message_id === parentId);
+        const parent = items.find((m: Record<string, unknown>) => m.message_id === parentId);
         if (!parent) {
             return html`<div class="reply-quote" @click=${this._onReplyQuoteClick}>
                 <span class="who">${this.t('bubble.default_message')}</span>
@@ -1195,11 +1222,21 @@ export class SyncMessageBubble extends PlatformElement {
         if (parent.sender && typeof parent.sender === 'object') {
             senderName = this._senderDisplayName(parent.sender);
         }
-        const previewContent = Array.isArray(parent.contents) ? (parent.contents as Record<string, any>[]).find((c) => c.type === 'text/plain') : null;
-        const previewData = previewContent && previewContent.data;
-        const previewBody = previewData && typeof previewData.body === 'string'
+        const contents = parent.contents;
+        let previewContent: Record<string, unknown> | null = null;
+        if (Array.isArray(contents)) {
+            for (const content of contents) {
+                if (isPlainRecord(content) && content.type === 'text/plain') {
+                    previewContent = content;
+                    break;
+                }
+            }
+        }
+        const data = previewContent === null ? null : previewContent.data;
+        const previewData = isPlainRecord(data) ? data : null;
+        const previewBody = previewData !== null && typeof previewData.body === 'string'
             ? previewData.body
-            : (previewData && typeof previewData.text === 'string' ? previewData.text : '');
+            : (previewData !== null && typeof previewData.text === 'string' ? previewData.text : '');
         const previewText = previewBody !== ''
             ? previewBody.slice(0, 80)
             : this.t('bubble.default_message');
@@ -1209,8 +1246,11 @@ export class SyncMessageBubble extends PlatformElement {
     }
 
     _renderForwarded() {
-        if (!this.message || this.message.forwarded_from === null || typeof this.message.forwarded_from !== 'object') return '';
-        const label = typeof this.message.forwarded_from.label === 'string' ? this.message.forwarded_from.label : '';
+        const forwarded = this.message !== null && isPlainRecord(this.message.forwarded_from)
+            ? this.message.forwarded_from
+            : null;
+        if (forwarded === null) return '';
+        const label = typeof forwarded.label === 'string' ? forwarded.label : '';
         return html`<div class="forwarded">
             <platform-icon name="forward" size="12"></platform-icon>
             <span class="forwarded-label">${this.t('bubble.forwarded_from', { label })}</span>
@@ -1240,7 +1280,8 @@ export class SyncMessageBubble extends PlatformElement {
         if (!message) return '';
         const status = message.status;
         if (typeof status !== 'string' || status === '') return '';
-        const own = message.sender && message.sender.user_id === this.myUserId;
+        const sender = isPlainRecord(message.sender) ? message.sender : null;
+        const own = sender !== null && sender.user_id === this.myUserId;
         if (!own) return '';
         const errorText = typeof message._error === 'string' && message._error !== ''
             ? message._error
@@ -1255,8 +1296,9 @@ export class SyncMessageBubble extends PlatformElement {
             ><platform-icon name="alert-circle" size="13"></platform-icon></button>`;
         }
         const channelsSlice = this._channelsSel.value;
-        const readMap = channelsSlice && channelsSlice.readByChannelUser
-            ? channelsSlice.readByChannelUser[message.channel_id]
+        const channelId = typeof message.channel_id === 'string' ? message.channel_id : '';
+        const readMap = channelId !== '' && channelsSlice && channelsSlice.readByChannelUser
+            ? channelsSlice.readByChannelUser[channelId]
             : null;
         const sentAtMs = typeof message.sent_at === 'string'
             ? Date.parse(message.sent_at)
@@ -1302,7 +1344,7 @@ export class SyncMessageBubble extends PlatformElement {
         return html`<div class="meta">${pinned}${edited}<span>${time}</span>${this._renderStatus()}</div>`;
     }
 
-    _stringContentType(c: Record<string, any> | null | undefined) {
+    _stringContentType(c: Record<string, unknown> | null | undefined) {
         if (c == null || typeof c !== 'object') return null;
         const t = c.type;
         if (typeof t !== 'string') return null;
@@ -1314,9 +1356,9 @@ export class SyncMessageBubble extends PlatformElement {
      * Блоки для решения, «только call/boundary» это или нет: пустые text/plain
      * (часто приезжают с бэка вторым slot) не считаем содержимым.
      */
-    _relevantContentBlocks(raw: unknown): Record<string, any>[] {
+    _relevantContentBlocks(raw: unknown): Record<string, unknown>[] {
         if (!Array.isArray(raw)) return [];
-        const out: Record<string, any>[] = [];
+        const out: Record<string, unknown>[] = [];
         for (const c of raw) {
             if (c == null || typeof c !== 'object') continue;
             const st = this._stringContentType(c);
@@ -1341,11 +1383,11 @@ export class SyncMessageBubble extends PlatformElement {
         return rel.length > 0 && rel.every((c) => this._stringContentType(c) === 'call/boundary');
     }
 
-    _isGuestSender(sender: Record<string, any> | null | undefined) {
+    _isGuestSender(sender: Record<string, unknown> | null | undefined) {
         return Boolean(sender && typeof sender.user_id === 'string' && isGuestSenderId(sender.user_id));
     }
 
-    _senderDisplayName(sender: Record<string, any> | null | undefined) {
+    _senderDisplayName(sender: Record<string, unknown> | null | undefined) {
         if (!sender || typeof sender !== 'object') {
             throw new Error('sender обязателен');
         }
@@ -1364,8 +1406,8 @@ export class SyncMessageBubble extends PlatformElement {
     }
 
     _renderAvatar() {
-        const sender = this.message && this.message.sender;
-        if (!sender || typeof sender.user_id !== 'string') return html`<span class="avatar"></span>`;
+        const sender = messageSender(this.message);
+        if (sender === null || typeof sender.user_id !== 'string') return html`<span class="avatar"></span>`;
         if (isGuestSenderId(sender.user_id)) {
             return html`<span class="avatar guest" title=${this._senderDisplayName(sender)}>
                 <platform-icon name="user" size="18"></platform-icon>
@@ -1387,8 +1429,8 @@ export class SyncMessageBubble extends PlatformElement {
 
     override render(): TemplateResult {
         if (!this.message) return html``;
-        const sender = this.message.sender;
-        const senderId = sender && sender.user_id;
+        const sender = isPlainRecord(this.message.sender) ? this.message.sender : null;
+        const senderId = sender !== null && typeof sender.user_id === 'string' ? sender.user_id : '';
         const isOwn = senderId === this.myUserId;
         const relevant = this._relevantContentBlocks(this.message.contents);
         const onlyCallBoundaryLayout =
@@ -1404,11 +1446,12 @@ export class SyncMessageBubble extends PlatformElement {
         const contents = Array.isArray(this.message.contents) ? this.message.contents : [];
         const slice = this._chatUi.value;
         const selectionMode = slice && slice.selectionMode === true;
+        const messageId = typeof this.message.message_id === 'string' ? this.message.message_id : '';
         const selected = slice && Array.isArray(slice.selectedMessageIds)
-            && this.message.message_id
-            && slice.selectedMessageIds.includes(this.message.message_id);
+            && messageId !== ''
+            && slice.selectedMessageIds.includes(messageId);
         const showSenderName = !isOwn && (this.position === 'first' || this.position === 'single');
-        const senderName = sender ? this._senderDisplayName(sender) : '';
+        const senderName = sender !== null ? this._senderDisplayName(sender) : '';
         const senderIsGuest = this._isGuestSender(sender);
         const bodyMain = html`${contents.map((c) => this._renderContent(c))}`;
         return html`

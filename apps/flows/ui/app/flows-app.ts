@@ -11,6 +11,7 @@
  */
 
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { CompanyRecord } from '@platform/lib/events/reducers/companies.js';
 import type { OpController, ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
@@ -162,7 +163,7 @@ import {
     buildLaraFlowsContext,
     flattenLaraFlowsContext,
 } from '../_helpers/lara-node-helper.js';
-import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
+import { applyCompanyHostRedirectIfNeeded, type CompanyListEntry } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/flows-catalog-list.js';
@@ -210,6 +211,22 @@ const FLOWS_BOTTOM_NAV_HIDE_ON_ROUTES = [
     'flow_evaluation',
     'flow_evaluation_branch',
 ];
+
+function companyListEntries(companies: readonly CompanyRecord[]): CompanyListEntry[] {
+    const entries: CompanyListEntry[] = [];
+    for (const company of companies) {
+        const companyId = company.company_id;
+        if (typeof companyId !== 'string' || companyId === '') {
+            throw new Error('flows-app: company_id required');
+        }
+        const entry: CompanyListEntry = { company_id: companyId };
+        if (typeof company.subdomain === 'string' && company.subdomain !== '') {
+            entry.subdomain = company.subdomain;
+        }
+        entries.push(entry);
+    }
+    return entries;
+}
 
 export class FlowsApp extends PlatformApp {
     static defaultI18nNamespace = 'flows';
@@ -443,18 +460,18 @@ export class FlowsApp extends PlatformApp {
     ];
     private _editor: ControllerFor<'flows/editor'>;
     private _flows: ResourceController;
-    private _companiesListSel: SelectController<any>;
-    private _companiesLoadingSel: SelectController<any>;
-    private _flowsMql: any;
-    private _onFlowsMobileMql: any;
-    private _flowsMobile: any;
+    private _companiesListSel: SelectController<readonly CompanyRecord[]>;
+    private _companiesLoadingSel: SelectController<boolean>;
+    private _flowsMql: MediaQueryList | null;
+    private _onFlowsMobileMql: (() => void) | null;
+    private _flowsMobile: boolean;
 
     constructor() {
         super();
         this._editor = this.useOp('flows/editor');
         this._flows = this.useResource('flows/flows');
-        this._companiesListSel = this.select((s) => (s as any).companies.list);
-        this._companiesLoadingSel = this.select((s) => (s as any).companies.loading);
+        this._companiesListSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._flowsMql = null;
         this._onFlowsMobileMql = null;
         this._flowsMobile =
@@ -471,16 +488,17 @@ export class FlowsApp extends PlatformApp {
         if (typeof window.matchMedia !== 'function') {
             return;
         }
-        this._flowsMql = window.matchMedia('(max-width: 767px)');
+        const media = window.matchMedia('(max-width: 767px)');
+        this._flowsMql = media;
         this._onFlowsMobileMql = () => {
-            const next = this._flowsMql.matches;
+            const next = media.matches;
             if (next !== this._flowsMobile) {
                 this._flowsMobile = next;
                 this.requestUpdate();
             }
         };
-        this._flowsMql.addEventListener('change', this._onFlowsMobileMql);
-        const next = this._flowsMql.matches;
+        media.addEventListener('change', this._onFlowsMobileMql);
+        const next = media.matches;
         if (next !== this._flowsMobile) {
             this._flowsMobile = next;
             this.requestUpdate();
@@ -488,8 +506,10 @@ export class FlowsApp extends PlatformApp {
     }
 
     override disconnectedCallback(): void {
-        if (this._flowsMql && this._onFlowsMobileMql) {
-            this._flowsMql.removeEventListener('change', this._onFlowsMobileMql);
+        const media = this._flowsMql;
+        const onChange = this._onFlowsMobileMql;
+        if (media !== null && onChange !== null) {
+            media.removeEventListener('change', onChange);
         }
         super.disconnectedCallback();
     }
@@ -502,7 +522,7 @@ export class FlowsApp extends PlatformApp {
         const auth = this._authSelect.value;
         applyCompanyHostRedirectIfNeeded(
             auth,
-            this._companiesListSel.value,
+            companyListEntries(this._companiesListSel.value),
             this._companiesLoadingSel.value,
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );
@@ -525,7 +545,7 @@ export class FlowsApp extends PlatformApp {
         return html`<div class="sidebar"><flows-sidebar></flows-sidebar></div>`;
     }
 
-    override renderRoute(routeKey: string, params: any) {
+    override renderRoute(routeKey: string, params: Record<string, string>) {
         switch (routeKey) {
             case 'platform_services':
                 return html`
@@ -610,7 +630,8 @@ export class FlowsApp extends PlatformApp {
 
     _buildLaraFlowsContext(options = {}) {
         const routerValue = this._routerSelect ? this._routerSelect.value : null;
-        const params = isPlainObject(routerValue?.params) ? (routerValue as Record<string, any>).params : {};
+        const routeParams = routerValue === null ? null : routerValue.params;
+        const params = isPlainObject(routeParams) ? routeParams : {};
         return buildLaraFlowsContext(this._editor?.state, params, options);
     }
 

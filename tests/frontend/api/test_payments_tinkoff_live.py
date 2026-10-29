@@ -9,7 +9,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 import pytest
-from httpx import AsyncClient, ConnectError, ConnectTimeout, HTTPError
+from httpx2 import AsyncClient, ConnectError, ConnectTimeout, HTTPError
 from playwright.async_api import Page
 from pydantic import ValidationError
 

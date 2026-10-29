@@ -654,10 +654,10 @@ export class LandingHero extends PlatformElement {
 
     _handleSearchInput(event: Event) {
         const target = event.target;
-        if (!target || typeof (target as Record<string, any>).value !== 'string') {
-            return;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('landing-hero: search input required');
         }
-        this._searchQuery = (target as Record<string, any>).value;
+        this._searchQuery = target.value;
     }
 
     _fileErrorMessage(error: any) {

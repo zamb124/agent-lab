@@ -312,7 +312,7 @@ async def fetch_platform_free_model_records(
         if not provider_is_configured_for_free_pool(settings, provider_slug):
             logger.info("platform_free_models.provider_unconfigured", provider=provider_slug)
             continue
-        catalog_records = await AIModelRecord.list_by_provider_capability(
+        catalog_records = await AIModelRecord.list_unordered_by_provider_and_capability(
             provider_slug,
             AICapability.LLM_CHAT,
         )
@@ -528,7 +528,7 @@ async def refresh_platform_free_models_cache(
     settings: BaseSettings,
 ) -> JsonObject:
     overlays = platform_model_score_overlays(
-        await LLMModelScore.rows_for_capability(AICapability.LLM_CHAT),
+        await LLMModelScore.list_unordered_for_capability(AICapability.LLM_CHAT),
     )
     artificial_analysis = await fetch_artificial_analysis_indices(settings)
     records = await fetch_platform_free_model_records(
@@ -559,7 +559,7 @@ async def rescore_cached_platform_free_models(
         overlays
         if overlays is not None
         else platform_model_score_overlays(
-            await LLMModelScore.rows_for_capability(AICapability.LLM_CHAT),
+            await LLMModelScore.list_unordered_for_capability(AICapability.LLM_CHAT),
         )
     )
     records = await fetch_platform_free_model_records(

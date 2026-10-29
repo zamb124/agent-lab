@@ -43,13 +43,13 @@ async def backfill_mail_authz(*, limit: int | None = None) -> tuple[int, int]:
     company_written = 0
     owners_written = 0
 
-    for row in await MailboxBinding.list_all_by_mailbox_binding_id(limit=limit):
+    for row in await MailboxBinding.list_by_mailbox_binding_id_asc(limit=limit):
         await authz.write(
             [mailbox_binding_company_link(row.mailbox_binding_id, row.company_id)]
         )
         company_written += 1
 
-    for row in await MailboxBinding.list_with_user_by_mailbox_binding_id(limit=limit):
+    for row in await MailboxBinding.list_with_user_by_mailbox_binding_id_asc(limit=limit):
         user_id = row.user_id
         if user_id is None:
             raise ValueError(

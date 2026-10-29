@@ -36,7 +36,8 @@ class EvaluationSuiteVersion(CompanyScopedModel):
     company_id: str = DbField(default="", db_index=True)
 
     @classmethod
-    async def next_version(cls, suite_id: str) -> int:
+    async def next_after_latest_version_desc(cls, suite_id: str) -> int:
+        """Следующий version: последняя строка ORDER BY version DESC, плюс 1. Нет строк — 1. Пустой suite_id — ValueError."""
         if suite_id == "":
             raise ValueError("suite_id is required")
         latest = await cls.objects.filter(suite_id=suite_id).order_by("-version").first()

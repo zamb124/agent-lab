@@ -14,7 +14,7 @@ import pytest
 from apps.provider_litserve.model_registry import (
     create_or_replace_model,
     init_registry,
-    list_models,
+    list_models_by_created_at_desc,
 )
 from core.config.models import ProviderLitserveInfraConfig
 
@@ -78,7 +78,7 @@ def test_init_registry_migrates_old_check_constraint(tmp_path, unique_id):
 
     init_registry(cfg)
 
-    models_after = {m.api_model_id: m for m in list_models(cfg)}
+    models_after = {m.api_model_id: m for m in list_models_by_created_at_desc(cfg)}
     assert f"baai/bge-m3-{unique_id}" in models_after, "legacy строка должна сохраниться"
     assert models_after[f"baai/bge-m3-{unique_id}"].kind == "embedding"
     assert models_after[f"baai/bge-m3-{unique_id}"].hf_model_id == "BAAI/bge-m3"
@@ -112,5 +112,5 @@ def test_init_registry_idempotent_on_already_migrated_table(tmp_path, unique_id)
 
     init_registry(cfg)
 
-    by_api = {m.api_model_id: m for m in list_models(cfg)}
+    by_api = {m.api_model_id: m for m in list_models_by_created_at_desc(cfg)}
     assert by_api[f"silero-{unique_id}"].kind == "vad"

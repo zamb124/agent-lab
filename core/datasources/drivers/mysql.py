@@ -27,6 +27,16 @@ from core.datasources.sql_policy import bind_named_params, rewrite_placeholders_
 from core.types import JsonObject, JsonValue
 
 
+def _columns_sql_by_table_and_position_asc() -> str:
+    """Колонки текущей базы, ORDER BY TABLE_NAME ASC, ORDINAL_POSITION ASC."""
+    return (
+        "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE "
+        "FROM information_schema.COLUMNS "
+        "WHERE TABLE_SCHEMA = DATABASE() "
+        "ORDER BY TABLE_NAME, ORDINAL_POSITION"
+    )
+
+
 class MysqlDatasourceDriver:
     async def test(self, connection: DatasourceConnection, password: str) -> DatasourceTestResult:
         started = perf_counter()
@@ -49,14 +59,7 @@ class MysqlDatasourceDriver:
         conn = await self._connect(connection, password)
         try:
             async with conn.cursor() as cursor:
-                _ = await cursor.execute(
-                    """
-                    SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE
-                    FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                    ORDER BY TABLE_NAME, ORDINAL_POSITION
-                    """
-                )
+                _ = await cursor.execute(_columns_sql_by_table_and_position_asc())
                 rows = await cursor.fetchall()
         finally:
             conn.close()

@@ -2,7 +2,7 @@
   "name": "code-runner-node-lsp-modules",
   "private": true,
   "dependencies": {
-    "typescript": "^5.8.3",
-    "typescript-language-server": "^4.3.4"
+    "typescript": "^7.0.2",
+    "typescript-language-server": "^6.0.2"
   }
 }

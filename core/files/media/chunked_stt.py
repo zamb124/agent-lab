@@ -6,7 +6,7 @@ import tempfile
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from core.ai.runtime import create_voice_stt_client
 from core.clients.speech_override import SpeechOverride
@@ -348,7 +348,7 @@ async def transcribe_audio_with_chunking(
                         context="single_request_mp3_normalized",
                     )
                     return text, last_provider
-                except httpx.HTTPStatusError as exc:
+                except httpx2.HTTPStatusError as exc:
                     if exc.response.status_code != 413:
                         raise
                     logger.warning(
@@ -375,7 +375,7 @@ async def transcribe_audio_with_chunking(
                     context="single_request",
                 )
                 return text, last_provider
-            except httpx.HTTPStatusError as exc:
+            except httpx2.HTTPStatusError as exc:
                 if exc.response.status_code != 413:
                     raise
                 logger.warning(

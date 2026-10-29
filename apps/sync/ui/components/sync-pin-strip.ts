@@ -16,6 +16,17 @@ import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 
+function pinnedIds(channel: Record<string, unknown> | undefined): string[] {
+    if (!channel) return [];
+    const pinned = channel.pinned_message_ids;
+    if (!Array.isArray(pinned)) return [];
+    const ids: string[] = [];
+    for (const id of pinned) {
+        if (typeof id === 'string' && id !== '') ids.push(id);
+    }
+    return ids;
+}
+
 function _textPreviewFromMessage(m: Record<string, any> | null | undefined) {
     if (!m || typeof m !== 'object') return '';
     const contents = Array.isArray(m.contents) ? m.contents : [];
@@ -97,9 +108,7 @@ export class SyncPinStrip extends PlatformElement {
 
     _onClick() {
         const channel = this._channel();
-        const ids = channel && Array.isArray(channel.pinned_message_ids)
-            ? (channel.pinned_message_ids as unknown[]).filter((id: unknown) => typeof id === 'string' && id !== '')
-            : [];
+        const ids = pinnedIds(channel);
         if (!channel || ids.length === 0) return;
         const idx = (typeof this._chatUi.value?.pinnedNavigateIndex === 'number'
             ? this._chatUi.value.pinnedNavigateIndex
@@ -115,9 +124,7 @@ export class SyncPinStrip extends PlatformElement {
     override render(): TemplateResult {
         const channel = this._channel();
         if (!channel) return html``;
-        const ids = Array.isArray(channel.pinned_message_ids)
-            ? (channel.pinned_message_ids as unknown[]).filter((id: unknown) => typeof id === 'string' && id !== '')
-            : [];
+        const ids = pinnedIds(channel);
         if (ids.length === 0) return html``;
         const idx = typeof this._chatUi.value?.pinnedNavigateIndex === 'number'
             ? this._chatUi.value.pinnedNavigateIndex

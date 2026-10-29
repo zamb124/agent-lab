@@ -46,7 +46,8 @@ class NamespaceTemplateType(PlatformModel):
     is_voice_target: bool = DbField(default=False)
 
     @classmethod
-    async def list_for_template(cls, template_key: str) -> list[Self]:
+    async def list_for_template_by_type_id_asc(cls, template_key: str) -> list[Self]:
+        """Типы шаблона, ORDER BY type_id ASC. Предела нет."""
         return await cls.objects.filter(template_key=template_key).order_by("type_id").all()
 
     @classmethod

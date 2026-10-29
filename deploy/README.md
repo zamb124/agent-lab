@@ -71,7 +71,7 @@ MicroK8s (одна нода)
 
 ### Состав приложений: Helm и `cluster-health.sh`
 
-Канон процессов локально — **[`scripts/run.py`](../scripts/run.py)** с прямыми entrypoint-ами сервисов и воркеров. В Kubernetes тот же набор задаётся **`deploy/helm/agent-lab/values.yaml`** (`applications`, `workers`, `litserve`, внешние блоки).
+Канон процессов локально — **[`scripts/dev/run.py`](../scripts/dev/run.py)** с прямыми entrypoint-ами сервисов и воркеров. В Kubernetes тот же набор задаётся **`deploy/helm/agent-lab/values.yaml`** (`applications`, `workers`, `litserve`, внешние блоки).
 
 | Зона | Источник | Проверка после деплоя |
 |------|----------|------------------------|
@@ -274,7 +274,7 @@ deploy/helm/agent-lab/
   1 ClusterRole   1 ClusterRoleBinding
 ```
 
-Миграции БД идут как init-containers `wait-postgres` + `db-migrate` (`python -m scripts.db_migrate upgrade`, цепочка `migrations/<db>/NNNN_<name>.py`) в каждом app/worker pod — отдельного Job в чарте нет. Параллельный старт ждёт advisory lock и запись в `oxyde_migrations`.
+Миграции БД идут как init-containers `wait-postgres` + `db-migrate` (`python -m scripts.db.migrate upgrade`, цепочка `migrations/<db>/NNNN_<name>.py`) в каждом app/worker pod — отдельного Job в чарте нет. Параллельный старт ждёт advisory lock и запись в `oxyde_migrations`.
 
 ## Wildcard TLS
 

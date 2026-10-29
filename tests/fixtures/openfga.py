@@ -16,7 +16,7 @@ from core.authz import AuthzService
 from core.authz.factory import build_authz_service
 from core.config import get_settings, set_settings
 from core.config.models import OpenFGAConfig
-from scripts.openfga_test_bootstrap import _ENV_PATH, load_env_file
+from scripts.testing.openfga_bootstrap import _ENV_PATH, load_env_file
 
 _ROOT = Path(__file__).resolve().parents[2]
 
@@ -34,7 +34,7 @@ def openfga_test_env() -> dict[str, str]:
     if not env_path.is_file():
         pytest.skip(
             f"OpenFGA test env missing ({env_path}). Run `make test-up` "
-            "(starts openfga-test and scripts/openfga_test_bootstrap.py)."
+            "(starts openfga-test and scripts/testing/openfga_bootstrap.py)."
         )
     env = load_env_file(env_path)
     required = (

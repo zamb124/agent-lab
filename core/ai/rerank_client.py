@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import cast as type_cast
 
-import httpx
+import httpx2
 import tiktoken
 
 import core.tracing.attributes as trace_attributes
@@ -23,7 +23,7 @@ class AIRerankerClientError(Exception):
         super().__init__(str(detail))
 
 
-def _response_body_as_detail(response: httpx.Response) -> JsonValue:
+def _response_body_as_detail(response: httpx2.Response) -> JsonValue:
     try:
         return require_json_value(type_cast(JsonValue, response.json()), "reranker error response")
     except Exception:
@@ -120,12 +120,12 @@ class AIRerankerHTTPClient:
                     json=payload,
                     headers=headers,
                 )
-        except httpx.TimeoutException as e:
+        except httpx2.TimeoutException as e:
             raise AIRerankerClientError(
                 status_code=503,
                 detail={"reason": "timeout", "message": str(e)},
             ) from e
-        except httpx.RequestError as e:
+        except httpx2.RequestError as e:
             raise AIRerankerClientError(
                 status_code=503,
                 detail={"reason": "request_error", "message": str(e)},

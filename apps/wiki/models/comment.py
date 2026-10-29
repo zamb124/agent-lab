@@ -38,12 +38,13 @@ class WikiComment(PlatformModel):
     resolved_by_user_id: str | None = DbField(default=None, max_length=100)
 
     @classmethod
-    async def list_for_page(
+    async def list_for_page_by_created_at_asc(
         cls,
         company_id: str,
         namespace: str,
         wiki_page_id: str,
     ) -> list[Self]:
+        """Комментарии страницы, ORDER BY created_at ASC. Предела нет. Пустые поля не проверяются."""
         return await (
             cls.objects.filter(
                 company_id=company_id,

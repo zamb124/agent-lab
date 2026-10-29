@@ -411,7 +411,7 @@ class TestFifoConsumption:
         assert inbound[0].remaining_value == Decimal("0")
         assert inbound[1].remaining_quantity == Decimal("1")
         assert inbound[1].remaining_value == Decimal("7")
-        consumptions = await StockValueLayerConsumption.list_for_out_layer(
+        consumptions = await StockValueLayerConsumption.list_unordered_for_out_layer(
             env.company_id, outbound.layer_id
         )
         by_in = {c.in_layer_id: c for c in consumptions}

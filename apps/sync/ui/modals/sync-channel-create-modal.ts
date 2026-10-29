@@ -12,6 +12,8 @@
  */
 
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import type { TeamMemberRecord } from '@platform/lib/events/reducers/team.js';
 import type { ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations} from 'lit';
@@ -111,9 +113,9 @@ export class SyncChannelCreateModal extends PlatformFormModal {
         `,
     ];
     private _channels: ControllerFor<'sync/channels'>;
-    private _teamMembersSel: SelectController<Record<string, any> | undefined>;
-    private _teamLoadingSel: SelectController<Record<string, any> | undefined>;
-    private _authSel: SelectController<Record<string, any> | undefined>;
+    private _teamMembersSel: SelectController<TeamMemberRecord[]>;
+    private _teamLoadingSel: SelectController<boolean>;
+    private _authSel: SelectController<AuthUser | null>;
 
     constructor() {
         super();
@@ -125,25 +127,24 @@ export class SyncChannelCreateModal extends PlatformFormModal {
         this._speechToChat = false;
         this._membersFilter = '';
         this._channels = this.useResource('sync/channels');
-        this._teamMembersSel = this.select((s) => (s.team as Record<string, any> | undefined)?.members);
-        this._teamLoadingSel = this.select((s) => (s.team as Record<string, any> | undefined)?.loading);
-        this._authSel = this.select((s) => (s.auth as Record<string, any> | undefined)?.user);
+        this._teamMembersSel = this.select((s) => s.team.members);
+        this._teamLoadingSel = this.select((s) => s.team.loading);
+        this._authSel = this.select((s) => s.auth.user);
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
         const members = this._teamMembersSel.value;
         const loading = this._teamLoadingSel.value;
-        if (!Array.isArray(members) || members.length === 0) {
-            if (!loading) this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
+        if (members.length === 0 && loading === false) {
+            this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
         }
     }
 
     _selectableMembers() {
         const me = this._authSel.value;
-        const myId = me ? me.user_id : null;
+        const myId = me === null ? null : me.user_id;
         const members = this._teamMembersSel.value;
-        if (!Array.isArray(members)) return [];
         const q = this._membersFilter.trim().toLowerCase();
         return members
             .filter((m: Record<string, any>) => m && m.user_id !== myId)
@@ -222,7 +223,8 @@ export class SyncChannelCreateModal extends PlatformFormModal {
                     ` : ''}
                     ${candidates.map((m: Record<string, any>) => html`
                         <label class="member-row" @click=${(e: Event) => {
-                            if (e.target && (e.target as HTMLElement).tagName === 'INPUT') return;
+                            const target = e.target;
+                            if (target instanceof HTMLInputElement) return;
                             this._toggleMember(m.user_id);
                         }}>
                             <input

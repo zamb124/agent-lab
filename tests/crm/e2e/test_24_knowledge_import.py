@@ -13,11 +13,11 @@ from io import BytesIO
 from pathlib import Path
 from typing import cast
 
-import fitz
 import openpyxl
+import pymupdf
 import pytest
 from docx import Document
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 from tests.crm.knowledge_import_helpers import (
@@ -97,12 +97,12 @@ def _docx_bytes(marker: str) -> bytes:
 
 
 def _pdf_bytes(tmp_path: Path, marker: str) -> bytes:
-    doc = fitz.open()  # pyright: ignore[reportCallIssue, reportUnknownVariableType]
-    page = doc.new_page()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-    page.insert_text((72, 72), marker)  # pyright: ignore[reportUnknownMemberType]
+    doc = pymupdf.open()
+    page = doc.new_page()
+    _ = page.insert_text((72, 72), marker)
     out = tmp_path / "kn_e2e.pdf"
-    doc.save(out)  # pyright: ignore[reportUnknownMemberType]
-    doc.close()  # pyright: ignore[reportUnknownMemberType]
+    doc.save(out)
+    doc.close()
     return out.read_bytes()
 
 

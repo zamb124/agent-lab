@@ -34,13 +34,15 @@ class EvaluationRubricVersion(CompanyScopedModel):
     company_id: str = DbField(default="", db_index=True)
 
     @classmethod
-    async def list_for_rubric(cls, rubric_id: str) -> list[Self]:
+    async def list_for_rubric_by_version_desc(cls, rubric_id: str) -> list[Self]:
+        """Версии рубрики, ORDER BY version DESC. Предела нет. Пустой rubric_id — ValueError rubric_id is required."""
         if rubric_id == "":
             raise ValueError("rubric_id is required")
         return await cls.objects.filter(rubric_id=rubric_id).order_by("-version").all()
 
     @classmethod
-    async def next_version(cls, rubric_id: str) -> int:
+    async def next_after_latest_version_desc(cls, rubric_id: str) -> int:
+        """Следующий version: последняя строка ORDER BY version DESC, плюс 1. Нет строк — 1. Пустой rubric_id — ValueError."""
         if rubric_id == "":
             raise ValueError("rubric_id is required")
         latest = await cls.objects.filter(rubric_id=rubric_id).order_by("-version").first()

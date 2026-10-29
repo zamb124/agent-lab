@@ -15,6 +15,7 @@ import {
     createResourceCollection,
     createAsyncOp,
 } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const teamMembersResource = createResourceCollection({
     name: 'frontend/team',
@@ -40,11 +41,23 @@ export const inviteGenerateOp = createAsyncOp({
     extraInitial: { links: {} },
     extraReducer: (state, event, events) => {
         if (event.type === events.SUCCEEDED) {
-            const result = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).result;
-            if (!result || typeof result.role !== 'string' || typeof result.invite_url !== 'string') {
+            const payload = event.payload;
+            const result = isPlainRecord(payload) ? payload.result : null;
+            if (!isPlainRecord(result)) {
                 throw new Error('inviteGenerateOp: result.role and result.invite_url required');
             }
-            return { ...state, links: { ...(state.links as Record<string, unknown>), [(result as Record<string, any>).role]: (result as Record<string, any>).invite_url } };
+            const role = result.role;
+            const inviteUrl = result.invite_url;
+            if (typeof role !== 'string' || typeof inviteUrl !== 'string') {
+                throw new Error('inviteGenerateOp: result.role and result.invite_url required');
+            }
+            if (!isPlainRecord(state.links)) {
+                throw new Error('inviteGenerateOp: links must be an object');
+            }
+            const links: Record<string, unknown> = {};
+            for (const [key, field] of Object.entries(state.links)) links[key] = field;
+            links[role] = inviteUrl;
+            return { ...state, links };
         }
         return state;
     },

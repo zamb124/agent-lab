@@ -10,7 +10,7 @@ from collections.abc import Iterator
 import pytest
 import pytest_asyncio
 
-from apps.crm_worker.di import CrmWorkerDi
+from apps.crm.di import CrmDi
 from core.config.models import OpenFGAConfig
 from tests.fixtures.service_processes import ServiceProcesses
 
@@ -25,6 +25,6 @@ def _crm_requires_openfga(openfga_settings: OpenFGAConfig) -> Iterator[None]:
 
 
 @pytest_asyncio.fixture
-async def crm_worker_di(service_processes: ServiceProcesses) -> CrmWorkerDi:
+async def crm_worker_di(service_processes: ServiceProcesses) -> CrmDi:
     """DI процесса crm_worker: анализ заметок, импорт знаний, интеграции."""
-    return await service_processes.di(CrmWorkerDi)
+    return await service_processes.di(CrmDi)

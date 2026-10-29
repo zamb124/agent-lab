@@ -591,7 +591,7 @@ class GraphService:
         _ = await self._require_viewable_entity(entity_id, user_id)
 
         direction_map = await self._build_direction_map()
-        touching = Relationship.touching(entity_id)
+        touching = Relationship.query_touching(entity_id)
         if rel_namespace is not None and rel_namespace.strip() != "":
             touching = touching.filter(namespace=rel_namespace)
         relationships = await touching.all()

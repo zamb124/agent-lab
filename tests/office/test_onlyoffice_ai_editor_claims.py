@@ -9,8 +9,8 @@ import pytest
 from apps.office.services.viewer_context import ViewerOpenContext
 from apps.office.services.viewer_handlers.onlyoffice_handler import OnlyOfficeViewerHandler
 from core.clients.onlyoffice import verify_onlyoffice_jwt_hs256
-from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.models import FileRecord
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.types import FileCategory
 from core.office.ai_settings import ONLYOFFICE_AI_PLUGIN_GUID
 from core.office.platform_ai_claims import (

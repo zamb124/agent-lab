@@ -292,7 +292,7 @@ async def test_children_endpoint_returns_direct_descendants(wiki_client, create_
 async def test_request_without_namespace_header_falls_into_default_space(
     wiki_app, auth_headers_system, wiki_page
 ):
-    from httpx import ASGITransport, AsyncClient
+    from httpx2 import ASGITransport, AsyncClient
 
     async with AsyncClient(
         transport=ASGITransport(app=wiki_app),
@@ -311,7 +311,7 @@ async def test_request_without_namespace_header_falls_into_default_space(
 
 
 async def test_unknown_namespace_is_rejected(wiki_app, wiki_di, auth_headers_system):
-    from httpx import ASGITransport, AsyncClient
+    from httpx2 import ASGITransport, AsyncClient
 
     _ = wiki_di
 

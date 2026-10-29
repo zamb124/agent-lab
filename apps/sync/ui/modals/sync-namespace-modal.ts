@@ -18,6 +18,14 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-spinner.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function switchValue(event: Event): boolean {
+    if (!(event instanceof CustomEvent) || !isPlainRecord(event.detail) || typeof event.detail.value !== 'boolean') {
+        throw new Error('sync-namespace-modal: switch value must be boolean');
+    }
+    return event.detail.value;
+}
 
 export class SyncNamespaceModal extends PlatformFormModal {
     static modalKind = 'sync.namespace_settings';
@@ -92,21 +100,21 @@ export class SyncNamespaceModal extends PlatformFormModal {
         if (this._hydrated) return;
         const item = this._namespaces.byId[this.name];
         if (!item) return;
-        const settings = item.sync_settings as Record<string, unknown> | undefined;
-        if (settings && typeof settings === 'object') {
-            this._transcribe = Boolean(settings.transcribe_voice_messages);
-            this._speechToChat = Boolean(settings.speech_to_chat_enabled);
+        const settings = item.sync_settings;
+        if (isPlainRecord(settings)) {
+            this._transcribe = settings.transcribe_voice_messages === true;
+            this._speechToChat = settings.speech_to_chat_enabled === true;
         }
         this._hydrated = true;
     }
 
     _onTranscribeToggle(event: Event) {
-        this._transcribe = Boolean((event as CustomEvent<{ value?: unknown }>).detail?.value);
+        this._transcribe = switchValue(event);
         this.isDirty = true;
     }
 
     _onSpeechToChatToggle(event: Event) {
-        this._speechToChat = Boolean((event as CustomEvent<{ value?: unknown }>).detail?.value);
+        this._speechToChat = switchValue(event);
         this.isDirty = true;
     }
 

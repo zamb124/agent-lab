@@ -78,7 +78,7 @@ jobs:
       image_tag: ${{ steps.helm_image_tag.outputs.tag }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Helm image tag (short commit SHA)
         id: helm_image_tag
@@ -100,7 +100,7 @@ jobs:
           df -h
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -108,7 +108,7 @@ jobs:
 
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
           tags: |
@@ -116,7 +116,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Pin FROM к digest :latest на момент сборки. Иначе GHA cache + тот же short SHA
       # переиспользуют app-образ, собранный до Build Base (нет новых deps вроде openfga-sdk).
@@ -173,7 +173,7 @@ jobs:
           echo "Using ${img}@${digest}"
 
       - name: Build and push (full stage)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -191,7 +191,7 @@ jobs:
       # (Python 3.14 GIL build) с тем же кодом и подключается в Helm через litserve.image.
       - name: Docker metadata (GPU)
         id: meta_gpu
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_GPU }}
           tags: |
@@ -199,7 +199,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push GPU image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.gpu
@@ -223,15 +223,15 @@ jobs:
     # и пустой KUBECONFIG_B64 в «production» ломает деплой. Нужны reviewers — GitHub Rulesets / отдельный процесс.
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
         with:
           version: v1.30.0
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: v3.16.2
 
@@ -446,7 +446,6 @@ jobs:
           SEARCH__LINKUP__API_KEY: ${{ secrets.SEARCH__LINKUP__API_KEY }}
           SEARCH__SERPER__API_KEY: ${{ secrets.SEARCH__SERPER__API_KEY }}
           SEARCH__TAVILY__API_KEY: ${{ secrets.SEARCH__TAVILY__API_KEY }}
-          AGENT__RELEASES__GITHUB_TOKEN: ${{ secrets.AGENT__RELEASES__GITHUB_TOKEN || secrets.GHCR_PULL_TOKEN }}
           MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD: ${{ secrets.MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD }}
           HELM_DELETE_ORPHAN_PLATFORM_SECRET: ${{ inputs.replace_orphan_platform_secret == true && '1' || '0' }}
         run: |

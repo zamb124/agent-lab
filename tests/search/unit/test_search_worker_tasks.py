@@ -15,7 +15,7 @@ import inspect
 
 import pytest
 
-from apps.search_worker.tasks import crawl_tasks
+from apps.search.tasks import crawl_tasks
 
 
 def test_crawl_orchestrator_tick_signature_requires_crawl_profile_id() -> None:

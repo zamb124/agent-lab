@@ -6,10 +6,10 @@
 """
 
 
-import httpx
+import httpx2
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport
+from httpx2 import ASGITransport
 
 import core.tracing.attributes as trace_attributes
 from core.ai.rerank_client import AIRerankerClientError
@@ -35,10 +35,10 @@ class _ASGIClientCM:
 
     def __init__(self, app: FastAPI) -> None:
         self._app = app
-        self._client: httpx.AsyncClient | None = None
+        self._client: httpx2.AsyncClient | None = None
 
-    async def __aenter__(self) -> httpx.AsyncClient:
-        self._client = httpx.AsyncClient(
+    async def __aenter__(self) -> httpx2.AsyncClient:
+        self._client = httpx2.AsyncClient(
             transport=ASGITransport(app=self._app),
             base_url="http://test",
         )
@@ -84,8 +84,8 @@ async def test_rerank_reorders_by_scores_gateway(monkeypatch: pytest.MonkeyPatch
     """Подменённый upstream: второй пассаж ранжируется выше по ``scores``."""
 
     class _MockUpstream:
-        async def post_predict(self, body: bytes, content_type: str) -> httpx.Response:
-            return httpx.Response(200, json={"scores": [0.01, 0.99]})
+        async def post_predict(self, body: bytes, content_type: str) -> httpx2.Response:
+            return httpx2.Response(200, json={"scores": [0.01, 0.99]})
 
     app = create_v1_rerank_stub_app()
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
@@ -134,8 +134,8 @@ async def test_rerank_reorders_by_scores(monkeypatch: pytest.MonkeyPatch) -> Non
     """Успешный ответ: порядок по убыванию scores, provenance с rerank_score."""
 
     class _MockUpstream:
-        async def post_predict(self, body: bytes, content_type: str) -> httpx.Response:
-            return httpx.Response(200, json={"scores": [0.2, 0.8]})
+        async def post_predict(self, body: bytes, content_type: str) -> httpx2.Response:
+            return httpx2.Response(200, json={"scores": [0.2, 0.8]})
 
     app = create_v1_rerank_stub_app()
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
@@ -161,8 +161,8 @@ async def test_rerank_503_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """503 от upstream — AIRerankerClientError с status_code 503 и телом."""
 
     class _MockUpstream:
-        async def post_predict(self, body: bytes, content_type: str) -> httpx.Response:
-            return httpx.Response(503, json={"reason": "overload"})
+        async def post_predict(self, body: bytes, content_type: str) -> httpx2.Response:
+            return httpx2.Response(503, json={"reason": "overload"})
 
     app = create_v1_rerank_stub_app()
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
@@ -184,8 +184,8 @@ async def test_rerank_scores_length_mismatch(monkeypatch: pytest.MonkeyPatch) ->
     """Несовпадение длины scores с passages — 422."""
 
     class _MockUpstream:
-        async def post_predict(self, body: bytes, content_type: str) -> httpx.Response:
-            return httpx.Response(200, json={"scores": [0.5]})
+        async def post_predict(self, body: bytes, content_type: str) -> httpx2.Response:
+            return httpx2.Response(200, json={"scores": [0.5]})
 
     app = create_v1_rerank_stub_app()
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
@@ -221,8 +221,8 @@ async def test_rerank_billing_span_pending_settlement(
     set_tracing_enabled(True)
 
     class _MockUpstream:
-        async def post_predict(self, body: bytes, content_type: str) -> httpx.Response:
-            return httpx.Response(200, json={"scores": [0.1, 0.9]})
+        async def post_predict(self, body: bytes, content_type: str) -> httpx2.Response:
+            return httpx2.Response(200, json={"scores": [0.1, 0.9]})
 
     app = create_v1_rerank_stub_app()
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()

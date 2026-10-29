@@ -105,13 +105,14 @@ class Namespace(CompanyScopedModel):
         return deleted > 0
 
     @classmethod
-    async def list_by_kind(
+    async def list_for_kinds_by_name_asc(
         cls,
         kinds: list[NamespaceKind],
         *,
         limit: int,
         offset: int,
     ) -> list[Self]:
+        """Окно пространств этих kind, ORDER BY name ASC."""
         return await (
             cls.objects.filter(kind__in=kinds)
             .order_by("name")
@@ -125,8 +126,8 @@ class Namespace(CompanyScopedModel):
         return await cls.objects.filter(kind__in=kinds).count()
 
     @classmethod
-    async def partial_company_rows_by_namespace_id(cls, *, limit: int | None) -> list[Self]:
-        """Строки с company_id, только name, company_id, kind и owner_user_id, ORDER BY namespace_id. limit is None не ограничивает."""
+    async def partial_company_rows_by_namespace_id_asc(cls, *, limit: int | None) -> list[Self]:
+        """Строки с company_id, только name, company_id, kind и owner_user_id, ORDER BY namespace_id ASC. limit is None не ограничивает."""
         # Менеджер отрезал бы одну компанию — сырой запрос обходит scope.
         sql = (
             "SELECT name, company_id, kind, owner_user_id "

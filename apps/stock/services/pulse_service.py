@@ -35,7 +35,7 @@ class PulseService:
             raise PlatformNotFoundError(
                 "Warehouse not found", error_code="warehouse_not_found"
             )
-        op_types = await StockOperationType.list_by_code_for_warehouse(
+        op_types = await StockOperationType.list_for_warehouse_by_code_asc(
             company_id, warehouse_id
         )
         op_code_by_id = {op.operation_type_id: op.code.value for op in op_types}
@@ -61,7 +61,7 @@ class PulseService:
         quants = await StockQuant.list_unordered_for_warehouse(company_id, warehouse_id)
         product_ids = sorted({q.product_id for q in quants})
         products = await StockProduct.found_in_company_by_ids(company_id, product_ids)
-        last_moves = await StockMove.list_last_move_at(company_id, product_ids)
+        last_moves = await StockMove.last_done_at_by_product_id(company_id, product_ids)
         avg_by_product = await self._avg_costs(company_id, product_ids, products)
         quant_rows = [
             StockPulseQuantRow(
@@ -98,7 +98,7 @@ class PulseService:
         """`product_id → avg_cost`: running balance слоёв, иначе `standard_price`."""
         result: dict[str, Decimal] = {}
         for product_id in product_ids:
-            last = await StockValueLayer.last_for_product(company_id, product_id)
+            last = await StockValueLayer.last_for_product_by_entry_no_desc(company_id, product_id)
             if last is not None and last.qty_after > Decimal("0"):
                 result[product_id] = quantize(last.value_after / last.qty_after)
                 continue

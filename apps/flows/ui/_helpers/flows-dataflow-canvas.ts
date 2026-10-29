@@ -3,7 +3,54 @@
  * Используются flows-flow-canvas и flows-editor-header.
  */
 
-import { getEdgeEndpoints } from './flows-resolvers.js';
+import { getEdgeEndpoints, isPlainObject } from './flows-resolvers.js';
+
+type ChipSide = 'in' | 'out';
+type ChipKind = 'content' | 'files' | 'variable' | 'trigger' | 'interface';
+
+interface DataWire {
+    from: string;
+    to: string;
+    label: string;
+    sourceLabel: string;
+    targetParam: string;
+    sourceKind: string;
+    [key: string]: unknown;
+}
+
+interface ChipRef {
+    nodeId: string;
+    side: string;
+    index: number;
+}
+
+function readDataWire(value: unknown): DataWire | null {
+    if (!isPlainObject(value)) return null;
+    if (typeof value.from !== 'string' || typeof value.to !== 'string') return null;
+    const label = typeof value.label === 'string' ? value.label : '';
+    const sourceLabel = typeof value.sourceLabel === 'string' && value.sourceLabel.length > 0
+        ? value.sourceLabel
+        : label;
+    const targetParam = typeof value.targetParam === 'string' && value.targetParam.length > 0
+        ? value.targetParam
+        : label;
+    const sourceKind = typeof value.sourceKind === 'string' ? value.sourceKind : 'state';
+    return { from: value.from, to: value.to, label, sourceLabel, targetParam, sourceKind };
+}
+
+function isChipKind(value: string): value is ChipKind {
+    return value === 'content'
+        || value === 'files'
+        || value === 'variable'
+        || value === 'trigger'
+        || value === 'interface';
+}
+
+function requireStackHeight(heights: readonly number[], index: number): number {
+    const rowHeight = heights[index];
+    if (rowHeight === undefined) throw new Error('flows-dataflow-canvas: chip height required');
+    return rowHeight;
+}
 
 export const DATAFLOW_CHIP_W = 132;
 export const DATAFLOW_CHIP_H = 24;
@@ -14,12 +61,12 @@ export const DATAFLOW_CHIP_ZONE_W = 144;
 export const DATAFLOW_CHIP_HOST_W = 136;
 
 /** Левый край входного чипа (точка прихода wire с upstream). */
-export function dataflowInputChipAnchorX(nodeX: any) {
+export function dataflowInputChipAnchorX(nodeX: number) {
     return nodeX - DATAFLOW_CHIP_ZONE_W + (DATAFLOW_CHIP_HOST_W - DATAFLOW_CHIP_W);
 }
 
 /** Правый край выходного чипа (точка ухода wire к downstream). */
-export function dataflowOutputChipAnchorX(nodeX: any, nodeWidth: any) {
+export function dataflowOutputChipAnchorX(nodeX: number, nodeWidth: number) {
     return nodeX + nodeWidth + DATAFLOW_CHIP_INSET + DATAFLOW_CHIP_W;
 }
 
@@ -31,7 +78,7 @@ export function dataflowOutputChipAnchorX(nodeX: any, nodeWidth: any) {
  * @param {number} dstY
  * @returns {string}
  */
-export function dataWirePathFor(srcX: any, srcY: any, dstX: any, dstY: any) {
+export function dataWirePathFor(srcX: number, srcY: number, dstX: number, dstY: number) {
     const dx = Math.max(48, Math.abs(dstX - srcX) * 0.45);
     const sign = dstX >= srcX ? 1 : -1;
     const c1x = srcX + sign * dx;
@@ -43,13 +90,10 @@ export function dataWirePathFor(srcX: any, srcY: any, dstX: any, dstY: any) {
  * @param {unknown} chip
  * @returns {string}
  */
-export function dataflowChipLabel(chip: any) {
-    if (chip && typeof chip.label === 'string' && chip.label.length > 0) {
-        return chip.label;
-    }
-    if (chip && typeof chip.target === 'string' && chip.target.length > 0) {
-        return chip.target;
-    }
+export function dataflowChipLabel(chip: unknown) {
+    if (!isPlainObject(chip)) return 'state';
+    if (typeof chip.label === 'string' && chip.label.length > 0) return chip.label;
+    if (typeof chip.target === 'string' && chip.target.length > 0) return chip.target;
     return 'state';
 }
 
@@ -71,9 +115,9 @@ export function dataflowPathChipKind(path: string) {
  * @param {unknown} chip
  * @returns {'content' | 'files' | 'variable' | 'trigger' | 'interface'}
  */
-export function dataflowChipKind(chip: any) {
-    if (chip && typeof chip.kind === 'string' && chip.kind.length > 0) {
-        return /** @type {'content' | 'files' | 'variable' | 'trigger' | 'interface'} */ (chip.kind);
+export function dataflowChipKind(chip: unknown): ChipKind {
+    if (isPlainObject(chip) && typeof chip.kind === 'string' && isChipKind(chip.kind)) {
+        return chip.kind;
     }
     return dataflowPathChipKind(dataflowChipLabel(chip));
 }
@@ -82,11 +126,12 @@ export function dataflowChipKind(chip: any) {
  * @param {{ label?: string, sourceLabel?: string, sourceKind?: string }} wire
  * @returns {'content' | 'files' | 'variable' | 'trigger' | 'interface'}
  */
-export function dataWireChipKind(wire: any) {
-    if (wire?.sourceKind === 'interface') return 'interface';
-    const sourceLabel = typeof wire?.sourceLabel === 'string' && wire.sourceLabel.length > 0
+export function dataWireChipKind(wire: unknown): ChipKind {
+    if (!isPlainObject(wire)) return dataflowPathChipKind('');
+    if (wire.sourceKind === 'interface') return 'interface';
+    const sourceLabel = typeof wire.sourceLabel === 'string' && wire.sourceLabel.length > 0
         ? wire.sourceLabel
-        : (typeof wire?.label === 'string' ? wire.label : '');
+        : (typeof wire.label === 'string' ? wire.label : '');
     return dataflowPathChipKind(sourceLabel);
 }
 
@@ -95,9 +140,9 @@ export function dataWireChipKind(wire: any) {
  * @param {'in' | 'out'} side
  * @returns {number}
  */
-export function dataflowChipRowHeight(chip: any, side: any) {
+export function dataflowChipRowHeight(chip: unknown, side: ChipSide) {
     const hasProducer = side === 'in'
-        && chip
+        && isPlainObject(chip)
         && typeof chip.producer_node === 'string'
         && chip.producer_node.length > 0;
     return hasProducer ? DATAFLOW_CHIP_H_EXPANDED : DATAFLOW_CHIP_H;
@@ -107,9 +152,9 @@ export function dataflowChipRowHeight(chip: any, side: any) {
  * @param {number[]} heights
  * @returns {number}
  */
-export function dataflowStackContentHeight(heights: any) {
-    if (!heights.length) return DATAFLOW_CHIP_H;
-    return heights.reduce((sum: any, rowHeight: any) => sum + rowHeight, 0)
+export function dataflowStackContentHeight(heights: readonly number[]) {
+    if (heights.length === 0) return DATAFLOW_CHIP_H;
+    return heights.reduce((sum: number, rowHeight: number) => sum + rowHeight, 0)
         + (heights.length - 1) * DATAFLOW_CHIP_GAP;
 }
 
@@ -124,7 +169,7 @@ export function dataflowStackContentHeight(heights: any) {
  *   outputHeights: number[],
  * }}
  */
-export function dataflowNodeChipLayout(nodeHeight: any, inputs: any, outputs: any) {
+export function dataflowNodeChipLayout(nodeHeight: number, inputs: unknown, outputs: unknown) {
     const inputList = Array.isArray(inputs) ? inputs : [];
     const outputList = Array.isArray(outputs) ? outputs : [];
     const inputHeights = inputList.map((chip) => dataflowChipRowHeight(chip, 'in'));
@@ -145,14 +190,14 @@ export function dataflowNodeChipLayout(nodeHeight: any, inputs: any, outputs: an
  * @param {number} chipIndex
  * @returns {number}
  */
-export function dataflowChipOffsetInStack(heights: any, chipIndex: any) {
-    if (!heights.length) return 0;
+export function dataflowChipOffsetInStack(heights: readonly number[], chipIndex: number) {
+    if (heights.length === 0) return 0;
     const idx = Math.max(0, Math.min(chipIndex, heights.length - 1));
     let offset = 0;
     for (let row = 0; row < idx; row += 1) {
-        offset += heights[row] + DATAFLOW_CHIP_GAP;
+        offset += requireStackHeight(heights, row) + DATAFLOW_CHIP_GAP;
     }
-    offset += heights[idx] / 2;
+    offset += requireStackHeight(heights, idx) / 2;
     return offset;
 }
 
@@ -162,7 +207,7 @@ export function dataflowChipOffsetInStack(heights: any, chipIndex: any) {
  * @param {number} chipIndex
  * @returns {number}
  */
-export function dataflowChipCenterY(stackY: any, heights: any, chipIndex: any) {
+export function dataflowChipCenterY(stackY: number, heights: readonly number[], chipIndex: number) {
     if (!heights.length) {
         return stackY + DATAFLOW_CHIP_H / 2;
     }
@@ -175,8 +220,9 @@ export function dataflowChipCenterY(stackY: any, heights: any, chipIndex: any) {
  * @param {number} chipIndex
  * @returns {{ y: number, height: number }}
  */
-export function dataflowChipRect(stackY: any, heights: any, chipIndex: any) {
-    const rowHeight = heights[chipIndex] || DATAFLOW_CHIP_H;
+export function dataflowChipRect(stackY: number, heights: readonly number[], chipIndex: number) {
+    const rawHeight = heights[chipIndex];
+    const rowHeight = rawHeight === undefined || rawHeight === 0 ? DATAFLOW_CHIP_H : rawHeight;
     const centerY = dataflowChipCenterY(stackY, heights, chipIndex);
     return { y: centerY - rowHeight / 2, height: rowHeight };
 }
@@ -192,7 +238,16 @@ export function dataflowChipRect(stackY: any, heights: any, chipIndex: any) {
  * @param {unknown[]} outputs
  * @returns {{ x: number, y: number }}
  */
-export function dataflowChipAnchor(nodeX: any, nodeY: any, nodeHeight: any, nodeWidth: any, side: any, chipIndex: any, inputs: any, outputs: any) {
+export function dataflowChipAnchor(
+    nodeX: number,
+    nodeY: number,
+    nodeHeight: number,
+    nodeWidth: number,
+    side: ChipSide,
+    chipIndex: number,
+    inputs: unknown,
+    outputs: unknown,
+) {
     const layout = dataflowNodeChipLayout(nodeHeight, inputs, outputs);
     const heights = side === 'out' ? layout.outputHeights : layout.inputHeights;
     const rect = dataflowChipRect(layout.stackY, heights, chipIndex);
@@ -208,7 +263,7 @@ export function dataflowChipAnchor(nodeX: any, nodeY: any, nodeHeight: any, node
  * @param {string} sourceLabel
  * @returns {number}
  */
-export function findOutputChipIndex(chips: any, sourceLabel: any) {
+export function findOutputChipIndex(chips: unknown, sourceLabel: unknown) {
     if (!Array.isArray(chips) || chips.length === 0) return -1;
     return chips.findIndex((chip) => dataflowChipLabel(chip) === sourceLabel);
 }
@@ -220,10 +275,10 @@ export function findOutputChipIndex(chips: any, sourceLabel: any) {
  * @param {string} [fromProducerId]
  * @returns {number}
  */
-export function findInputChipIndex(chips: any, targetParam: any, sourceLabel: any, fromProducerId: any) {
+export function findInputChipIndex(chips: unknown, targetParam: unknown, sourceLabel: unknown, fromProducerId: unknown) {
     if (!Array.isArray(chips) || chips.length === 0) return -1;
     if (typeof fromProducerId === 'string' && fromProducerId.length > 0) {
-        const byProducer = chips.findIndex((chip) => chip
+        const byProducer = chips.findIndex((chip) => isPlainObject(chip)
             && typeof chip.producer_node === 'string'
             && chip.producer_node === fromProducerId
             && (
@@ -232,7 +287,7 @@ export function findInputChipIndex(chips: any, targetParam: any, sourceLabel: an
             ));
         if (byProducer >= 0) return byProducer;
     }
-    let idx = chips.findIndex((chip) => chip && typeof chip.target === 'string' && chip.target === targetParam);
+    let idx = chips.findIndex((chip) => isPlainObject(chip) && typeof chip.target === 'string' && chip.target === targetParam);
     if (idx >= 0) return idx;
     idx = chips.findIndex((chip) => dataflowChipLabel(chip) === sourceLabel);
     if (idx >= 0) return idx;
@@ -243,47 +298,47 @@ export function findInputChipIndex(chips: any, targetParam: any, sourceLabel: an
  * @param {unknown} nodeInfo
  * @returns {unknown[]}
  */
-function canvasOutputsFromNodeInfo(nodeInfo: any) {
-    const canvas = nodeInfo && typeof nodeInfo === 'object' && typeof nodeInfo.canvas === 'object'
-        ? nodeInfo.canvas
-        : null;
-    if (canvas && Array.isArray(canvas.outputs) && canvas.outputs.length > 0) {
+function canvasOutputsFromNodeInfo(nodeInfo: unknown): unknown[] {
+    const info = isPlainObject(nodeInfo) ? nodeInfo : null;
+    const canvas = info !== null && isPlainObject(info.canvas) ? info.canvas : null;
+    if (canvas !== null && Array.isArray(canvas.outputs) && canvas.outputs.length > 0) {
         return canvas.outputs;
     }
-    const writes = nodeInfo && typeof nodeInfo === 'object' && Array.isArray(nodeInfo.writes)
-        ? nodeInfo.writes
-        : [];
-    return writes
-        .filter((write: any) => write && typeof write.path === 'string' && write.path.length > 0)
-        .map((write: any) => ({
+    const writes = info !== null && Array.isArray(info.writes) ? info.writes : [];
+    const outputs: { label: string; type: string }[] = [];
+    for (const write of writes) {
+        if (!isPlainObject(write) || typeof write.path !== 'string' || write.path.length === 0) continue;
+        outputs.push({
             label: write.path,
             type: typeof write.type === 'string' ? write.type : 'any',
-        }));
+        });
+    }
+    return outputs;
 }
 
 /**
  * @param {unknown} nodeInfo
  * @returns {unknown[]}
  */
-function canvasInputsFromNodeInfo(nodeInfo: any) {
-    const canvas = nodeInfo && typeof nodeInfo === 'object' && typeof nodeInfo.canvas === 'object'
-        ? nodeInfo.canvas
-        : null;
-    if (canvas && Array.isArray(canvas.inputs) && canvas.inputs.length > 0) {
+function canvasInputsFromNodeInfo(nodeInfo: unknown): unknown[] {
+    const info = isPlainObject(nodeInfo) ? nodeInfo : null;
+    const canvas = info !== null && isPlainObject(info.canvas) ? info.canvas : null;
+    if (canvas !== null && Array.isArray(canvas.inputs) && canvas.inputs.length > 0) {
         return canvas.inputs;
     }
-    const rows = nodeInfo && typeof nodeInfo === 'object' && Array.isArray(nodeInfo.input_mapping)
-        ? nodeInfo.input_mapping
-        : [];
-    return rows
-        .filter((row: any) => row && row.source_kind === 'state')
-        .map((row: any) => ({
-            label: typeof row.source_path === 'string' && row.source_path.length > 0
-                ? row.source_path
-                : (typeof row.source === 'string' ? row.source : row.target),
+    const rows = info !== null && Array.isArray(info.input_mapping) ? info.input_mapping : [];
+    const inputs: { label: unknown; target: unknown; producer_node: unknown }[] = [];
+    for (const row of rows) {
+        if (!isPlainObject(row) || row.source_kind !== 'state') continue;
+        const sourcePath = typeof row.source_path === 'string' && row.source_path.length > 0 ? row.source_path : null;
+        const source = typeof row.source === 'string' ? row.source : null;
+        inputs.push({
+            label: sourcePath !== null ? sourcePath : (source !== null ? source : row.target),
             target: row.target,
             producer_node: Array.isArray(row.producers) && row.producers.length > 0 ? row.producers[0] : null,
-        }));
+        });
+    }
+    return inputs;
 }
 
 /**
@@ -291,7 +346,7 @@ function canvasInputsFromNodeInfo(nodeInfo: any) {
  * @param {number} chipCount
  * @returns {number}
  */
-function resolveChipIndex(chipIndex: any, chipCount: any) {
+function resolveChipIndex(chipIndex: number, chipCount: number) {
     if (chipCount <= 0) return 0;
     if (chipIndex >= 0) return Math.min(chipIndex, chipCount - 1);
     if (chipCount === 1) return 0;
@@ -319,32 +374,36 @@ function axis(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export function resolveDataWireEndpoints(wire: any, fromNode: any, toNode: any, dataflowNodes: any, nodeWidth: any, nodeHeightOf: any) {
+export function resolveDataWireEndpoints(
+    wire: unknown,
+    fromNode: Record<string, unknown>,
+    toNode: Record<string, unknown>,
+    dataflowNodes: unknown,
+    nodeWidth: number,
+    nodeHeightOf: (node: Record<string, unknown>) => number,
+) {
+    const parsedWire = readDataWire(wire);
+    if (parsedWire === null) return null;
     const fromX = axis(fromNode.pos_x);
     const fromY = axis(fromNode.pos_y);
     const toX = axis(toNode.pos_x);
     const toY = axis(toNode.pos_y);
     const fromHeight = nodeHeightOf(fromNode);
     const toHeight = nodeHeightOf(toNode);
-    const sourceLabel = typeof wire.sourceLabel === 'string' && wire.sourceLabel.length > 0
-        ? wire.sourceLabel
-        : wire.label;
-    const targetParam = typeof wire.targetParam === 'string' && wire.targetParam.length > 0
-        ? wire.targetParam
-        : wire.label;
-    const fromInfo = dataflowNodes && typeof dataflowNodes === 'object' ? dataflowNodes[wire.from] : null;
-    const toInfo = dataflowNodes && typeof dataflowNodes === 'object' ? dataflowNodes[wire.to] : null;
-    const fromInputs = fromInfo && typeof fromInfo.canvas === 'object' && Array.isArray(fromInfo.canvas.inputs)
-        ? fromInfo.canvas.inputs
-        : [];
+    const sourceLabel = parsedWire.sourceLabel;
+    const targetParam = parsedWire.targetParam;
+    const nodes = isPlainObject(dataflowNodes) ? dataflowNodes : null;
+    const fromInfo = nodes === null ? null : nodes[parsedWire.from];
+    const toInfo = nodes === null ? null : nodes[parsedWire.to];
+    const fromCanvas = isPlainObject(fromInfo) && isPlainObject(fromInfo.canvas) ? fromInfo.canvas : null;
+    const fromInputs = fromCanvas !== null && Array.isArray(fromCanvas.inputs) ? fromCanvas.inputs : [];
     const fromOutputs = canvasOutputsFromNodeInfo(fromInfo);
     const toInputs = canvasInputsFromNodeInfo(toInfo);
-    const toOutputs = toInfo && typeof toInfo.canvas === 'object' && Array.isArray(toInfo.canvas.outputs)
-        ? toInfo.canvas.outputs
-        : [];
+    const toCanvas = isPlainObject(toInfo) && isPlainObject(toInfo.canvas) ? toInfo.canvas : null;
+    const toOutputs = toCanvas !== null && Array.isArray(toCanvas.outputs) ? toCanvas.outputs : [];
     const outIdx = resolveChipIndex(findOutputChipIndex(fromOutputs, sourceLabel), fromOutputs.length);
     const inIdx = resolveChipIndex(
-        findInputChipIndex(toInputs, targetParam, sourceLabel, wire.from),
+        findInputChipIndex(toInputs, targetParam, sourceLabel, parsedWire.from),
         toInputs.length,
     );
     if (outIdx < 0 || inIdx < 0) {
@@ -362,19 +421,21 @@ export function resolveDataWireEndpoints(wire: any, fromNode: any, toNode: any, 
  * @param {unknown[]} edges
  * @returns {boolean}
  */
-export function hasControlPath(fromId: any, toId: any, edges: any) {
+export function hasControlPath(fromId: string, toId: string, edges: readonly unknown[]) {
     if (fromId === toId) return true;
-    const adj = new Map();
+    const adj = new Map<string, string[]>();
     for (const edge of edges) {
         const { from_node, to_node } = getEdgeEndpoints(edge);
         if (typeof from_node !== 'string' || typeof to_node !== 'string') continue;
-        if (!adj.has(from_node)) adj.set(from_node, []);
-        adj.get(from_node).push(to_node);
+        const nextList = adj.get(from_node);
+        if (nextList === undefined) adj.set(from_node, [to_node]);
+        else nextList.push(to_node);
     }
     const seen = new Set([fromId]);
     const queue = [fromId];
     while (queue.length > 0) {
         const cur = queue.shift();
+        if (cur === undefined) break;
         const nextNodes = adj.get(cur);
         for (const nxt of nextNodes === undefined ? [] : nextNodes) {
             if (nxt === toId) return true;
@@ -387,60 +448,81 @@ export function hasControlPath(fromId: any, toId: any, edges: any) {
     return false;
 }
 
+function recordArray(value: unknown, field: string) {
+    if (!isPlainObject(value)) return [];
+    const items = value[field];
+    return Array.isArray(items) ? items : [];
+}
+
 /**
  * @param {Record<string, unknown> | null | undefined} dataflowNodes
  * @param {Record<string, unknown> | null | undefined} graphNodes
  * @returns {Array<{ from: string, to: string, label: string, sourceLabel: string, targetParam: string }>}
  */
-export function buildDataWires(dataflowNodes: any, graphNodes: any) {
-    if (!dataflowNodes || typeof dataflowNodes !== 'object') return [];
-    if (!graphNodes || typeof graphNodes !== 'object') return [];
-    const wires: any[] = [];
-    const seen = new Set();
+export function buildDataWires(dataflowNodes: unknown, graphNodes: unknown): DataWire[] {
+    if (!isPlainObject(dataflowNodes) || !isPlainObject(graphNodes)) return [];
+    const wires: DataWire[] = [];
+    const seen = new Set<string>();
 
-    const pushWire = (fromId: any, toId: any, sourceLabel: any, targetParam: any, sourceKind: any) => {
-        if (!fromId || !toId || fromId === toId || !graphNodes[fromId] || !graphNodes[toId]) return;
-        const label = sourceLabel;
-        const key = `${fromId}\u0000${toId}\u0000${label}\u0000${targetParam}`;
+    const pushWire = (fromId: string, toId: string, sourceLabel: string, targetParam: string, sourceKind: string) => {
+        if (fromId.length === 0 || toId.length === 0 || fromId === toId) return;
+        if (graphNodes[fromId] === undefined || graphNodes[toId] === undefined) return;
+        const key = `${fromId}\u0000${toId}\u0000${sourceLabel}\u0000${targetParam}`;
         if (seen.has(key)) return;
         seen.add(key);
-        wires.push({ from: fromId, to: toId, label, sourceLabel, targetParam, sourceKind });
+        wires.push({
+            from: fromId,
+            to: toId,
+            label: sourceLabel,
+            sourceLabel,
+            targetParam,
+            sourceKind,
+        });
     };
-    const descriptorKind = (desc: any) => (desc && (desc.source === 'interface' || (Array.isArray(desc.source) && desc.source.includes('interface'))) ? 'interface' : 'state');
+    const descriptorKind = (desc: unknown) => {
+        if (!isPlainObject(desc)) return 'state';
+        if (desc.source === 'interface') return 'interface';
+        if (Array.isArray(desc.source) && desc.source.includes('interface')) return 'interface';
+        return 'state';
+    };
+    const producerIds = (value: unknown): string[] => {
+        if (!Array.isArray(value)) return [];
+        const ids: string[] = [];
+        for (const item of value) {
+            if (typeof item === 'string' && item.length > 0) ids.push(item);
+        }
+        return ids;
+    };
 
     for (const [toId, info] of Object.entries(dataflowNodes)) {
-        if (!graphNodes[toId]) continue;
-        const incomingByPath = new Map();
-        const incomingList = info && Array.isArray((info as Record<string, any>).incoming_state) ? (info as Record<string, any>).incoming_state : [];
-        for (const desc of incomingList) {
-            if (!desc || typeof desc.path !== 'string' || desc.path.length === 0) continue;
+        if (graphNodes[toId] === undefined) continue;
+        const incomingByPath = new Map<string, unknown>();
+        for (const desc of recordArray(info, 'incoming_state')) {
+            if (!isPlainObject(desc) || typeof desc.path !== 'string' || desc.path.length === 0) continue;
             incomingByPath.set(desc.path, desc);
         }
 
-        const rows = info && Array.isArray((info as Record<string, any>).input_mapping) ? (info as Record<string, any>).input_mapping : [];
-        for (const row of rows) {
-            if (!row || row.source_kind !== 'state') continue;
-            const producers = Array.isArray(row.producers) ? row.producers : [];
+        for (const row of recordArray(info, 'input_mapping')) {
+            if (!isPlainObject(row) || row.source_kind !== 'state') continue;
             const targetParam = typeof row.target === 'string' ? row.target : '';
             const sourceLabel = typeof row.source_path === 'string' && row.source_path.length > 0
                 ? row.source_path
                 : (typeof row.source === 'string' ? row.source : targetParam);
             const sourceKind = descriptorKind(incomingByPath.get(sourceLabel));
-            for (const fromId of producers) {
+            for (const fromId of producerIds(row.producers)) {
                 pushWire(fromId, toId, sourceLabel, targetParam, sourceKind);
             }
         }
 
-        const reads = info && Array.isArray((info as Record<string, any>).reads) ? (info as Record<string, any>).reads : [];
-        for (const read of reads) {
-            if (!read || read.source_kind !== 'state') continue;
+        for (const read of recordArray(info, 'reads')) {
+            if (!isPlainObject(read) || read.source_kind !== 'state') continue;
             const sourceLabel = typeof read.source_path === 'string' ? read.source_path : '';
-            if (!sourceLabel) continue;
+            if (sourceLabel.length === 0) continue;
             const targetParam = typeof read.config_path === 'string' && read.config_path.length > 0
                 ? read.config_path
                 : sourceLabel;
             const desc = incomingByPath.get(sourceLabel);
-            const producers = desc && Array.isArray(desc.producers) ? desc.producers : [];
+            const producers = isPlainObject(desc) ? producerIds(desc.producers) : [];
             for (const fromId of producers) {
                 pushWire(fromId, toId, sourceLabel, targetParam, descriptorKind(desc));
             }
@@ -454,7 +536,7 @@ export function buildDataWires(dataflowNodes: any, graphNodes: any) {
  * @param {Array<{ from: string, to: string }>} wires
  * @returns {Set<string> | null}
  */
-export function buildLineageSet(hoverNodeId: any, wires: any) {
+export function buildLineageSet(hoverNodeId: string | null, wires: readonly DataWire[]) {
     if (!hoverNodeId) return null;
     const lineage = new Set([hoverNodeId]);
     for (const wire of wires) {
@@ -470,21 +552,17 @@ export function buildLineageSet(hoverNodeId: any, wires: any) {
  * @param {{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }} wire
  * @returns {string}
  */
-export function dataWireKey(wire: any) {
-    const sourceLabel = typeof wire.sourceLabel === 'string' && wire.sourceLabel.length > 0
-        ? wire.sourceLabel
-        : wire.label;
-    const targetParam = typeof wire.targetParam === 'string' && wire.targetParam.length > 0
-        ? wire.targetParam
-        : wire.label;
-    return `${wire.from}\u0000${wire.to}\u0000${sourceLabel}\u0000${targetParam}`;
+export function dataWireKey(wire: unknown) {
+    const parsed = readDataWire(wire);
+    if (parsed === null) throw new Error('flows-dataflow-canvas: wire required');
+    return `${parsed.from}\u0000${parsed.to}\u0000${parsed.sourceLabel}\u0000${parsed.targetParam}`;
 }
 
 /**
  * @param {{ nodeId: string, side: 'in' | 'out', index: number }} ref
  * @returns {string}
  */
-export function chipRefKey(ref: any) {
+export function chipRefKey(ref: ChipRef) {
     return `${ref.nodeId}\u0000${ref.side}\u0000${ref.index}`;
 }
 
@@ -492,7 +570,7 @@ export function chipRefKey(ref: any) {
  * @param {{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }} wire
  * @returns {string}
  */
-function wireSourceLabel(wire: any) {
+function wireSourceLabel(wire: DataWire) {
     return typeof wire.sourceLabel === 'string' && wire.sourceLabel.length > 0
         ? wire.sourceLabel
         : wire.label;
@@ -506,12 +584,9 @@ function wireSourceLabel(wire: any) {
  * @param {Record<string, unknown> | null | undefined} dataflowNodes
  * @returns {Set<string>}
  */
-function wiresForChipEndpoint(allWires: any, chipRef: any, dataflowNodes: any) {
-    const keys = new Set();
-    if (!chipRef || typeof chipRef.nodeId !== 'string' || chipRef.nodeId.length === 0) return keys;
-    if (chipRef.side !== 'in' && chipRef.side !== 'out') return keys;
-    if (typeof chipRef.index !== 'number' || chipRef.index < 0) return keys;
-    if (!dataflowNodes || typeof dataflowNodes !== 'object') return keys;
+function wiresForChipEndpoint(allWires: readonly DataWire[], chipRef: ChipRef, dataflowNodes: unknown) {
+    const keys = new Set<string>();
+    if (!isPlainObject(dataflowNodes)) return keys;
 
     if (chipRef.side === 'out') {
         const fromInfo = dataflowNodes[chipRef.nodeId];
@@ -551,12 +626,9 @@ function wiresForChipEndpoint(allWires: any, chipRef: any, dataflowNodes: any) {
  * @param {Array<{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }>} allWires
  * @returns {Set<string>}
  */
-export function resolveChipStatePaths(chipRef: any, dataflowNodes: any, allWires: any) {
-    const paths = new Set();
-    if (!chipRef || typeof chipRef.nodeId !== 'string' || chipRef.nodeId.length === 0) return paths;
-    if (chipRef.side !== 'in' && chipRef.side !== 'out') return paths;
-    if (typeof chipRef.index !== 'number' || chipRef.index < 0) return paths;
-    if (!dataflowNodes || typeof dataflowNodes !== 'object') return paths;
+export function resolveChipStatePaths(chipRef: ChipRef, dataflowNodes: unknown, allWires: readonly DataWire[]) {
+    const paths = new Set<string>();
+    if (!isPlainObject(dataflowNodes)) return paths;
 
     if (chipRef.side === 'out') {
         const fromInfo = dataflowNodes[chipRef.nodeId];
@@ -592,8 +664,8 @@ export function resolveChipStatePaths(chipRef: any, dataflowNodes: any, allWires
  * @param {Record<string, unknown> | null | undefined} dataflowNodes
  * @returns {Set<string>}
  */
-export function wiresForChipHover(allWires: any, chipRef: any, dataflowNodes: any) {
-    const keys = new Set();
+export function wiresForChipHover(allWires: readonly DataWire[], chipRef: ChipRef, dataflowNodes: unknown) {
+    const keys = new Set<string>();
     const statePaths = resolveChipStatePaths(chipRef, dataflowNodes, allWires);
     if (statePaths.size === 0) return keys;
     for (const wire of allWires) {
@@ -609,8 +681,8 @@ export function wiresForChipHover(allWires: any, chipRef: any, dataflowNodes: an
  * @param {Record<string, unknown> | null | undefined} dataflowNodes
  * @returns {Array<{ nodeId: string, side: 'in' | 'out', index: number }>}
  */
-export function chipRefsForWire(wire: any, dataflowNodes: any) {
-    if (!wire || !dataflowNodes || typeof dataflowNodes !== 'object') return [];
+export function chipRefsForWire(wire: DataWire, dataflowNodes: unknown): ChipRef[] {
+    if (!isPlainObject(dataflowNodes)) return [];
     const sourceLabel = typeof wire.sourceLabel === 'string' && wire.sourceLabel.length > 0
         ? wire.sourceLabel
         : wire.label;
@@ -623,7 +695,7 @@ export function chipRefsForWire(wire: any, dataflowNodes: any) {
     const toInputs = canvasInputsFromNodeInfo(toInfo);
     const outIdx = findOutputChipIndex(fromOutputs, sourceLabel);
     const inIdx = findInputChipIndex(toInputs, targetParam, sourceLabel, wire.from);
-    const refs = [];
+    const refs: ChipRef[] = [];
     if (outIdx >= 0) {
         refs.push({ nodeId: wire.from, side: 'out', index: outIdx });
     }
@@ -638,9 +710,9 @@ export function chipRefsForWire(wire: any, dataflowNodes: any) {
  * @param {Array<{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }>} wires
  * @returns {Set<string> | null}
  */
-export function buildLineageSetFromWireKeys(wireKeys: any, wires: any) {
-    if (!wireKeys || wireKeys.size === 0) return null;
-    const lineage = new Set();
+export function buildLineageSetFromWireKeys(wireKeys: ReadonlySet<string> | null, wires: readonly DataWire[]) {
+    if (wireKeys === null || wireKeys.size === 0) return null;
+    const lineage = new Set<string>();
     for (const wire of wires) {
         if (!wireKeys.has(dataWireKey(wire))) continue;
         lineage.add(wire.from);
@@ -655,9 +727,13 @@ export function buildLineageSetFromWireKeys(wireKeys: any, wires: any) {
  * @param {Record<string, unknown> | null | undefined} dataflowNodes
  * @returns {Set<string>}
  */
-export function chipRefKeysForWireKeys(wireKeys: any, allWires: any, dataflowNodes: any) {
-    const chipKeys = new Set();
-    if (!wireKeys || wireKeys.size === 0) return chipKeys;
+export function chipRefKeysForWireKeys(
+    wireKeys: ReadonlySet<string> | null,
+    allWires: readonly DataWire[],
+    dataflowNodes: unknown,
+) {
+    const chipKeys = new Set<string>();
+    if (wireKeys === null || wireKeys.size === 0) return chipKeys;
     for (const wire of allWires) {
         if (!wireKeys.has(dataWireKey(wire))) continue;
         for (const ref of chipRefsForWire(wire, dataflowNodes)) {
@@ -670,8 +746,8 @@ export function chipRefKeysForWireKeys(wireKeys: any, allWires: any, dataflowNod
  * @param {unknown} canvas
  * @returns {{ errors: number, warnings: number, total: number }}
  */
-export function countNodeDataflowProblems(canvas: any) {
-    const canvasObj = canvas && typeof canvas === 'object' ? canvas : null;
+export function countNodeDataflowProblems(canvas: unknown) {
+    const canvasObj = isPlainObject(canvas) ? canvas : null;
     const errors = canvasObj && typeof canvasObj.error_count === 'number' ? canvasObj.error_count : 0;
     const warnings = canvasObj && typeof canvasObj.warning_count === 'number' ? canvasObj.warning_count : 0;
     return { errors, warnings, total: errors + warnings };
@@ -682,23 +758,27 @@ export function countNodeDataflowProblems(canvas: any) {
  * @param {Record<string, unknown> | null | undefined} branchNodes
  * @returns {Array<{ nodeId: string, nodeName: string, severity: string, message: string }>}
  */
-export function aggregateDataflowIssues(dataflowNodes: any, branchNodes: any) {
-    if (!dataflowNodes || typeof dataflowNodes !== 'object') return [];
-    const out = [];
+export function aggregateDataflowIssues(dataflowNodes: unknown, branchNodes: unknown) {
+    if (!isPlainObject(dataflowNodes)) return [];
+    const branches = isPlainObject(branchNodes) ? branchNodes : null;
+    const out: { nodeId: string; nodeName: string; severity: 'error' | 'warning'; message: string }[] = [];
     for (const [nodeId, info] of Object.entries(dataflowNodes)) {
-        const issues = info && Array.isArray((info as Record<string, any>).issues) ? (info as Record<string, any>).issues : [];
+        const issues = recordArray(info, 'issues');
         for (const issue of issues) {
-            if (!issue || (issue.severity !== 'error' && issue.severity !== 'warning')) continue;
-            const node = branchNodes && typeof branchNodes === 'object' ? branchNodes[nodeId] : null;
-            const nodeName = node && typeof node.name === 'string' && node.name.length > 0 ? node.name : nodeId;
-            out.push({
-                nodeId,
-                nodeName,
-                severity: issue.severity,
-                message: issue.message === undefined || issue.message === null || issue.message === ''
-                    ? (issue.code === undefined || issue.code === null || issue.code === '' ? '' : String(issue.code))
-                    : String(issue.message),
-            });
+            if (!isPlainObject(issue)) continue;
+            const severity = issue.severity;
+            if (severity !== 'error' && severity !== 'warning') continue;
+            const node = branches === null ? null : branches[nodeId];
+            const nodeRecord = isPlainObject(node) ? node : null;
+            const nodeName = nodeRecord !== null && typeof nodeRecord.name === 'string' && nodeRecord.name.length > 0
+                ? nodeRecord.name
+                : nodeId;
+            const messageText = issue.message;
+            const codeText = issue.code;
+            const message = messageText === undefined || messageText === null || messageText === ''
+                ? (codeText === undefined || codeText === null || codeText === '' ? '' : String(codeText))
+                : String(messageText);
+            out.push({ nodeId, nodeName, severity, message });
         }
     }
     out.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));

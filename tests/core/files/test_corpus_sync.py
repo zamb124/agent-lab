@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from tests.core.files.corpus.manifest import (
@@ -36,7 +36,7 @@ def test_corpus_local_matches_github_tree() -> None:
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    with httpx.Client(headers=headers, timeout=60.0) as client:
+    with httpx2.Client(headers=headers, timeout=60.0) as client:
         response = client.get(
             "https://api.github.com/repos/Unstructured-IO/unstructured/git/trees/main?recursive=1"
         )
@@ -83,7 +83,7 @@ def test_example_docs_github_tree_reachable() -> None:
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    with httpx.Client(headers=headers, timeout=60.0) as client:
+    with httpx2.Client(headers=headers, timeout=60.0) as client:
         response = client.get(
             "https://api.github.com/repos/Unstructured-IO/unstructured/git/trees/main?recursive=1"
         )

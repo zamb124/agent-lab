@@ -19,7 +19,7 @@ export class FlowsInterfaceTemplateCard extends PlatformElement {
         selected: { type: Boolean, reflect: true },
         _visible: { type: Boolean, state: true },
     }
-    declare template: any;
+    declare template: Record<string, any> | null;
     declare selected: boolean;
     declare _visible: boolean;
 ;
@@ -62,21 +62,30 @@ export class FlowsInterfaceTemplateCard extends PlatformElement {
     }
 
     _select() {
-        this.emit('template-select', { templateId: ((this.template as Record<string, any>).template_id as any) });
+        const template = this.template;
+        if (template === null) {
+            throw new Error('flows-interface-template-card: template required');
+        }
+        const templateId = template.template_id;
+        if (typeof templateId !== 'string' || templateId.length === 0) {
+            throw new Error('flows-interface-template-card: template_id required');
+        }
+        this.emit('template-select', { templateId });
     }
 
     override render(): TemplateResult | typeof nothing {
         if (this.template === null) return nothing;
+        const template = this.template;
         return html`<div class="card" role="button" tabindex="0" @click=${this._select}
             @keydown=${(event: KeyboardEvent) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this._select(); } }}>
             <div class="preview">
                 ${this._visible
-                    ? html`<platform-flow-ui editing theme="auto" .initialDocument=${(this as Record<string, any>).template.document} .sampleState=${{}}></platform-flow-ui>`
-                    : html`<div class="placeholder"><platform-icon name=${(this as Record<string, any>).template.icon} size="28"></platform-icon></div>`}
+                    ? html`<platform-flow-ui editing theme="auto" .initialDocument=${template.document} .sampleState=${{}}></platform-flow-ui>`
+                    : html`<div class="placeholder"><platform-icon name=${template.icon} size="28"></platform-icon></div>`}
             </div>
             <div class="meta">
-                <div class="title"><platform-icon name=${(this as Record<string, any>).template.icon} size="14"></platform-icon>${(this as Record<string, any>).template.title}</div>
-                <div class="description">${(this as Record<string, any>).template.description}</div>
+                <div class="title"><platform-icon name=${template.icon} size="14"></platform-icon>${template.title}</div>
+                <div class="description">${template.description}</div>
             </div>
         </div>`;
     }

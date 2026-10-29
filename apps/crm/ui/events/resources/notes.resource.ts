@@ -26,6 +26,7 @@ import {
     CoreEvents,
 } from '@platform/lib/events/index.js';
 import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 /**
  * 409 / conflict — задача уже идёт;
@@ -37,8 +38,10 @@ import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js'
  * @param {string} failedKey
  */
 function _toastOnActiveTaskConflict(ctx: EffectCtx, err: unknown, event: PlatformEvent, alreadyRunningKey: string, failedKey: string) {
-    const e = err as Record<string, any> | null;
-    const conflict = (e && e.status === 409) || (e && e.code === 'conflict');
+    const failure = isPlainRecord(err) ? err : null;
+    const status = failure === null ? undefined : failure.status;
+    const code = failure === null ? undefined : failure.code;
+    const conflict = status === 409 || code === 'conflict';
     if (conflict) {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
@@ -47,11 +50,12 @@ function _toastOnActiveTaskConflict(ctx: EffectCtx, err: unknown, event: Platfor
         );
         return;
     }
-    const body = e && e.body;
-    const detail = body && typeof body === 'object' ? body.detail : null;
+    const body = failure === null ? undefined : failure.body;
+    const detail = isPlainRecord(body) ? body.detail : null;
+    const message = failure === null ? undefined : failure.message;
     const detailText = typeof detail === 'string' && detail.length > 0
         ? detail
-        : (e && typeof e.message === 'string' && e.message.length > 0 ? e.message : null);
+        : (typeof message === 'string' && message.length > 0 ? message : null);
     if (detailText !== null) {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
@@ -145,12 +149,12 @@ export const notesListResource = createCursorList({
         if (event.type !== 'crm/note/updated') {
             return state;
         }
-        const payload = (event.payload as Record<string, any>);
-        if (!payload || typeof payload !== 'object') {
+        if (!isPlainRecord(event.payload)) {
             return state;
         }
-        const mf = payload.markdown_format;
-        if (mf && (mf.phase === 'partial' || mf.phase === 'started')) {
+        const payload = event.payload;
+        const markdownFormat = payload.markdown_format;
+        if (isPlainRecord(markdownFormat) && (markdownFormat.phase === 'partial' || markdownFormat.phase === 'started')) {
             return state;
         }
         const noteId = payload.note_id;
@@ -169,7 +173,7 @@ export const notesListResource = createCursorList({
         }
 
         const note = payload.note;
-        if (!note || typeof note !== 'object' || typeof note.entity_id !== 'string') {
+        if (!isPlainRecord(note) || typeof note.entity_id !== 'string') {
             return state;
         }
         if (!_noteMatchesListFilters(note, filters)) {
@@ -285,12 +289,15 @@ export const noteAnalyzeStartOp = createAsyncOp({
     commandType: 'crm/notes/analyze_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/note-analyze' },
     onSuccess: (ctx, result, event) => {
-        if (result && typeof result === 'object' && typeof (result as Record<string, unknown>).task_id === 'string') {
-            ctx.dispatch(
-                'crm/task/updated',
-                { task: result },
-                { causation_id: event.id },
-            );
+        if (isPlainRecord(result)) {
+            const taskId = result.task_id;
+            if (typeof taskId === 'string') {
+                ctx.dispatch(
+                    'crm/task/updated',
+                    { task: result },
+                    { causation_id: event.id },
+                );
+            }
         }
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,

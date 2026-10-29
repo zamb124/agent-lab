@@ -29,7 +29,6 @@ curl -fsS -H 'Host: linnex.io' https://linnex.io/manifest.json | jq -e '.short_n
 3. Embed snippet с linnex CDN origin.
 4. Sync call — token `livekit_url` = `wss://livekit.linnex.io`.
 5. Office document open — OnlyOffice `https://onlyoffice.linnex.io`.
-6. HumanitecAgent download с `Host: linnex.io` → redirect на `https://linnex.io/...`.
 
 ## Legacy humanitec.ru
 

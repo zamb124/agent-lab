@@ -1,6 +1,6 @@
 # Test base: production venv (agent-lab-base) + dev dependency group для pytest и линтеров.
 # Сборка и push: .github/workflows/build-test-base.yml → ghcr.io/<owner>/agent-lab-test-base.
-# Локальный fallback: scripts/ensure_test_compose_images.py (pull-or-build).
+# Локальный fallback: scripts/testing/ensure_compose_images.py (pull-or-build).
 
 ARG BASE_IMAGE=ghcr.io/zamb124/agent-lab-base:latest
 FROM ${BASE_IMAGE}

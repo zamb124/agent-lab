@@ -11,7 +11,7 @@ import hashlib
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -20,6 +20,7 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import Span as SDKSpan
 from opentelemetry.trace import Span as OtelSpan
 from opentelemetry.trace import SpanKind, Status, StatusCode, Tracer
+from opentelemetry.util.types import AnyValue, Attributes
 
 import core.tracing.attributes as attr
 from core.config import get_settings
@@ -55,10 +56,26 @@ def _sdk_span(span: OtelSpan) -> SDKSpan:
     return span
 
 
+def _json_from_otel_value(value: AnyValue) -> JsonValue:
+    if value is None or isinstance(value, str | bool | int | float):
+        return value
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    if isinstance(value, Mapping):
+        return {key: _json_from_otel_value(item) for key, item in value.items()}
+    return [_json_from_otel_value(item) for item in value]
+
+
+def _json_from_otel_attributes(attributes: Attributes) -> JsonObject:
+    if attributes is None:
+        return {}
+    return {key: _json_from_otel_value(value) for key, value in attributes.items()}
+
+
 def _serialize_span_events(readable_span: SDKSpan) -> list[TraceSpanEvent]:
     events: list[TraceSpanEvent] = []
     for event in readable_span.events:
-        event_attributes = otel_attributes_to_json_object(event.attributes)
+        event_attributes = _json_from_otel_attributes(event.attributes)
         events.append(
             TraceSpanEvent(
                 name=event.name,
@@ -92,7 +109,7 @@ _tracer: PlatformTracer | None = None
 _process_tracing_service_name: str | None = None
 
 
-def _span_attribute(span: OtelSpan, key: str) -> OtelAttributeValue | None:
+def _span_attribute(span: OtelSpan, key: str) -> AnyValue | None:
     span_attrs = _sdk_span(span).attributes
     if span_attrs is None:
         return None
@@ -184,7 +201,7 @@ class PlatformTracer:
             status_message = readable_span.status.description
 
         all_attrs = require_json_object(
-            otel_attributes_to_json_object(readable_span.attributes),
+            _json_from_otel_attributes(readable_span.attributes),
             "span.attributes",
         )
         if extra_attrs:
@@ -857,7 +874,7 @@ class PlatformTracer:
 
         readable_span = _sdk_span(span)
         span_attributes = require_json_object(
-            otel_attributes_to_json_object(readable_span.attributes),
+            _json_from_otel_attributes(readable_span.attributes),
             "tool_span.attributes",
         )
         tool_name_raw = span_attributes.get(attr.ATTR_TOOL_NAME)

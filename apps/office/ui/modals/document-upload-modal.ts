@@ -12,6 +12,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-file-card.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const UPLOAD_OP_NAME = 'office/document_upload';
 
@@ -140,7 +141,7 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
     private _addFiles(rawFiles: ArrayLike<unknown> | null | undefined) {
         if (!rawFiles || rawFiles.length === 0) return;
         const next = [...this._entries];
-        for (const file of Array.from(rawFiles as ArrayLike<unknown>)) {
+        for (const file of Array.from(rawFiles)) {
             if (!(file instanceof File)) continue;
             next.push({
                 localId: this._newLocalId(),
@@ -187,7 +188,10 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
     }
 
     private _onFileChange(e: Event) {
-        const input = e.target as HTMLInputElement;
+        const input = e.target;
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('document-upload-modal: file input missing');
+        }
         const files = input.files ? Array.from(input.files) : [];
         input.value = '';
         this._addFiles(files);
@@ -240,7 +244,7 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
                 suppressSuccessToast: pending.length > 1,
                 suppressErrorToast: pending.length > 1,
             });
-            if (result && typeof (result as Record<string, unknown>).file_id === 'string') {
+            if (isPlainRecord(result) && typeof result.file_id === 'string') {
                 this._updateEntry(entry.localId, { status: 'done' });
                 doneCount += 1;
                 if (openAfterUpload) openedEditor = true;

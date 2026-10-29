@@ -2,7 +2,7 @@
 
 Никаких mocks/monkeypatching: для HTTP-клиентов поднимается реальный
 `aiohttp` сервер на свободном порту (`fake_speech_server`), STT-клиенты
-дёргают его через настоящий `httpx.AsyncClient`. Для stub-клиентов
+дёргают его через настоящий `httpx2.AsyncClient`. Для stub-клиентов
 (`YandexSTTClient`/`SberSTTClient`) проверяется, что вызов падает с
 `NotImplementedError`. Для `MockSTTClient` — что возвращает заданный `transcript_text` конструктора.
 

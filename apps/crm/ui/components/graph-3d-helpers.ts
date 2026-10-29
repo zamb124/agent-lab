@@ -2,6 +2,8 @@
  * Общие THREE-хелперы для мини-графа и (при необходимости) основного канваса.
  */
 
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
 // THREE.js грузится рантайм-скриптом (вне ts-бандла); типизируем как any-фасад.
 declare global {
     interface Window {
@@ -26,16 +28,6 @@ export function firstGraphText(values: readonly unknown[]): string {
 export function storedWeight(map: Map<string, number>, id: string): number {
     const current = map.get(id);
     return current === undefined ? 0 : current;
-}
-
-interface GraphEdgeLike {
-    source_id?: unknown;
-    source_entity_id?: unknown;
-    source?: unknown;
-    target_id?: unknown;
-    target_entity_id?: unknown;
-    target?: unknown;
-    weight?: unknown;
 }
 
 export interface GraphNodeSpriteOptions {
@@ -84,13 +76,14 @@ export function aggregateIncidentWeightsByNode(edges: unknown): Map<string, numb
     if (!Array.isArray(edges)) {
         return map;
     }
-    for (const edge of edges as GraphEdgeLike[]) {
-        const sourceId = edge.source_id || edge.source_entity_id || edge.source;
-        const targetId = edge.target_id || edge.target_entity_id || edge.target;
+    for (const raw of edges) {
+        if (!isPlainRecord(raw)) continue;
+        const sourceId = raw.source_id || raw.source_entity_id || raw.source;
+        const targetId = raw.target_id || raw.target_entity_id || raw.target;
         if (typeof sourceId !== 'string' || typeof targetId !== 'string') {
             continue;
         }
-        const edgeWeight = typeof edge.weight === 'number' && Number.isFinite(edge.weight) ? edge.weight : 1;
+        const edgeWeight = typeof raw.weight === 'number' && Number.isFinite(raw.weight) ? raw.weight : 1;
         if (sourceId === targetId) {
             map.set(sourceId, storedWeight(map, sourceId) + edgeWeight);
         } else {

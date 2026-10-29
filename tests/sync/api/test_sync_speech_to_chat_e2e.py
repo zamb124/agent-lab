@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 
-import httpx
+import httpx2
 import pytest
 
 from core.utils.tokens import get_token_service
@@ -94,7 +94,7 @@ async def test_speech_to_chat_posts_audio_segment_to_channel_feed(
 
     deadline = asyncio.get_event_loop().time() + 90.0
     speech_message: dict[str, object] | None = None
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url="http://127.0.0.1:9005",
         timeout=10.0,
         headers={"Authorization": f"Bearer {sync_auth_token}"},
@@ -103,10 +103,10 @@ async def test_speech_to_chat_posts_audio_segment_to_channel_feed(
             try:
                 r = await long_http.get(f"/sync/api/v1/channels/{channel_id}/messages?limit=50")
             except (
-                httpx.RemoteProtocolError,
-                httpx.ReadError,
-                httpx.ConnectError,
-                httpx.ReadTimeout,
+                httpx2.RemoteProtocolError,
+                httpx2.ReadError,
+                httpx2.ConnectError,
+                httpx2.ReadTimeout,
             ):
                 await asyncio.sleep(2.0)
                 continue
@@ -159,7 +159,7 @@ async def test_speech_to_chat_posts_audio_segment_to_channel_feed(
     assert isinstance(message_id, str) and message_id != ""
     stt_deadline = asyncio.get_event_loop().time() + 60.0
     speech_text: dict[str, object] | None = None
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url="http://127.0.0.1:9005",
         timeout=10.0,
         headers={"Authorization": f"Bearer {sync_auth_token}"},

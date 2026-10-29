@@ -76,11 +76,19 @@ const CUSTOM_ATTR_FIELD_TYPES = Object.freeze([
     'object',
 ]);
 
-function _isObject(value: unknown): value is Record<string, any> {
+function _isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
 }
 
-function _readDraft(entity: Record<string, any> | null): Record<string, any> | null {
+function stringField(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function isCustomAttrType(value: unknown): value is typeof CUSTOM_ATTR_FIELD_TYPES[number] {
+    return typeof value === 'string' && CUSTOM_ATTR_FIELD_TYPES.some((item) => item === value);
+}
+
+function _readDraft(entity: Record<string, unknown> | null): Record<string, unknown> | null {
     if (entity === null) return null;
     const attrs = entity.attributes;
     if (!_isObject(attrs)) return null;
@@ -90,16 +98,16 @@ function _readDraft(entity: Record<string, any> | null): Record<string, any> | n
     return draft;
 }
 
-function _readApplyFailures(entity: Record<string, any> | null): Record<string, any>[] {
+function _readApplyFailures(entity: Record<string, unknown> | null): Record<string, unknown>[] {
     if (entity === null) return [];
     const attrs = entity.attributes;
     if (!_isObject(attrs)) return [];
     const raw = attrs.ai_analysis_apply_failures;
     if (!Array.isArray(raw)) return [];
-    return raw.filter((x): x is Record<string, any> => _isObject(x) && typeof x.draft_entity_id === 'string');
+    return raw.filter((x): x is Record<string, unknown> => _isObject(x) && typeof x.draft_entity_id === 'string');
 }
 
-function _analysisLastErrorText(entity: Record<string, any> | null): string {
+function _analysisLastErrorText(entity: Record<string, unknown> | null): string {
     if (entity === null) return '';
     const attrs = entity.attributes;
     if (!_isObject(attrs)) return '';
@@ -107,7 +115,7 @@ function _analysisLastErrorText(entity: Record<string, any> | null): string {
     return typeof msg === 'string' && msg.trim().length > 0 ? msg.trim() : '';
 }
 
-function _isApplied(entity: Record<string, any> | null): boolean {
+function _isApplied(entity: Record<string, unknown> | null): boolean {
     if (entity === null) return false;
     const attrs = entity.attributes;
     if (!_isObject(attrs)) return false;
@@ -152,15 +160,15 @@ export class CRMAiAnalysisModal extends PlatformModal {
     declare _pendingRemoveRelIds: string[];
     declare _attrsExpandedIds: string[];
     declare _saveError: string;
-    declare _pendingAttrPatches: Record<string, Record<string, any>>;
+    declare _pendingAttrPatches: Record<string, Record<string, unknown>>;
     declare _attrValidationErrorsById: Record<string, Record<string, string>>;
-    declare _attrAddUiById: Record<string, Record<string, any>>;
+    declare _attrAddUiById: Record<string, Record<string, unknown>>;
     declare _customAttrTypesById: Record<string, Record<string, string>>;
     declare _pendingKindPatches: Record<string, Record<string, string>>;
-    declare _kindUiById: Record<string, Record<string, any>>;
+    declare _kindUiById: Record<string, Record<string, unknown>>;
     declare _entityTypesNs: string;
-    declare _pendingAddEntities: Record<string, any>[];
-    declare _pendingAddRelationships: Record<string, any>[];
+    declare _pendingAddEntities: Record<string, unknown>[];
+    declare _pendingAddRelationships: Record<string, unknown>[];
     declare _newEntityType: string;
     declare _newEntitySubtype: string;
     declare _newEntityName: string;
@@ -878,12 +886,12 @@ export class CRMAiAnalysisModal extends PlatformModal {
         }
     }
 
-    _entity(): Record<string, any> | null {
+    _entity(): Record<string, unknown> | null {
         const item = this._entities.byId[this.noteId];
         return item === undefined ? null : item;
     }
 
-    _draft(): Record<string, any> | null {
+    _draft(): Record<string, unknown> | null {
         return _readDraft(this._entity());
     }
 
@@ -895,17 +903,17 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return this._pendingRemoveRelIds.indexOf(draftRelId) !== -1;
     }
 
-    _draftEntityRow(draft: Record<string, any> | null, draftEntityId: string): Record<string, any> | null {
+    _draftEntityRow(draft: Record<string, unknown> | null, draftEntityId: string): Record<string, unknown> | null {
         const draftEntities = draft && Array.isArray(draft.entities) ? draft.entities : [];
-        const byId = draftEntities.find((e: Record<string, any>) => e && e.draft_entity_id === draftEntityId);
+        const byId = draftEntities.find((e: Record<string, unknown>) => e && e.draft_entity_id === draftEntityId);
         if (_isObject(byId)) {
             return byId;
         }
-        const byName = draftEntities.find((e: Record<string, any>) => e && e.name === draftEntityId);
+        const byName = draftEntities.find((e: Record<string, unknown>) => e && e.name === draftEntityId);
         if (_isObject(byName)) {
             return byName;
         }
-        const pending = this._pendingAddEntities.find((e: Record<string, any>) => e && e.draft_entity_id === draftEntityId);
+        const pending = this._pendingAddEntities.find((e: Record<string, unknown>) => e && e.draft_entity_id === draftEntityId);
         return _isObject(pending) ? pending : null;
     }
 
@@ -967,7 +975,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._attrsExpandedIds = this._attrsExpandedIds.filter((id) => id !== draftEntityId);
     }
 
-    _onEntityRowRemoveClick(draftEntityId: string, draft: Record<string, any>) {
+    _onEntityRowRemoveClick(draftEntityId: string, draft: Record<string, unknown>) {
         const pendingIdx = this._pendingAddEntities.findIndex((e) => e && e.draft_entity_id === draftEntityId);
         if (pendingIdx !== -1) {
             this._pendingAddEntities = this._pendingAddEntities.filter((e) => e.draft_entity_id !== draftEntityId);
@@ -980,19 +988,19 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._toggleRemoveEntity(draftEntityId);
     }
 
-    _mergeNonTaskDraftEntities(draft: Record<string, any>) {
+    _mergeNonTaskDraftEntities(draft: Record<string, unknown>) {
         const draftEntities = draft && Array.isArray(draft.entities) ? draft.entities : [];
         const server = draftEntities.filter((e) => e.entity_type !== TASK_TYPE);
         const pendingNonTask = this._pendingAddEntities.filter((e) => _isObject(e) && e.entity_type !== TASK_TYPE);
         return [...server, ...pendingNonTask];
     }
 
-    _mergeDraftRelationships(draft: Record<string, any>) {
+    _mergeDraftRelationships(draft: Record<string, unknown>) {
         const server = Array.isArray(draft.relationships) ? draft.relationships : [];
         return [...server, ...this._pendingAddRelationships];
     }
 
-    _draftEndpointEnumValues(draft: Record<string, any>) {
+    _draftEndpointEnumValues(draft: Record<string, unknown>) {
         const values = [];
         const merged = [...(Array.isArray(draft.entities) ? draft.entities : []), ...this._pendingAddEntities];
         for (const e of merged) {
@@ -1056,7 +1064,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return null;
     }
 
-    _schemaTypeIdForDraftRow(item: Record<string, any>, draftEntityId: string) {
+    _schemaTypeIdForDraftRow(item: Record<string, unknown>, draftEntityId: string) {
         const subtype = this._effectiveEntitySubtypeFromItem(item, draftEntityId);
         if (subtype.length > 0) {
             return subtype;
@@ -1064,27 +1072,37 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return this._effectiveEntityTypeFromItem(item, draftEntityId);
     }
 
-    _schemaTypeForDraftRow(item: Record<string, any>, draftEntityId: string) {
+    _schemaTypeForDraftRow(item: Record<string, unknown>, draftEntityId: string) {
         return this._entityTypeRowByTypeId(this._schemaTypeIdForDraftRow(item, draftEntityId));
     }
 
-    _attributesSchema(type: unknown): { key: string; def: Record<string, any>; required: boolean; custom?: boolean; customType?: string }[] {
-        const required: Record<string, Record<string, any>> = _isObject(type) && _isObject(type.required_fields) ? type.required_fields : {};
-        const optional: Record<string, Record<string, any>> = _isObject(type) && _isObject(type.optional_fields) ? type.optional_fields : {};
-        const out: { key: string; def: Record<string, any>; required: boolean; custom?: boolean; customType?: string }[] = [];
-        for (const [key, def] of Object.entries(required)) {
-            out.push({ key, def, required: true });
-        }
-        for (const [key, def] of Object.entries(optional)) {
-            if (key in required) {
-                continue;
+    _attributesSchema(type: unknown): { key: string; def: Record<string, unknown>; required: boolean; custom?: boolean; customType?: string }[] {
+        const requiredRaw = _isObject(type) && _isObject(type.required_fields) ? type.required_fields : null;
+        const optionalRaw = _isObject(type) && _isObject(type.optional_fields) ? type.optional_fields : null;
+        const out: { key: string; def: Record<string, unknown>; required: boolean; custom?: boolean; customType?: string }[] = [];
+        if (requiredRaw !== null) {
+            for (const [key, def] of Object.entries(requiredRaw)) {
+                if (!_isObject(def)) {
+                    throw new Error('CRMAiAnalysisModal: attribute field definition required');
+                }
+                out.push({ key, def, required: true });
             }
-            out.push({ key, def, required: false });
+        }
+        if (optionalRaw !== null) {
+            for (const [key, def] of Object.entries(optionalRaw)) {
+                if (requiredRaw !== null && key in requiredRaw) {
+                    continue;
+                }
+                if (!_isObject(def)) {
+                    throw new Error('CRMAiAnalysisModal: attribute field definition required');
+                }
+                out.push({ key, def, required: false });
+            }
         }
         return out;
     }
 
-    _fieldType(def: Record<string, any>, key: string) {
+    _fieldType(def: Record<string, unknown>, key: string) {
         if (typeof key === 'string' && key === 'external_refs') {
             return 'external_refs';
         }
@@ -1114,14 +1132,14 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return 'string';
     }
 
-    _fieldLabel(key: string, def: Record<string, any>) {
+    _fieldLabel(key: string, def: Record<string, unknown>) {
         if (_isObject(def) && typeof def.label === 'string' && def.label.length > 0) {
             return def.label;
         }
         return key;
     }
 
-    _fieldConfig(def: Record<string, any>) {
+    _fieldConfig(def: Record<string, unknown>) {
         if (!_isObject(def)) {
             return {};
         }
@@ -1203,7 +1221,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         if (_isObject(ui)) {
             return {
                 key: typeof ui.key === 'string' ? ui.key : '',
-                type: CUSTOM_ATTR_FIELD_TYPES.includes(ui.type) ? ui.type : 'string',
+                type: isCustomAttrType(ui.type) ? ui.type : 'string',
                 value: ui.value === undefined ? '' : ui.value,
                 error: typeof ui.error === 'string' ? ui.error : '',
             };
@@ -1211,7 +1229,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return { key: '', type: 'string', value: '', error: '' };
     }
 
-    _patchAttrAddUi(draftEntityId: string, patch: Record<string, any>) {
+    _patchAttrAddUi(draftEntityId: string, patch: Record<string, unknown>) {
         const prev = this._attrAddUi(draftEntityId);
         this._attrAddUiById = {
             ...this._attrAddUiById,
@@ -1257,7 +1275,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._customAttrTypesById = next;
     }
 
-    _effectiveAttrsForDraftRow(draftEntityId: string, item: Record<string, any>): Record<string, unknown> {
+    _effectiveAttrsForDraftRow(draftEntityId: string, item: Record<string, unknown>): Record<string, unknown> {
         if (draftEntityId in this._pendingAttrPatches) {
             const pending = this._pendingAttrPatches[draftEntityId];
             return _isObject(pending) && !Array.isArray(pending) ? pending : {};
@@ -1272,11 +1290,12 @@ export class CRMAiAnalysisModal extends PlatformModal {
             || (typeof value === 'string' && value.trim().length === 0);
     }
 
-    _onAttrFieldChange(draftEntityId: string, item: Record<string, any>, key: string, event: CustomEvent) {
+    _onAttrFieldChange(draftEntityId: string, item: Record<string, unknown>, key: string, event: CustomEvent) {
         if (key === 'external_refs') {
             return;
         }
-        const value = event && (event as CustomEvent).detail ? ((event as CustomEvent).detail as Record<string, unknown>).value : null;
+        const detail = event.detail;
+        const value = _isObject(detail) ? detail.value : null;
         const base = this._effectiveAttrsForDraftRow(draftEntityId, item);
         const next = { ...base };
         if (this._shouldDropAttrValue(value)) {
@@ -1291,7 +1310,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._clearAttrValidationError(draftEntityId, key);
     }
 
-    _toggleAttrAdd(draftEntityId: string, item: Record<string, any>) {
+    _toggleAttrAdd(draftEntityId: string, item: Record<string, unknown>) {
         if (draftEntityId in this._attrAddUiById) {
             this._closeAttrAddUi(draftEntityId);
             return;
@@ -1306,14 +1325,14 @@ export class CRMAiAnalysisModal extends PlatformModal {
         };
     }
 
-    _onAttrAddKeyChange(draftEntityId: string, detail: Record<string, any>) {
+    _onAttrAddKeyChange(draftEntityId: string, detail: Record<string, unknown>) {
         const value = detail && detail.value !== undefined && detail.value !== null
             ? String(detail.value)
             : '';
         this._patchAttrAddUi(draftEntityId, { key: value, error: '' });
     }
 
-    _onAttrAddTypeChange(draftEntityId: string, detail: Record<string, any>) {
+    _onAttrAddTypeChange(draftEntityId: string, detail: Record<string, unknown>) {
         const value = detail && typeof detail.value === 'string' ? detail.value : 'string';
         const type = CUSTOM_ATTR_FIELD_TYPES.includes(value) ? value : 'string';
         this._patchAttrAddUi(draftEntityId, {
@@ -1323,12 +1342,12 @@ export class CRMAiAnalysisModal extends PlatformModal {
         });
     }
 
-    _onAttrAddValueChange(draftEntityId: string, detail: Record<string, any>) {
+    _onAttrAddValueChange(draftEntityId: string, detail: Record<string, unknown>) {
         const value = detail && detail.value !== undefined ? detail.value : null;
         this._patchAttrAddUi(draftEntityId, { value, error: '' });
     }
 
-    _onAddCustomAttr(draftEntityId: string, item: Record<string, any>) {
+    _onAddCustomAttr(draftEntityId: string, item: Record<string, unknown>) {
         const ui = this._attrAddUi(draftEntityId);
         const key = ui.key.trim();
         if (key.length === 0) {
@@ -1343,7 +1362,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
             });
             return;
         }
-        const type = CUSTOM_ATTR_FIELD_TYPES.includes(ui.type) ? ui.type : 'string';
+        const type = isCustomAttrType(ui.type) ? ui.type : 'string';
         const schema = this._attributesSchema(this._schemaTypeForDraftRow(item, draftEntityId));
         const schemaHasKey = schema.some((row) => row.key === key);
         const attrs = this._effectiveAttrsForDraftRow(draftEntityId, item);
@@ -1365,7 +1384,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._closeAttrAddUi(draftEntityId);
     }
 
-    _removeAttrField(draftEntityId: string, item: Record<string, any>, key: string) {
+    _removeAttrField(draftEntityId: string, item: Record<string, unknown>, key: string) {
         if (key === 'external_refs') {
             return;
         }
@@ -1461,7 +1480,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return false;
     }
 
-    _validateDraftAttributeRows(draft: Record<string, any>) {
+    _validateDraftAttributeRows(draft: Record<string, unknown>) {
         const server = Array.isArray(draft.entities) ? draft.entities : [];
         const rows = [...server, ...this._pendingAddEntities];
         const nextErrors: Record<string, Record<string, string>> = {};
@@ -1514,11 +1533,11 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return false;
     }
 
-    _onNewEntityTypeChange(detail: Record<string, any>): void {
+    _onNewEntityTypeChange(detail: Record<string, unknown>): void {
         const raw = detail && typeof detail.value === 'string' ? detail.value : '';
-        const subOpts = this._subtypeEnumOptions(raw).filter((o: Record<string, any>) => o.value !== '');
+        const subOpts = this._subtypeEnumOptions(raw).filter((o: Record<string, unknown>) => o.value !== '');
         let nextSub = typeof this._newEntitySubtype === 'string' ? this._newEntitySubtype : '';
-        if (nextSub.length > 0 && subOpts.every((o: Record<string, any>) => o.value !== nextSub)) {
+        if (nextSub.length > 0 && subOpts.every((o: Record<string, unknown>) => o.value !== nextSub)) {
             nextSub = '';
         }
         this._newEntityType = raw;
@@ -1533,12 +1552,12 @@ export class CRMAiAnalysisModal extends PlatformModal {
             this.toast('ai_analysis_modal.err_add_entity_required', { type: 'error' });
             return;
         }
-        const row: Record<string, any> = {
+        const row: Record<string, unknown> = {
             draft_entity_id: this._newDraftUuid(),
             entity_type: entityType,
             name,
             attributes: {},
-        } as Record<string, any>;
+        };
         if (sub.length > 0) {
             row.entity_subtype = sub;
         }
@@ -1549,7 +1568,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._showDraftEntityComposer = false;
     }
 
-    _onAddDraftRelationship(draft: Record<string, any>): void {
+    _onAddDraftRelationship(draft: Record<string, unknown>): void {
         const source = typeof this._newRelSource === 'string' ? this._newRelSource.trim() : '';
         const target = typeof this._newRelTarget === 'string' ? this._newRelTarget.trim() : '';
         const relType = typeof this._newRelType === 'string' ? this._newRelType.trim() : '';
@@ -1568,7 +1587,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
             this.toast('ai_analysis_modal.err_add_rel_bad_endpoint', { type: 'error' });
             return;
         }
-        const row: Record<string, any> = {
+        const row: Record<string, unknown> = {
             draft_relationship_id: this._newDraftUuid(),
             source_draft_entity_id: source,
             target_draft_entity_id: target,
@@ -1586,14 +1605,14 @@ export class CRMAiAnalysisModal extends PlatformModal {
     _onRelRowRemoveClick(draftRelId: string): void {
         if (this._isPendingLocalRelationship(draftRelId)) {
             this._pendingAddRelationships = this._pendingAddRelationships.filter(
-                (r: Record<string, any>) => r.draft_relationship_id !== draftRelId,
+                (r: Record<string, unknown>) => r.draft_relationship_id !== draftRelId,
             );
             return;
         }
         this._toggleRemoveRel(draftRelId);
     }
 
-    _effectiveEntityTypeFromItem(item: Record<string, any>, draftEntityId: string) {
+    _effectiveEntityTypeFromItem(item: Record<string, unknown>, draftEntityId: string) {
         const k = this._pendingKindPatches[draftEntityId];
         if (k && k.entity_type !== undefined) {
             return typeof k.entity_type === 'string' ? k.entity_type : '';
@@ -1601,7 +1620,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return typeof item.entity_type === 'string' ? item.entity_type : '';
     }
 
-    _effectiveEntitySubtypeFromItem(item: Record<string, any>, draftEntityId: string) {
+    _effectiveEntitySubtypeFromItem(item: Record<string, unknown>, draftEntityId: string) {
         const k = this._pendingKindPatches[draftEntityId];
         if (k && k.entity_subtype !== undefined) {
             const s = k.entity_subtype;
@@ -1613,7 +1632,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return '';
     }
 
-    _entitySubtitleDraft(item: Record<string, any>, draftEntityId: string) {
+    _entitySubtitleDraft(item: Record<string, unknown>, draftEntityId: string) {
         const parts = [];
         const et = this._effectiveEntityTypeFromItem(item, draftEntityId);
         const es = this._effectiveEntitySubtypeFromItem(item, draftEntityId);
@@ -1671,7 +1690,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return opts;
     }
 
-    _ensureKindUi(draftEntityId: string, item: Record<string, any>) {
+    _ensureKindUi(draftEntityId: string, item: Record<string, unknown>) {
         if (draftEntityId in this._kindUiById) {
             return;
         }
@@ -1690,7 +1709,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._syncPendingKindFromUi(draftEntityId, item);
     }
 
-    _syncPendingKindFromUi(draftEntityId: string, item: Record<string, any>) {
+    _syncPendingKindFromUi(draftEntityId: string, item: Record<string, unknown>) {
         const ui = this._kindUiById[draftEntityId];
         if (!ui || !_isObject(ui)) {
             return;
@@ -1720,13 +1739,13 @@ export class CRMAiAnalysisModal extends PlatformModal {
         };
     }
 
-    _onDraftEntityTypeChange(draftEntityId: string, item: Record<string, any>, detail: Record<string, any>) {
+    _onDraftEntityTypeChange(draftEntityId: string, item: Record<string, unknown>, detail: Record<string, unknown>) {
         const raw = detail && typeof detail.value === 'string' ? detail.value : '';
         const prev = this._kindUiById[draftEntityId];
         const prevSub = prev && typeof prev.entity_subtype === 'string' ? prev.entity_subtype : '';
-        const subOpts = this._subtypeEnumOptions(raw).filter((o: Record<string, any>) => o.value !== '');
+        const subOpts = this._subtypeEnumOptions(raw).filter((o: Record<string, unknown>) => o.value !== '');
         let nextSub = prevSub;
-        if (nextSub.length > 0 && subOpts.every((o: Record<string, any>) => o.value !== nextSub)) {
+        if (nextSub.length > 0 && subOpts.every((o: Record<string, unknown>) => o.value !== nextSub)) {
             nextSub = '';
         }
         this._kindUiById = {
@@ -1737,7 +1756,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._syncPendingKindFromUi(draftEntityId, item);
     }
 
-    _onDraftEntitySubtypeChange(draftEntityId: string, item: Record<string, any>, detail: Record<string, any>) {
+    _onDraftEntitySubtypeChange(draftEntityId: string, item: Record<string, unknown>, detail: Record<string, unknown>) {
         const raw = detail && typeof detail.value === 'string' ? detail.value : '';
         const prev = this._kindUiById[draftEntityId];
         const prevType = prev && typeof prev.entity_type === 'string' ? prev.entity_type : '';
@@ -1765,7 +1784,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         }
     }
 
-    _toggleAttrs(draftEntityId: string, draft: Record<string, any>) {
+    _toggleAttrs(draftEntityId: string, draft: Record<string, unknown>) {
         const idx = this._attrsExpandedIds.indexOf(draftEntityId);
         if (idx !== -1) {
             this._attrsExpandedIds = this._attrsExpandedIds.filter((id) => id !== draftEntityId);
@@ -1796,7 +1815,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
             }
             const entityType = typeof e.entity_type === 'string' ? e.entity_type : '';
             const name = typeof e.name === 'string' ? e.name : '';
-            const row: Record<string, any> = {
+            const row: Record<string, unknown> = {
                 draft_entity_id: e.draft_entity_id,
                 entity_type: entityType,
                 name,
@@ -1836,9 +1855,9 @@ export class CRMAiAnalysisModal extends PlatformModal {
             ...Object.keys(this._pendingKindPatches),
             ...Object.keys(this._pendingNamePatches),
         ]);
-        const patch_entities: Record<string, any>[] = [];
+        const patch_entities: Record<string, unknown>[] = [];
         for (const draft_entity_id of ids) {
-            const row: Record<string, any> = { draft_entity_id };
+            const row: Record<string, unknown> = { draft_entity_id };
             if (draft_entity_id in this._pendingAttrPatches) {
                 row.attributes = this._pendingAttrPatches[draft_entity_id];
             }
@@ -1873,7 +1892,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return payload;
     }
 
-    _failureMessageForDraft(entity: Record<string, any>, draftEntityId: string) {
+    _failureMessageForDraft(entity: Record<string, unknown>, draftEntityId: string) {
         const failures = _readApplyFailures(entity);
         const hit = failures.find((x) => x.draft_entity_id === draftEntityId);
         if (!hit || typeof hit.message !== 'string') {
@@ -2008,7 +2027,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _renderApplyErrorBanner(entity: Record<string, any>) {
+    _renderApplyErrorBanner(entity: Record<string, unknown>) {
         const summary = _analysisLastErrorText(entity);
         const failures = _readApplyFailures(entity);
         if (!summary && failures.length === 0) {
@@ -2072,7 +2091,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _renderEmptyState(entity: Record<string, any>) {
+    _renderEmptyState(entity: Record<string, unknown>) {
         const applied = _isApplied(entity);
         const analyzing = this._analyzeOp.busy;
         if (analyzing) {
@@ -2105,14 +2124,14 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _effectiveTaskTitle(draftId: string, item: Record<string, any>) {
+    _effectiveTaskTitle(draftId: string, item: Record<string, unknown>) {
         if (draftId in this._pendingNamePatches) {
             return this._pendingNamePatches[draftId];
         }
         return typeof item.name === 'string' ? item.name : '';
     }
 
-    _isDraftTaskCompleted(draftId: string, draft: Record<string, any>) {
+    _isDraftTaskCompleted(draftId: string, draft: Record<string, unknown>) {
         const item = this._draftEntityRow(draft, draftId);
         if (!_isObject(item)) {
             return false;
@@ -2127,7 +2146,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return serverAttrs[DRAFT_TASK_COMPLETED_ATTR] === true;
     }
 
-    _toggleDraftTaskCompleted(draftId: string, draft: Record<string, any>) {
+    _toggleDraftTaskCompleted(draftId: string, draft: Record<string, unknown>) {
         const nextDone = !this._isDraftTaskCompleted(draftId, draft);
         const overlay = draftId in this._pendingAttrPatches
             ? { ...this._pendingAttrPatches[draftId] }
@@ -2139,7 +2158,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         };
     }
 
-    _onTaskTitleBlur(draftId: string, draft: Record<string, any>) {
+    _onTaskTitleBlur(draftId: string, draft: Record<string, unknown>) {
         const item = this._draftEntityRow(draft, draftId);
         if (!_isObject(item)) {
             throw new Error('CRMAiAnalysisModal: task row not found');
@@ -2162,14 +2181,13 @@ export class CRMAiAnalysisModal extends PlatformModal {
     }
 
     _onTaskTitleInput(draftId: string, event: Event) {
-        const t = event && event.target;
-        const v = t && (t as HTMLInputElement).value;
-        if (typeof v !== 'string') {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
             throw new Error('CRMAiAnalysisModal: task title input value required');
         }
         this._pendingNamePatches = {
             ...this._pendingNamePatches,
-            [draftId]: v,
+            [draftId]: target.value,
         };
     }
 
@@ -2182,7 +2200,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         if (!title.length) {
             return;
         }
-        const row: Record<string, any> = {
+        const row: Record<string, unknown> = {
             draft_entity_id: this._newDraftUuid(),
             entity_type: TASK_TYPE,
             name: title,
@@ -2192,12 +2210,12 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._newTaskTitle = '';
     }
 
-    _renderSuggestedTasksBlock(entity: Record<string, any>, draft: Record<string, any>, tasks: Record<string, any>[]) {
+    _renderSuggestedTasksBlock(entity: Record<string, unknown>, draft: Record<string, unknown>, tasks: Record<string, unknown>[]) {
         const busy = this._draftSaveOp.busy === true;
         return html`
             ${tasks.length === 0
                 ? html`<div class="hint" style="color: var(--text-tertiary); font-size: var(--text-sm);">${this.t('ai_analysis_modal.no_tasks')}</div>`
-                : html`<div class="tasks-quick-list">${tasks.map((t: Record<string, any>) => this._renderTaskQuickRow(t, entity, draft, busy))}</div>`}
+                : html`<div class="tasks-quick-list">${tasks.map((t: Record<string, unknown>) => this._renderTaskQuickRow(t, entity, draft, busy))}</div>`}
             <div class="tasks-quick-add-wrap">
                 <platform-icon name="sparkle" size="18"></platform-icon>
                 <input
@@ -2208,8 +2226,11 @@ export class CRMAiAnalysisModal extends PlatformModal {
                     placeholder=${this.t('ai_analysis_modal.tasks_quick_add_placeholder')}
                     ?disabled=${busy}
                     @input=${(e: Event) => {
-                        const v = e.target && (e.target as HTMLInputElement).value;
-                        this._newTaskTitle = typeof v === 'string' ? v : '';
+                        const target = e.target;
+                        if (!(target instanceof HTMLInputElement)) {
+                            throw new Error('CRMAiAnalysisModal: task title input value required');
+                        }
+                        this._newTaskTitle = target.value;
                     }}
                     @keydown=${(e: KeyboardEvent) => this._onQuickAddTaskKeydown(e)}
                 />
@@ -2217,10 +2238,10 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _renderTaskQuickRow(item: Record<string, any>, entity: Record<string, any>, draft: Record<string, any>, busy: boolean) {
+    _renderTaskQuickRow(item: Record<string, unknown>, entity: Record<string, unknown>, draft: Record<string, unknown>, busy: boolean) {
         const draftId = typeof item.draft_entity_id === 'string' && item.draft_entity_id.length > 0
             ? item.draft_entity_id
-            : item.name;
+            : stringField(item.name);
         const removed = this._isPendingRemoveEntity(draftId);
         const done = this._isDraftTaskCompleted(draftId, draft);
         const applyErr = entity !== null ? this._failureMessageForDraft(entity, draftId) : '';
@@ -2244,7 +2265,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                         class="task-title-input"
                         .value=${titleVal}
                         ?disabled=${busy || removed}
-                        @input=${(e: any) => this._onTaskTitleInput(draftId, e)}
+                        @input=${(e: Event) => this._onTaskTitleInput(draftId, e)}
                         @blur=${() => this._onTaskTitleBlur(draftId, draft)}
                     />
                     ${applyErr.length > 0
@@ -2267,7 +2288,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _renderLeftColumn(entity: Record<string, any>, draft: Record<string, any>) {
+    _renderLeftColumn(entity: Record<string, unknown>, draft: Record<string, unknown>) {
         const summary = this._summaryText(entity, draft);
         const mergedEntities = [...(Array.isArray(draft.entities) ? draft.entities : []), ...this._pendingAddEntities];
         const tasks = mergedEntities.filter((e) => _isObject(e) && e.entity_type === TASK_TYPE);
@@ -2291,7 +2312,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _renderRightColumn(entity: Record<string, any>, draft: Record<string, any>) {
+    _renderRightColumn(entity: Record<string, unknown>, draft: Record<string, unknown>) {
         const entities = this._mergeNonTaskDraftEntities(draft);
         const relationships = this._mergeDraftRelationships(draft);
         const typeOpts = this._allTypeEnumOptions();
@@ -2334,7 +2355,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                     .config=${{ values: typeOpts }}
                                     pill-density="compact"
                                     ?disabled=${typesBusy || this._draftSaveOp.busy}
-                                    @change=${(e: any) => this._onNewEntityTypeChange(e.detail)}
+                                    @change=${(e: CustomEvent) => this._onNewEntityTypeChange(e.detail)}
                                 ></platform-field>
                                 ${showNewSubtypeField
                                     ? html`
@@ -2346,7 +2367,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                             .config=${{ values: newSubOpts }}
                                             pill-density="compact"
                                             ?disabled=${typesBusy || this._draftSaveOp.busy}
-                                            @change=${(e: any) => {
+                                            @change=${(e: CustomEvent) => {
                                                 const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                                                 this._newEntitySubtype = v;
                                             }}
@@ -2360,7 +2381,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                     placeholder=${this.t('ai_analysis_modal.add_entity_name_placeholder')}
                                     .value=${this._newEntityName}
                                     ?disabled=${this._draftSaveOp.busy}
-                                    @change=${(e: any) => {
+                                    @change=${(e: CustomEvent) => {
                                         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                                         this._newEntityName = v;
                                     }}
@@ -2410,7 +2431,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                     .config=${{ values: this._draftEndpointEnumValues(draft) }}
                                     pill-density="compact"
                                     ?disabled=${relTypesBusy || this._draftSaveOp.busy}
-                                    @change=${(e: any) => {
+                                    @change=${(e: CustomEvent) => {
                                         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                                         this._newRelSource = v;
                                     }}
@@ -2423,7 +2444,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                     .config=${{ values: this._draftEndpointEnumValues(draft) }}
                                     pill-density="compact"
                                     ?disabled=${relTypesBusy || this._draftSaveOp.busy}
-                                    @change=${(e: any) => {
+                                    @change=${(e: CustomEvent) => {
                                         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                                         this._newRelTarget = v;
                                     }}
@@ -2436,7 +2457,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                     .config=${relTypeCfg}
                                     pill-density="compact"
                                     ?disabled=${relTypesBusy || this._draftSaveOp.busy}
-                                    @change=${(e: any) => {
+                                    @change=${(e: CustomEvent) => {
                                         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                                         this._newRelType = v;
                                     }}
@@ -2459,9 +2480,10 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _summaryText(entity: Record<string, any>, draft: Record<string, any>) {
-        if (draft && draft.note && typeof draft.note.description === 'string' && draft.note.description.length > 0) {
-            return draft.note.description;
+    _summaryText(entity: Record<string, unknown>, draft: Record<string, unknown>) {
+        const note = draft.note;
+        if (_isObject(note) && typeof note.description === 'string' && note.description.length > 0) {
+            return note.description;
         }
         if (typeof entity.description === 'string' && entity.description.length > 0) {
             return entity.description;
@@ -2469,7 +2491,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return this.t('ai_analysis_modal.summary_empty');
     }
 
-    _renderAttrAddComposer(draftId: string, item: Record<string, any>) {
+    _renderAttrAddComposer(draftId: string, item: Record<string, unknown>) {
         if (!(draftId in this._attrAddUiById)) {
             return nothing;
         }
@@ -2487,7 +2509,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                         .value=${ui.key}
                         pill-density="compact"
                         ?disabled=${this._draftSaveOp.busy}
-                        @change=${(e: any) => this._onAttrAddKeyChange(draftId, e.detail)}
+                        @change=${(e: CustomEvent) => this._onAttrAddKeyChange(draftId, e.detail)}
                     ></platform-field>
                     <platform-field
                         type="enum"
@@ -2497,7 +2519,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                         .config=${this._attrFieldTypeEnumConfig()}
                         pill-density="compact"
                         ?disabled=${this._draftSaveOp.busy}
-                        @change=${(e: any) => this._onAttrAddTypeChange(draftId, e.detail)}
+                        @change=${(e: CustomEvent) => this._onAttrAddTypeChange(draftId, e.detail)}
                     ></platform-field>
                 </div>
                 <platform-field
@@ -2508,7 +2530,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                     .config=${this._customAttrConfig(ui.type)}
                     pill-density="compact"
                     ?disabled=${this._draftSaveOp.busy}
-                    @change=${(e: any) => this._onAttrAddValueChange(draftId, e.detail)}
+                    @change=${(e: CustomEvent) => this._onAttrAddValueChange(draftId, e.detail)}
                 ></platform-field>
                 ${ui.error.length > 0
                     ? html`<p class="attr-field-error">${ui.error}</p>`
@@ -2535,7 +2557,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _renderDraftAttributeFields(draftId: string, item: Record<string, any>) {
+    _renderDraftAttributeFields(draftId: string, item: Record<string, unknown>) {
         const type = this._schemaTypeForDraftRow(item, draftId);
         const schema = this._attributesSchema(type);
         const attrs = this._effectiveAttrsForDraftRow(draftId, item);
@@ -2642,10 +2664,10 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _renderEntityRow(item: Record<string, any>, entity: Record<string, any>, draft: Record<string, any>) {
+    _renderEntityRow(item: Record<string, unknown>, entity: Record<string, unknown>, draft: Record<string, unknown>) {
         const draftId = typeof item.draft_entity_id === 'string' && item.draft_entity_id.length > 0
             ? item.draft_entity_id
-            : item.name;
+            : stringField(item.name);
         const removed = this._isPendingRemoveEntity(draftId);
         const expanded = this._attrsExpandedIds.indexOf(draftId) !== -1;
         const name = typeof item.name === 'string' && item.name.length > 0
@@ -2742,7 +2764,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                     .config=${{ values: typeOpts }}
                                     pill-density="compact"
                                     ?disabled=${typesBusy || this._draftSaveOp.busy}
-                                    @change=${(e: any) => this._onDraftEntityTypeChange(draftId, item, e.detail)}
+                                    @change=${(e: CustomEvent) => this._onDraftEntityTypeChange(draftId, item, e.detail)}
                                 ></platform-field>
                                 ${showSubtypeField
                                     ? html`
@@ -2754,7 +2776,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                             .config=${{ values: subOpts }}
                                             pill-density="compact"
                                             ?disabled=${typesBusy || this._draftSaveOp.busy}
-                                            @change=${(e: any) => this._onDraftEntitySubtypeChange(draftId, item, e.detail)}
+                                            @change=${(e: CustomEvent) => this._onDraftEntitySubtypeChange(draftId, item, e.detail)}
                                         ></platform-field>
                                     `
                                     : nothing}
@@ -2767,11 +2789,11 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _renderRelRow(rel: Record<string, any>, draft: Record<string, any>) {
-        const draftId = rel.draft_relationship_id;
+    _renderRelRow(rel: Record<string, unknown>, draft: Record<string, unknown>) {
+        const draftId = stringField(rel.draft_relationship_id);
         const removed = this._isPendingRemoveRel(draftId);
-        const sourceName = this._draftEntityName(draft, rel.source_draft_entity_id);
-        const targetName = this._draftEntityName(draft, rel.target_draft_entity_id);
+        const sourceName = this._draftEntityName(draft, stringField(rel.source_draft_entity_id));
+        const targetName = this._draftEntityName(draft, stringField(rel.target_draft_entity_id));
         const relType = typeof rel.relationship_type === 'string' && rel.relationship_type.length > 0
             ? rel.relationship_type
             : this.t('ai_analysis_modal.relationship_fallback');
@@ -2799,7 +2821,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         `;
     }
 
-    _dedupBadge(item: Record<string, any>) {
+    _dedupBadge(item: Record<string, unknown>) {
         if (item.dedup_action === 'merge') {
             const score = typeof item.dedup_confidence === 'number' && Number.isFinite(item.dedup_confidence)
                 ? Math.round(item.dedup_confidence * 100)
@@ -2824,7 +2846,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return 'circle';
     }
 
-    _draftEntityName(draft: Record<string, any>, draftEntityId: string) {
+    _draftEntityName(draft: Record<string, unknown>, draftEntityId: string) {
         if (!_isObject(draft) || typeof draftEntityId !== 'string') {
             return this.t('ai_analysis_modal.existing_entity_fallback');
         }

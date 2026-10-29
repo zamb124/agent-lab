@@ -296,7 +296,7 @@ class TestIncomingCycle:
         )
         nos = [layer.entry_no for layer in await _layers(env)]
         assert nos == list(range(1, len(nos) + 1))
-        last = await StockValueLayer.last_for_product(
+        last = await StockValueLayer.last_for_product_by_entry_no_desc(
             env.company_id, env.product.product_id
         )
         assert last is not None

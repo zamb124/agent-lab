@@ -8,7 +8,7 @@ import re
 import time
 from typing import Literal
 
-import httpx
+import httpx2
 import trafilatura
 from bs4 import BeautifulSoup
 
@@ -105,7 +105,7 @@ class CrawlFetchService:
 
 
 def _http_status_from_error(exc: BaseException) -> int | None:
-    if isinstance(exc, httpx.HTTPStatusError):
+    if isinstance(exc, httpx2.HTTPStatusError):
         return exc.response.status_code
     return None
 

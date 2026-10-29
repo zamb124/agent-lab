@@ -11,7 +11,7 @@ E2E тесты для Push Notifications API.
     pytest tests/e2e/push/ -v -m e2e
 """
 
-import httpx
+import httpx2
 import pytest
 
 # Базовый URL frontend сервиса
@@ -31,7 +31,7 @@ class TestPushAPIEndpoints:
 
         Реальный запрос к сервису.
         """
-        with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
+        with httpx2.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
             response = client.get("/frontend/api/push/vapid-public-key")
 
             assert response.status_code == 200, f"Response: {response.text}"
@@ -51,7 +51,7 @@ class TestPushAPIEndpoints:
 
         Должен вернуть 401.
         """
-        with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
+        with httpx2.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
             response = client.post(
                 "/frontend/api/push/subscribe",
                 json=push_subscription_data
@@ -73,7 +73,7 @@ class TestPushAPIEndpoints:
             "platform": push_subscription_data["platform"],
         }
 
-        with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
+        with httpx2.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
             response = client.post(
                 "/frontend/api/push/subscribe",
                 json=subscription_data,
@@ -117,7 +117,7 @@ class TestPushAPIEndpoints:
             "platform": push_subscription_data["platform"],
         }
 
-        with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
+        with httpx2.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
             headers = {
                 "Authorization": f"Bearer {auth_token_system}",
                 "User-Agent": push_subscription_data["user_agent"],
@@ -166,7 +166,7 @@ class TestPushAPIEndpoints:
             {"endpoint": f"https://fcm.googleapis.com/android-{unique_id}", "platform": "android"},
         ]
 
-        with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
+        with httpx2.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
             headers = {"Authorization": f"Bearer {auth_token_system}"}
             subscription_ids = []
 
@@ -202,7 +202,7 @@ class TestPushAPIValidation:
     @pytest.mark.e2e
     def test_subscribe_missing_keys(self, frontend_service, auth_token_system):
         """Отсутствующие keys должны вернуть 422."""
-        with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
+        with httpx2.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
             response = client.post(
                 "/frontend/api/push/subscribe",
                 json={
@@ -219,7 +219,7 @@ class TestPushAPIValidation:
         """Регистрация нативного APNs-токена (endpoint apns:<hex>)."""
         token = "a" * 64
         endpoint = f"apns:{token}"
-        with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
+        with httpx2.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
             headers = {"Authorization": f"Bearer {auth_token_system}"}
             response = client.post(
                 "/frontend/api/push/subscribe",

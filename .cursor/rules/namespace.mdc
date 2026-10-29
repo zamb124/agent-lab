@@ -11,7 +11,7 @@ alwaysApply: false
 
 ## Модель
 
-- `Namespace` — таблица `namespaces`, алиас `shared`; первичный ключ `namespace_id` = `{company_id}:{name}`, уникальность `(company_id, name)`; адрес внутри компании — `name`. `partial_company_rows_by_namespace_id(*, limit) -> list[Namespace]` — строки с `company_id IS NOT NULL`, только `name`, `company_id`, `kind`, `owner_user_id`, `ORDER BY namespace_id`. `limit is None` не ограничивает. Сырой SQL обходит scope менеджера.
+- `Namespace` — таблица `namespaces`, алиас `shared`; первичный ключ `namespace_id` = `{company_id}:{name}`, уникальность `(company_id, name)`; адрес внутри компании — `name`. `partial_company_rows_by_namespace_id_asc(*, limit) -> list[Namespace]` — строки с `company_id IS NOT NULL`, только `name`, `company_id`, `kind`, `owner_user_id`, `ORDER BY namespace_id ASC`. `limit is None` не ограничивает. `Namespace.list_for_kinds_by_name_asc(kinds, *, limit, offset) -> list[Namespace]` — окно пространств этих `kind`, `ORDER BY name ASC`. Сырой SQL обходит scope менеджера.
 - Поля домена: `kind`, `owner_user_id` (обязателен при `kind=personal`, иначе `null`), `is_default`, `sync_settings`, `crm_settings`.
 - `kind`:
 
@@ -46,5 +46,5 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_identity_model_files.py` (`make lint`) — одна таблица идентичности на файл `core/models/identity_models/`.
-- `scripts/check_authz_dual_write.py`, `scripts/check_authz_backfill_completeness.py` (`make lint`) — dual-write и backfill `platform_namespace` (`core/namespace/authz/`).
+- `scripts/gates/backend/model_files.py` (`make lint`) — одна таблица идентичности на файл `core/models/identity_models/`.
+- `scripts/gates/authz/dual_write.py`, `scripts/gates/authz/backfill_completeness.py` (`make lint`) — dual-write и backfill `platform_namespace` (`core/namespace/authz/`).

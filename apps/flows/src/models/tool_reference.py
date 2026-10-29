@@ -283,7 +283,8 @@ class ToolReference(CompanyScopedModel):
         _ = is_create, update_fields
 
     @classmethod
-    async def list_in_tool_id_order(cls, *, limit: int, offset: int = 0) -> list[Self]:
+    async def list_by_tool_id_asc(cls, *, limit: int, offset: int = 0) -> list[Self]:
+        """Окно tools, ORDER BY tool_id ASC. limit < 1 и offset < 0 — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if offset < 0:
@@ -291,7 +292,8 @@ class ToolReference(CompanyScopedModel):
         return await cls.objects.order_by("tool_id").limit(limit).offset(offset).all()
 
     @classmethod
-    async def by_tool_ids(cls, tool_ids: list[str]) -> dict[str, Self]:
+    async def found_unique_by_tool_ids(cls, tool_ids: list[str]) -> dict[str, Self]:
+        """Найденные tools компании по tool_id. Пустой список — {}. Пустой tool_id — ValueError с текстом tool_id is required. Две строки с одним tool_id — RuntimeError. Отсутствующие id не входят. Порядка нет."""
         if len(tool_ids) == 0:
             return {}
         for tool_id in tool_ids:
@@ -322,13 +324,13 @@ class ToolReference(CompanyScopedModel):
         return query.order_by("tool_id")
 
     @classmethod
-    async def list_tool_index(
+    async def list_tool_index_items_by_tool_id_asc(
         cls,
         *,
         mcp: ToolIndexMcpFilter = "all",
         exclude_tool_ids: Collection[str] | None = None,
     ) -> list[ToolListIndexItem]:
-        """Индекс tools, ORDER BY tool_id. Предела нет. mcp=all и пустой exclude_tool_ids не фильтруют."""
+        """Элементы индекса tools, ORDER BY tool_id ASC. Предела нет. mcp=all и пустой exclude_tool_ids не фильтруют."""
         rows = await cls._indexed(mcp=mcp, exclude_tool_ids=exclude_tool_ids).all()
         return [
             ToolListIndexItem(
@@ -404,7 +406,6 @@ class ToolCreateRequest(StrictBaseModel):
     parameters_schema: JsonObject
     tags: list[str] = Field(default_factory=list)
     react_role: str | None = None
-    agent_toolkit_ids: list[str] = Field(default_factory=list)
 
 
 class ToolResponse(StrictBaseModel):
@@ -429,7 +430,6 @@ class ToolResponse(StrictBaseModel):
     mcp_schema_hash: str | None = None
     mcp_schema_version: str | None = None
     mcp_output_schema: JsonObject | None = None
-    agent_toolkit_ids: list[str] = Field(default_factory=list)
 
 
 class ToolDeletedResponse(StrictBaseModel):

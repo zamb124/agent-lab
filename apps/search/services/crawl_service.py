@@ -42,7 +42,7 @@ class SearchCrawlService:
         return await CrawlProfile.patch_with_index(crawl_profile_id, body)
 
     async def list_profiles(self, *, limit: int, offset: int) -> OffsetPage[CrawlProfileWithIndex]:
-        return await CrawlProfile.with_index_page_by_crawl_profile_id(limit=limit, offset=offset)
+        return await CrawlProfile.with_index_page_by_crawl_profile_id_asc(limit=limit, offset=offset)
 
     async def create_domain(
         self,

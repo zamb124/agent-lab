@@ -27,7 +27,7 @@ mobile/android/
         MainActivity.java
         HumanitecBridgeWebChromeClient.java            # перехват window.open, аналог HumanitecWebViewNewWindowFix.swift
       res/
-        mipmap-*/ic_launcher*.png                      # генерируется scripts/generate_linnex_pwa_icons.py
+        mipmap-*/ic_launcher*.png                      # генерируется scripts/generate/pwa_icons.py
         mipmap-anydpi-v26/ic_launcher*.xml             # adaptive icon
         values/ic_launcher_background.xml              # #1A1A2E
         ...
@@ -97,7 +97,7 @@ Wildcard покрывает tenant slug-поддомены каждой комп
 
 ## Иконки и Splash
 
-Иконки (mipmap всех плотностей + adaptive icon с фоном `#1A1A2E`) генерирует [`scripts/generate_linnex_pwa_icons.py`](../../scripts/generate_linnex_pwa_icons.py). Splash — стандартный механизм Capacitor (`@capacitor/splash-screen`, конфиг в [`capacitor.config.json`](../capacitor.config.json)).
+Иконки (mipmap всех плотностей + adaptive icon с фоном `#1A1A2E`) генерирует [`scripts/generate/pwa_icons.py`](../../scripts/generate/pwa_icons.py). Splash — стандартный механизм Capacitor (`@capacitor/splash-screen`, конфиг в [`capacitor.config.json`](../capacitor.config.json)).
 
 ## Обновление только веба
 

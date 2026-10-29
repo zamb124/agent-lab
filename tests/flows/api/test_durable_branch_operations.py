@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.flows.src.durable_execution import (
     NodeFailedPayload,

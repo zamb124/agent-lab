@@ -27,7 +27,7 @@ from apps.wiki.content.schema import (
     WikiMentionKind,
     WikiSchemaError,
     WikiTableAlign,
-    normalize_document,
+    normalize_document_in_serialization_order,
 )
 
 MENTION_LINK_SCHEME: Final[dict[WikiMentionKind, str]] = {
@@ -320,7 +320,7 @@ def document_to_markdown(document: ProseMirrorNode) -> str:
     определение, встреченное посреди текста, как часть предыдущего блока, и
     документ с определением в середине после экспорта стал бы невалидным.
     """
-    normalized = normalize_document(document)
+    normalized = normalize_document_in_serialization_order(document)
     if normalized.type != "doc":
         raise WikiSchemaError(f"Expected doc, got {normalized.type}")
     body = [
@@ -334,7 +334,7 @@ def document_to_markdown(document: ProseMirrorNode) -> str:
 
 def document_to_plain_text(document: ProseMirrorNode) -> str:
     """Текст без разметки — для сниппетов поиска и полнотекстового вектора."""
-    normalized = normalize_document(document)
+    normalized = normalize_document_in_serialization_order(document)
     chunks: list[str] = []
 
     def walk(node: ProseMirrorNode) -> None:

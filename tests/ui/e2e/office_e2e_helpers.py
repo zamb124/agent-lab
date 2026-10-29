@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import httpx
+import httpx2
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page, expect
 
@@ -394,8 +394,8 @@ def office_e2e_namespace_headers(headers: dict[str, str], namespace: str) -> dic
     return {**headers, "X-Platform-Namespace": namespace}
 
 
-def _office_client(origin: str, auth_token: str, *, namespace: str) -> httpx.AsyncClient:
-    return httpx.AsyncClient(
+def _office_client(origin: str, auth_token: str, *, namespace: str) -> httpx2.AsyncClient:
+    return httpx2.AsyncClient(
         base_url=origin,
         cookies={"auth_token": auth_token},
         headers={"X-Platform-Namespace": namespace},

@@ -86,7 +86,7 @@ const DEFAULT_STRUCTURED_OUTPUT_SCHEMA = Object.freeze({
     additionalProperties: false,
 });
 
-function _isUnsetOutputSchema(schema: any) {
+function _isUnsetOutputSchema(schema: unknown) {
     if (schema == null || typeof schema !== 'object') {
         return true;
     }
@@ -97,11 +97,11 @@ function _cloneDefaultStructuredOutputSchema() {
     return JSON.parse(JSON.stringify(DEFAULT_STRUCTURED_OUTPUT_SCHEMA));
 }
 
-function _toolListEntryKey(t: any) {
+function _toolListEntryKey(t: unknown) {
     if (typeof t === 'string') {
         return `tool:${t}`;
     }
-    if (!t || typeof t !== 'object') {
+    if (!isPlainObject(t)) {
         return '';
     }
     const id = t.tool_id;
@@ -114,8 +114,8 @@ function _toolListEntryKey(t: any) {
     return `tool:${id}`;
 }
 
-function _appendPickerDetailToTools(detail: any, tools: any, existingKeys: any) {
-    if (detail === null || typeof detail !== 'object') {
+function _appendPickerDetailToTools(detail: unknown, tools: unknown[], existingKeys: Set<string>) {
+    if (!isPlainObject(detail)) {
         return;
     }
     if (typeof detail.tool_id !== 'string' || detail.tool_id.length === 0) {
@@ -146,7 +146,7 @@ function _appendPickerDetailToTools(detail: any, tools: any, existingKeys: any) 
         return;
     }
     const item = isPlainObject(detail.item) ? detail.item : null;
-    const ref = (item !== null && isMcpToolRegistryItem(item)) || toolId.startsWith('mcp:')
+    const ref: Record<string, unknown> = (item !== null && isMcpToolRegistryItem(item)) || toolId.startsWith('mcp:')
         ? _mcpToolRefFromPicker(toolId, item)
         : { tool_id: toolId };
     if (
@@ -161,8 +161,16 @@ function _appendPickerDetailToTools(detail: any, tools: any, existingKeys: any) 
     tools.push(ref);
 }
 
-function _mcpToolRefFromPicker(toolId: string, item: any) {
-    const ref: any = {
+function catalogRow(catalog: readonly unknown[], resourceId: string): Record<string, unknown> | null {
+    for (const row of catalog) {
+        if (!isPlainObject(row)) continue;
+        if (row.resource_id === resourceId) return row;
+    }
+    return null;
+}
+
+function _mcpToolRefFromPicker(toolId: string, item: unknown): Record<string, unknown> {
+    const ref: Record<string, unknown> = {
         tool_id: toolId,
         type: 'mcp',
         code_mode: 'mcp_tool',
@@ -200,7 +208,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -212,12 +220,12 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
     declare focusMode: boolean;
     declare focusSection: string;
@@ -380,8 +388,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     private _resources: ResourceController;
     private _agentSkills: ResourceController;
     private _llmContextParent: OpController;
-    private _branchResourcesSlice: SelectController<any>;
-    private _pendingFromCanvas: SelectController<any>;
+    private _branchResourcesSlice: SelectController<Record<string, unknown> | null>;
+    private _pendingFromCanvas: SelectController<{ pendingNodeToolId: string | null; selectedNodeId: string | null }>;
     private _parentContextFingerprint: string;
 
     constructor() {
@@ -390,7 +398,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'llm_node';
+        this.flowNodeType = 'llm_node';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -460,10 +468,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _parentContextResolved() {
         const result = this._llmContextParent.lastResult;
-        if (!isPlainObject(result) || !isPlainObject((result as any).resolved)) {
+        if (!isPlainObject(result) || !isPlainObject(result.resolved)) {
             return {};
         }
-        return (result as any).resolved;
+        return result.resolved;
     }
 
     _parentContextProfiles() {
@@ -483,7 +491,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     }
 
     _consumePendingCanvasTool() {
-        const { pendingNodeToolId, selectedNodeId } = (this._pendingFromCanvas as any).value;
+        const { pendingNodeToolId, selectedNodeId } = this._pendingFromCanvas.value;
         if (pendingNodeToolId === null) return;
         if (selectedNodeId !== this.nodeId) return;
         if (typeof this.nodeId !== 'string' || this.nodeId.length === 0) return;
@@ -495,22 +503,22 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     toolRef = { tool_id: t };
                     break;
                 }
-            } else if (t && typeof t === 'object' && t.tool_id === pendingNodeToolId) {
+            } else if (isPlainObject(t) && t.tool_id === pendingNodeToolId) {
                 toolRef = t;
                 break;
             }
         }
-        (this._editor.clearPendingNodeTool({}) as any);
+        this._editor.clearPendingNodeTool({});
         if (toolRef !== null) {
             this._onEditTool(toolRef);
         }
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
-    _commitModalPatch(patch: any) {
+    _commitModalPatch(patch: Record<string, unknown>) {
         const state = this._editor.state;
         const branchData = state?.branchData;
         const nodes = isPlainObject(branchData) && isPlainObject(branchData.nodes) ? { ...branchData.nodes } : null;
@@ -524,9 +532,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         }
         nodes[this.nodeId] = { ...node, ...patch };
         const next = { ...branchData, nodes };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.pushHistory({ snapshot: next }) as any);
+        this._editor.updateBranchData({ data: next });
+        this._editor.setDirty({ dirty: true });
+        this._editor.pushHistory({ snapshot: next });
     }
 
     _onPromptChange(e: CustomEvent) {
@@ -588,18 +596,14 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _flowBranchResources() {
         const st = asObject(this._editor.state);
-        const bd = (st as any).branchData;
+        const bd = st.branchData;
         if (!isPlainObject(bd) || !isPlainObject(bd.resources)) {
             return {};
         }
         return bd.resources;
     }
 
-    /**
-     * @param {object | null} refRaw
-     * @param {{ resource_id?: string, name?: string, type?: string }[]} catalog
-     */
-    _branchRefIsLlm(refRaw: any, catalog: any) {
+    _branchRefIsLlm(refRaw: unknown, catalog: readonly unknown[]) {
         if (!isPlainObject(refRaw)) {
             return false;
         }
@@ -611,11 +615,11 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         if (rid.length === 0) {
             return false;
         }
-        const def = catalog.find((r: any) => r && r.resource_id === rid);
-        return Boolean(def && def.type === 'llm');
+        const def = catalogRow(catalog, rid);
+        return def !== null && def.type === 'llm';
     }
 
-    _branchRefIsLlmContext(refRaw: any, catalog: any) {
+    _branchRefIsLlmContext(refRaw: unknown, catalog: readonly unknown[]) {
         if (!isPlainObject(refRaw)) {
             return false;
         }
@@ -627,18 +631,18 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         if (rid.length === 0) {
             return false;
         }
-        const def = catalog.find((r: any) => r && r.resource_id === rid);
-        return Boolean(def && def.type === 'llm_context');
+        const def = catalogRow(catalog, rid);
+        return def !== null && def.type === 'llm_context';
     }
 
-    _llmContextResourceLabel(key: string, refRaw: any, catalog: any) {
+    _llmContextResourceLabel(key: string, refRaw: unknown, catalog: readonly unknown[]) {
         const rid = isPlainObject(refRaw) && typeof refRaw.resource_id === 'string'
             ? refRaw.resource_id.trim()
             : '';
         const inlineName = isPlainObject(refRaw) && typeof refRaw.name === 'string'
             ? refRaw.name.trim()
             : '';
-        const def = rid.length > 0 ? catalog.find((r: any) => r && r.resource_id === rid) : null;
+        const def = rid.length > 0 ? catalogRow(catalog, rid) : null;
         const title = def && typeof def.name === 'string' && def.name.length > 0
             ? def.name.trim()
             : (inlineName.length > 0 ? inlineName : (rid.length > 0 ? rid : key));
@@ -686,38 +690,41 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         if (!isPlainObject(bag)) {
             return '';
         }
-        const raw = (bag as any).llm_resource_key;
+        const raw = bag.llm_resource_key;
         return typeof raw === 'string' ? raw.trim() : '';
     }
 
-    _applyLlmResourceKeyToNode(nextKey: any) {
+    _applyLlmResourceKeyToNode(nextKey: unknown) {
         const k = typeof nextKey === 'string' ? nextKey.trim() : '';
         if (k.length === 0) {
             throw new Error('flows-llm-node-editor: bind base resource requires non-empty resource id');
         }
         const catalog = Array.isArray(this._resources.items) ? this._resources.items : [];
         const flowRes = this._flowBranchResources();
-        const resources = this.nodeConfig?.resources && typeof this.nodeConfig.resources === 'object'
-            ? { ...this.nodeConfig.resources }
-            : {};
+        const resourceBag = this.nodeConfig?.resources;
+        const resources: Record<string, unknown> = isPlainObject(resourceBag) ? { ...resourceBag } : {};
         const rawLlm = this.nodeConfig?.llm;
         const rawLegacy = this.nodeConfig?.llm_override;
         const ov = isPlainObject(rawLlm)
             ? { ...rawLlm }
             : (isPlainObject(rawLegacy) ? { ...rawLegacy } : {});
 
+        const dropPinnedLlm = (next: Record<string, unknown>) => {
+            for (const [key, ref] of Object.entries(next)) {
+                const rid = isPlainObject(ref) && typeof ref.resource_id === 'string' ? ref.resource_id : key;
+                const row = catalogRow(catalog, rid);
+                if (row !== null && row.type === 'llm') {
+                    delete next[key];
+                }
+            }
+        };
+
         if (
             Object.prototype.hasOwnProperty.call(flowRes, k)
             && this._branchRefIsLlm(flowRes[k], catalog)
         ) {
             const next = { ...resources };
-            for (const [key, ref] of Object.entries(next)) {
-                const rid = isPlainObject(ref) && typeof ref.resource_id === 'string' ? ref.resource_id : key;
-                const d = catalog.find((r: any) => r && r.resource_id === rid);
-                if (d && d.type === 'llm') {
-                    delete (next as any)[key];
-                }
-            }
+            dropPinnedLlm(next);
             ov.llm_resource_key = k;
             this._emitPatch({
                 resources: next,
@@ -726,17 +733,11 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             return;
         }
 
-        const def = catalog.find((r: any) => r && r.resource_id === k);
-        if (def && def.type === 'llm') {
+        const def = catalogRow(catalog, k);
+        if (def !== null && def.type === 'llm') {
             const next = { ...resources };
-            for (const [key, ref] of Object.entries(next)) {
-                const rid = isPlainObject(ref) && typeof ref.resource_id === 'string' ? ref.resource_id : key;
-                const d = catalog.find((r: any) => r && r.resource_id === rid);
-                if (d && d.type === 'llm') {
-                    delete (next as any)[key];
-                }
-            }
-            (next as any)[k] = { resource_id: k };
+            dropPinnedLlm(next);
+            next[k] = { resource_id: k };
             ov.llm_resource_key = k;
             this._emitPatch({
                 resources: next,
@@ -774,8 +775,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             if (Object.prototype.hasOwnProperty.call(flowRes, rid) && this._branchRefIsLlm(flowRes[rid], catalog)) {
                 isLlm = true;
             } else {
-                const def = catalog.find((r: any) => r && r.resource_id === rid);
-                if (def && def.type === 'llm') {
+                const def = catalogRow(catalog, rid);
+                if (def !== null && def.type === 'llm') {
                     isLlm = true;
                 }
             }
@@ -792,14 +793,14 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _llmConfigForEditor() {
         const cfg = asObject(this.nodeConfig);
-        const llm = isPlainObject((cfg as any).llm)
-            ? (cfg as any).llm
-            : (isPlainObject((cfg as any).llm_override) ? (cfg as any).llm_override : {});
+        const llm = isPlainObject(cfg.llm)
+            ? cfg.llm
+            : (isPlainObject(cfg.llm_override) ? cfg.llm_override : {});
         const { llm_resource_key: _drop, ...rest } = llm;
         return rest;
     }
 
-    _resolvedLlmConfigForPinnedResource(resourceKey: any) {
+    _resolvedLlmConfigForPinnedResource(resourceKey: unknown) {
         if (typeof resourceKey !== 'string' || resourceKey.length === 0) {
             return {};
         }
@@ -832,7 +833,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this._emitPatch({ messages_filter: current.length > 0 ? current : [this.nodeId] });
     }
 
-    _onFilterToggleChecked(nodeId: string, checked: any) {
+    _onFilterToggleChecked(nodeId: string, checked: unknown) {
         const current = Array.isArray(this.nodeConfig?.messages_filter) ? this.nodeConfig.messages_filter : [];
         let next;
         if (checked === true) {
@@ -873,8 +874,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this._emitPatch({ output_schema: detail.value });
     }
 
-    _reactPatch(patch: any) {
-        const current = this.nodeConfig?.react && typeof this.nodeConfig.react === 'object' ? this.nodeConfig.react : {};
+    _reactPatch(patch: Record<string, unknown>) {
+        const currentRaw = this.nodeConfig?.react;
+        const current = isPlainObject(currentRaw) ? currentRaw : {};
         const next = { ...current, ...patch };
         this._emitPatch({ react: next });
     }
@@ -953,7 +955,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     _onPickTool() {
         this.openModal('flows.tool_picker', {
             pickMode: 'all',
-            onPick: (detail: any) => {
+            onPick: (detail: unknown) => {
                 const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
                 const existingKeys = new Set(tools.map((t) => _toolListEntryKey(t)));
                 _appendPickerDetailToTools(detail, tools, existingKeys);
@@ -963,13 +965,14 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 // custom element's bubbling `change` event.
                 this._commitModalPatch({ tools });
             },
-            onPickBatch: (detail: any) => {
-                if (detail === null || typeof detail !== 'object' || !Array.isArray(detail.items)) {
+            onPickBatch: (detail: unknown) => {
+                if (!isPlainObject(detail) || !Array.isArray(detail.items)) {
                     return;
                 }
+                const picked = detail.items;
                 const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
                 const existingKeys = new Set(tools.map((t) => _toolListEntryKey(t)));
-                for (const item of detail.items) {
+                for (const item of picked) {
                     if (!isPlainObject(item) || typeof item.tool_id !== 'string' || item.tool_id.length === 0) {
                         continue;
                     }
@@ -988,7 +991,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
-    _agentSkillLabel(agentSkillId: any) {
+    _agentSkillLabel(agentSkillId: unknown) {
         const id = typeof agentSkillId === 'string' ? agentSkillId : '';
         if (id.length === 0) {
             return '';
@@ -998,7 +1001,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             return item.name;
         }
         const fromList = Array.isArray(this._agentSkills.items)
-            ? this._agentSkills.items.find((skill: any) => skill.agent_skill_id === id)
+            ? this._agentSkills.items.find((skill) => isPlainObject(skill) && skill.agent_skill_id === id)
             : null;
         if (fromList && typeof fromList.name === 'string' && fromList.name.length > 0) {
             return fromList.name;
@@ -1012,14 +1015,15 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             : [];
         this.openModal('flows.agent_skill_picker', {
             excludeIds: attached,
-            onPickBatch: (items: Record<string, any>[]) => {
+            onPickBatch: (items: unknown) => {
                 if (!Array.isArray(items)) {
                     return;
                 }
                 const next = [...attached];
                 const seen = new Set(next);
                 for (const item of items) {
-                    const id = item && typeof item.agent_skill_id === 'string' ? item.agent_skill_id : '';
+                    if (!isPlainObject(item) || typeof item.agent_skill_id !== 'string') continue;
+                    const id = item.agent_skill_id;
                     if (id.length === 0 || seen.has(id)) {
                         continue;
                     }
@@ -1031,7 +1035,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
-    _onRemoveAgentSkill(agentSkillId: any) {
+    _onRemoveAgentSkill(agentSkillId: string) {
         const attached = Array.isArray(this.nodeConfig?.agent_skills)
             ? this.nodeConfig.agent_skills.filter((id) => typeof id === 'string' && id.length > 0)
             : [];
@@ -1040,14 +1044,17 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
-    _onEditAgentSkill(agentSkillId: any) {
+    _onEditAgentSkill(agentSkillId: unknown) {
         const id = typeof agentSkillId === 'string' ? agentSkillId.trim() : '';
         if (id.length === 0) {
             throw new Error('flows-llm-node-editor: agentSkillId required');
         }
         this.openModal('flows.agent_skill_edit', {
             agentSkillId: id,
-            onDuplicated: ({ fromId, toId }: any) => {
+            onDuplicated: (duplicated: unknown) => {
+                if (!isPlainObject(duplicated)) return;
+                const fromId = duplicated.fromId;
+                const toId = duplicated.toId;
                 if (typeof fromId !== 'string' || typeof toId !== 'string') {
                     return;
                 }
@@ -1121,7 +1128,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         `;
     }
 
-    _sectionHeading(label: string, hintKey: any, docHref = '/documentation/scenarios/flows/edit-llm-flow/') {
+    _sectionHeading(label: string, hintKey: string, docHref = '/documentation/scenarios/flows/edit-llm-flow/') {
         return html`
             <h4 class="block-title">
                 <span class="block-title-text">${label}</span>
@@ -1136,13 +1143,13 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         `;
     }
 
-    _onEditTool(toolRef: any) {
+    _onEditTool(toolRef: unknown) {
         const { tool_id: toolId, raw } = normalizeToolRef(toolRef);
         const st = asObject(this._editor.state);
-        const skillsData = isPlainObject((st as any).branchData) ? (st as any).branchData : {};
+        const skillsData = isPlainObject(st.branchData) ? st.branchData : {};
         const graphNodes = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
         if (graphNodes[toolId] !== undefined) {
-            (this._editor.selectNode({ nodeId: toolId }) as any);
+            this._editor.selectNode({ nodeId: toolId });
             return;
         }
         this.openModal('flows.embedded_tool_config', {
@@ -1157,17 +1164,17 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
-    _toolEntryId(t: any) {
+    _toolEntryId(t: unknown) {
         if (typeof t === 'string' && t.length > 0) {
             return t;
         }
-        if (t && typeof t === 'object' && typeof t.tool_id === 'string' && t.tool_id.length > 0) {
+        if (isPlainObject(t) && typeof t.tool_id === 'string' && t.tool_id.length > 0) {
             return t.tool_id;
         }
         return '';
     }
 
-    _toolChipVisualMeta(t: any) {
+    _toolChipVisualMeta(t: unknown) {
         const ref = normalizeVisualToolRef(t);
         if (ref === null) {
             return getNodeTypeMeta('code');
@@ -1213,9 +1220,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _renderPromptSection() {
         const prompt = typeof this.nodeConfig?.prompt === 'string' ? this.nodeConfig.prompt : '';
+        const localVariables = this.nodeConfig?.local_variables;
         const variableContext = buildPromptVariableContext({
             flowVariables: this.flowVariables,
-            nodeLocalVariables: this.nodeConfig?.local_variables,
+            nodeLocalVariables: isPlainObject(localVariables) ? localVariables : null,
             dataflowNode: this.dataflowNode,
             previewExecutionState: this.previewExecutionState,
         });
@@ -1243,6 +1251,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const llmForEditor = pinned
             ? this._resolvedLlmConfigForPinnedResource(resourceKey)
             : this._llmConfigForEditor();
+        const capability = this.nodeConfig?.llm_capability;
+        const llmCapability = typeof capability === 'string' && capability.length > 0 ? capability : 'llm_chat';
         return html`
             <section class="block">
                 ${this._sectionHeading(
@@ -1263,7 +1273,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     ` : ''}
                     <flows-llm-config-editor
                         .config=${llmForEditor}
-                        .capability=${this.nodeConfig?.llm_capability || 'llm_chat'}
+                        .capability=${llmCapability}
                         ?readOnly=${pinned}
                         @change=${pinned ? nothing : this._onLlmConfigChange}
                     ></flows-llm-config-editor>
@@ -1274,7 +1284,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _renderMessagesFilterSection() {
         const mode = this._filterMode();
-        const customList = Array.isArray(this.nodeConfig?.messages_filter) ? this.nodeConfig.messages_filter : [];
+        const filterValue = this.nodeConfig?.messages_filter;
+        const customList = Array.isArray(filterValue) ? filterValue : [];
         const nodes = Array.isArray(this.graphNodes) ? this.graphNodes : [];
         return html`
             <section class="block">
@@ -1296,17 +1307,27 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     ></platform-segmented-control>
                     ${mode === 'custom' ? html`
                         <div class="filter-list">
-                            ${nodes.map((n) => html`
+                            ${nodes.map((node) => {
+                                if (!isPlainObject(node)) {
+                                    throw new Error('flows-llm-node-editor: graph node id required');
+                                }
+                                const nodeId = node.id;
+                                if (typeof nodeId !== 'string' || nodeId.length === 0) {
+                                    throw new Error('flows-llm-node-editor: graph node id required');
+                                }
+                                const nodeName = typeof node.name === 'string' && node.name.length > 0 ? node.name : nodeId;
+                                return html`
                                 <platform-field
                                     type="boolean"
                                     mode="edit"
                                     pill-embed
                                     pill-density="compact"
-                                    .label=${`${(n as any).name} (${(n as any).id})`}
-                                    .value=${customList.includes((n as any).id)}
-                                    @change=${(e: CustomEvent) => this._onFilterToggleChecked((n as any).id, e.detail.value === true)}
+                                    .label=${`${nodeName} (${nodeId})`}
+                                    .value=${customList.includes(nodeId)}
+                                    @change=${(e: CustomEvent) => this._onFilterToggleChecked(nodeId, e.detail.value === true)}
                                 ></platform-field>
-                            `)}
+                            `;
+                            })}
                         </div>
                     ` : ''}
                 </div>
@@ -1405,7 +1426,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         `;
     }
 
-    _exitToolEnumConfig(exitTool: any) {
+    _exitToolEnumConfig(exitTool: unknown) {
         if (typeof exitTool !== 'string' || exitTool.length === 0) {
             throw new Error('flows-llm-node-editor: exit_tool string required');
         }
@@ -1531,9 +1552,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                             const vm = this._toolChipVisualMeta(t);
                             const tid = this._toolEntryId(t);
                             const rawLanguage = inferToolRefLanguage(t);
-                            const hasLanguageIcon = (rawLanguage as any).length > 0;
+                            const language = typeof rawLanguage === 'string' ? rawLanguage : '';
+                            const hasLanguageIcon = language.length > 0;
                             const chipIcon = hasLanguageIcon
-                                ? html`<flows-code-language-icon language=${rawLanguage} size="16"></flows-code-language-icon>`
+                                ? html`<flows-code-language-icon language=${language} size="16"></flows-code-language-icon>`
                                 : html`<platform-icon name=${vm.icon} size="14"></platform-icon>`;
                             return html`
                             <span class="chip" @click=${() => this._onEditTool(t)}>
@@ -1630,7 +1652,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'llm_node'}
+                .flowNodeType=${this.flowNodeType.length > 0 ? this.flowNodeType : 'llm_node'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

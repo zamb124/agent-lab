@@ -8,6 +8,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import {
     aggregateIncidentWeightsByNode,
     computeGraphNodeDisplaySize,
@@ -38,6 +39,78 @@ const GRAPH_WORLD_RADIUS = 220;
 const MIN_CAMERA_DISTANCE = 760;
 const ADAPTIVE_LABEL_DISTANCE = 900;
 
+interface ForceGraphApi {
+    backgroundColor(color: string): this;
+    cooldownTicks(count: number): this;
+    warmupTicks(count: number): this;
+    showNavInfo(show: boolean): this;
+    nodeLabel(readLabel: () => string): this;
+    nodeVal(readValue: (node: Record<string, unknown>) => number): this;
+    linkLabel(readLabel: () => string): this;
+    nodeThreeObject(): (node: Record<string, unknown>) => unknown;
+    nodeThreeObject(build: (node: Record<string, unknown>) => unknown): this;
+    nodeThreeObjectExtend(extend: boolean): this;
+    linkColor(readColor: (link: Record<string, unknown>) => string): this;
+    linkWidth(readWidth: (link: Record<string, unknown>) => number): this;
+    linkOpacity(readOpacity: (link: Record<string, unknown>) => number): this;
+    linkThreeObjectExtend(extend: boolean): this;
+    linkThreeObject(): (link: Record<string, unknown>) => unknown;
+    linkThreeObject(build: (link: Record<string, unknown>) => unknown): this;
+    linkPositionUpdate(update: (
+        mesh: { visible: boolean },
+        coords: { start: unknown; end: unknown },
+        link: Record<string, unknown>,
+    ) => boolean): this;
+    linkDirectionalArrowLength(readLength: (link: Record<string, unknown>) => number): this;
+    linkDirectionalArrowRelPos(position: number): this;
+    linkDirectionalArrowColor(readColor: (link: Record<string, unknown>) => string | null): this;
+    linkDirectionalParticles(readCount: (link: Record<string, unknown>) => number): this;
+    linkDirectionalParticleWidth(readWidth: (link: Record<string, unknown>) => number): this;
+    linkDirectionalParticleSpeed(speed: number): this;
+    enableNodeDrag(enabled: boolean): this;
+    onNodeClick(handle: (node: Record<string, unknown>, event: unknown) => void): this;
+    onNodeHover(handle: (node: Record<string, unknown> | null) => void): this;
+    onLinkClick(handle: (link: Record<string, unknown>) => void): this;
+    onNodeDragEnd(handle: (node: Record<string, unknown>) => void): this;
+    onEngineStop(handle: () => void): this;
+    d3VelocityDecay(value: number): this;
+    d3Force(name: string, force?: unknown): { strength(value: number): unknown };
+    nodeRelSize(size: number): this;
+    width(px: number): this;
+    height(px: number): this;
+    zoomToFit(durationMs: number, paddingPx: number): this;
+    graphData(data?: unknown): { nodes?: Record<string, unknown>[] };
+    cameraPosition(
+        position?: { x: number; y: number; z: number },
+        lookAt?: { x: number; y: number; z: number },
+        durationMs?: number,
+    ): { x: number; y: number; z: number };
+    _destructor(): void;
+}
+
+function graphNumber(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function graphText(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function firstRecordText(record: Record<string, unknown>, keys: readonly string[], fallback: string): string {
+    for (const key of keys) {
+        const value = record[key];
+        if (typeof value === 'string' && value.trim().length > 0) return value;
+    }
+    return fallback;
+}
+
+function isVec3(value: unknown): value is { x: number; y: number; z: number } {
+    return isPlainRecord(value)
+        && typeof value.x === 'number'
+        && typeof value.y === 'number'
+        && typeof value.z === 'number';
+}
+
 export class CRMGraphCanvas extends PlatformElement {
     static i18nNamespace = 'crm';
 
@@ -58,17 +131,17 @@ export class CRMGraphCanvas extends PlatformElement {
         /** Плоский объект type_id → локализованное имя типа связи (подпись на ребре). */
         relationshipTypeLabels: { type: Object },
     };
-    declare graphNodes: Record<string, any>[];
-    declare graphEdges: Record<string, any>[];
-    declare shortestPathEdges: Record<string, any>[];
+    declare graphNodes: Record<string, unknown>[];
+    declare graphEdges: Record<string, unknown>[];
+    declare shortestPathEdges: Record<string, unknown>[];
     declare graphPreset: string;
     declare labelMode: string;
     declare selectedNodeId: string;
     declare selectedEdgeId: string;
     declare pathSourceId: string;
     declare pathTargetId: string;
-    declare nodeColorFn: (node: Record<string, any>) => string;
-    declare edgeDirectedFn: (edge: Record<string, any>) => boolean;
+    declare nodeColorFn: (node: Record<string, unknown>) => string;
+    declare edgeDirectedFn: (edge: Record<string, unknown>) => boolean;
     declare relationshipTypeColors: Map<string, string>;
     declare incidentWeightSubtitleFn: ((weight: number) => string) | null;
     declare relationshipTypeLabels: Record<string, unknown>;
@@ -83,9 +156,9 @@ export class CRMGraphCanvas extends PlatformElement {
 
     private _themeSelect: SelectController<string | undefined> | null = null;
     private _lastAppliedTheme: string | null = null;
-    private _graphInstance: any;
-    private _graphContainerEl: any;
-    private _resizeObserver: any;
+    private _graphInstance: ForceGraphApi | null;
+    private _graphContainerEl: HTMLElement | null;
+    private _resizeObserver: ResizeObserver | null;
     private _autoFitPending: boolean;
     private _hoveredNodeId: string;
     private _lastClickNodeId: string;
@@ -124,18 +197,22 @@ export class CRMGraphCanvas extends PlatformElement {
         this._assertOfflineVendorSetup();
         this._initGraph();
         this._syncGraph();
-        this._themeSelect = this.select((s: Record<string, any>) => (s.theme && s.theme.name) as string | undefined);
+        this._themeSelect = this.select((state) => state.theme.mode);
         const canvasEl = this.renderRoot?.querySelector('#graph-canvas');
         if (canvasEl) {
             canvasEl.addEventListener('contextmenu', (event: Event) => {
                 event.preventDefault();
-                if (this._hoveredNodeId) {
-                    this.emit('node-contextmenu', {
-                        node: { id: this._hoveredNodeId },
-                        screenX: (event as MouseEvent).clientX,
-                        screenY: (event as MouseEvent).clientY,
-                    });
+                if (!this._hoveredNodeId) {
+                    return;
                 }
+                if (!(event instanceof MouseEvent)) {
+                    throw new Error('graph-canvas: contextmenu requires a mouse event');
+                }
+                this.emit('node-contextmenu', {
+                    node: { id: this._hoveredNodeId },
+                    screenX: event.clientX,
+                    screenY: event.clientY,
+                });
             });
             canvasEl.addEventListener('click', () => {
                 this.emit('canvas-click', {});
@@ -190,15 +267,15 @@ export class CRMGraphCanvas extends PlatformElement {
         }
     }
 
-    flyToNode(node: Record<string, any>): void {
+    flyToNode(node: Record<string, unknown>): void {
         if (!this._graphInstance) {
             return;
         }
-        let targetNode: Record<string, any> = node;
+        let targetNode: Record<string, unknown> = node;
         if (typeof node === 'object' && node.id && (node.x === undefined)) {
             const graphData = this._graphInstance.graphData();
             if (graphData && Array.isArray(graphData.nodes)) {
-                targetNode = graphData.nodes.find((n: Record<string, any>) => n.id === node.id) || node;
+                targetNode = graphData.nodes.find((n: Record<string, unknown>) => n.id === node.id) || node;
             }
         }
         const nx = finiteOrZero(targetNode.x);
@@ -241,44 +318,41 @@ export class CRMGraphCanvas extends PlatformElement {
     }
 
     _buildGraphDataForScene() {
-        const highlightedEdgeIds = new Set(this.shortestPathEdges.map((edge: Record<string, any>) => {
-            const edgeId = edge.edge_id || edge.relationship_id || edge.id;
-            if (typeof edgeId === 'string' && edgeId.trim().length > 0) {
-                return edgeId;
-            }
-            const sourceId = edge.source_id || edge.source_entity_id || edge.source;
-            const targetId = edge.target_id || edge.target_entity_id || edge.target;
-            const relationType = edge.relationship_type || edge.type || 'related';
-            return `${sourceId}:${targetId}:${relationType}`;
+        const highlightedEdgeIds = new Set(this.shortestPathEdges.map((edge: Record<string, unknown>) => {
+            const sourceId = firstRecordText(edge, ['source_id', 'source_entity_id', 'source'], '');
+            const targetId = firstRecordText(edge, ['target_id', 'target_entity_id', 'target'], '');
+            const relationType = firstRecordText(edge, ['relationship_type', 'type'], 'related');
+            return firstRecordText(edge, ['edge_id', 'relationship_id', 'id'], `${sourceId}:${targetId}:${relationType}`);
         }));
         const weightByNodeId = aggregateIncidentWeightsByNode(this.graphEdges);
         const maxWeight = maxIncidentWeightOrOne(weightByNodeId);
-        const nodes = this.graphNodes.map((node: Record<string, any>) => {
-            const nodeId = node.entity_id || node.id;
+        const nodes = this.graphNodes.map((node: Record<string, unknown>) => {
+            const entityId = graphText(node.entity_id);
+            const nodeId = entityId.length > 0 ? entityId : graphText(node.id);
             const stored = weightByNodeId.get(nodeId);
             const totalWeight = stored === undefined ? 0 : stored;
             const rawLevel = typeof node.level === 'number' && Number.isFinite(node.level) ? node.level : 1;
             const sizingLevel = rawLevel === 0 ? 0 : 1;
-            return {
+            const graphNode: Record<string, unknown> = {
                 ...node,
                 id: nodeId,
                 name: node.name || node.label || nodeId,
                 color: this.nodeColorFn(node),
                 incident_weight_sum: totalWeight,
                 size: computeGraphNodeDisplaySize(sizingLevel, totalWeight, maxWeight),
-            } as Record<string, any>;
+            };
+            return graphNode;
         });
         if (nodes.length === 1 && nodes[0]) {
             nodes[0].x = 0;
             nodes[0].y = 0;
             nodes[0].z = 0;
         }
-        const links = this.graphEdges.map((edge: Record<string, any>) => {
-            const source = edge.source_id || edge.source_entity_id || edge.source;
-            const target = edge.target_id || edge.target_entity_id || edge.target;
-            const edgeId = edge.edge_id || edge.relationship_id || edge.id
-                || `${source}:${target}:${edge.relationship_type || edge.type || 'related'}`;
-            const relationType = edge.relationship_type || edge.type || 'related';
+        const links = this.graphEdges.map((edge: Record<string, unknown>) => {
+            const source = firstRecordText(edge, ['source_id', 'source_entity_id', 'source'], '');
+            const target = firstRecordText(edge, ['target_id', 'target_entity_id', 'target'], '');
+            const relationType = firstRecordText(edge, ['relationship_type', 'type'], 'related');
+            const edgeId = firstRecordText(edge, ['edge_id', 'relationship_id', 'id'], `${source}:${target}:${relationType}`);
             const directed = this.edgeDirectedFn(edge);
             return {
                 ...edge,
@@ -300,26 +374,26 @@ export class CRMGraphCanvas extends PlatformElement {
             throw new Error('ForceGraph3D is not available in window');
         }
         const container = this.renderRoot?.querySelector('#graph-canvas');
-        if (!container) {
+        if (!(container instanceof HTMLElement)) {
             throw new Error('Graph canvas container is not available');
         }
         this._graphContainerEl = container;
         const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#1a1a2e';
-        this._graphInstance = factory()(container)
+        const graph = factory()(container)
             .backgroundColor(canvasBg)
             .cooldownTicks(120)
             .warmupTicks(80)
             .showNavInfo(false)
             .nodeLabel(() => '')
-            .nodeVal((node: any) => Math.cbrt(node.size || 1))
+            .nodeVal((node: Record<string, unknown>) => Math.cbrt(graphNumber(node.size, 1)))
             .linkLabel(() => '')
-            .nodeThreeObject((node: any) => {
+            .nodeThreeObject((node: Record<string, unknown>) => {
                 if (!window.THREE) {
                     return null;
                 }
                 const THREE = window.THREE;
                 const nodeRelSize = GRAPH_PRESETS[this.graphPreset as keyof typeof GRAPH_PRESETS].nodeRelSize;
-                const baseRadius = Math.cbrt(node.size || 1) * nodeRelSize * 0.5;
+                const baseRadius = Math.cbrt(graphNumber(node.size, 1)) * nodeRelSize * 0.5;
                 const isSelected = typeof node.id === 'string' && node.id.length > 0 && node.id === this.selectedNodeId;
                 const selectionScale = isSelected ? 1.2 : 1;
                 const radius = baseRadius * selectionScale;
@@ -375,16 +449,16 @@ export class CRMGraphCanvas extends PlatformElement {
                 return group;
             })
             .nodeThreeObjectExtend(false)
-            .linkColor((link: any) => {
+            .linkColor((link: Record<string, unknown>) => {
                 if (link.path_kind === 'directed') return '#41d36d';
                 if (link.path_kind === 'undirected') return '#f2c94c';
                 if (link.path_kind === 'both') return '#9adf5d';
                 if (link.highlighted) return '#ff6b6b';
-                const typeColor = this.relationshipTypeColors.get(link.relation_type);
+                const typeColor = this.relationshipTypeColors.get(graphText(link.relation_type));
                 if (typeColor) return typeColor;
                 return '#9ba3bf';
             })
-            .linkWidth((link: any) => {
+            .linkWidth((link: Record<string, unknown>) => {
                 if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
                     return 4;
                 }
@@ -396,7 +470,7 @@ export class CRMGraphCanvas extends PlatformElement {
                 }
                 return weightWidth;
             })
-            .linkOpacity((link: any) => {
+            .linkOpacity((link: Record<string, unknown>) => {
                 if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
                     return 0.95;
                 }
@@ -405,7 +479,7 @@ export class CRMGraphCanvas extends PlatformElement {
                 return 0.45;
             })
             .linkThreeObjectExtend(true)
-            .linkThreeObject((link: any) => {
+            .linkThreeObject((link: Record<string, unknown>) => {
                 const linkLabelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
                 const typeKey = typeof link.relation_type === 'string' && link.relation_type.trim().length > 0
                     ? link.relation_type.trim()
@@ -416,42 +490,42 @@ export class CRMGraphCanvas extends PlatformElement {
                 mesh.visible = this._shouldShowLinkLabel(link);
                 return mesh;
             })
-            .linkPositionUpdate((mesh: any, { start, end }: { start: any; end: any }, link: any) => {
-                if (!mesh || !start || !end) return false;
+            .linkPositionUpdate((mesh: { visible: boolean }, { start, end }: { start: unknown; end: unknown }, link: Record<string, unknown>) => {
+                if (!isVec3(start) || !isVec3(end)) return false;
                 mesh.visible = this._shouldShowLinkLabel(link);
                 if (!mesh.visible) return true;
                 const cam = this._graphInstance ? this._graphInstance.cameraPosition() : null;
                 positionGraphLinkLabelMesh(mesh, start, end, cam);
                 return true;
             })
-            .linkDirectionalArrowLength((link: any) => {
+            .linkDirectionalArrowLength((link: Record<string, unknown>) => {
                 if (link.path_kind === 'undirected') return 0;
                 return link.directed ? 8 : 0;
             })
             .linkDirectionalArrowRelPos(0.88)
-            .linkDirectionalArrowColor((link: any) => {
+            .linkDirectionalArrowColor((link: Record<string, unknown>) => {
                 if (link.path_kind === 'directed') return '#41d36d';
                 if (link.path_kind === 'both') return '#9adf5d';
-                const typeColor = this.relationshipTypeColors.get(link.relation_type);
+                const typeColor = this.relationshipTypeColors.get(graphText(link.relation_type));
                 if (typeColor) return typeColor;
                 return null;
             })
-            .linkDirectionalParticles((link: any) => {
+            .linkDirectionalParticles((link: Record<string, unknown>) => {
                 if (link.highlighted) return 4;
                 if (link.directed) return 2;
                 return 0;
             })
-            .linkDirectionalParticleWidth((link: any) => (link.highlighted ? 3 : 1.5))
+            .linkDirectionalParticleWidth((link: Record<string, unknown>) => (link.highlighted ? 3 : 1.5))
             .linkDirectionalParticleSpeed(0.006)
             .enableNodeDrag(true)
-            .onNodeClick((node: any, event: unknown) => this._onCanvasNodeClick(node, event))
-            .onNodeHover((node: any) => {
+            .onNodeClick((node: Record<string, unknown>, event: unknown) => this._onCanvasNodeClick(node, event))
+            .onNodeHover((node: Record<string, unknown>) => {
                 this._hoveredNodeId = node ? firstGraphText([node.id]) : '';
             })
-            .onLinkClick((link: any) => {
+            .onLinkClick((link: Record<string, unknown>) => {
                 this.emit('link-click', { link });
             })
-            .onNodeDragEnd((node: any) => {
+            .onNodeDragEnd((node: Record<string, unknown>) => {
                 node.fx = node.x;
                 node.fy = node.y;
                 node.fz = node.z;
@@ -470,10 +544,11 @@ export class CRMGraphCanvas extends PlatformElement {
                     this._fitGraphToViewport(300, 90);
                 }
             });
-        this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this.graphPreset as keyof typeof GRAPH_PRESETS].charge);
-        this._graphInstance.d3VelocityDecay(0.5);
-        this._graphInstance.d3Force('box', this._createBoundingForce(GRAPH_WORLD_RADIUS));
-        this._graphInstance.nodeRelSize(GRAPH_PRESETS[this.graphPreset as keyof typeof GRAPH_PRESETS].nodeRelSize);
+        graph.d3Force('charge').strength(GRAPH_PRESETS[this.graphPreset as keyof typeof GRAPH_PRESETS].charge);
+        graph.d3VelocityDecay(0.5);
+        graph.d3Force('box', this._createBoundingForce(GRAPH_WORLD_RADIUS));
+        graph.nodeRelSize(GRAPH_PRESETS[this.graphPreset as keyof typeof GRAPH_PRESETS].nodeRelSize);
+        this._graphInstance = graph;
         this._applyGraphDimensionsFromContainer();
         this._resizeObserver = new ResizeObserver(() => {
             this._applyGraphDimensionsFromContainer();
@@ -490,29 +565,32 @@ export class CRMGraphCanvas extends PlatformElement {
         this._graphInstance.height(heightPx);
     }
 
-    _createBoundingForce(worldRadius: number): any {
-        let nodes: any[] = [];
+    _createBoundingForce(worldRadius: number): (alpha: number) => void {
+        let nodes: Record<string, unknown>[] = [];
         const force = (alpha: number) => {
             const restoringStrength = 0.12 * alpha;
-            nodes.forEach((node: any) => {
-                const hasCoordinates = [node.x, node.y, node.z].every((value) => typeof value === 'number' && Number.isFinite(value));
-                if (!hasCoordinates) return;
-                const distance = Math.sqrt((node.x ** 2) + (node.y ** 2) + (node.z ** 2));
+            nodes.forEach((node: Record<string, unknown>) => {
+                const x = node.x;
+                const y = node.y;
+                const z = node.z;
+                if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') return;
+                if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+                const distance = Math.sqrt((x ** 2) + (y ** 2) + (z ** 2));
                 if (distance <= worldRadius || distance === 0) return;
                 const overshoot = distance - worldRadius;
-                const nx = node.x / distance;
-                const ny = node.y / distance;
-                const nz = node.z / distance;
+                const nx = x / distance;
+                const ny = y / distance;
+                const nz = z / distance;
                 const pull = overshoot * restoringStrength;
-                if (typeof node.vx !== 'number' || !Number.isFinite(node.vx)) node.vx = 0;
-                if (typeof node.vy !== 'number' || !Number.isFinite(node.vy)) node.vy = 0;
-                if (typeof node.vz !== 'number' || !Number.isFinite(node.vz)) node.vz = 0;
-                node.vx -= nx * pull;
-                node.vy -= ny * pull;
-                node.vz -= nz * pull;
+                const vx = graphNumber(node.vx, 0) - nx * pull;
+                const vy = graphNumber(node.vy, 0) - ny * pull;
+                const vz = graphNumber(node.vz, 0) - nz * pull;
+                node.vx = vx;
+                node.vy = vy;
+                node.vz = vz;
             });
         };
-        force.initialize = (simNodes: any[]) => {
+        force.initialize = (simNodes: Record<string, unknown>[]) => {
             nodes = simNodes;
         };
         return force;
@@ -553,7 +631,10 @@ export class CRMGraphCanvas extends PlatformElement {
         if (!this._graphInstance) return;
         const graphData = this._buildGraphDataForScene();
         if (graphData.nodes.length === 1) {
-            const singleNode = graphData.nodes[0] as Record<string, any>;
+            const singleNode = graphData.nodes[0];
+            if (singleNode === undefined) {
+                throw new Error('graph-canvas: single node missing');
+            }
             singleNode.x = 0;
             singleNode.y = 0;
             singleNode.z = 0;
@@ -587,10 +668,11 @@ export class CRMGraphCanvas extends PlatformElement {
         }
     }
 
-    _onCanvasNodeClick(node: Record<string, any>, event: unknown): void {
+    _onCanvasNodeClick(node: Record<string, unknown>, event: unknown): void {
         const now = Date.now();
-        const isDoubleClick = this._lastClickNodeId === node.id && (now - this._lastClickTimestamp) < 380;
-        this._lastClickNodeId = node.id;
+        const clickedId = graphText(node.id);
+        const isDoubleClick = this._lastClickNodeId === clickedId && (now - this._lastClickTimestamp) < 380;
+        this._lastClickNodeId = clickedId;
         this._lastClickTimestamp = now;
         if (isDoubleClick) {
             this.emit('node-dblclick', { node });
@@ -614,7 +696,7 @@ export class CRMGraphCanvas extends PlatformElement {
         return k;
     }
 
-    _shouldShowNodeLabel(node: Record<string, any>): boolean {
+    _shouldShowNodeLabel(node: Record<string, unknown>): boolean {
         if (this.labelMode !== 'adaptive') return false;
         const isImportant = node.id === this.selectedNodeId
             || node.id === this.pathSourceId
@@ -626,7 +708,7 @@ export class CRMGraphCanvas extends PlatformElement {
         return false;
     }
 
-    _shouldShowLinkLabel(link: Record<string, any>): boolean {
+    _shouldShowLinkLabel(link: Record<string, unknown>): boolean {
         if (this.labelMode !== 'adaptive') return false;
         if (link.id === this.selectedEdgeId || link.highlighted) return true;
         if (this.graphEdges.length <= 16 && this._getCameraDistance() < ADAPTIVE_LABEL_DISTANCE * 0.82) return true;
@@ -644,21 +726,20 @@ export class CRMGraphCanvas extends PlatformElement {
 
     _getLinkEndpointId(endpoint: unknown): string {
         if (typeof endpoint === 'string') return endpoint;
-        if (endpoint && typeof endpoint === 'object') {
-            const record = endpoint as Record<string, unknown>;
-            return firstGraphText([record.id, record.entity_id]);
+        if (isPlainRecord(endpoint)) {
+            return firstGraphText([endpoint.id, endpoint.entity_id]);
         }
         return '';
     }
 
-    _isLinkNearSelectedNode(link: Record<string, any>): boolean {
+    _isLinkNearSelectedNode(link: Record<string, unknown>): boolean {
         if (!this.selectedNodeId) return false;
         const sourceId = this._getLinkEndpointId(link.source);
         const targetId = this._getLinkEndpointId(link.target);
         return sourceId === this.selectedNodeId || targetId === this.selectedNodeId;
     }
 
-    _createTextSprite(text: string, color = '#f2f5ff', fontSize = 22, maxLength = 28): any {
+    _createTextSprite(text: string, color = '#f2f5ff', fontSize = 22, maxLength = 28) {
         return createGraphTextSprite(text, color, fontSize, maxLength);
     }
 }

@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.sync.realtime.command_router import SYNC_OPERATIONS
 from core.di.platform import PlatformDi

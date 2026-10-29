@@ -10,6 +10,7 @@ import '@platform/lib/components/glass-spinner.js';
 import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '@platform/lib/voice/voice-http-origin.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const HOME_DEMO_FLOW_ORDER = Object.freeze(['lawyer', 'support_demo', 'psy']);
 
@@ -167,10 +168,14 @@ export class LandingHomeDemoAgents extends PlatformElement {
             }
             return {};
         }
-        if (typeof (result as Record<string, any>).token !== 'string' || (result as Record<string, any>).token === '') {
+        if (!isPlainRecord(result)) {
             throw new Error('landing_home_demo_agents: session token missing');
         }
-        return { Authorization: `Bearer ${(result as Record<string, any>).token}` };
+        const token = result.token;
+        if (typeof token !== 'string' || token === '') {
+            throw new Error('landing_home_demo_agents: session token missing');
+        }
+        return { Authorization: `Bearer ${token}` };
     };
 
     _tryAgent(card: Record<string, any>) {
@@ -225,10 +230,13 @@ export class LandingHomeDemoAgents extends PlatformElement {
 
     _allItemsList() {
         const raw = this._load.lastResult;
-        if (raw === null || typeof raw !== 'object') {
+        if (Array.isArray(raw)) {
+            throw new Error('landing_home_demo_agents: items must be array');
+        }
+        if (!isPlainRecord(raw)) {
             return [];
         }
-        const items = (raw as Record<string, any>).items;
+        const items = raw.items;
         if (!Array.isArray(items)) {
             throw new Error('landing_home_demo_agents: items must be array');
         }

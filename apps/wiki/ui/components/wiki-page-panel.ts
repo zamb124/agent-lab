@@ -23,27 +23,6 @@ interface WikiOutlineItem {
     [key: string]: unknown;
 }
 
-interface WikiBacklinkItem {
-    wiki_page_id?: unknown;
-    title?: unknown;
-    [key: string]: unknown;
-}
-
-interface WikiCommentItem {
-    wiki_comment_id?: string;
-    author_user_id?: string;
-    body_markdown?: unknown;
-    resolved_at?: unknown;
-    created_at?: string | number | Date;
-    [key: string]: unknown;
-}
-
-interface WikiRevisionItem {
-    wiki_revision_id?: string;
-    author_user_id?: string;
-    created_at?: string | number | Date;
-    [key: string]: unknown;
-}
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -52,6 +31,11 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-user-chip.js';
+
+function dateValue(value: unknown): string | number | Date {
+    if (typeof value === 'string' || typeof value === 'number' || value instanceof Date) return value;
+    return '';
+}
 
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
@@ -494,7 +478,7 @@ export class WikiPagePanel extends PlatformElement {
         return html`
             ${comments.length === 0
                 ? html`<div class="muted">${this.t('page.comments_empty')}</div>`
-                : comments.map((comment: WikiCommentItem) => html`
+                : comments.map((comment) => html`
                       <div class="comment" data-wiki-comment=${comment.wiki_comment_id}>
                           <platform-user-chip
                               user-id=${comment.author_user_id}
@@ -509,7 +493,7 @@ export class WikiPagePanel extends PlatformElement {
                                 >${this.t('page.comment_resolve')}</button>`
                               : html`<span class="comment-resolved">${this.t('page.comment_resolved')}</span>`}
                           <div class="muted">
-                              ${formatPlatformDateTime(new Date(comment.created_at === undefined || comment.created_at === null ? '' : comment.created_at), missingAsEmpty(this._locale.value))}
+                              ${formatPlatformDateTime(new Date(dateValue(comment.created_at)), missingAsEmpty(this._locale.value))}
                           </div>
                       </div>
                   `)}
@@ -578,7 +562,7 @@ export class WikiPagePanel extends PlatformElement {
                 >
                     <platform-user-chip user-id=${revision.author_user_id} size="sm"></platform-user-chip>
                     <div class="revision-meta">
-                        ${formatPlatformDateTime(new Date(revision.created_at === undefined || revision.created_at === null ? '' : revision.created_at), missingAsEmpty(this._locale.value))}
+                        ${formatPlatformDateTime(new Date(dateValue(revision.created_at)), missingAsEmpty(this._locale.value))}
                     </div>
                 </button>
                 ${revision.wiki_revision_id === this._selectedRevisionId

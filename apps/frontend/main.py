@@ -18,10 +18,6 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
-from apps.agent.tunnel_bus import configure_tunnel_bus_storage, start_tunnel_bus_listener
-from apps.frontend.api.agent import router as agent_settings_router
-from apps.frontend.api.agent_devices import router as agent_router
-from apps.frontend.api.agent_tunnel import router as agent_tunnel_router
 from apps.frontend.api.ai_providers import router as ai_providers_router
 from apps.frontend.api.api_keys import router as api_keys_router
 from apps.frontend.api.auth import router as auth_router
@@ -117,7 +113,6 @@ INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/products/crm",
     "/products/sync",
     "/products/documents",
-    "/agent",
     "/demo/digital-workers",
     "/blog",
     "/about",
@@ -217,7 +212,6 @@ def _build_sitemap_xml(base_url: str) -> str:
 
 def _build_llms_txt(base_url: str, brand: PlatformBrandConfig) -> str:
     platform_name = brand.platform_name
-    agent_product_name = brand.agent_product_name
     return (
         f"# {platform_name}\n\n"
         f"> {platform_name} is a business automation platform with AI flows and LLM agents, "
@@ -233,7 +227,6 @@ def _build_llms_txt(base_url: str, brand: PlatformBrandConfig) -> str:
         f"- Product NetWorkle: {base_url}/products/crm\n"
         f"- Product Sync: {base_url}/products/sync\n"
         f"- Product Documents: {base_url}/products/documents\n"
-        f"- {agent_product_name} Download: {base_url}/agent\n"
         f"- Product Documentation: {base_url}/documentation/\n"
         f"- Support: {base_url}/support\n"
         f"- Blog: {base_url}/blog\n"
@@ -247,7 +240,7 @@ async def _seed_platform_pronunciation_rules() -> None:
     """Засевает платформенные правила произношения при первом старте (идемпотентно)."""
     if not get_settings().voice.tts.pronunciation_seed_enabled:
         return
-    existing = await PronunciationRule.list_for_company_scope(company_id=None)
+    existing = await PronunciationRule.list_for_company_scope_by_created_at_asc(company_id=None)
     existing_patterns = {(r.kind, r.pattern, r.language) for r in existing}
 
     seed_rules: list[tuple[PronunciationRuleKind, str, str, str]] = [
@@ -284,9 +277,6 @@ async def frontend_startup(
 ) -> None:
     await redis_client.connect()
     logger.info("frontend.redis.connected")
-
-    configure_tunnel_bus_storage(shared_storage)
-    await start_tunnel_bus_listener(redis_client)
 
     if is_testing():
         return
@@ -338,9 +328,6 @@ app = create_service_app(
     services_spa_index=_UI_STATIC_PATH / "index.html",
     pages_routers=[
         auth_router,
-        agent_router,
-        agent_settings_router,
-        agent_tunnel_router,
         companies_router,
         embed_configs_router,
         public_embed_page_router,
@@ -669,33 +656,6 @@ async def get_pwa_offline_page(request: Request, di: Di) -> Response:
     brand = resolve_brand(str(host).strip())
     body = _render_pwa_brand_template(_PWA_OFFLINE_TEMPLATE_PATH, brand.platform_name)
     return Response(content=body, media_type="text/html; charset=utf-8")
-
-
-# HumanitecAgent: статика (assets), страница /agent — SPA (agent-download-page)
-_agent_static_path = Path(__file__).parent.parent / "agent" / "static"
-if _agent_static_path.exists():
-    app.mount(
-        "/static/agent",
-        StaticFiles(directory=str(_agent_static_path)),
-        name="agent-static",
-    )
-
-
-def _frontend_spa_index_response() -> FileResponse:
-    index_path = _UI_STATIC_PATH / "index.html"
-    if not index_path.exists():
-        raise WsCommandError("not_found", "Frontend UI not built yet", error_code="not_found")
-    return FileResponse(index_path)
-
-
-@app.get("/agent")
-@app.get("/agent/")
-@app.get("/frontend/agent")
-@app.get("/frontend/agent/")
-async def agent_download_spa_page(di: Di) -> FileResponse:
-    """HumanitecAgent download landing — SPA (agent-download-page)."""
-    _ = di
-    return _frontend_spa_index_response()
 
 
 # SPA-резерв (все неизвестные пути → index.html)

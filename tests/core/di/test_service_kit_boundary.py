@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-import httpx
+import httpx2
 import pytest
 from fastapi import APIRouter, FastAPI
 from taskiq import InMemoryBroker, TaskiqState
@@ -73,9 +73,9 @@ def _greeter_app() -> FastAPI:
     return app
 
 
-async def _get(app: FastAPI, path: str) -> httpx.Response:
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://kit") as client:
+async def _get(app: FastAPI, path: str) -> httpx2.Response:
+    transport = httpx2.ASGITransport(app=app)
+    async with httpx2.AsyncClient(transport=transport, base_url="http://kit") as client:
         return await client.get(path)
 
 

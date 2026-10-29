@@ -96,8 +96,8 @@ async def _open_inbound(env, qty: Decimal) -> str:
 
 
 async def _open_line(env, transfer_id: str) -> StockMoveLine:
-    moves = await StockMove.list_for_transfer(env.company_id, transfer_id)
-    lines = await StockMoveLine.list_for_moves(
+    moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer_id)
+    lines = await StockMoveLine.list_for_moves_by_created_at_asc(
         env.company_id, [m.move_id for m in moves]
     )
     return lines[0]
@@ -301,7 +301,7 @@ class TestTransferMoveErrors:
         )
         transfer_id = await _receipt(env, Decimal("2"), Decimal("10"))
         move = (
-            await StockMove.list_for_transfer(env.company_id, transfer_id)
+            await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer_id)
         )[0]
         with pytest.raises(PlatformConflictError) as exc_move_state_conflict:
             await env.di.scan_service.commit(

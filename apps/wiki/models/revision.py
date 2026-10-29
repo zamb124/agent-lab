@@ -40,7 +40,7 @@ class WikiRevision(PlatformModel):
         return await cls.objects.create(instance=revision)
 
     @classmethod
-    async def list_recent_for_page(
+    async def list_for_page_by_created_at_desc(
         cls,
         company_id: str,
         namespace: str,
@@ -48,6 +48,7 @@ class WikiRevision(PlatformModel):
         *,
         limit: int,
     ) -> list[Self]:
+        """Версии страницы, ORDER BY created_at DESC. limit обязателен и в теле не проверяется."""
         return await (
             cls.objects.filter(
                 company_id=company_id,

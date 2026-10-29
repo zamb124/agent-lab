@@ -91,9 +91,9 @@ async def _receipt_to(
     в тару, перенос не нужен.
     """
     _ = await _receipt(env, qty, unit_price)
-    quants = await StockQuant.list_for_locations(
+    quants = await StockQuant.list_unordered_for_locations(
         env.company_id,
-        await StockLocation.list_subtree_ids(
+        await StockLocation.list_subtree_ids_by_parent_path_asc(
             env.company_id, env.warehouse.view_location_id
         ),
     )
@@ -412,10 +412,10 @@ class TestLeastContainers:
                 company_id=env.company_id,
                 transfer_id=transfer.transfer_id,
             )
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             env.company_id, transfer.transfer_id
         )
-        lines = await StockMoveLine.list_all_for_move(
+        lines = await StockMoveLine.list_for_move_by_created_at_asc(
             env.company_id, moves[0].move_id
         )
         container_lines = [

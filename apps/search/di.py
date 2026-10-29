@@ -87,7 +87,7 @@ def crawl_fetch_service(
     )
 
 
-HTTP_RECIPES = (
+SEARCH_RECIPES = (
     search_integration,
     search_index_provider_config,
     crawl_config,
@@ -98,14 +98,8 @@ HTTP_RECIPES = (
     crawl_fetch_service,
 )
 
-WORKER_RECIPES = (
-    crawl_config,
-    crawl_enrichment_config,
-    rag_client,
-    crawl_fetch_service,
-)
 
-class SearchDi(PlatformDi, recipes=HTTP_RECIPES):
+class SearchDi(PlatformDi, recipes=SEARCH_RECIPES):
     crawl_orchestrator_service: CrawlOrchestratorService
     crawl_report_service: CrawlReportService
     crawl_service: SearchCrawlService

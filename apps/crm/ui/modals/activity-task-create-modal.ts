@@ -140,7 +140,7 @@ export class CRMActivityTaskCreateModal extends PlatformFormModal {
                     mode="edit"
                     .label=${this.t('tasks_page.field_due')}
                     .value=${draft.due_date}
-                    @change=${(e: CustomEvent) => { const due = (e as CustomEvent).detail.value;
+                    @change=${(e: CustomEvent) => { const due = e.detail.value;
                         if (due === null || due === undefined || due === '') {
                             this._form.setField('due_date', '');
                             return;

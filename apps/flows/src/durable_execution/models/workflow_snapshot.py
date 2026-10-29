@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from oxyde import Field as DbField
 from oxyde import Index
@@ -38,3 +38,24 @@ class WorkflowSnapshot(PlatformModel):
     state_hash: str = DbField()
     created_at: datetime = DbField()
     schema_version: int = DbField(default=1)
+
+    @classmethod
+    async def latest_at_or_before_sequence_desc(
+        cls,
+        *,
+        company_id: str,
+        session_id: str,
+        execution_branch_id: str,
+        sequence: int,
+    ) -> Self | None:
+        """Последний снимок ветки с sequence не больше заданного, ORDER BY sequence DESC. Нет строки — None."""
+        return await (
+            cls.objects.filter(
+                company_id=company_id,
+                session_id=session_id,
+                execution_branch_id=execution_branch_id,
+                sequence__lte=sequence,
+            )
+            .order_by("-sequence")
+            .first()
+        )

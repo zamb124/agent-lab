@@ -166,7 +166,7 @@ class TestRouteChain:
                 )
             ],
         )
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             env.company_id, transfer.transfer_id
         )
         assert len(moves) == 2

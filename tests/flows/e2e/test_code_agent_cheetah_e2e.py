@@ -7,7 +7,7 @@ import shutil
 from collections.abc import Awaitable, Callable, Sequence
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.guest_runtime.services.slots import require_docker
 from core.clients.flow_ui_client import FlowUIClient

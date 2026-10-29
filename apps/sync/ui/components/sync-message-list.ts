@@ -23,12 +23,21 @@ import type { OpController, ResourceController, ControllerFor } from '@platform/
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import './sync-message-bubble.js';
 import { groupMessagesForRender } from '../_helpers/sync-day-grouping.js';
 
 const SCROLL_TOP_THRESHOLD = 60;
+
+function isMessagesStore(value: unknown): value is SyncMessagesStoreSlice {
+    return isPlainRecord(value) && isPlainRecord(value.byChannelId);
+}
+
+function isChannelsSlice(value: unknown): value is SyncChannelsSlice {
+    return isPlainRecord(value) && Array.isArray(value.items);
+}
 
 export class SyncMessageList extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -163,8 +172,14 @@ export class SyncMessageList extends PlatformElement {
         this.channelType = '';
         this._channelMembers = [];
         this._store = this.useSlice('sync/messages_store');
-        this._messagesStoreSel = this.select((s) => s.syncMessagesStore as SyncMessagesStoreSlice | undefined);
-        this._channelsSel = this.select((s) => s.syncChannels as SyncChannelsSlice | undefined);
+        this._messagesStoreSel = this.select((s) => {
+            const store = s.syncMessagesStore;
+            return isMessagesStore(store) ? store : undefined;
+        });
+        this._channelsSel = this.select((s) => {
+            const channels = s.syncChannels;
+            return isChannelsSlice(channels) ? channels : undefined;
+        });
         this._members = this.useResource('sync/company_members', { autoload: true });
         this._loadOlder = this.useOp('sync/messages_load_older');
         this._loadNewer = this.useOp('sync/messages_load_newer');
@@ -278,19 +293,17 @@ export class SyncMessageList extends PlatformElement {
             before: oldestCursor,
             direction: 'older',
         });
-        const result = this._loadOlder.lastResult as {
-            items?: unknown;
-            has_older?: unknown;
-            prev_cursor?: unknown;
-            oldest_cursor?: unknown;
-        } | null;
-        if (!result || !Array.isArray(result.items)) return;
-        const hasOlder = typeof result.has_older === 'boolean'
-            ? result.has_older
-            : (typeof result.prev_cursor === 'string' && result.prev_cursor !== '');
-        const oldestCursorNext = typeof result.oldest_cursor === 'string'
-            ? result.oldest_cursor
-            : (typeof result.prev_cursor === 'string' ? result.prev_cursor : null);
+        const result = this._loadOlder.lastResult;
+        if (!isPlainRecord(result) || !Array.isArray(result.items)) return;
+        const hasOlderValue = result.has_older;
+        const prevCursor = result.prev_cursor;
+        const oldestCursorValue = result.oldest_cursor;
+        const hasOlder = typeof hasOlderValue === 'boolean'
+            ? hasOlderValue
+            : (typeof prevCursor === 'string' && prevCursor !== '');
+        const oldestCursorNext = typeof oldestCursorValue === 'string'
+            ? oldestCursorValue
+            : (typeof prevCursor === 'string' ? prevCursor : null);
         this._store.loadedOlder({
             channelId: this.channelId,
             items: result.items,
@@ -360,9 +373,12 @@ export class SyncMessageList extends PlatformElement {
     }
 
     _onJumpToMessage = (e: Event) => {
-        const detail = (e as CustomEvent<{ messageId?: unknown }>).detail;
-        if (!detail || typeof detail.messageId !== 'string') return;
-        this.scrollToMessageId(detail.messageId);
+        if (!(e instanceof CustomEvent)) return;
+        const detail = e.detail;
+        if (!isPlainRecord(detail)) return;
+        const messageId = detail.messageId;
+        if (typeof messageId !== 'string') return;
+        this.scrollToMessageId(messageId);
     };
 
     async scrollToMessageId(messageId: string) {

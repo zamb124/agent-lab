@@ -9,6 +9,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface PublicResolveResult {
     resource_kind?: string;
@@ -25,6 +26,32 @@ interface PublicCatalogItem {
     file_id?: string;
     title?: string;
     [key: string]: unknown;
+}
+
+function isPublicResolve(value: unknown): value is PublicResolveResult {
+    return isPlainRecord(value);
+}
+
+function isPublicOpenConfig(value: unknown): value is PublicOpenConfig {
+    return isPlainRecord(value);
+}
+
+function isPublicCatalogItem(value: unknown): value is PublicCatalogItem {
+    return isPlainRecord(value);
+}
+
+function catalogItems(value: unknown): PublicCatalogItem[] {
+    if (!isPlainRecord(value) || !Array.isArray(value.items)) {
+        return [];
+    }
+    const rows: PublicCatalogItem[] = [];
+    for (const item of value.items) {
+        if (!isPublicCatalogItem(item)) {
+            throw new Error('office-public-preview: catalog item must be an object');
+        }
+        rows.push(item);
+    }
+    return rows;
 }
 
 export class OfficePublicPreviewPage extends PlatformPage {
@@ -146,23 +173,20 @@ export class OfficePublicPreviewPage extends PlatformPage {
             this._loading = false;
             return;
         }
-        const resolve = await this._publicResolve.run({ token }) as PublicResolveResult | null;
-        if (!resolve) {
+        const resolve = await this._publicResolve.run({ token });
+        if (!isPublicResolve(resolve)) {
             this._errorKey = 'public_preview.notFound';
             this._loading = false;
             return;
         }
         this._resolve = resolve;
         if (resolve.resource_kind === 'catalog') {
-            const itemsResponse = await this._publicCatalogItems.run({ token }) as { items?: unknown } | null;
-            this._catalogItems = itemsResponse && Array.isArray(itemsResponse.items)
-                ? itemsResponse.items as PublicCatalogItem[]
-                : [];
+            this._catalogItems = catalogItems(await this._publicCatalogItems.run({ token }));
             this._loading = false;
             return;
         }
-        const openConfig = await this._publicOpen.run({ token }) as PublicOpenConfig | null;
-        if (!openConfig) {
+        const openConfig = await this._publicOpen.run({ token });
+        if (!isPublicOpenConfig(openConfig)) {
             this._errorKey = 'public_preview.openFailed';
             this._loading = false;
             return;
@@ -179,9 +203,9 @@ export class OfficePublicPreviewPage extends PlatformPage {
         const openConfig = await this._publicCatalogBindingOpen.run({
             token,
             fileId: item.file_id,
-        }) as PublicOpenConfig | null;
+        });
         this._loading = false;
-        if (!openConfig) {
+        if (!isPublicOpenConfig(openConfig)) {
             this._errorKey = 'public_preview.openFailed';
             return;
         }

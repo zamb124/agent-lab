@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.src.evaluation.lab_service import EVALUATION_JUDGE_TOOL_NAME
 from apps.flows.src.models.evaluation_lab import (

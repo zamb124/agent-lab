@@ -12,14 +12,6 @@ from apps.flows.realtime.agent_skill_operations import (
     op_flows_agent_skills_remove,
     op_flows_agent_skills_update,
 )
-from apps.flows.realtime.agent_toolkit_operations import (
-    op_flows_agent_toolkits_catalog_list,
-    op_flows_agent_toolkits_create,
-    op_flows_agent_toolkits_item,
-    op_flows_agent_toolkits_list,
-    op_flows_agent_toolkits_remove,
-    op_flows_agent_toolkits_update,
-)
 from apps.flows.realtime.browser_preview_operations import (
     BrowserPreviewClickPayload,
     BrowserPreviewKeyPayload,
@@ -282,12 +274,6 @@ from apps.flows.src.models.agent_skill import (
     AgentSkillImportRequest,
     AgentSkillListPayload,
     AgentSkillUpdatePayload,
-)
-from apps.flows.src.models.agent_toolkit import (
-    AgentToolkitCatalogListPayload,
-    AgentToolkitCreateRequest,
-    AgentToolkitIdPayload,
-    AgentToolkitUpdatePayload,
 )
 from apps.flows.src.models.code_api import (
     CodeDocumentationPayload,
@@ -727,12 +713,6 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowsDi]] = {
     "flows/agent_skills/ensure_seed_requested": Operation(
         payload_model=EmptyPayload, fn=op_flows_agent_skills_ensure_seed
     ),
-    "flows/agent_toolkits/list_requested": Operation(
-        payload_model=EmptyPayload, fn=op_flows_agent_toolkits_list
-    ),
-    "flows/agent_toolkits/catalog_list_requested": Operation(
-        payload_model=AgentToolkitCatalogListPayload, fn=op_flows_agent_toolkits_catalog_list
-    ),
     "flows/tool_runtime/manifest_requested": Operation(
         payload_model=ToolRuntimeManifestPayload, fn=op_flows_tool_runtime_manifest
     ),
@@ -759,18 +739,6 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowsDi]] = {
     ),
     "flows/browser_preview/takeover_release_requested": Operation(
         payload_model=BrowserPreviewSessionPayload, fn=op_flows_browser_preview_takeover_release
-    ),
-    "flows/agent_toolkits/item_requested": Operation(
-        payload_model=AgentToolkitIdPayload, fn=op_flows_agent_toolkits_item
-    ),
-    "flows/agent_toolkits/create_requested": Operation(
-        payload_model=AgentToolkitCreateRequest, fn=op_flows_agent_toolkits_create
-    ),
-    "flows/agent_toolkits/update_requested": Operation(
-        payload_model=AgentToolkitUpdatePayload, fn=op_flows_agent_toolkits_update
-    ),
-    "flows/agent_toolkits/remove_requested": Operation(
-        payload_model=AgentToolkitIdPayload, fn=op_flows_agent_toolkits_remove
     ),
     "flows/mcp_servers/list_requested": Operation(
         payload_model=MCPServerListPayload, fn=op_flows_mcp_servers_list

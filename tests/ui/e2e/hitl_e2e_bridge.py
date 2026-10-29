@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from typing import Literal
 from urllib.parse import quote
 
-import httpx
+import httpx2
 from playwright.async_api import Locator, Page, expect
 
 from apps.flows.src.services.hitl_demo_queue import EXAMPLE_HITL_SLUG
@@ -70,7 +70,7 @@ def _queue_member_user_id(row: object) -> str:
     return member_user_id
 
 
-async def _ensure_queue_member(client: httpx.AsyncClient, queue_id: str, user_id: str) -> None:
+async def _ensure_queue_member(client: httpx2.AsyncClient, queue_id: str, user_id: str) -> None:
     add_resp = await client.post(
         f"{WORKTRACKER_API_PREFIX}/work-queues/{queue_id}/members",
         json={
@@ -99,7 +99,7 @@ async def hitl_ensure_demo_queue_member(origin: str, auth_token: str, user_id: s
     from tests.ui.e2e_worker import ui_e2e_scope_headers
 
     api_origin = hitl_worktracker_api_origin(origin)
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=api_origin,
         cookies={"auth_token": auth_token},
         headers=ui_e2e_scope_headers(),
@@ -172,7 +172,7 @@ async def hitl_api_wait_conversation_text(
     timeout_s: float = 120.0,
 ) -> None:
     """Ждёт текст в GET /flows/api/v1/hitl/{work_item_id}/conversation (снимок леджера)."""
-    import httpx
+    import httpx2
 
     pattern = (
         text_pattern
@@ -184,7 +184,7 @@ async def hitl_api_wait_conversation_text(
     last_turns: list[str] | None = None
     last_policy: object = None
     session_debug: dict[str, object] | None = None
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=flows_origin,
         cookies={"auth_token": auth_token},
         timeout=630.0,
@@ -244,13 +244,13 @@ async def hitl_api_assert_turn_role(
     *,
     timeout_s: float = 60.0,
 ) -> None:
-    import httpx
+    import httpx2
 
     deadline = time.monotonic() + timeout_s
     path = f"/flows/api/v1/hitl/{work_item_id}/conversation"
     last_turns: object | None = None
     last_status: int | None = None
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=flows_origin,
         cookies={"auth_token": auth_token},
         timeout=30.0,
@@ -349,7 +349,7 @@ async def hitl_wait_session_contains(
     text_pattern: re.Pattern[str] | str,
     timeout_s: float = 120.0,
 ) -> None:
-    import httpx
+    import httpx2
 
     pattern = (
         text_pattern
@@ -357,7 +357,7 @@ async def hitl_wait_session_contains(
         else re.compile(re.escape(text_pattern), re.I)
     )
     deadline = time.monotonic() + timeout_s
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=flows_origin,
         cookies={"auth_token": auth_token},
         timeout=630.0,
@@ -436,12 +436,12 @@ async def hitl_operator_claim_and_complete(
     work_item_id: str,
     resolution_text: str,
 ) -> None:
-    import httpx
+    import httpx2
 
     from tests.ui.e2e_worker import ui_e2e_scope_headers
 
     api_origin = hitl_worktracker_api_origin(origin)
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=api_origin,
         cookies={"auth_token": auth_token},
         headers=ui_e2e_scope_headers(),
@@ -598,10 +598,10 @@ async def hitl_api_get_conversation(
     auth_token: str,
     work_item_id: str,
 ) -> JsonObject:
-    import httpx
+    import httpx2
 
     path = f"/flows/api/v1/hitl/{work_item_id}/conversation"
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=flows_origin,
         cookies={"auth_token": auth_token},
         timeout=30.0,
@@ -642,12 +642,12 @@ async def hitl_api_assert_turn_has_files(
     *,
     timeout_s: float = 60.0,
 ) -> None:
-    import httpx
+    import httpx2
 
     deadline = time.monotonic() + timeout_s
     path = f"/flows/api/v1/hitl/{work_item_id}/conversation"
     last_turns: object = None
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=flows_origin,
         cookies={"auth_token": auth_token},
         timeout=30.0,
@@ -828,11 +828,11 @@ async def hitl_start_via_a2a(
     text: str,
     title_contains: str,
 ) -> str:
-    import httpx
+    import httpx2
 
     from tests.ui.e2e_worker import ui_e2e_scope_headers
 
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         base_url=origin,
         cookies={"auth_token": auth_token},
         headers={**ui_e2e_scope_headers(), **A2A_HEADERS},
@@ -868,7 +868,7 @@ async def hitl_embed_opened(
     unique_id: str,
     flow_id: str = EXAMPLE_GRAPH_ID,
 ) -> AsyncIterator[Locator]:
-    from httpx import AsyncClient
+    from httpx2 import AsyncClient
 
     from tests.ui.e2e.test_embed_autoload_browser import (
         _build_embed_page_html,

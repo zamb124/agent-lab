@@ -18,8 +18,8 @@ alwaysApply: false
 ## Модель
 
 - `SpeechOverride` (`core/clients/speech_override.py`, `extra="forbid"`) — per-call настройка: `provider`, `model`, `voice`, `language` (BCP-47), `sample_rate`, `threshold` (VAD), `response_format`, `timeout_s`, `pronunciation_rules`, `pronunciation_replace`.
-- `CompanyVoiceProvider` (`core/models/voice_models.py`), таблица `company_voice_providers`, PK `company_voice_provider_id` = `{company_id}:{kind}`, уникальность `(company_id, kind)`: `kind` ∈ `stt` | `tts`, `provider`, `model`, `voice`, `language`, `sample_rate`, `threshold`, `response_format`, `secrets` (JSONB, в JSON не отдаётся). Поле типа — `kind`, не `type`. `list_by_kind_for_company(*, company_id) -> list[CompanyVoiceProvider]` — все провайдеры компании, `ORDER BY kind`, без предела. Пустой `company_id` — `ValueError`.
-- `PronunciationRule` (`core/clients/tts_pronunciation/models.py`), таблица `pronunciation_rules`, PK `pronunciation_rule_id`: `company_id` (`null` — правило платформы), `kind` ∈ `alias` | `regex` | `stress`, `pattern`, `replacement`, `language`, `providers`, `voices`, `enabled`. Одна модель для строки БД, API и per-call правила. `list_for_company_scope(*, company_id) -> list[PronunciationRule]` — строки одного scope, `ORDER BY created_at`, без limit; `company_id is None` — платформа (`company_id IS NULL`); пустая строка — `ValueError`. `list_enabled_for_company_scope` — то же для `enabled=true`.
+- `CompanyVoiceProvider` (`core/models/voice_models.py`), таблица `company_voice_providers`, PK `company_voice_provider_id` = `{company_id}:{kind}`, уникальность `(company_id, kind)`: `kind` ∈ `stt` | `tts`, `provider`, `model`, `voice`, `language`, `sample_rate`, `threshold`, `response_format`, `secrets` (JSONB, в JSON не отдаётся). Поле типа — `kind`, не `type`. `list_by_kind_for_company_asc(*, company_id) -> list[CompanyVoiceProvider]` — все провайдеры компании, `ORDER BY kind ASC`, без предела. Пустой `company_id` — `ValueError`.
+- `PronunciationRule` (`core/clients/tts_pronunciation/models.py`), таблица `pronunciation_rules`, PK `pronunciation_rule_id`: `company_id` (`null` — правило платформы), `kind` ∈ `alias` | `regex` | `stress`, `pattern`, `replacement`, `language`, `providers`, `voices`, `enabled`. Одна модель для строки БД, API и per-call правила. `PronunciationRule.list_for_company_scope_by_created_at_asc(*, company_id) -> list[PronunciationRule]` — строки одного scope, `ORDER BY created_at ASC`, без limit; `company_id is None` — платформа (`company_id IS NULL`); пустая строка — `ValueError` с текстом `company_id cannot be empty.`. `PronunciationRule.list_enabled_for_company_scope_by_created_at_asc(*, company_id) -> list[PronunciationRule]` — то же для `enabled=true`.
 - Базовые клиенты — `BaseSTTClient`, `BaseTTSClient`, `BaseVADClient` (`core/clients/stt_client.py`, `core/clients/tts_client.py`, `core/clients/vad_client.py`); реализации провайдеров и `*ClientFactory` живут только в `core/clients/**`.
 - Каталог провайдеров, моделей, языков и голосов — `VoiceProvidersCatalogDTO` (`core/models/voice_providers_catalog.py`, константы — `core/clients/speech_provider_catalog.py`).
 - Deployment-default — `settings.voice` (`SpeechProvidersConfig`, `core/config/models.py`, ENV `VOICE__{STT,TTS,VAD}__*`).
@@ -80,13 +80,13 @@ alwaysApply: false
 
 ## Исключения
 
-- Исключение: dry-run правил произношения `apps/voice/api/company_pronunciation_rules.py` вызывает `TtsTextPipeline` напрямую — allowlist `_ALLOWED_FILES` в `scripts/check_tts_pipeline_single_apply.py`.
+- Исключение: dry-run правил произношения `apps/voice/api/company_pronunciation_rules.py` вызывает `TtsTextPipeline` напрямую — allowlist `_ALLOWED_FILES` в `scripts/gates/voice/tts_pipeline_single_apply.py`.
 
 ## Гейты
 
-- `scripts/check_voice_resolver_usage.py` (`make check-voice-canon`, `make lint`) — реализации клиентов речи и фабрики не импортируются вне `core/clients/**`.
-- `scripts/check_tts_pipeline_single_apply.py` (`make check-voice-canon`, `make lint`) — `TtsTextPipeline` только внутри `PronunciationAwareTTSClient`.
-- `scripts/check_speakable_parity.py` (`make check-voice-canon`, `make lint`) — `SPEAKABLE_ARTIFACT_NAMES` Python ≡ JS.
+- `scripts/gates/voice/resolver_usage.py` (`make check-voice-canon`, `make lint`) — реализации клиентов речи и фабрики не импортируются вне `core/clients/**`.
+- `scripts/gates/voice/tts_pipeline_single_apply.py` (`make check-voice-canon`, `make lint`) — `TtsTextPipeline` только внутри `PronunciationAwareTTSClient`.
+- `scripts/gates/voice/speakable_parity.py` (`make check-voice-canon`, `make lint`) — `SPEAKABLE_ARTIFACT_NAMES` Python ≡ JS.
 - `tests/clients/test_voice_resolver.py`, `tests/clients/test_voice_resolver_tts_synthesis_locale.py` — порядок резолва, VAD без company-строки, модель по `synthesis_locale`.
 - `tests/voice/test_company_voice_providers_api.py` — REST провайдеров компании: отказ `vad`, `model: null`, отказ неизвестной модели, снятие override.
 - `tests/clients/test_tts_pronunciation.py` — каскад правил и capabilities провайдеров.

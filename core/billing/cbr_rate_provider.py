@@ -19,7 +19,7 @@ import random
 import xml.etree.ElementTree as ET
 from datetime import date
 
-import httpx
+import httpx2
 
 from core.logging import get_logger
 
@@ -51,7 +51,7 @@ async def refresh_rate_once(fallback: float) -> None:
     global _cached_rate
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+        async with httpx2.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
             response = await client.get(_CBR_URL)
             _ = response.raise_for_status()
             rate, effective_date = _parse_usd_rate(response.text)
@@ -63,14 +63,14 @@ async def refresh_rate_once(fallback: float) -> None:
             effective_date=str(effective_date),
         )
 
-    except httpx.HTTPStatusError as exc:
+    except httpx2.HTTPStatusError as exc:
         logger.warning(
             "billing.cbr_rate.http_error",
             status_code=exc.response.status_code,
             url=str(exc.request.url),
             fallback=fallback,
         )
-    except httpx.TransportError as exc:
+    except httpx2.TransportError as exc:
         logger.warning(
             "billing.cbr_rate.network_error",
             error=str(exc),

@@ -38,7 +38,7 @@ from apps.wiki.content.schema import (
     WikiMentionKind,
     WikiSchemaError,
     WikiTableAlign,
-    normalize_document,
+    normalize_document_in_serialization_order,
     schema_as_json,
 )
 
@@ -61,7 +61,7 @@ __all__ = [
     "empty_document",
     "markdown_file_name",
     "markdown_to_document",
-    "normalize_document",
+    "normalize_document_in_serialization_order",
     "parse_markdown",
     "schema_as_json",
     "split_markdown_file",

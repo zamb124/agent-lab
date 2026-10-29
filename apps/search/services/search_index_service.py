@@ -106,7 +106,7 @@ class SearchIndexService:
         if len(search_index_ids) == 0:
             return []
         slugs = [_slug(item) for item in search_index_ids]
-        rows = await SearchIndexDefinition.batch_get_for_company(slugs, company_id=company_id)
+        rows = await SearchIndexDefinition.list_unordered_by_ids_for_company(slugs, company_id=company_id)
         by_id = {row.search_index_id: row for row in rows}
         missing = [slug for slug in slugs if slug not in by_id]
         if len(missing) > 0:

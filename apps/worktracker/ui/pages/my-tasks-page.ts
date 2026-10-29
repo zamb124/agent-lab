@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
 import '../components/worktracker-icon-action.js';
 import '../components/worktracker-list-section.js';
@@ -31,7 +32,7 @@ export class WorktrackerMyTasksPage extends PlatformPage {
     ];
 
     private _workItems: ResourceController;
-    private _userSel: SelectController<unknown>;
+    private _userSel: SelectController<AuthUser | null>;
 
     constructor() {
         super();
@@ -41,8 +42,8 @@ export class WorktrackerMyTasksPage extends PlatformPage {
 
     override connectedCallback() {
         super.connectedCallback();
-        const user = this._userSel.value as { user_id?: unknown } | null;
-        if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
+        const user = this._userSel.value;
+        if (user === null || typeof user.user_id !== 'string' || user.user_id.length === 0) {
             throw new Error('WorktrackerMyTasksPage: auth user required');
         }
         this._workItems.load({ assignee_user_id: user.user_id, exclude_terminal: true });

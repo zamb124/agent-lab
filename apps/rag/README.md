@@ -8,7 +8,7 @@
 
 - **Провайдер** (`pgvector`, `agentset`) определяет хранение чанков и способ поиска. У namespace фиксируется провайдер создания. В запросах к API опционально передаётся **`?provider=`**; иначе используется **`rag.default_provider`** из конфигурации.
 - **Индексация асинхронная**: загрузка файла возвращает **202** и идентификатор фоновой задачи; итог смотрите по **`GET /rag/api/v1/documents/{document_id}/status`**. Для выполнения задач должен быть запущен **rag_worker** (TaskIQ).
-- **Межсервисные вызовы** к RAG — через **`RagClient`** (`core/clients/rag_client.py`) поверх **`ServiceClient`** (сервис `"rag"`), с контекстом **`get_context()`**, не прямым `httpx` между сервисами.
+- **Межсервисные вызовы** к RAG — через **`RagClient`** (`core/clients/rag_client.py`) поверх **`ServiceClient`** (сервис `"rag"`), с контекстом **`get_context()`**, не прямым `httpx2` между сервисами.
 - **Префикс API** — только **`/rag/api/v1/...`**.
 
 ## HTTP-контракт
@@ -82,7 +82,7 @@
 
 Параметры конфига: **`namespace`**, **`provider`**, **`default_top_k`**, опционально **`company_id`**, **`search_options`** и **`index_profile_config`**.
 
-**`RAGRepository`** (`core/rag/repository.py`): in-process **`provider`** (pgvector, см. **`RAG_IN_PROCESS_PROVIDER_ID`** в `core/rag/constants.py`) и опционально **`service_client`** + **`bind`** для HTTP **`search_namespace`** (тот же контракт, что **`POST /rag/api/v1/namespaces/{id}/search`**). Постановка индексации из API и воркера — напрямую через TaskIQ-задачи в `apps/rag_worker/tasks/` и вызовы из `apps/rag/api/`.
+**`RAGRepository`** (`core/rag/repository.py`): in-process **`provider`** (pgvector, см. **`RAG_IN_PROCESS_PROVIDER_ID`** в `core/rag/constants.py`) и опционально **`service_client`** + **`bind`** для HTTP **`search_namespace`** (тот же контракт, что **`POST /rag/api/v1/namespaces/{id}/search`**). Постановка индексации из API и воркера — напрямую через TaskIQ-задачи в `apps/rag/tasks/` и вызовы из `apps/rag/api/`.
 
 Единая сборка path/body для HTTP-поиска по namespace — **`core/rag/rag_http_namespace_search.py`** (используют **`RagClient.search`** и **`RAGRepository.search_namespace`**).
 
@@ -118,14 +118,14 @@ apps/rag/
 Локально (из корня репозитория):
 
 ```bash
-uv run python scripts/run.py rag
+uv run python -m scripts.dev.run rag
 ```
 
 Сервис: **`http://localhost:8004`**. UI: **`http://localhost:8004/rag/ui`**.
 
-Полный стек разработки: **`make app`** (см. корневой README / `scripts/run.py`).
+Полный стек разработки: **`make app`** (см. корневой README / `scripts/dev/run.py`).
 
-Для индексации документов дополнительно запускайте **rag-worker**: `uv run python scripts/run.py rag-worker` (или через цели в `Makefile`, если описаны).
+Для индексации документов дополнительно запускайте **rag-worker**: `uv run python -m scripts.dev.run rag-worker` (или через цели в `Makefile`, если описаны).
 
 ## Пример вызовов
 

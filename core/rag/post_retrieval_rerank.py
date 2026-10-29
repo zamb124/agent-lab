@@ -188,7 +188,7 @@ def rerank_options(
     )
 
 
-async def apply_rerank_after_retrieve(
+async def apply_rerank_after_retrieve_by_score_desc(
     *,
     results: list[RAGSearchResult],
     query: str,
@@ -328,7 +328,7 @@ async def _rerank_pool_scores(
     return ordered_scores
 
 
-async def apply_rerank_after_retrieve_grouped(
+async def apply_rerank_after_retrieve_grouped_by_score_desc(
     *,
     results_by_namespace: dict[str, list[RAGSearchResult]],
     namespace_order: list[str],
@@ -345,7 +345,7 @@ async def apply_rerank_after_retrieve_grouped(
     if not flat:
         return empty
 
-    reranked = await apply_rerank_after_retrieve(
+    reranked = await apply_rerank_after_retrieve_by_score_desc(
         results=flat,
         query=query,
         provider_name=provider_name,
@@ -364,7 +364,7 @@ async def apply_rerank_after_retrieve_grouped(
 
 
 __all__ = [
-    "apply_rerank_after_retrieve",
-    "apply_rerank_after_retrieve_grouped",
+    "apply_rerank_after_retrieve_by_score_desc",
+    "apply_rerank_after_retrieve_grouped_by_score_desc",
     "rerank_options",
 ]

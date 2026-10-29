@@ -12,7 +12,7 @@ from apps.provider_litserve.model_registry import (
     RegistryModel,
     create_or_replace_model,
     get_model,
-    list_models,
+    list_models_by_created_at_desc,
     mark_model_deleted,
     mark_model_status,
 )
@@ -104,7 +104,7 @@ def _delete_model_weights(model_id: str) -> None:
 )
 def list_registry_models() -> ProviderLitserveModelListResponse:
     cfg = get_provider_litserve_settings().provider_litserve.infra
-    return ProviderLitserveModelListResponse(items=list_models(cfg))
+    return ProviderLitserveModelListResponse(items=list_models_by_created_at_desc(cfg))
 
 
 @router.post(

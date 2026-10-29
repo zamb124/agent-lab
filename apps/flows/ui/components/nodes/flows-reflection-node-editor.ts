@@ -5,7 +5,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-picker-card.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-llm-config-editor.js';
-import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import {
@@ -21,6 +21,13 @@ import {
     newBlankExit,
 } from '../../_helpers/flows-reflection-defaults.js';
 
+function includesString(values: readonly string[], value: string) {
+    for (const item of values) {
+        if (item === value) return true;
+    }
+    return false;
+}
+
 export class FlowsReflectionNodeEditor extends PlatformElement {
     static i18nNamespace = 'flows';
     static override properties: PropertyDeclarations = {
@@ -28,7 +35,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -38,12 +45,12 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
 ;
 
@@ -198,7 +205,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'reflection';
+        this.flowNodeType = 'reflection';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -206,53 +213,61 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this.embedded = false;
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
-    _llmForEditor() {
-        const cfg = asObject(this.nodeConfig);
-        if (!isPlainObject((cfg as any).llm)) {
+    _llmForEditor(): Record<string, unknown> {
+        const cfg = this.nodeConfig;
+        if (!isPlainObject(cfg)) {
             throw new Error('flows-reflection-node-editor: llm config is required');
         }
-        return (cfg as any).llm;
+        const llm = cfg.llm;
+        if (!isPlainObject(llm)) {
+            throw new Error('flows-reflection-node-editor: llm config is required');
+        }
+        return llm;
     }
 
-    _policyForEditor() {
-        const cfg = asObject(this.nodeConfig);
-        if (!isPlainObject((cfg as any).critic_policy)) {
+    _policyForEditor(): Record<string, unknown> {
+        const cfg = this.nodeConfig;
+        if (!isPlainObject(cfg)) {
             throw new Error('flows-reflection-node-editor: critic_policy is required');
         }
-        return (cfg as any).critic_policy;
+        const policy = cfg.critic_policy;
+        if (!isPlainObject(policy)) {
+            throw new Error('flows-reflection-node-editor: critic_policy is required');
+        }
+        return policy;
     }
 
-    _enumValues(values: any, prefix: string) {
-        return values.map((value: unknown) => ({
+    _enumValues(values: readonly string[], prefix: string) {
+        return values.map((value) => ({
             value,
             label: this.t(`${prefix}.${value}`),
         }));
     }
 
-    _emitPolicyPatch(patch: any) {
+    _emitPolicyPatch(patch: Record<string, unknown>) {
         const policy = this._policyForEditor();
         this._emitPatch({ critic_policy: { ...policy, ...patch } });
     }
 
-    _requiredEnum(value: unknown, values: any, ctx: any) {
-        if (typeof value === 'string' && values.includes(value)) {
+    _requiredEnum(value: unknown, values: readonly string[], ctx: string) {
+        if (typeof value === 'string' && includesString(values, value)) {
             return value;
         }
         throw new Error(`flows-reflection-node-editor: ${ctx} is invalid`);
     }
 
-    _requiredNumber(value: unknown, ctx: any) {
+    _requiredNumber(value: unknown, ctx: string) {
         if (typeof value === 'number' && Number.isFinite(value)) {
             return value;
         }
         throw new Error(`flows-reflection-node-editor: ${ctx} is required`);
     }
 
-    _requiredArray(value: unknown, ctx: any) {
+    _requiredArray(value: unknown, ctx: string): unknown[] {
         if (Array.isArray(value)) {
             return value;
         }
@@ -270,14 +285,14 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this._emitPatch({ llm: Object.keys(next).length === 0 ? null : next });
     }
 
-    _onApplyPreset(presetId: any) {
-        if (!REFLECTION_POLICY_PRESET_IDS.includes(presetId)) {
+    _onApplyPreset(presetId: string) {
+        if (!includesString(REFLECTION_POLICY_PRESET_IDS, presetId)) {
             throw new Error(`flows-reflection-node-editor: unknown preset ${presetId}`);
         }
         this._emitPatch({ critic_policy: getReflectionPolicyPreset(presetId) });
     }
 
-    _activePresetId(policy: any) {
+    _activePresetId(policy: Record<string, unknown>) {
         for (const presetId of REFLECTION_POLICY_PRESET_IDS) {
             const preset = getReflectionPolicyPreset(presetId);
             if (
@@ -299,7 +314,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
 
     _onGate(e: CustomEvent) {
         const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
-        if (!REFLECTION_GATES.includes(value)) {
+        if (!includesString(REFLECTION_GATES, value)) {
             throw new Error('flows-reflection-node-editor: invalid gate');
         }
         this._emitPolicyPatch({ gate: value });
@@ -307,11 +322,14 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
 
     _onTargetKind(e: CustomEvent) {
         const kind = typeof e.detail?.value === 'string' ? e.detail.value : '';
-        if (!REFLECTION_TARGET_KINDS.includes(kind)) {
+        if (!includesString(REFLECTION_TARGET_KINDS, kind)) {
             throw new Error('flows-reflection-node-editor: invalid target kind');
         }
-        const current = asObject(this._policyForEditor().target);
-        const statePath = typeof (current as any).state_path === 'string' ? (current as any).state_path : '';
+        const current = this._policyForEditor().target;
+        if (!isPlainObject(current)) {
+            throw new Error('flows-reflection-node-editor: target object required');
+        }
+        const statePath = typeof current.state_path === 'string' ? current.state_path : '';
         const target = kind === 'state_path'
             ? { kind, state_path: statePath }
             : { kind };
@@ -337,8 +355,8 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this._emitPolicyPatch({ min_confidence: value });
     }
 
-    _onToggleSeverity(severity: any, checked: any) {
-        if (!CRITIC_SEVERITIES.includes(severity)) {
+    _onToggleSeverity(severity: string, checked: boolean) {
+        if (!includesString(CRITIC_SEVERITIES, severity)) {
             throw new Error('flows-reflection-node-editor: invalid severity');
         }
         const policy = this._policyForEditor();
@@ -352,12 +370,17 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this._emitPolicyPatch({ block_on_severities: next });
     }
 
-    _criteriaList() {
+    _criteriaList(): unknown[] {
         return this._requiredArray(this._policyForEditor().criteria, 'criteria');
     }
 
-    _emitCriteria(next: any) {
-        const ids = next.map((item: any) => item.criterion_id);
+    _emitCriteria(next: readonly unknown[]) {
+        const ids = next.map((item) => {
+            if (!isPlainObject(item) || typeof item.criterion_id !== 'string') {
+                throw new Error('flows-reflection-node-editor: criterion_id required');
+            }
+            return item.criterion_id;
+        });
         if (new Set(ids).size !== ids.length) {
             throw new Error('flows-reflection-node-editor: criterion_id values must be unique');
         }
@@ -379,7 +402,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this._emitCriteria(criteria.filter((_, i) => i !== index));
     }
 
-    _onCriterionField(index: number, field: any, value: unknown) {
+    _onCriterionField(index: number, field: string, value: unknown) {
         const criteria = this._criteriaList().map((item, i) => {
             if (i !== index) {
                 return item;
@@ -392,16 +415,16 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this._emitCriteria(criteria);
     }
 
-    _exitsList() {
+    _exitsList(): unknown[] {
         const policy = this._policyForEditor();
         if (Array.isArray(policy.exits) && policy.exits.length > 0) {
             return policy.exits;
         }
-        return getDefaultPassFailExits();
+        return [...getDefaultPassFailExits()];
     }
 
-    _emitExits(next: any) {
-        const ids = next.map((item: any) => {
+    _emitExits(next: readonly unknown[]) {
+        const ids = next.map((item) => {
             if (!isPlainObject(item) || typeof item.exit_id !== 'string') {
                 throw new Error('flows-reflection-node-editor: exit object with exit_id required');
             }
@@ -414,7 +437,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
             throw new Error('flows-reflection-node-editor: at least one exit required');
         }
         const alwaysIndexes = next
-            .map((item: any, index: number) => (isPlainObject(item.when) && item.when.kind === 'always' ? index : -1))
+            .map((item, index) => (isPlainObject(item) && isPlainObject(item.when) && item.when.kind === 'always' ? index : -1))
             .filter((index: number) => index >= 0);
         if (alwaysIndexes.length > 1) {
             throw new Error('flows-reflection-node-editor: at most one always exit');
@@ -434,23 +457,25 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         if (exits.length <= 1) {
             throw new Error('flows-reflection-node-editor: at least one exit required');
         }
-        this._emitExits(exits.filter((_: any, i: number) => i !== index));
+        this._emitExits(exits.filter((_, i) => i !== index));
     }
 
-    _onMoveExit(index: number, delta: any) {
+    _onMoveExit(index: number, delta: number) {
         const exits = [...this._exitsList()];
         const target = index + delta;
-        if (target < 0 || target >= exits.length) {
-            return;
+        if (target < 0 || target >= exits.length) return;
+        const current = exits[index];
+        const swapped = exits[target];
+        if (current === undefined || swapped === undefined) {
+            throw new Error('flows-reflection-node-editor: exit index required');
         }
-        const tmp = exits[index];
-        exits[index] = exits[target];
-        exits[target] = tmp;
+        exits[index] = swapped;
+        exits[target] = current;
         this._emitExits(exits);
     }
 
-    _onExitField(index: number, field: any, value: unknown) {
-        const exits = this._exitsList().map((item: any, i: number) => {
+    _onExitField(index: number, field: string, value: unknown) {
+        const exits = this._exitsList().map((item, i) => {
             if (i !== index) {
                 return item;
             }
@@ -463,10 +488,10 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
     }
 
     _onExitWhenKind(index: number, kind: string) {
-        if (!REFLECTION_EXIT_WHEN_KINDS.includes(kind)) {
+        if (!includesString(REFLECTION_EXIT_WHEN_KINDS, kind)) {
             throw new Error('flows-reflection-node-editor: invalid exit when kind');
         }
-        const exits = this._exitsList().map((item: any, i: number) => {
+        const exits = this._exitsList().map((item, i) => {
             if (i !== index) {
                 return item;
             }
@@ -484,11 +509,11 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this._emitExits(exits);
     }
 
-    _onExitWhenDecision(index: number, decision: any) {
-        if (!CRITIC_DECISIONS.includes(decision)) {
+    _onExitWhenDecision(index: number, decision: string) {
+        if (!includesString(CRITIC_DECISIONS, decision)) {
             throw new Error('flows-reflection-node-editor: invalid decision');
         }
-        const exits = this._exitsList().map((item: any, i: number) => {
+        const exits = this._exitsList().map((item, i) => {
             if (i !== index) {
                 return item;
             }
@@ -500,8 +525,8 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         this._emitExits(exits);
     }
 
-    _onExitWhenReasonPrefix(index: number, reasonPrefix: any) {
-        const exits = this._exitsList().map((item: any, i: number) => {
+    _onExitWhenReasonPrefix(index: number, reasonPrefix: string) {
+        const exits = this._exitsList().map((item, i) => {
             if (i !== index) {
                 return item;
             }
@@ -521,7 +546,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                 <p class="intro-body">${this.t('reflection_node_editor.intro_body')}</p>
                 <p class="block-hint">${this.t('reflection_node_editor.exits_title')}</p>
                 <ul class="exits-preview">
-                    ${exits.map((item: any) => {
+                    ${exits.map((item) => {
                         if (!isPlainObject(item)) {
                             throw new Error('flows-reflection-node-editor: exit object required');
                         }
@@ -543,15 +568,18 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                 <h4 class="block-title">${this.t('reflection_node_editor.section_exits')}</h4>
                 <p class="block-hint">${this.t('reflection_node_editor.section_exits_hint')}</p>
                 <div class="block-card content-panel exits-editor">
-                    ${exits.map((item: any, index: number) => {
+                    ${exits.map((item, index) => {
                         if (!isPlainObject(item)) {
                             throw new Error('flows-reflection-node-editor: exit object required');
                         }
                         const exitId = typeof item.exit_id === 'string' ? item.exit_id : '';
                         const label = typeof item.label === 'string' ? item.label : '';
-                        const when = asObject(item.when);
+                        if (!isPlainObject(item.when)) {
+                            throw new Error('flows-reflection-node-editor: exit.when object required');
+                        }
+                        const when = item.when;
                         const whenKind = this._requiredEnum(
-                            (when as any).kind,
+                            when.kind,
                             REFLECTION_EXIT_WHEN_KINDS,
                             'exit.when.kind',
                         );
@@ -622,7 +650,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                                             mode="edit"
                                             .label=${this.t('reflection_node_editor.exit_when_decision')}
                                             .value=${this._requiredEnum(
-                                                (when as any).decision,
+                                                when.decision,
                                                 CRITIC_DECISIONS,
                                                 'exit.when.decision',
                                             )}
@@ -639,7 +667,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                                             type="string"
                                             mode="edit"
                                             .label=${this.t('reflection_node_editor.exit_when_reason_prefix')}
-                                            .value=${typeof (when as any).reason_prefix === 'string' ? (when as any).reason_prefix : ''}
+                                            .value=${typeof when.reason_prefix === 'string' ? when.reason_prefix : ''}
                                             @change=${(e: CustomEvent) => {
                                                 const value = typeof e.detail?.value === 'string' ? e.detail.value.trim() : '';
                                                 this._onExitWhenReasonPrefix(index, value);
@@ -659,7 +687,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderPresets(policy: any) {
+    _renderPresets(policy: Record<string, unknown>) {
         const active = this._activePresetId(policy);
         const cards = [
             {
@@ -706,10 +734,13 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderCheckSection(policy: any) {
-        const target = asObject(policy.target);
-        const targetKind = this._requiredEnum((target as any).kind, REFLECTION_TARGET_KINDS, 'target.kind');
-        const statePath = typeof (target as any).state_path === 'string' ? (target as any).state_path : '';
+    _renderCheckSection(policy: Record<string, unknown>) {
+        if (!isPlainObject(policy.target)) {
+            throw new Error('flows-reflection-node-editor: target object required');
+        }
+        const target = policy.target;
+        const targetKind = this._requiredEnum(target.kind, REFLECTION_TARGET_KINDS, 'target.kind');
+        const statePath = typeof target.state_path === 'string' ? target.state_path : '';
         const gate = this._requiredEnum(policy.gate, REFLECTION_GATES, 'gate');
         return html`
             <section class="block">
@@ -782,7 +813,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderBlockRules(policy: any) {
+    _renderBlockRules(policy: Record<string, unknown>) {
         const minConfidence = this._requiredNumber(policy.min_confidence, 'min_confidence');
         const blockOn = this._requiredArray(policy.block_on_severities, 'block_on_severities');
         return html`
@@ -931,7 +962,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'reflection'}
+                .flowNodeType=${this.flowNodeType.length > 0 ? this.flowNodeType : 'reflection'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

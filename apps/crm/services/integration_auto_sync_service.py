@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from croniter import CroniterBadCronError, croniter
 
 from apps.crm.integrations.registry import IntegrationRegistry
-from apps.crm_worker.tasks.task_names import SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC
+from apps.crm.tasks.task_names import SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC
 from core.clients.scheduler_client import SchedulerClient
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService

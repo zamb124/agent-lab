@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from apps.search_worker.tasks.task_names import (
+from apps.search.tasks.task_names import (
     CRAWL_ORCHESTRATOR_TICK,
     CRAWL_RECLAIM_STALE_FETCHING,
 )

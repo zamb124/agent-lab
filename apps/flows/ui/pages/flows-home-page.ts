@@ -2,13 +2,14 @@
  * FlowsHomePage — рабочая главная страница сервиса flows.
  */
 
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { html, css, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
-import { buildFrontendPublicPath, buildServiceEntryUrl } from '@platform/lib/utils/build-service-entry-url.js';
+import { buildServiceEntryUrl } from '@platform/lib/utils/build-service-entry-url.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
@@ -115,7 +116,21 @@ const CAPABILITY_GROUPS = Object.freeze([
     }),
 ]);
 
-function resultItems(result: any) {
+interface FlowHomeStats {
+    flows: readonly unknown[];
+    flowCount: number;
+    branchCount: number;
+    nodeCount: number;
+    activeSessionCount: number;
+    bundleUpdateCount: number;
+}
+
+interface FlowsHomeAuth {
+    user: AuthUser | null;
+    companyId: string;
+}
+
+function resultItems(result: unknown): unknown[] {
     if (Array.isArray(result)) {
         return result;
     }
@@ -125,7 +140,7 @@ function resultItems(result: any) {
     return [];
 }
 
-function countBranches(flows: any) {
+function countBranches(flows: readonly unknown[]) {
     let total = 0;
     for (const flow of flows) {
         total += 1;
@@ -136,7 +151,7 @@ function countBranches(flows: any) {
     return total;
 }
 
-function countFlowNodes(flows: any) {
+function countFlowNodes(flows: readonly unknown[]) {
     let total = 0;
     for (const flow of flows) {
         if (!isPlainObject(flow)) {
@@ -150,21 +165,30 @@ function countFlowNodes(flows: any) {
     return total;
 }
 
-function flowTitle(flow: any) {
-    if (isPlainObject(flow) && typeof flow.name === 'string' && flow.name.length > 0) {
-        return flow.name;
+function flowRecord(flow: unknown): Record<string, unknown> {
+    if (!isPlainObject(flow)) {
+        throw new Error('flows-home-page: flow required');
     }
-    return asString(flow?.flow_id);
+    return flow;
 }
 
-function flowDescription(flow: any) {
-    if (isPlainObject(flow) && typeof flow.description === 'string' && flow.description.length > 0) {
-        return flow.description;
+function flowTitle(flow: unknown) {
+    const record = flowRecord(flow);
+    if (typeof record.name === 'string' && record.name.length > 0) {
+        return record.name;
     }
-    return '';
+    if (typeof record.flow_id === 'string' && record.flow_id.length > 0) {
+        return record.flow_id;
+    }
+    throw new Error('flows-home-page: flow name required');
 }
 
-function resourceTypeCount(items: Record<string, any>[], type: string) {
+function flowDescription(flow: unknown) {
+    const record = flowRecord(flow);
+    return typeof record.description === 'string' ? record.description : '';
+}
+
+function resourceTypeCount(items: readonly unknown[], type: string) {
     let total = 0;
     for (const item of items) {
         if (isPlainObject(item) && item.type === type) {
@@ -174,7 +198,7 @@ function resourceTypeCount(items: Record<string, any>[], type: string) {
     return total;
 }
 
-function activeSessionCount(items: Record<string, any>[]) {
+function activeSessionCount(items: readonly unknown[]) {
     let total = 0;
     for (const item of items) {
         if (!isPlainObject(item)) {
@@ -690,10 +714,10 @@ export class FlowsHomePage extends PlatformPage {
     private _bundles: OpController;
     private _integrations: OpController;
     private _workItemCounts: OpController;
-    private _authSel: SelectController<any>;
-    private _localeSel: SelectController<any>;
-    private _flowsHomeMql: any;
-    private _onFlowsHomeMql: any;
+    private _authSel: SelectController<FlowsHomeAuth>;
+    private _localeSel: SelectController<string>;
+    private _flowsHomeMql: MediaQueryList | null;
+    private _onFlowsHomeMql: (() => void) | null;
 
     constructor() {
         super();
@@ -712,21 +736,15 @@ export class FlowsHomePage extends PlatformPage {
         this._bundles = this.useOp('flows/flow_store_bundles');
         this._integrations = this.useOp('flows/integrations_list');
         this._workItemCounts = this.useOp('worktracker/work_item_counts');
-        this._authSel = this.select((s) => {
-            const auth = isPlainObject(s.auth) ? s.auth : {};
-            return {
-                user: isPlainObject((auth as any).user) ? (auth as any).user : null,
-                companyId: typeof (auth as any).activeCompanyId === 'string' ? (auth as any).activeCompanyId : '',
-            };
-        });
-        this._localeSel = this.select((s) => {
-            if (!isPlainObject(s.i18n)) {
-                return '';
+        this._authSel = this.select((state): FlowsHomeAuth => ({
+            user: state.auth.user,
+            companyId: state.auth.activeCompanyId === null ? '' : state.auth.activeCompanyId,
+        }));
+        this._localeSel = this.select((state) => {
+            if (state.i18n.locale.length === 0) {
+                throw new Error('flows-home-page: i18n.locale is required');
             }
-            if (typeof (s as any).i18n.locale !== 'string') {
-                return '';
-            }
-            return (s as any).i18n.locale;
+            return state.i18n.locale;
         });
         if (typeof window !== 'undefined') {
             if (typeof window.matchMedia === 'function') {
@@ -777,8 +795,10 @@ export class FlowsHomePage extends PlatformPage {
             };
             unsubOk = this.bus.subscribeType(okType, (event) => {
                 cleanup();
-                const total = event && isPlainObject(event.payload) ? (event as any).payload.total : null;
-                this._toolsCount = typeof total === 'number' && total >= 0 ? total : 0;
+                if (!isPlainObject(event.payload) || typeof event.payload.total !== 'number' || event.payload.total < 0) {
+                    throw new Error('flows-home-page: tools total required');
+                }
+                this._toolsCount = event.payload.total;
                 resolve();
             });
             unsubFail = this.bus.subscribeType(failType, () => {
@@ -900,7 +920,7 @@ export class FlowsHomePage extends PlatformPage {
         this.navigate('flow_editor', { flowId });
     }
 
-    _openSession(session: any) {
+    _openSession(session: unknown) {
         if (!isPlainObject(session)) {
             return;
         }
@@ -908,7 +928,14 @@ export class FlowsHomePage extends PlatformPage {
         if (route === null) {
             return;
         }
-        this.navigate(route.routeKey, route.params as Record<string, string>);
+        const params: Record<string, string> = {};
+        for (const [key, value] of Object.entries(route.params)) {
+            if (typeof value !== 'string') {
+                throw new Error('flows-home-page: session route param must be a string');
+            }
+            params[key] = value;
+        }
+        this.navigate(route.routeKey, params);
     }
 
     _formatDateTime(value: unknown) {
@@ -925,9 +952,9 @@ export class FlowsHomePage extends PlatformPage {
         return formatPlatformDateTime(value, locale);
     }
 
-    _flowStats() {
-        const flows = asArray(this._flows.items).filter((flow) => isPlainObject(flow) && flow.hidden !== true);
-        const sessions = asArray(this._sessions.items);
+    _flowStats(): FlowHomeStats {
+        const flows: unknown[] = asArray(this._flows.items).filter((flow) => isPlainObject(flow) && flow.hidden !== true);
+        const sessions: unknown[] = asArray(this._sessions.items);
         return {
             flows,
             flowCount: flows.length,
@@ -1007,10 +1034,6 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _agentDownloadHref() {
-        return buildFrontendPublicPath('/agent');
-    }
-
     _renderHero() {
         return html`
             <section class="hero-band">
@@ -1045,15 +1068,6 @@ export class FlowsHomePage extends PlatformPage {
                             <platform-icon name="mcp" size="16"></platform-icon>
                             <span>${this.t('flows_home.hero_mcp')}</span>
                         </platform-button>
-                        <a
-                            class="hero-download-link"
-                            href=${this._agentDownloadHref()}
-                            title=${this.t('flows_home.hero_download_desc')}
-                            aria-label=${this.t('flows_home.hero_download')}
-                        >
-                            <platform-icon name="download" size="16"></platform-icon>
-                            <span>${this.t('flows_home.hero_download')}</span>
-                        </a>
                     </div>
                 </div>
                 <div class="hero-map" aria-hidden="true">
@@ -1068,7 +1082,7 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderMapNode(icon: any, title: string, kind: string) {
+    _renderMapNode(icon: string, title: string, kind: string) {
         return html`
             <div class="map-node">
                 <div class="map-node-head">
@@ -1080,7 +1094,7 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderMetric(icon: any, labelKey: string, value: unknown, captionKey: any) {
+    _renderMetric(icon: string, labelKey: string, value: unknown, captionKey: string) {
         const numericValue = Number(value);
         return html`
             <div class="metric-shell">
@@ -1093,7 +1107,7 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderMetrics(stats: any) {
+    _renderMetrics(stats: FlowHomeStats) {
         return html`
             <section class="metric-grid" aria-label=${this.t('flows_home.metrics_aria')}>
                 ${this._renderMetric('workflow', 'flows_home.metric_flows', String(stats.flowCount), 'flows_home.metric_flows_caption')}
@@ -1109,7 +1123,7 @@ export class FlowsHomePage extends PlatformPage {
         return [...QUICK_ACTIONS];
     }
 
-    _renderActionCard(action: any) {
+    _renderActionCard(action: (typeof QUICK_ACTIONS)[number]) {
         const title = this.t(action.titleKey);
         return html`
             <glass-card compact>
@@ -1145,7 +1159,7 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderSectionHead(titleKey: any, subtitleKey: any, actionTemplate = '', hintKey = '') {
+    _renderSectionHead(titleKey: string, subtitleKey: string, actionTemplate = '', hintKey = '') {
         return html`
             <div class="section-head">
                 <div>
@@ -1170,16 +1184,18 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderFlowMedia(flow: any) {
-        const imageUrl = asString(flow?.store_card_image_url);
+    _renderFlowMedia(flow: unknown) {
+        const record = flowRecord(flow);
+        const imageUrl = typeof record.store_card_image_url === 'string' ? record.store_card_image_url : '';
         if (imageUrl.length > 0) {
             return html`<img src=${imageUrl} alt=${flowTitle(flow)} />`;
         }
         return html`<platform-icon name="workflow" size="34"></platform-icon>`;
     }
 
-    _renderFlowCard(flow: any) {
-        const flowId = asString(flow?.flow_id);
+    _renderFlowCard(flow: unknown) {
+        const record = flowRecord(flow);
+        const flowId = typeof record.flow_id === 'string' ? record.flow_id : '';
         const branches = isPlainObject(flow) && isPlainObject(flow.branches) ? Object.keys(flow.branches).length : 0;
         const description = flowDescription(flow);
         return html`
@@ -1220,7 +1236,7 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderFlowsSection(flows: any) {
+    _renderFlowsSection(flows: readonly unknown[]) {
         const visibleFlows = flows;
         return html`
             <section>
@@ -1235,14 +1251,20 @@ export class FlowsHomePage extends PlatformPage {
                         `
                         : html`
                             <div class="flow-grid">
-                                ${repeat(visibleFlows, (flow) => asString((flow as any).flow_id), (flow) => this._renderFlowCard(flow))}
+                                ${repeat(visibleFlows, (flow) => {
+                                    const record = flowRecord(flow);
+                                    if (typeof record.flow_id !== 'string' || record.flow_id.length === 0) {
+                                        throw new Error('flows-home-page: flow_id required');
+                                    }
+                                    return record.flow_id;
+                                }, (flow) => this._renderFlowCard(flow))}
                             </div>
                         `}
             </section>
         `;
     }
 
-    _renderConnectCard(action: any, value: unknown) {
+    _renderConnectCard(action: (typeof CONNECT_ACTIONS)[number], value: unknown) {
         const title = this.t(action.titleKey);
         if (action.id === 'resources') {
             return html`
@@ -1329,9 +1351,12 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderSessionRow(session: any) {
-        const flowId = asString(session?.flow_id);
-        const status = asString(session?.status);
+    _renderSessionRow(session: unknown) {
+        if (!isPlainObject(session)) {
+            throw new Error('flows-home-page: session required');
+        }
+        const flowId = typeof session.flow_id === 'string' ? session.flow_id : '';
+        const status = typeof session.status === 'string' ? session.status : '';
         return html`
             <article class="session-row">
                 <span class="row-main">
@@ -1340,7 +1365,7 @@ export class FlowsHomePage extends PlatformPage {
                     </span>
                     <span class="row-copy">
                         <span class="row-title">${flowId}</span>
-                        <span class="row-subtitle">${this._formatDateTime(session?.last_activity)}</span>
+                        <span class="row-subtitle">${this._formatDateTime(session.last_activity)}</span>
                     </span>
                 </span>
                 <span class="chip">${status}</span>
@@ -1357,7 +1382,7 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderReadinessRow(icon: any, titleKey: any, value: unknown) {
+    _renderReadinessRow(icon: string, titleKey: string, value: unknown) {
         return html`
             <div class="readiness-row">
                 <span class="row-main">
@@ -1404,7 +1429,7 @@ export class FlowsHomePage extends PlatformPage {
     _renderActivitySection() {
         const sessions = asArray(this._sessions.items).slice(0, 5);
         const bundles = resultItems(this._bundles.lastResult);
-        const installedBundles = bundles.filter((item: any) => isPlainObject(item) && item.installed === true).length;
+        const installedBundles = bundles.filter((item) => isPlainObject(item) && item.installed === true).length;
         const toolsCount = this._toolsCount;
         return html`
             <section>
@@ -1415,7 +1440,12 @@ export class FlowsHomePage extends PlatformPage {
                             ? html`<div class="empty-panel"><glass-spinner></glass-spinner></div>`
                             : sessions.length === 0
                                 ? html`<div class="empty-panel">${this.t('flows_home.sessions_empty')}</div>`
-                                : repeat(sessions, (session) => asString(session.session_id), (session) => this._renderSessionRow(session))}
+                                : repeat(sessions, (session) => {
+                                    if (!isPlainObject(session) || typeof session.session_id !== 'string' || session.session_id.length === 0) {
+                                        throw new Error('flows-home-page: session_id required');
+                                    }
+                                    return session.session_id;
+                                }, (session) => this._renderSessionRow(session))}
                     </div>
                     <div class="readiness-list">
                         ${this._renderReadinessRow('box', 'flows_home.ready_bundles', `${installedBundles}/${bundles.length}`)}

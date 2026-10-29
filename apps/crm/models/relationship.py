@@ -134,16 +134,18 @@ class Relationship(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    def touching(cls, entity_id: str) -> Query[Self]:
+    def query_touching(cls, entity_id: str) -> Query[Self]:
+        """Рёбра, где сущность — source или target. Фильтра компании нет. Порядка нет."""
         return cls.objects.filter(
             Q(source_entity_id=entity_id) | Q(target_entity_id=entity_id)
         )
 
     @classmethod
-    def touching_in_company(
+    def query_touching_in_company(
         cls, entity_id: str, company_id: str
     ) -> Query[Self]:
-        return cls.touching(entity_id).filter(company_id=company_id)
+        """Тот же запрос, что query_touching, плюс компания. Порядка нет."""
+        return cls.query_touching(entity_id).filter(company_id=company_id)
 
     @classmethod
     def _exact_edge(cls, company_id: str, row: Self) -> Query[Self]:
@@ -205,12 +207,13 @@ class Relationship(PlatformModel):
         return neighbors
 
     @classmethod
-    async def graph_page(
+    async def graph_page_by_created_at_and_relationship_id_asc(
         cls,
         *,
         limit: int,
         cursor: str | None,
     ) -> CursorPage[Relationship]:
+        """Страница рёбер компании, ORDER BY created_at ASC, relationship_id ASC. Курсор продолжает страницу после последней строки."""
         table_name = cls.get_table_name()
         company_id = require_active_company().company_id
         clauses = ["company_id = $1"]
@@ -287,7 +290,7 @@ class Relationship(PlatformModel):
     async def delete_loops_and_duplicate_edges(cls, entity_id: str) -> None:
         """В активной компании удаляет петли сущности и лишние рёбра с тем же namespace, концами и типом. Оставляет ребро с наименьшим relationship_id."""
         company_id = require_active_company().company_id
-        rows = await cls.touching_in_company(entity_id, company_id).all()
+        rows = await cls.query_touching_in_company(entity_id, company_id).all()
         deleted_count = 0
         for relationship in rows:
             if relationship.source_entity_id != relationship.target_entity_id:
@@ -298,7 +301,7 @@ class Relationship(PlatformModel):
             ).delete()
             if deleted > 0:
                 deleted_count += 1
-        rows = await cls.touching_in_company(entity_id, company_id).all()
+        rows = await cls.query_touching_in_company(entity_id, company_id).all()
         groups: dict[tuple[str, str, str, str], list[Relationship]] = {}
         for relationship in rows:
             key = (

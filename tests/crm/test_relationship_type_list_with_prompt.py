@@ -40,7 +40,7 @@ async def test_list_with_prompt_keeps_empty_string_and_skips_null(unique_id: str
     _ = await RelationshipType.objects.create(instance=null_prompt)
     _ = await RelationshipType.objects.create(instance=foreign)
 
-    found = await RelationshipType.list_with_prompt(company_id)
+    found = await RelationshipType.list_unordered_with_prompt(company_id)
     assert {row.type_id for row in found} == {with_prompt.type_id, empty_prompt.type_id}
 
 
@@ -58,7 +58,7 @@ async def test_update_loaded_by_company_and_type_id_counts_rows(unique_id: str) 
     stored.name = "After"
     stored.prompt = "now"
     assert await RelationshipType.update_loaded_by_company_and_type_id(stored) == 1
-    found = await RelationshipType.list_with_prompt(company_id)
+    found = await RelationshipType.list_unordered_with_prompt(company_id)
     assert {row.type_id: row.name for row in found} == {stored.type_id: "After"}
     missing = RelationshipType(
         type_id=f"missing-{unique_id}",

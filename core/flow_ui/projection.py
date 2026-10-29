@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import types
 from collections.abc import Iterable, Sequence
-from typing import Annotated, cast, get_args, get_origin
+from typing import Annotated, TypeVar, cast, get_args, get_origin
 
 from pydantic import BaseModel
+from typing_extensions import TypeForm
 
 from core.flow_ui.document import (
     FlowUIBlockBase,
@@ -42,6 +43,7 @@ def template_paths(text: str) -> list[str]:
 type FlowUIFieldMarker = FlowUITemplateText | FlowUIStatePathMarker | FlowUIImageUrlMarker
 type FlowUIAnnotation = type | types.GenericAlias | types.UnionType | None
 type FlowUIAnnotationArg = FlowUIAnnotation | FlowUIFieldMarker
+_FieldAnnotation = TypeVar("_FieldAnnotation")
 type FlowUIFieldValue = (
     str
     | int
@@ -55,7 +57,9 @@ type FlowUIFieldValue = (
 )
 
 
-def _annotation_args(annotation: FlowUIAnnotationArg) -> tuple[FlowUIAnnotationArg, ...]:
+def _annotation_args(
+    annotation: TypeForm[_FieldAnnotation] | FlowUIAnnotationArg,
+) -> tuple[FlowUIAnnotationArg, ...]:
     return cast(tuple[FlowUIAnnotationArg, ...], get_args(annotation))
 
 
@@ -65,7 +69,9 @@ def _has_markers(metadata: Sequence[FlowUIAnnotationArg]) -> tuple[bool, bool]:
     return template, state_path
 
 
-def _annotation_markers(annotation: FlowUIAnnotationArg) -> tuple[bool, bool]:
+def _annotation_markers(
+    annotation: TypeForm[_FieldAnnotation] | FlowUIAnnotationArg,
+) -> tuple[bool, bool]:
     origin = get_origin(annotation)
     args = _annotation_args(annotation)
     if origin is Annotated:

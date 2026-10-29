@@ -24,8 +24,8 @@ from typing import BinaryIO, ClassVar, Literal, Protocol, TypedDict, TypeIs, ove
 
 import ebooklib
 import extract_msg
-import fitz as pymupdf
 import olefile
+import pymupdf
 import trafilatura
 import xlrd
 from a2a.types import Message, Part, Role

@@ -3,7 +3,7 @@ name: agentlab-dev
 services:
   postgres:
     platform: "linux/amd64"
-    image: pgvector/pgvector:pg17
+    image: pgvector/pgvector:0.8.7-pg18
     container_name: agentlab_postgres_dev
     environment:
       POSTGRES_DB: platform_shared
@@ -26,7 +26,7 @@ services:
 
   redis:
     platform: "linux/amd64"
-    image: redis:7-alpine
+    image: redis:8.8.4-alpine
     container_name: agentlab_redis_dev
     command: redis-server --save 60 1 --loglevel notice
     ports:
@@ -45,7 +45,7 @@ services:
   # -volume.max=0: лимит вольюмов авто = свободное место / размер вольюма — иначе фиксированный лимит исчерпывается, т.к. каждый бакет (collection) резервирует свои вольюмы
   seaweedfs:
     platform: "linux/amd64"
-    image: chrislusf/seaweedfs:4.45
+    image: chrislusf/seaweedfs:4.51
     container_name: agentlab_seaweedfs_dev
     ports:
       - "19001:8333"
@@ -66,7 +66,7 @@ services:
   # могла появиться в каноне после первого init тома. Helm: openfga_bootstrap_cluster.sh.
   openfga-db:
     platform: "linux/amd64"
-    image: pgvector/pgvector:pg17
+    image: pgvector/pgvector:0.8.7-pg18
     container_name: agentlab_openfga_db_dev
     depends_on:
       postgres:
@@ -90,7 +90,7 @@ services:
 
   openfga-migrate:
     platform: "linux/amd64"
-    image: openfga/openfga:v1.18.1
+    image: openfga/openfga:v1.22.1
     container_name: agentlab_openfga_migrate_dev
     depends_on:
       postgres:
@@ -109,7 +109,7 @@ services:
 
   openfga:
     platform: "linux/amd64"
-    image: openfga/openfga:v1.18.1
+    image: openfga/openfga:v1.22.1
     container_name: agentlab_openfga_dev
     depends_on:
       openfga-migrate:
@@ -152,7 +152,7 @@ services:
   # Доп. флаги: снижают типичные сигналы автоматизации у процесса, поднятого до connect_over_cdp
   chromium-cdp:
     platform: "linux/amd64"
-    image: zenika/alpine-chrome:latest
+    image: zenika/alpine-chrome:124
     ports:
       - "9222:9222"
     shm_size: 1g
@@ -199,7 +199,7 @@ services:
   #     - dev-net
 
   # Worker опционален - можно запустить локально для дебага:
-  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq worker apps.flows_worker.worker:worker_app
+  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m taskiq worker apps.flows.worker:worker_app
   # flows_worker:
   #   build:
   #     context: .
@@ -215,7 +215,7 @@ services:
   #     - DATABASE__SHARED_URL=postgresql://platform_user:admin@postgres:5432/platform_shared
   #     - DATABASE__REDIS_URL=redis://redis:6379/0
   #     - TASKS__BROKER_URL=redis://redis:6379/1
-  #   command: ["uv", "run", "python", "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
+  #   command: ["uv", "run", "python", "-m", "taskiq", "worker", "apps.flows.worker:worker_app", "--workers", "4"]
   #   restart: unless-stopped
   #   networks:
   #     - dev-net
@@ -243,7 +243,7 @@ services:
   #     - dev-net
 
   # RAGWorker опционален - можно запустить локально для дебага:
-  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared DATABASE__RAG_URL=postgresql://platform_user:admin@localhost:54321/platform_rag TASKS__BROKER_URL=redis://localhost:63791/1 uv run python scripts/run.py rag_worker
+  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared DATABASE__RAG_URL=postgresql://platform_user:admin@localhost:54321/platform_rag TASKS__BROKER_URL=redis://localhost:63791/1 uv run python -m scripts.dev.run rag_worker
   # rag_worker:
   #   build:
   #     context: .
@@ -259,14 +259,14 @@ services:
   #     - DATABASE__SHARED_URL=postgresql://platform_user:admin@postgres:5432/platform_shared
   #     - DATABASE__REDIS_URL=redis://redis:6379/0
   #     - TASKS__BROKER_URL=redis://redis:6379/1
-  #   command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
+  #   command: ["taskiq", "worker", "apps.rag.worker:worker_app", "--workers", "2"]
   #   restart: unless-stopped
   #   networks:
   #     - dev-net
 
   # Redis в конфиге обязателен для связки livekit-server + livekit-egress (запись, speech-to-chat).
   livekit:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.13.11
     container_name: agentlab_livekit_dev
     environment:
       LIVEKIT_CONFIG: |
@@ -299,7 +299,7 @@ services:
       - dev-net
 
   livekit-egress:
-    image: livekit/egress:latest
+    image: livekit/egress:v1.15.0
     container_name: agentlab_livekit_egress_dev
     environment:
       EGRESS_CONFIG_BODY: |
@@ -327,7 +327,7 @@ services:
   # Тот же JWT_SECRET, что в conf services.office.office.jwt_secret / OFFICE__JWT_SECRET.
   onlyoffice-documentserver:
     platform: "linux/amd64"
-    image: onlyoffice/documentserver:latest
+    image: onlyoffice/documentserver:10.0.0.1
     container_name: agentlab_onlyoffice_dev
     ports:
       - "8088:80"
@@ -335,8 +335,8 @@ services:
       - JWT_ENABLED=true
       - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-dev-onlyoffice-jwt-secret}
       # Browser → frontend proxy → flows LLM (addon=v1). Proxy unwrap на /v1/proxy.
-      - PLATFORM_LLM_BASE_URL=${ONLYOFFICE_PLATFORM_LLM_BASE_URL:-http://localhost:8002/flows/api/v1/agent/llm}
-      - PLATFORM_LLM_PROXY_URL=${ONLYOFFICE_PLATFORM_LLM_PROXY_URL:-http://localhost:8002/flows/api/v1/agent/llm/v1/proxy}
+      - PLATFORM_LLM_BASE_URL=${ONLYOFFICE_PLATFORM_LLM_BASE_URL:-http://localhost:8002/flows/api/v1/llm}
+      - PLATFORM_LLM_PROXY_URL=${ONLYOFFICE_PLATFORM_LLM_PROXY_URL:-http://localhost:8002/flows/api/v1/llm/v1/proxy}
       - PLATFORM_LLM_PROVIDER_NAME=${ONLYOFFICE_PLATFORM_LLM_PROVIDER_NAME:-Linnex LLMs}
       - ONLYOFFICE_AI_FRAGMENT_PATH=/opt/platform/onlyoffice-ai-local-fragment.json
       - ONLYOFFICE_APPLY_AI_SCRIPT=/opt/platform/onlyoffice_apply_ai_settings.sh
@@ -355,7 +355,7 @@ services:
       - dev-net
 
   coturn:
-    image: coturn/coturn:latest
+    image: coturn/coturn:4.18.0
     container_name: agentlab_coturn_dev
     network_mode: host
     command:
@@ -372,7 +372,7 @@ services:
   # Observability (Loki + Tempo + Alloy + Grafana)
   # ============================================
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.7.9
     container_name: agentlab_loki_dev
     command: -config.file=/etc/loki/loki.yaml
     volumes:
@@ -384,7 +384,7 @@ services:
       - dev-net
 
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.10.10
     container_name: agentlab_tempo_dev
     command: -config.file=/etc/tempo/tempo.yaml
     volumes:
@@ -396,7 +396,7 @@ services:
       - dev-net
 
   alloy:
-    image: grafana/alloy:latest
+    image: grafana/alloy:v1.21.3
     container_name: agentlab_alloy_dev
     command: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=0.0.0.0:12345"]
     volumes:
@@ -414,7 +414,7 @@ services:
       - dev-net
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.3.0
     container_name: agentlab_grafana_dev
     environment:
       GF_SERVER_ROOT_URL: "http://localhost:3000"

@@ -16,6 +16,7 @@ import './dashboard-stat-tile.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export class DashboardStatStrip extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -37,15 +38,21 @@ export class DashboardStatStrip extends PlatformElement {
         this._subscription = this.useOp('frontend/billing_subscription');
         this._usage = this.useOp('frontend/billing_usage');
         this._status = this.useOp('frontend/services_status_load');
-        this._activeCompanyId = this.select((s: Record<string, any>) => s.auth.activeCompanyId);
-        this._locale = this.select((s: Record<string, any>) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
+        this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
+        this._locale = this.select((s) => {
+            const locale = s.i18n.locale;
+            if (locale.length === 0) {
+                throw new Error('dashboard-stat-strip: locale required');
+            }
+            return locale;
+        });
         this._loaded = false;
     }
     private _subscription: OpController;
     private _usage: OpController;
     private _status: OpController;
-    private _activeCompanyId: SelectController<any>;
-    private _locale: SelectController<any>;
+    private _activeCompanyId: SelectController<string | null>;
+    private _locale: SelectController<string>;
     private _loaded: boolean;
 
 
@@ -68,35 +75,36 @@ export class DashboardStatStrip extends PlatformElement {
         this._status.run(null);
     }
 
-    _planValue(subscription: any) {
-        if (subscription && typeof subscription.plan === 'string' && subscription.plan.length > 0) {
-            return subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1);
-        }
-        return '—';
-    }
-
-    _balanceValue(subscription: any) {
-        const formatted = subscription ? this._formatCurrency(subscription.balance) : null;
-        if (formatted === null) return '—';
-        return `${formatted} ${this.t('console_home.currency_rub')}`;
-    }
-
-    _spentValue(subscription: any) {
-        const formatted = subscription ? this._formatCurrency(subscription.current_month_spent) : null;
-        if (formatted === null) return '—';
-        return `${formatted} ${this.t('console_home.currency_rub')}`;
-    }
-
-    _servicesValue(statusResult: any, activeCompanyId: string) {
-        if (!statusResult || !Array.isArray(statusResult.items)) {
+    _planValue(subscription: unknown) {
+        if (!isPlainRecord(subscription) || typeof subscription.plan !== 'string' || subscription.plan.length === 0) {
             return '—';
         }
-        const items = statusResult.items;
+        return subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1);
+    }
+
+    _balanceValue(subscription: unknown) {
+        const formatted = isPlainRecord(subscription) ? this._formatCurrency(subscription.balance) : null;
+        if (formatted === null) return '—';
+        return `${formatted} ${this.t('console_home.currency_rub')}`;
+    }
+
+    _spentValue(subscription: unknown) {
+        const formatted = isPlainRecord(subscription) ? this._formatCurrency(subscription.current_month_spent) : null;
+        if (formatted === null) return '—';
+        return `${formatted} ${this.t('console_home.currency_rub')}`;
+    }
+
+    _servicesValue(statusResult: unknown, activeCompanyId: string | null) {
+        if (!isPlainRecord(statusResult) || !Array.isArray(statusResult.items)) {
+            return '—';
+        }
+        const items: unknown[] = [];
+        for (const item of statusResult.items) items.push(item);
         const total = items.length;
         if (activeCompanyId === 'system') {
             return `${total} / ${total}`;
         }
-        const hasHumanitecModelsInternalService = items.some((s: Record<string, any>) => s.name === 'provider_litserve');
+        const hasHumanitecModelsInternalService = items.some((item) => isPlainRecord(item) && item.name === 'provider_litserve');
         const online = hasHumanitecModelsInternalService ? total - 1 : total;
         return `${online} / ${total}`;
     }

@@ -10,7 +10,7 @@ from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.models.crm_entity import CRMEntity
 from apps.crm.models.task import CRMTask
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
-from apps.crm_worker.tasks.task_names import CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN
+from apps.crm.tasks.task_names import CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN
 from core.authz.service import AuthzService
 from core.context import get_context, resolve_namespace_or_raise
 from core.logging import get_logger
@@ -66,7 +66,7 @@ async def begin_note_markdown_format(*, note_id: str) -> CRMTask:
         raise ValueError("Note text is empty")
     ns = resolve_namespace_or_raise(note.namespace)
     company_id = _company_id()
-    existing = await CRMTask.active_by_data_keys(
+    existing = await CRMTask.latest_active_by_data_keys_created_at_desc(
         "note_markdown_format",
         {"note_id": note_id},
         ns,

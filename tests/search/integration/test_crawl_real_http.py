@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.search.config import get_search_settings
-from apps.search_worker.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
+from apps.search.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainSeed,
@@ -56,7 +56,7 @@ async def test_discover_sitemap_example_com_real_http(crawl_search_di, search_sy
         [CrawlDomainSeed(domain=REAL_CRAWL_DOMAIN, category="docs", domain_rank=1)],
         next_crawl_after=datetime.now(UTC),
     )
-    due = await CrawlDomain.list_due(
+    due = await CrawlDomain.list_due_by_next_crawl_after_asc(
         crawl_profile_id,
         now=datetime.now(UTC),
         limit=1,
@@ -119,7 +119,7 @@ async def test_crawl_fetch_indexes_example_com_and_search_finds_content(
         [CrawlDomainSeed(domain=REAL_CRAWL_DOMAIN, category="docs", domain_rank=1)],
         next_crawl_after=datetime.now(UTC),
     )
-    due = await CrawlDomain.list_due(
+    due = await CrawlDomain.list_due_by_next_crawl_after_asc(
         crawl_profile_id,
         now=datetime.now(UTC),
         limit=1,

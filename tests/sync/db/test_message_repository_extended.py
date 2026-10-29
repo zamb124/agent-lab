@@ -106,7 +106,7 @@ async def test_replace_contents_soft_delete_reactions_max_sent(
         ],
         ed,
     )
-    contents = await SyncMessageContent.list_for_message(m_r)
+    contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(m_r)
     assert len(contents) == 1
     assert isinstance(contents[0].data, TextPlainContent)
     assert contents[0].data.body == "b"
@@ -230,5 +230,5 @@ async def test_list_by_channel_pagination(
                 MessageContentModel(type=MessageContentType.TEXT_PLAIN, data=TextPlainContent(body=str(i)), order=0),
             ],
         )
-    rows = await SyncMessage.list_root_lane(ch_pg, limit=2, offset=0, company_id=company_id)
+    rows = await SyncMessage.list_root_lane_by_sent_at_desc(ch_pg, limit=2, offset=0, company_id=company_id)
     assert len(rows) == 2

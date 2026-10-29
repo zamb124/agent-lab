@@ -11,7 +11,6 @@ from pydantic_settings import PydanticBaseSettingsSource, SettingsConfigDict
 
 from core.config.loader import load_merged_config
 from core.config.models import (
-    AgentSettings,
     AuthConfig,
     BillingConfig,
     CalendarSyncConfig,
@@ -148,7 +147,6 @@ class BaseSettings(PydanticBaseSettings):
         ge=60,
         description="TTL Redis SET NX для ключа sync:transcribe_audio:{company_id}:{message_id}.",
     )
-    agent: AgentSettings = Field(default_factory=AgentSettings)
     code_runner: CodeRunnerSettings = Field(default_factory=CodeRunnerSettings)
     test_scope_default: str = Field(
         default="",
@@ -159,7 +157,7 @@ class BaseSettings(PydanticBaseSettings):
     )
 
     # extra="forbid": ключ conf.json без поля в Settings — ошибка старта, а не тихо
-    # проигнорированная настройка (гейт scripts/check_conf_keys_declared.py ловит это статически).
+    # проигнорированная настройка (гейт scripts/gates/repo/conf_keys_declared.py ловит это статически).
     # dotenv_filtering="only_existing": .env разработчика может содержать переменные для
     # других инструментов (ключи деплоя, App Store) — они не проходят через Pydantic.
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
@@ -355,10 +353,6 @@ class _SettingsProxy:
     @property
     def transcribe_audio_redis_lock_ttl_seconds(self) -> int:
         return get_settings().transcribe_audio_redis_lock_ttl_seconds
-
-    @property
-    def agent(self) -> AgentSettings:
-        return get_settings().agent
 
     @override
     def __repr__(self) -> str:

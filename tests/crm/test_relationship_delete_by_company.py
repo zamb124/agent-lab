@@ -214,7 +214,7 @@ async def test_touching_includes_both_ends_and_company_filter(unique_id: str) ->
         )
     )
 
-    touched_ids = {row.relationship_id for row in await Relationship.touching(entity_id).all()}
+    touched_ids = {row.relationship_id for row in await Relationship.query_touching(entity_id).all()}
     assert touched_ids == {
         outgoing.relationship_id,
         incoming.relationship_id,
@@ -222,10 +222,10 @@ async def test_touching_includes_both_ends_and_company_filter(unique_id: str) ->
     }
     company_ids = {
         row.relationship_id
-        for row in await Relationship.touching_in_company(entity_id, company_id).all()
+        for row in await Relationship.query_touching_in_company(entity_id, company_id).all()
     }
     assert company_ids == {outgoing.relationship_id, incoming.relationship_id}
-    assert await Relationship.touching(f"missing-{unique_id}").all() == []
+    assert await Relationship.query_touching(f"missing-{unique_id}").all() == []
     for owner, row in (
         (company_id, outgoing),
         (company_id, incoming),
@@ -406,17 +406,17 @@ async def test_graph_page_orders_by_created_at_and_hides_other_company(unique_id
                 created_at=datetime(2019, 1, 1, tzinfo=UTC),
             )
         )
-        first = await Relationship.graph_page(limit=1, cursor=None)
+        first = await Relationship.graph_page_by_created_at_and_relationship_id_asc(limit=1, cursor=None)
         assert [row.relationship_id for row in first.items] == [older.relationship_id]
         assert first.has_more is True
         assert first.next_cursor is not None
-        second = await Relationship.graph_page(limit=1, cursor=first.next_cursor)
+        second = await Relationship.graph_page_by_created_at_and_relationship_id_asc(limit=1, cursor=first.next_cursor)
         assert [row.relationship_id for row in second.items] == [newer.relationship_id]
         bad_cursor = base64.urlsafe_b64encode(b'{"ts": 1, "id": "x"}').decode()
         with pytest.raises(ValueError, match="relationship graph cursor has invalid shape"):
-            _ = await Relationship.graph_page(limit=1, cursor=bad_cursor)
+            _ = await Relationship.graph_page_by_created_at_and_relationship_id_asc(limit=1, cursor=bad_cursor)
         _bind_company(other_company_id)
-        foreign_page = await Relationship.graph_page(limit=10, cursor=None)
+        foreign_page = await Relationship.graph_page_by_created_at_and_relationship_id_asc(limit=10, cursor=None)
         assert [row.relationship_id for row in foreign_page.items] == [f"page-foreign-{unique_id}"]
         _bind_company(company_id)
         assert (

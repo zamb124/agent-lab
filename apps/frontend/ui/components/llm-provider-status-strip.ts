@@ -21,12 +21,18 @@ export const LLM_PROVIDER_ERROR_CLASS_I18N = Object.freeze({
     unspecified: 'settings_page.model_scoring.error_unspecified',
 });
 
-export function llmProviderErrorClassLabel(t: Record<string, any>, errorClass: string) {
-    const key = (LLM_PROVIDER_ERROR_CLASS_I18N as Record<string, string>)[errorClass];
-    if (key === undefined) {
+function hasOwnErrorClass(
+    catalog: typeof LLM_PROVIDER_ERROR_CLASS_I18N,
+    key: string,
+): key is Extract<keyof typeof LLM_PROVIDER_ERROR_CLASS_I18N, string> {
+    return Object.prototype.hasOwnProperty.call(catalog, key);
+}
+
+export function llmProviderErrorClassLabel(t: (key: string) => string, errorClass: string) {
+    if (!hasOwnErrorClass(LLM_PROVIDER_ERROR_CLASS_I18N, errorClass)) {
         throw new Error(`unknown error_class ${errorClass}`);
     }
-    return (t as (key: string) => string)(key);
+    return t(LLM_PROVIDER_ERROR_CLASS_I18N[errorClass]);
 }
 
 export function llmProviderErrorClassIsBlocking(errorClass: string) {

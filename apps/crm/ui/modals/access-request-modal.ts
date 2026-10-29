@@ -21,6 +21,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -262,9 +263,9 @@ export class CRMAccessRequestModal extends PlatformModal {
 
         this.useEvent(this._accessRequests.resource.events.CREATED, () => this.close());
         this.useEvent(this._accessRequests.resource.events.CREATE_FAILED, (event) => {
-            const p = (event && event.payload) as Record<string, any> | null;
-            const message = p && typeof p.message === 'string'
-                ? p.message
+            const payload = event.payload;
+            const message = isPlainRecord(payload) && typeof payload.message === 'string'
+                ? payload.message
                 : this.t('access_request_modal.submit_failed');
             this._submitFailedMessage = message;
         });
@@ -291,11 +292,19 @@ export class CRMAccessRequestModal extends PlatformModal {
     }
 
     _onIncludeDepsChange(e: Event) {
-        this._includeDeps = Boolean((e.target as HTMLInputElement).checked);
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('CRMAccessRequestModal: include dependencies expects a checkbox');
+        }
+        this._includeDeps = target.checked;
     }
 
     _onDepthChange(e: Event) {
-        const value = parseInt((e.target as HTMLInputElement).value, 10);
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('CRMAccessRequestModal: depth expects an input');
+        }
+        const value = parseInt(target.value, 10);
         if (Number.isFinite(value) && value >= DEPTH_MIN && value <= DEPTH_MAX) {
             this._maxDepth = value;
         }

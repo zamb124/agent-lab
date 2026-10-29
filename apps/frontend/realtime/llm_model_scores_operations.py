@@ -151,7 +151,7 @@ async def _catalog_records_for_capability(
     for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
         if not provider_is_configured_for_free_pool(settings, provider_slug):
             continue
-        provider_records = await AIModelRecord.list_by_provider_capability(
+        provider_records = await AIModelRecord.list_unordered_by_provider_and_capability(
             provider_slug,
             capability,
         )
@@ -164,11 +164,11 @@ async def _build_score_catalog_rows() -> list[_ScoreCatalogRow]:
     capability = AICapability.LLM_CHAT
     catalog_records = await _catalog_records_for_capability(capability)
     catalog_by_key = catalog_record_map(catalog_records)
-    score_rows = await LLMModelScore.rows_for_capability(capability)
+    score_rows = await LLMModelScore.list_unordered_for_capability(capability)
     overlays = platform_model_score_overlays(score_rows)
     db_rows = {
         (row.provider, row.model_id): row
-        for row in await LLMModelScore.list_all()
+        for row in await LLMModelScore.list_by_capability_provider_and_model_id_asc()
         if row.capability == capability.value
     }
 
@@ -270,7 +270,7 @@ async def op_llm_model_scores_upsert(
     )
     if catalog_record is None:
         raise_invalid(ValueError("model not found in catalog"))
-    result = await LLMModelScore.upsert_overlay(
+    result = await LLMModelScore.upsert_result_by_provider_model_id_and_capability(
         provider=payload.provider,
         model_id=payload.model_id,
         capability=payload.capability,
@@ -307,7 +307,7 @@ async def op_llm_model_scores_delete(
     payload: LLMModelScoreDeletePayload, *, user: User, di: Di
 ) -> LLMModelScoreDeleteResponse:
     _ = await require_system_admin(di.authz_service)
-    deleted = await LLMModelScore.delete_overlay(
+    deleted = await LLMModelScore.delete_by_provider_model_id_and_capability(
         provider=payload.provider, model_id=payload.model_id, capability=payload.capability
     )
     cache_rescore = await _rescore_cache(di)

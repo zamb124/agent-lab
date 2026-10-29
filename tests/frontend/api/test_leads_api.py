@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.frontend.models import LeadRequestRecord
 from core.models.identity_models import SYSTEM_COMPANY_ID

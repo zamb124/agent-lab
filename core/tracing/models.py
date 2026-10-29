@@ -371,7 +371,7 @@ class Span(PlatformModel):
                 raise
 
     @classmethod
-    async def span_page_and_cursor_for_service(
+    async def span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
         cls,
         *,
         service_name: str,
@@ -398,7 +398,8 @@ class Span(PlatformModel):
         return rows, _next_cursor(rows, limit)
 
     @classmethod
-    async def list_for_trace(cls, trace_id: str) -> list[Span]:
+    async def list_for_trace_by_start_time_asc(cls, trace_id: str) -> list[Span]:
+        """Спаны трейса, ORDER BY start_time ASC. Предела нет. Пустой trace_id не проверяется."""
         return await Span.objects.filter(trace_id=trace_id).order_by("start_time").all()
 
     @classmethod
@@ -474,7 +475,7 @@ class Span(PlatformModel):
         )
 
     @classmethod
-    async def trace_group_page_and_span_count(
+    async def trace_group_page_by_start_time_desc_and_span_count(
         cls,
         user_id: str | None = None,
         session_id: str | None = None,
@@ -541,7 +542,7 @@ class Span(PlatformModel):
         ], total_cell
 
     @classmethod
-    async def admin_span_page_and_cursor(
+    async def admin_span_page_and_cursor_by_start_time_and_span_id_desc(
         cls,
         *,
         service_name: str | None = None,
@@ -603,7 +604,7 @@ class Span(PlatformModel):
         return rows, _next_cursor(rows, limit)
 
     @classmethod
-    async def list_pending_billing_settlement(
+    async def list_pending_billing_settlement_by_start_time_and_span_id_asc(
         cls,
         *,
         from_time: datetime,

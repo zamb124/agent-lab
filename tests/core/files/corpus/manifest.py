@@ -1,6 +1,6 @@
 """Карта файлов корпуса example-docs → ожидаемое поведение FileReader.
 
-CORPUS генерируется scripts/generate_corpus_manifest.py из GitHub tree + overrides.yaml.
+CORPUS генерируется scripts/generate/corpus_manifest.py из GitHub tree + overrides.yaml.
 Пути — относительно tests/core/files/example-docs/.
 
 Правила:

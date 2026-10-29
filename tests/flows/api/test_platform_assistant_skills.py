@@ -151,7 +151,7 @@ async def test_seed_platform_assistant_skills_idempotent(di, unique_id: str) -> 
         assert "browser_duckduckgo_links_batch" in web_tool_ids
         assert "browser_page_snapshot" in web_tool_ids
 
-        seeded_skills = await AgentSkill.list_skills(
+        seeded_skills = await AgentSkill.list_by_agent_skill_id_asc(
             limit=100,
             offset=0,
         )

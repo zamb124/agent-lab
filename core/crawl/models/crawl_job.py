@@ -110,7 +110,8 @@ class CrawlJob(PlatformModel):
         return row
 
     @classmethod
-    async def active_for_profile(cls, crawl_profile_id: str) -> Self | None:
+    async def active_for_profile_by_started_at_desc(cls, crawl_profile_id: str) -> Self | None:
+        """Последний running job профиля, ORDER BY started_at DESC. Несколько с одним started_at — какой именно, не задано. Нет строки — None."""
         return await (
             cls.objects.filter(crawl_profile_id=crawl_profile_id, status="running")
             .order_by("-started_at")
@@ -118,7 +119,8 @@ class CrawlJob(PlatformModel):
         )
 
     @classmethod
-    async def latest_for_profile(cls, crawl_profile_id: str) -> Self | None:
+    async def latest_for_profile_by_started_at_desc(cls, crawl_profile_id: str) -> Self | None:
+        """Последний job профиля, ORDER BY started_at DESC. Несколько с одним started_at — какой именно, не задано. Нет строки — None."""
         return await (
             cls.objects.filter(crawl_profile_id=crawl_profile_id)
             .order_by("-started_at")

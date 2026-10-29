@@ -15,7 +15,6 @@ const API_PAYLOAD = {
     logo_path: '/static/core/assets/service_logos/frontend_logo.svg',
     apex_origin: 'https://linnex.io/',
     supported_domains: ['linnex.io', 'humanitec.ru'],
-    agent_product_name: 'LinnexAgent',
     models_product_name: 'Linnex Models',
     voice_product_name: 'Linnex Voice',
     llms_display_label: 'Linnex LLMs',
@@ -52,7 +51,6 @@ describe('loadPlatformBrandBootstrap', () => {
         const brand = await loadPlatformBrandBootstrap();
         expect(brand.baseDomain).toBe('linnex.io');
         expect(brand.platformName).toBe('Linnex');
-        expect(brand.agentProductName).toBe('LinnexAgent');
         expect(brand.protocol).toBe('https');
         expect(getPlatformBrandBootstrap()).toEqual(brand);
         expect(fetchMock.calls).toHaveLength(1);

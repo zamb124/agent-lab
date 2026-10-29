@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 
 def _code_from_share_url(share_url: str) -> str:

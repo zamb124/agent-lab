@@ -311,7 +311,7 @@ async def op_flows_mcp_branding_list(
     _ = user
     _ = await require_company_member(di)
     try:
-        items, total = await di.mcp_branding_service.list_branding(
+        items, total = await di.mcp_branding_service.list_branding_by_server_id_asc(
             search=payload.search,
             limit=payload.limit,
             offset=payload.offset,

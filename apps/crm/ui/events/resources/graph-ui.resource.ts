@@ -11,6 +11,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { CrmGraphUiSlice } from '../crm.types.js';
 
 const DEFAULT_PANELS = Object.freeze({
@@ -19,6 +20,19 @@ const DEFAULT_PANELS = Object.freeze({
     legend: true,
     meta: true,
 });
+
+function applyPanels(state: CrmGraphUiSlice, payload: unknown): CrmGraphUiSlice {
+    if (!isPlainRecord(payload) || !isPlainRecord(payload.panels)) return state;
+    const panels = payload.panels;
+    const next: Record<string, boolean> = { ...state.panels };
+    for (const key of Object.keys(DEFAULT_PANELS)) {
+        const value = panels[key];
+        if (typeof value === 'boolean') {
+            next[key] = value;
+        }
+    }
+    return { ...state, panels: Object.freeze(next) };
+}
 
 export const graphUiSlice = createSlice({
     name: 'crm/graph_ui',
@@ -38,28 +52,10 @@ export const graphUiSlice = createSlice({
     },
     extraReducer: (state: CrmGraphUiSlice, event) => {
         switch (event.type) {
-            case 'crm/graph_ui/panels_hydrated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || !p.panels || typeof p.panels !== 'object') return state;
-                const next = { ...(state.panels as Record<string, boolean>) };
-                for (const key of Object.keys(DEFAULT_PANELS)) {
-                    if (typeof p.panels[key] === 'boolean') {
-                        next[key] = p.panels[key];
-                    }
-                }
-                return { ...state, panels: Object.freeze(next) };
-            }
-            case 'crm/graph_ui/panels_updated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || !p.panels || typeof p.panels !== 'object') return state;
-                const next = { ...(state.panels as Record<string, boolean>) };
-                for (const key of Object.keys(DEFAULT_PANELS)) {
-                    if (typeof p.panels[key] === 'boolean') {
-                        next[key] = p.panels[key];
-                    }
-                }
-                return { ...state, panels: Object.freeze(next) };
-            }
+            case 'crm/graph_ui/panels_hydrated':
+                return applyPanels(state, event.payload);
+            case 'crm/graph_ui/panels_updated':
+                return applyPanels(state, event.payload);
             case 'crm/graph_ui/timeline_seeded':
                 return { ...state, timelineSeeded: true };
             default:

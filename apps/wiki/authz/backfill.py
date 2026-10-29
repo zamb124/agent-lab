@@ -39,7 +39,7 @@ async def backfill_wiki_authz(*, limit: int | None = None) -> int:
 
 async def _write_page_tuples(authz: AuthzService, *, limit: int | None) -> int:
     pages_written = 0
-    page_rows = await WikiPage.alive_by_created_at(limit=limit)
+    page_rows = await WikiPage.alive_by_created_at_asc(limit=limit)
 
     for row in page_rows:
         wiki_page_id = row.wiki_page_id

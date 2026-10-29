@@ -46,7 +46,7 @@ _PYTHON_FILES_HOVER = (
 _JS_LODASH_PREFIX = (
     "import lodash from 'lodash';\n\nasync function run(args, state) {\n  const value = lodash."
 )
-_PYTHON_HTTPX = "import httpx\n\nasync def run(args, state):\n    return args\n"
+_PYTHON_HTTPX = "import httpx2\n\nasync def run(args, state):\n    return args\n"
 
 
 async def _open_code_canvas(

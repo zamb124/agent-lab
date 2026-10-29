@@ -25,6 +25,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function grantUserId(user: { user_id: string } | null): string {
     if (user === null || user.user_id.length === 0) {
@@ -63,6 +64,24 @@ const ROLE_EDITOR = 'editor';
 const ROLE_ADMIN = 'admin';
 
 const ROLES = [ROLE_VIEWER, ROLE_EDITOR, ROLE_ADMIN];
+
+function anyRecord(value: unknown): Record<string, unknown> | null {
+    return isPlainRecord(value) ? value : null;
+}
+
+function recordList(value: unknown): Record<string, unknown>[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const rows: Record<string, unknown>[] = [];
+    for (const item of value) {
+        if (!isPlainRecord(item)) {
+            throw new Error('share-modal: list item must be an object');
+        }
+        rows.push(item);
+    }
+    return rows;
+}
 
 
 export class CRMShareModal extends PlatformModal {
@@ -424,9 +443,10 @@ export class CRMShareModal extends PlatformModal {
 
         this.useEvent(this._grantCreateOp.op.events.SUCCEEDED, () => this._resetForm());
         this.useEvent(this._grantCreateOp.op.events.FAILED, (event) => {
-            const p = (event && event.payload) as Record<string, any> | null;
-            const message = p && typeof p.message === 'string'
-                ? p.message
+            const payload = isPlainRecord(event.payload) ? event.payload : null;
+            const messageField = payload === null ? undefined : payload.message;
+            const message = typeof messageField === 'string'
+                ? messageField
                 : this.t('share_modal.submit_failed');
             this._submitFailedMessage = message;
         });
@@ -448,15 +468,16 @@ export class CRMShareModal extends PlatformModal {
         this._submitFailedMessage = '';
     }
 
-    _entity(): Record<string, any> | null {
-        const item = this._entities.byId[this.entityId] as Record<string, any> | undefined;
-        return item === undefined ? null : item;
+    _entity(): Record<string, unknown> | null {
+        return anyRecord(this._entities.byId[this.entityId]);
     }
 
-    _grants(): Record<string, any>[] {
-        const result = this._grantsListOp.lastResult as { items?: unknown } | null;
-        if (!result || !Array.isArray(result.items)) return [];
-        return result.items as Record<string, any>[];
+    _grants(): Record<string, unknown>[] {
+        const result = this._grantsListOp.lastResult;
+        if (!isPlainRecord(result)) {
+            return [];
+        }
+        return recordList(result.items);
     }
 
     _hasPublicGrant() {
@@ -472,16 +493,28 @@ export class CRMShareModal extends PlatformModal {
         this._role = role;
     }
 
-    _onUserQueryInput(e: CustomEvent) {
-        const value = (e.target as HTMLInputElement).value;
-        this._userQuery = value;
-        this._teamSearch.search('users', value);
+    _onUserQueryInput(e: Event) {
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('share-modal: user query input required');
+        }
+        this._userQuery = target.value;
+        this._teamSearch.search('users', target.value);
     }
 
-    _onUserPick(user: Record<string, any>) {
+    _onUserPick(user: Record<string, unknown>) {
+        const userId = user.user_id;
+        if (typeof userId !== 'string' || userId.length === 0) {
+            throw new Error('share-modal: user_id required');
+        }
+        const name = typeof user.name === 'string' ? user.name : '';
+        const email = typeof user.email === 'string' ? user.email : '';
+        if (name.length === 0 && email.length === 0) {
+            throw new Error('share-modal: user name required');
+        }
         this._selectedUser = {
-            user_id: user.user_id,
-            label: user.email ? `${user.name} <${user.email}>` : user.name,
+            user_id: userId,
+            label: email.length > 0 ? `${name} <${email}>` : name,
         };
         this._userQuery = '';
     }
@@ -571,7 +604,7 @@ export class CRMShareModal extends PlatformModal {
         `;
     }
 
-    _renderEntityHead(entity: Record<string, any> | null): TemplateResult {
+    _renderEntityHead(entity: Record<string, unknown> | null): TemplateResult {
         if (entity === null) {
             return html`
                 <div class="entity-head">
@@ -600,7 +633,7 @@ export class CRMShareModal extends PlatformModal {
         `;
     }
 
-    _renderGrantsSection(grants: Record<string, any>[], loading: boolean): TemplateResult {
+    _renderGrantsSection(grants: Record<string, unknown>[], loading: boolean): TemplateResult {
         return html`
             <div class="section-title">${this.t('share_modal.current_grants')}</div>
             ${loading
@@ -615,22 +648,28 @@ export class CRMShareModal extends PlatformModal {
         `;
     }
 
-    _renderGrantItem(grant: Record<string, any>): TemplateResult {
+    _renderGrantItem(grant: Record<string, unknown>): TemplateResult {
         const target = this._formatGrantTarget(grant);
+        const grantType = typeof grant.grant_type === 'string' ? grant.grant_type : '';
+        const role = typeof grant.role === 'string' ? grant.role : '';
+        const grantId = typeof grant.grant_id === 'string' ? grant.grant_id : '';
+        if (role.length === 0 || grantId.length === 0) {
+            throw new Error('share-modal: grant role and grant_id required');
+        }
         return html`
             <div class="grant-item">
                 <div class="grant-icon">
-                    <platform-icon name=${this._iconForSubject(grant.grant_type)} size="16"></platform-icon>
+                    <platform-icon name=${this._iconForSubject(grantType)} size="16"></platform-icon>
                 </div>
                 <div class="grant-content">
                     <div class="grant-target">${target}</div>
                 </div>
-                <span class="grant-role">${this.t(`share_modal.role_${grant.role}`)}</span>
+                <span class="grant-role">${this.t(`share_modal.role_${role}`)}</span>
                 <button
                     type="button"
                     class="revoke-btn"
                     ?disabled=${this._grantRevokeOp.busy}
-                    @click=${() => this._onRevoke(grant.grant_id)}
+                    @click=${() => this._onRevoke(grantId)}
                 >
                     ${this.t('share_modal.revoke')}
                 </button>
@@ -638,10 +677,19 @@ export class CRMShareModal extends PlatformModal {
         `;
     }
 
-    _formatGrantTarget(grant: Record<string, any>): string {
+    _formatGrantTarget(grant: Record<string, unknown>): string {
         if (grant.grant_type === SUBJECT_PUBLIC) return this.t('share_modal.target_public');
-        if (grant.grant_type === SUBJECT_USER) return grant.target_user_id || this.t('share_modal.target_user_unknown');
-        if (grant.grant_type === SUBJECT_COMPANY) return grant.target_company_id || this.t('share_modal.target_company_unknown');
+        if (grant.grant_type === SUBJECT_USER) {
+            const userId = typeof grant.target_user_id === 'string' ? grant.target_user_id : '';
+            return userId.length > 0 ? userId : this.t('share_modal.target_user_unknown');
+        }
+        if (grant.grant_type === SUBJECT_COMPANY) {
+            const companyId = typeof grant.target_company_id === 'string' ? grant.target_company_id : '';
+            return companyId.length > 0 ? companyId : this.t('share_modal.target_company_unknown');
+        }
+        if (typeof grant.grant_type !== 'string' || grant.grant_type.length === 0) {
+            throw new Error('share-modal: grant_type required');
+        }
         return grant.grant_type;
     }
 
@@ -707,7 +755,7 @@ export class CRMShareModal extends PlatformModal {
     }
 
     _renderUserPicker() {
-        const items = this._teamSearch.items('users') as Record<string, any>[];
+        const items = recordList(this._teamSearch.items('users'));
         const loading = this._teamSearch.loading('users');
         return html`
             <div>
@@ -744,13 +792,17 @@ export class CRMShareModal extends PlatformModal {
                                             ? html`<div class="hint" style="padding: var(--space-2);">${this.t('share_modal.user_searching')}</div>`
                                             : items.length === 0
                                                 ? html`<div class="hint" style="padding: var(--space-2);">${this.t('share_modal.user_no_results')}</div>`
-                                                : items.map((u) => html`
-                                                    <button type="button" class="result-row" @click=${() => this._onUserPick(u)}>
+                                                : items.map((user) => {
+                                                    const name = typeof user.name === 'string' ? user.name : '';
+                                                    const email = typeof user.email === 'string' ? user.email : '';
+                                                    return html`
+                                                    <button type="button" class="result-row" @click=${() => this._onUserPick(user)}>
                                                         <platform-icon name="user" size="14"></platform-icon>
-                                                        <span>${u.name}</span>
-                                                        ${u.email ? html`<span class="email">${u.email}</span>` : nothing}
+                                                        <span>${name}</span>
+                                                        ${email.length > 0 ? html`<span class="email">${email}</span>` : nothing}
                                                     </button>
-                                                `)}
+                                                `;
+                                                })}
                                     </div>
                                 `
                                 : html`<div class="hint">${this.t('share_modal.user_min_query')}</div>`}

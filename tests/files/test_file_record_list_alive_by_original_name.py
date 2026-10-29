@@ -98,11 +98,11 @@ async def test_list_alive_by_original_name_orders_alive_catalog_rows(
         )
     )
 
-    found = await FileRecord.list_alive_by_original_name(company_id, [catalog_id], token, 10)
+    found = await FileRecord.list_alive_matching_original_name_by_updated_at_desc(company_id, [catalog_id], token, 10)
     assert [row.file_id for row in found] == [newer_id, older_id]
-    limited = await FileRecord.list_alive_by_original_name(company_id, [catalog_id], token, 1)
+    limited = await FileRecord.list_alive_matching_original_name_by_updated_at_desc(company_id, [catalog_id], token, 1)
     assert [row.file_id for row in limited] == [newer_id]
-    assert await FileRecord.list_alive_by_original_name(company_id, [], token, 10) == []
+    assert await FileRecord.list_alive_matching_original_name_by_updated_at_desc(company_id, [], token, 10) == []
 
 
 @pytest.mark.asyncio
@@ -157,7 +157,7 @@ async def test_list_with_catalog_by_original_name_skips_empty_catalog_and_trash(
         )
     )
 
-    found = await FileRecord.list_with_catalog_by_original_name(company_id, token, 10)
+    found = await FileRecord.list_with_catalog_by_original_name_asc(company_id, token, 10)
     assert [row.file_id for row in found] == [alpha_id, beta_id]
-    limited = await FileRecord.list_with_catalog_by_original_name(company_id, "", 1)
+    limited = await FileRecord.list_with_catalog_by_original_name_asc(company_id, "", 1)
     assert [row.file_id for row in limited] == [alpha_id]

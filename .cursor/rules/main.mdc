@@ -12,7 +12,7 @@ alwaysApply: true
 SaaS автоматизации средних компаний. Подписка создаёт `Company` (tenant `company_id`, свой subdomain); сотрудники сразу получают все сервисы: агенты (Flows), CRM (NetWorkle), чат и звонки (Sync), документы (Documents), базу знаний (Wiki), задачи (Worktracker), склад (Stock), почту, голос, поиск. Один аккаунт, одна компания, одна сессия.
 
 - Агентов строит сама компания во Flows: граф нод, код в isolated code-runner, skills, tools, MCP, datasources. Новая продуктовая потребность закрывается flow, skill или capability, а не новым сервисом.
-- AI-first: любая операция доступна человеку (UI) и агенту (builtin tool, capability, Platform MCP, A2A) через один `op_*` и один контракт. Lara (`flow_id=lara`) — единый ассистент во всех SPA и в LinnexAgent.
+- AI-first: любая операция доступна человеку (UI) и агенту (builtin tool, capability, A2A) через один `op_*` и один контракт. Lara (`flow_id=lara`) — единый ассистент во всех SPA.
 - Всё, за что платит платформа (LLM, embeddings, STT/TTS, LiveKit, guest runtime), проходит billing span → settlement → `UsageRecord` → баланс компании; нет span — нет денег — баг → `billing.mdc`.
 - Мульти-бренд: одна кодовая база, несколько apex-доменов, бренд по `Host` → `configuration.mdc` § Бренды.
 
@@ -63,7 +63,7 @@ SaaS автоматизации средних компаний. Подписк�
 4. **Локальные импорты.** В `core/` и `apps/` импорты только на уровне файла; цикл чинится слоями → `architecture.mdc` § Service Kit DI. Гейт: `analyze_imports.py`.
 5. **Мета-комментарии.** «Отрефакторил», «обновил логику», «временное решение» запрещены. `[без гейта]`
 6. **Бессмысленные имена.** `new_`, `old_`, `temp_`, `data`, `result` без контекста запрещены. `[без гейта]`
-7. **Неявные фолбеки значений.** `value or "default"`, `getattr(obj, "field", fallback)` запрещены. Гейт: `scripts/audit_wider_repo_strictness.py` (getattr); `or`-фолбек `[без гейта]`.
+7. **Неявные фолбеки значений.** `value or "default"`, `getattr(obj, "field", fallback)` запрещены. Гейт: `scripts/gates/backend/wider_repo_strictness.py` (getattr); `or`-фолбек `[без гейта]`.
 8. **Широкие типы.** `Any`, `object`, `Unknown`, голые `dict`/`list`, `dict[str, Any]`, `Callable[..., Any]`, `cast`, `# type: ignore` запрещены → § Типизация. Гейт: basedpyright, ratchet `cast_calls`, `object_annotations`, `type_ignore`.
 9. **Дублирование функционала.** Совпавшие по смыслу классы и модели сливаются end-to-end. `[без гейта]`
 10. **In-process пользовательский код.** code_node, inline tool, code-condition — только `RemoteCodeRunner` → `code-runner-*` и capability-gateway; `eval`, `exec`, `PythonNamespaceBuilder` запрещены → `eval.mdc`. `[без гейта]`
@@ -71,10 +71,10 @@ SaaS автоматизации средних компаний. Подписк�
 12. **Glue и compat-обёртки.** Wrapper, shim, compat-слой, patch «чтобы не трогать callers», метод-делегат запрещены: старый контракт удаляется, consumers обновляются. `[без гейта]`
 13. **Дубли моделей.** Одна сущность — одна модель на всех слоях; `Foo`/`FooDTO`/`FooData`/`FooResponse` с теми же полями запрещены; отдельная модель — только при другой форме. `[без гейта]`
 14. **Незаконченный breaking change.** Старые атрибуты контракта со слоем преобразования вокруг них запрещены. `[без гейта]`
-15. **Второй владелец.** Сущность из § Владельцы сущностей не заводится вторично. Гейты: `scripts/check_files_canon.py`, `scripts/check_taskiq_canon.py`, `scripts/check_platform_events_canon.py`, `scripts/check_authz_canon.py`, `scripts/check_billing_span_canon.py`, `scripts/check_rag_post_retrieval_rerank_single.py`.
-16. **Копипаста между сервисами.** Одинаковый модуль в двух `apps/<svc>/` выносится в `core/`. Гейт: `scripts/check_cross_service_imports.py` (импорты); совпадение содержимого `[без гейта]`.
-17. **Oxyde вне модели.** Таблица — один `PlatformModel` в своём `models/<entity>.py`; запросы и PK-CRUD (`get`, `set`, `delete_by_id`, `list`, `count_all`, `get_many`) — `@classmethod` на `cls.objects`; `TableRepository`, `*Repository`, `db/repositories/`, `*_queries.py`, свободные функции над `objects` запрещены → `database.mdc`. Гейт: ratchet `raw_storage_in_services`; расположение и классы `[без гейта]`.
-18. **Второй объект композиции.** Service locator, `dependencies.py`, `container.py`, Protocol-зеркало DI и передача `di` в service/runtime/model/client запрещены → `architecture.mdc` § Service Kit DI. Гейт: `scripts/check_dependency_injection_canon.py`; файлы `dependencies.py`/`container.py` `[без гейта]`.
+15. **Второй владелец.** Сущность из § Владельцы сущностей не заводится вторично. Гейты: `scripts/gates/files/files_canon.py`, `scripts/gates/backend/taskiq.py`, `scripts/gates/backend/platform_events.py`, `scripts/gates/authz/canon.py`, `scripts/gates/backend/billing_span.py`, `scripts/gates/ai/rag_post_retrieval_rerank_single.py`.
+16. **Копипаста между сервисами.** Одинаковый модуль в двух `apps/<svc>/` выносится в `core/`. Гейт: `scripts/gates/backend/cross_service_imports.py` (импорты); совпадение содержимого `[без гейта]`.
+17. **Oxyde вне модели.** Таблица — один `PlatformModel` в своём `models/<entity>.py`; запросы и PK-CRUD (`get`, `set`, `delete_by_id`, `list`, `count_all`, `get_many`) — `@classmethod` на `cls.objects`; `TableRepository`, `*Repository`, `db/repositories/`, `*_queries.py`, свободные функции над `objects` запрещены → `database.mdc`. Гейт: ratchet `raw_storage_in_services`; один `PlatformModel` на файл — `scripts/gates/backend/model_files.py`; расположение `models/<entity>.py` `[без гейта]`.
+18. **Второй объект композиции.** Service locator, `dependencies.py`, `container.py`, Protocol-зеркало DI и передача `di` в service/runtime/model/client запрещены → `architecture.mdc` § Service Kit DI. Гейт: `scripts/gates/backend/dependency_injection.py`; файлы `dependencies.py`/`container.py` `[без гейта]`.
 
 ## Куда писать код
 
@@ -110,17 +110,18 @@ apps/<svc>/
 ├── services/     # сценарии
 ├── models/       # <entity>.py: одна таблица PlatformModel и её запросы
 ├── authz/        # tuple-helpers + backfill типов OpenFGA
-└── ui/           # Lit SPA → frontend.mdc
-apps/<svc>_worker/  # broker.py + worker.py + tasks/; di.py — только если задачи лежат в tasks/ воркера
+├── ui/           # Lit SPA → frontend.mdc
+├── worker.py     # TaskIQ владельца; второй процесс — worker_<name>.py
+└── tasks/        # declare_task и @platform_task; flows — src/tasks, sync — realtime
 ```
 
 - Одна таблица — один файл `models/<entity>.py`; shared-таблица — файл в `core/<domain>/`. Миграции — цепочка `migrations/<db>/NNNN_<name>.py` от `0001_initial.py` → `database.mdc`. `[без гейта]`
-- `components.py` в корне процесса нет: recipes — в `di.py`. Гейт: `scripts/check_no_service_components.py`.
+- `components.py` в корне процесса нет: recipes — в `di.py`. Гейт: `scripts/gates/backend/forbidden_paths.py`.
 - `apps/<svc>/db/`, `db/repositories/`, `dependencies.py`, `container.py`, `*_queries.py` не существуют; `di.py` содержит только `<Svc>Di`, recipes и alias `Di`. `[без гейта]`
 - Общее — из `create_service_app` (`core/app/factory.py`): middleware, платформенные роутеры, health, tracing/logging lifecycle, каталог событий, `static_mounts`, `/{segment}/services`. Свой lifespan, `on_startup`/`on_shutdown`, `@app.exception_handler`, `app.add_middleware` в `main.py` запрещены → `architecture.mdc` § App-level поведение. `[без гейта]`
 - Статика и SPA-fallback — только `mount_service_spa` (`core/app/spa.py`) после собственных маршрутов; core-статику (`/static/core/lib` — собранный `embed-dist`, затем `/static/core`) монтирует только `mount_core_frontend`.
-- Сервис без UI (`secrets`, `scheduler`, `realtime`, `browser`, `capability_gateway`, `code_runner_*`, `guest_runtime`, `provider_litserve`) — подмножество той же схемы без новых папок. Домен с моделями в `core/` (`worktracker`, `rag`) держит в `apps/<svc>/` только `api/`, `realtime/`, `ui/`.
-- `apps/` содержит только процессы из § Сервисы и стек и библиотечные домены без HTTP-процесса: `apps/agent` (роутеры монтируются во `flows`/`frontend`), `apps/worker_manifest.py` (топология очередей TaskIQ). `[без гейта]`
+- Сервис без UI (`secrets`, `scheduler`, `realtime`, `browser`, `capability_gateway`, `code_runner_*`, `guest_runtime`, `provider_litserve`) — подмножество той же схемы без новых папок. `idle` — процесс без HTTP: `di.py`, `worker.py`, `worker_a2a_push.py`, `tasks/`. Домен с моделями в `core/` (`worktracker`, `rag`) держит в `apps/<svc>/` только `api/`, `realtime/`, `ui/` и, если есть очередь, `worker.py` с `tasks/`.
+- `apps/` содержит только процессы из § Сервисы и стек и библиотечный домен без HTTP-процесса `apps/worker_manifest.py` (топология очередей TaskIQ). `[без гейта]`
 - Типы событий регистрирует `apps/<svc>/events.py` (flows — `apps/flows/src/events.py`).
 
 ### Исключения
@@ -130,7 +131,7 @@ apps/<svc>_worker/  # broker.py + worker.py + tasks/; di.py — только е�
 
 ## Границы core и apps
 
-`core/` не импортирует `apps/`. `[без гейта]` `apps/<a>` не импортирует `apps/<b>`, кроме воркера своего владельца, `*.tasks.task_names`, моделей владельца и библиотечных доменов. Гейт: `scripts/check_cross_service_imports.py`.
+`core/` не импортирует `apps/`. `[без гейта]` `apps/<a>` не импортирует `apps/<b>`, кроме воркера своего владельца, `*.tasks.task_names`, моделей владельца и библиотечных доменов. Гейт: `scripts/gates/backend/cross_service_imports.py`.
 
 `core/` — общая библиотека: `di`, `app`, `config`, `context`, `db`, `models`, `events`, `realtime`, `websocket`, `authz`, `auth`, `identity`, `files`, `documents`, `data_tables`, `ai`, `llm_context`, `rag`, `worktracker`, `namespace`, `mail`, `calendar`, `tracing`, `logging`, `billing`, `payments`, `tasks`, `scheduler`, `flow_ui`, `a2a`, `state`, `variables`, `capabilities`, `frontend`, `i18n`, `lanes`, `pagination.py`, `types.py`, `errors`, `clients`. Клиенты к сервисам и внешним API — только `core/clients/`. `[без гейта]`
 
@@ -194,12 +195,12 @@ apps/<svc>_worker/  # broker.py + worker.py + tasks/; di.py — только е�
 
 ## Сервисы и стек
 
-Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запрещён: `scripts/check_no_uvicorn.sh`), PostgreSQL + pgvector, Redis, TaskIQ, uv, OpenFGA, Centrifugo, Lit 3 + EventBus + UI-фабрики.
+Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запрещён: `scripts/gates/backend/no_uvicorn.sh`), PostgreSQL + pgvector, Redis, TaskIQ, uv, OpenFGA, Centrifugo, Lit 3 + EventBus + UI-фабрики.
 
 | Сервис | Порт | Назначение |
 |---|---|---|
 | flows | 8001 | графы агентов, skills, tools, A2A, Flow UI, триггеры |
-| frontend | 8002 | консоль компании, auth, billing, лендинг, control plane LinnexAgent |
+| frontend | 8002 | консоль компании, auth, billing, лендинг |
 | crm | 8003 | NetWorkle |
 | rag | 8004 | семантический индекс |
 | sync | 8005 | чат, звонки, Git |
@@ -238,6 +239,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `infrastructure.mdc` | один Helm-чарт, MicroK8s, Granian |
 | `testing.mdc` | реальная инфраструктура; единственный мок — `MockLLM`; тест — инвариант |
 | `code_search.mdc` | rule → граф → семантика → grep → read |
+| `scripts.mdc` | пакеты `scripts/`, реестр гейтов, запуск через `python -m` |
 | `namespace.mdc` | kind company_workspace/personal/technical |
 | `files.mdc` | байты — chunked Files API; Documents bind; `FileReader.read`; S3 URL наружу запрещены |
 | `office.mdc` | Documents; id документа — `file_id` |
@@ -258,8 +260,7 @@ Python 3.14t free-threaded (`PYTHON_GIL=0`), FastAPI, Granian (uvicorn запр�
 | `mcp.mdc` | внешние MCP-серверы во flows |
 | `eval.mdc` | пользовательский код — только `code-runner-*` + capability-gateway |
 | `guest_runtime.mdc` | `code_agent`: дерево в Документах + контейнер фермы |
-| `ai_models.mdc` | любая модель — через `core.ai`; context layer `core/llm_context` |
-| `humanitec_agent.mdc` | LinnexAgent, tunnel WS, Platform MCP |
+| `ai_models.mdc` | любая модель — через `core.ai`; context layer `core/llm_context`; OpenAI LLM proxy |
 | `crm.mdc` | граф CRM; work-семантика задачи — в `WorkItem` |
 | `worktracker.mdc` | любая задача — `WorkItem` |
 | `sync.mdc` | чат и звонки; DM/@mention будят flow-сотрудника через шину |

@@ -594,7 +594,7 @@ async def list_mail_binding_members(
     di: Di,
 ) -> ListResponse[MailboxBindingMember]:
     try:
-        items = await di.mail_service.list_binding_members(mailbox_binding_id)
+        items = await di.mail_service.list_binding_members_by_user_id_asc(mailbox_binding_id)
         return ListResponse(items=items)
     except Exception as exc:
         _raise_http_for_mail_error(exc)

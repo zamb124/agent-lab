@@ -2,43 +2,61 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
+import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
-function asArray(value: unknown) {
-    return Array.isArray(value) ? value : [];
+function asArray(value: unknown): unknown[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const items: unknown[] = [];
+    for (const item of value) {
+        items.push(item);
+    }
+    return items;
 }
 
-function stringValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function stringValue(record: unknown, field: string): string {
+    if (!isPlainObject(record)) {
         return '';
     }
     const value = record[field];
     return typeof value === 'string' ? value : '';
 }
 
-function objectValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function objectValue(record: unknown, field: string): Record<string, unknown> | null {
+    if (!isPlainObject(record)) {
         return null;
     }
     const value = record[field];
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    return isPlainObject(value) ? value : null;
 }
 
-function findCaseRun(caseRuns: any, selectedCaseRunId: any) {
+function findCaseRun(caseRuns: unknown, selectedCaseRunId: string): Record<string, unknown> | null {
     const runs = asArray(caseRuns);
     if (selectedCaseRunId.length > 0) {
         const found = runs.find((item) => stringValue(item, 'case_run_id') === selectedCaseRunId);
-        if (found) {
+        if (found !== undefined) {
+            if (!isPlainObject(found)) {
+                throw new Error('flows-evaluation-transcript: case run must be an object');
+            }
             return found;
         }
     }
-    return runs.length > 0 ? runs[0] : null;
+    if (runs.length === 0) {
+        return null;
+    }
+    const first = runs[0];
+    if (!isPlainObject(first)) {
+        throw new Error('flows-evaluation-transcript: case run must be an object');
+    }
+    return first;
 }
 
-function messageContent(message: any) {
-    if (!message || typeof message !== 'object') {
+function messageContent(message: unknown): string {
+    if (!isPlainObject(message)) {
         return '';
     }
     const content = message.content;
@@ -51,11 +69,11 @@ function messageContent(message: any) {
     return JSON.stringify(content);
 }
 
-function eventSequence(event: Event) {
-    if (!event || typeof event !== 'object') {
+function eventSequence(event: unknown) {
+    if (!isPlainObject(event)) {
         return '·';
     }
-    const value = (event as Record<string, any>).sequence;
+    const value = event.sequence;
     if (typeof value === 'number' || typeof value === 'string') {
         return value;
     }
@@ -80,7 +98,7 @@ function prettyJson(value: unknown) {
     return formatJsonPretty(value);
 }
 
-function eventTone(eventType: any, payload: any) {
+function eventTone(eventType: string, payload: Record<string, unknown> | null) {
     if (eventType.includes('failed') || eventType.includes('error') || eventType.includes('cancelled')) {
         return 'danger';
     }
@@ -102,7 +120,7 @@ function eventTone(eventType: any, payload: any) {
     return 'neutral';
 }
 
-function eventIcon(eventType: any) {
+function eventIcon(eventType: string) {
     if (eventType.includes('failed') || eventType.includes('error') || eventType.includes('cancelled')) {
         return 'alert-triangle';
     }
@@ -128,9 +146,9 @@ export class FlowsEvaluationTranscript extends PlatformElement {
         events: { type: Array },
         selectedCaseRunId: { type: String },
     }
-    declare run: Record<string, any> | null;
-    declare caseRuns: any[];
-    declare events: any[];
+    declare run: Record<string, unknown> | null;
+    declare caseRuns: unknown[];
+    declare events: unknown[];
     declare selectedCaseRunId: string;
 ;
 
@@ -445,7 +463,7 @@ export class FlowsEvaluationTranscript extends PlatformElement {
         const runState = stringValue(this.run, 'state');
         const caseRun = findCaseRun(this.caseRuns, this.selectedCaseRunId);
         const caseRunId = stringValue(caseRun, 'case_run_id');
-        const dialog = asArray(caseRun && caseRun.dialog);
+        const dialog = asArray(isPlainObject(caseRun) ? caseRun.dialog : undefined);
         const events = asArray(this.events).filter((event) => {
             const eventCaseRunId = stringValue(event, 'case_run_id');
             return caseRunId.length === 0 || eventCaseRunId.length === 0 || eventCaseRunId === caseRunId;
@@ -476,7 +494,7 @@ export class FlowsEvaluationTranscript extends PlatformElement {
         `;
     }
 
-    _renderSyntheticDialog(caseRun: any) {
+    _renderSyntheticDialog(caseRun: Record<string, unknown>) {
         const error = stringValue(caseRun, 'error');
         const feedback = stringValue(caseRun, 'judge_feedback');
         if (error.length > 0) {
@@ -488,7 +506,7 @@ export class FlowsEvaluationTranscript extends PlatformElement {
         return html`<div class="content-panel-empty">${this.t('evaluation.transcript.no_dialog')}</div>`;
     }
 
-    _renderMessage(message: any) {
+    _renderMessage(message: unknown) {
         const role = stringValue(message, 'role');
         const visualRole = role.length > 0 ? role : 'assistant';
         const icon = visualRole === 'user' ? 'user' : 'bot';
@@ -503,7 +521,7 @@ export class FlowsEvaluationTranscript extends PlatformElement {
         `;
     }
 
-    _renderEvent(event: Event) {
+    _renderEvent(event: unknown) {
         const eventType = stringValue(event, 'event_type');
         const payload = objectValue(event, 'payload');
         const tone = eventTone(eventType, payload);
@@ -521,7 +539,7 @@ export class FlowsEvaluationTranscript extends PlatformElement {
         `;
     }
 
-    _renderPayload(eventType: any, payload: any) {
+    _renderPayload(eventType: string, payload: Record<string, unknown> | null) {
         if (payload === null) {
             return html`<div class="payload-empty">${this.t('evaluation.transcript.payload_empty')}</div>`;
         }
@@ -539,10 +557,10 @@ export class FlowsEvaluationTranscript extends PlatformElement {
         `;
     }
 
-    _renderPayloadGrid(entries: any) {
+    _renderPayloadGrid(entries: ReadonlyArray<readonly [string, unknown]>) {
         return html`
             <div class="payload-grid">
-                ${entries.map(([key, value]: [string, any]) => this._renderPayloadItem(key, value))}
+                ${entries.map(([key, value]) => this._renderPayloadItem(key, value))}
             </div>
         `;
     }

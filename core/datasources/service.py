@@ -84,7 +84,7 @@ class DatasourceService:
         return await DatasourceConnectorSpec.by_connector_id(company_id, connector_id)
 
     async def _list_connectors_for_company(self, company_id: str) -> list[DatasourceConnectorSpec]:
-        stamped = await DatasourceConnectorSpec.list_stamped_for_company(company_id)
+        stamped = await DatasourceConnectorSpec.list_stamped_for_company_by_name_and_connector_id_asc(company_id)
         platform_specs = [platform_connector(item) for item in sorted(PLATFORM_CONNECTOR_IDS)]
         return platform_specs + stamped
 
@@ -112,7 +112,7 @@ class DatasourceService:
         company_id = _company_id()
         user_id = _user_id()
         await self._authz.require_can_view(AuthzObject.company(company_id))
-        candidates = await DatasourceConnection.list_by_name_and_datasource_id(company_id)
+        candidates = await DatasourceConnection.list_by_name_and_datasource_id_asc(company_id)
         if not candidates:
             return []
         allowed = await self._authz.batch_check(

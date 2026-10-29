@@ -3,7 +3,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { agentToolkitsListOp } from '@platform/lib/events/resources/flows-agent-toolkits.resource.js';
 import { flowsListOp } from '@platform/lib/events/resources/flows-flows-list.resource.js';
 import { catalogItemsOp } from '@platform/lib/events/resources/office-catalog-items.resource.js';
 import {
@@ -23,15 +22,6 @@ afterEach(() => {
 });
 
 describe('core WS catalog resources', () => {
-    it('flows/agent_toolkits', () => {
-        expect(agentToolkitsListOp.transport).toBe('ws');
-        expect(agentToolkitsListOp.commandType).toBe('flows/agent_toolkits/list_requested');
-        expect(agentToolkitsListOp.restMirror).toEqual({
-            method: 'GET',
-            path: '/flows/api/v1/agent/toolkits/manage',
-        });
-    });
-
     it('flows/flows_list', () => {
         expect(flowsListOp.transport).toBe('ws');
         expect(flowsListOp.commandType).toBe('flows/flows/list_requested');

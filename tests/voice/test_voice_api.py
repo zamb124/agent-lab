@@ -8,7 +8,7 @@ import os
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.voice.providers.streaming_adapters import (
     StreamingSTTProvider,

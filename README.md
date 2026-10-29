@@ -1,6 +1,6 @@
 # Платформа (linnex.io)
 
-Платформа для ИИ-агентов (Flows), командного чата (Sync), графа знаний (NetWorkle/CRM), семантического поиска (RAG), документов (Office), задач (Worktracker), голоса (Voice) и desktop-агента (LinnexAgent). Primary apex — **linnex.io**; также доступна на **humanitec.ru** и других доменах из `platform_brands` ([`configuration.mdc`](.cursor/rules/configuration.mdc)).
+Платформа для ИИ-агентов (Flows), командного чата (Sync), графа знаний (NetWorkle/CRM), семантического поиска (RAG), документов (Office), задач (Worktracker) и голоса (Voice). Primary apex — **linnex.io**; также доступна на **humanitec.ru** и других доменах из `platform_brands` ([`configuration.mdc`](.cursor/rules/configuration.mdc)).
 
 **Инвариант**: Database-First — конфигурация flows, tools и resources в базе данных; код задаёт только поведение.
 
@@ -50,9 +50,9 @@ make app APP_KILL=1
 make app ex flows_worker
 ```
 
-HTTP-сервисы стартуют через **Granian** (Rust ASGI, не uvicorn). `runtime-bootstrap` вызывается автоматически из `dev-up` и `app`. В docker/k8s `PYTHON_GIL=0` задан в окружении. `apps/provider_litserve` и `apps/rag_worker` импортируют HuggingFace-стек — внутри их процесса CPython автоматически включает GIL (known limitation, фиксируется в startup-логе и OTEL).
+HTTP-сервисы стартуют через **Granian** (Rust ASGI, не uvicorn). `runtime-bootstrap` вызывается автоматически из `dev-up` и `app`. В docker/k8s `PYTHON_GIL=0` задан в окружении. `apps/provider_litserve` и `apps/rag` импортируют HuggingFace-стек — внутри их процесса CPython автоматически включает GIL (known limitation, фиксируется в startup-логе и OTEL).
 
-Один сервис: `uv run python scripts/run.py <service>` (реестр — [scripts/run.py](scripts/run.py)).
+Один сервис: `uv run python -m scripts.dev.run <service>` (реестр — [scripts/dev/run.py](scripts/dev/run.py)).
 
 Конфигурация: каскад ENV → `conf.json` / `conf.local.json` → defaults через Pydantic Settings. Подробности — [.cursor/rules/configuration.mdc](.cursor/rules/configuration.mdc).
 
@@ -76,7 +76,7 @@ make doc-serve       # Локальный предпросмотр RU-сайта
 
 ## Сервисы и порты
 
-Канон портов — [scripts/run.py](scripts/run.py).
+Канон портов — [scripts/dev/run.py](scripts/dev/run.py).
 
 | Сервис | Порт | Назначение |
 |---|---|---|
@@ -108,14 +108,13 @@ agent-lab/
 ├── apps/              # Микросервисы (flows, frontend, crm, rag, sync, office, …)
 │   ├── flows/         # Flow runtime, API, UI, bundles
 │   ├── frontend/      # Платформенный shell, auth, billing
-│   ├── agent/         # LinnexAgent desktop (Electron)
-│   ├── *_worker/      # TaskIQ-воркеры по доменам
-│   └── …
+│   ├── idle/          # TaskIQ без HTTP: очереди idle и a2a_push
+│   └── …              # у сервиса с очередью — worker.py и tasks/ в его каталоге
 ├── core/              # Общая платформа (ai, clients, db, frontend lib, llm_context, …)
 ├── migrations/        # Alembic per-domain (shared, flows, crm, rag, sync, office, …)
-├── tests/             # pytest: core, apps, ui, agent
+├── tests/             # pytest: core, apps, ui
 ├── scripts/           # run.py, db_migrate, docs_prepare, …
-├── mk/                # app.mk, test.mk, lint.mk, migrate.mk, agent.mk
+├── mk/                # app.mk, test.mk, lint.mk, migrate.mk
 ├── deploy/helm/       # Единый Helm-чарт всего стека
 ├── docs/              # Zensical-исходники, scenarios, openapi
 ├── mobile/            # Capacitor iOS/Android
@@ -147,7 +146,6 @@ agent-lab/
 | `make test` | CI-прогон unit/API |
 | `make test-ui` / `make ui-doc` | Playwright E2E + doc scenarios |
 | `make migrate` | Alembic всех сервисных деревьев |
-| `make agent` | LinnexAgent desktop — сборка и GitHub Release |
 | `make doc` | Zensical RU+EN build |
 
 Миграции: `make migrate-new m="описание" s=shared` (`s` — имя базы из `migrations/services.json`). См. [.cursor/rules/database.mdc](.cursor/rules/database.mdc).

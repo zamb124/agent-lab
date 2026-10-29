@@ -218,7 +218,7 @@ async def test_record_usage_then_get_company_usage_stats(
     assert stats["by_resource"]["llm:test"]["cost"] == pytest.approx(3.5)
     assert stats["by_user"][system_user_id]["cost"] == pytest.approx(3.5)
 
-    rec = (await UsageRecord.admin_search_usage_records(
+    rec = (await UsageRecord.admin_search_by_timestamp_desc(
         company_id=cid, limit=50
     )).items
     ids = {r.usage_id for r in rec}

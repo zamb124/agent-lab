@@ -148,7 +148,7 @@ async def handle_call_invite(
                     left_at=now,
                 )
 
-    member_rows = await channel_access.list_member_rows(payload.channel_id)
+    member_rows = await channel_access.list_member_rows_by_user_id_asc(payload.channel_id)
     member_ids = [user_id for user_id, _role in member_rows]
     mode = "p2p" if len(member_ids) <= P2P_MAX else "sfu"
 

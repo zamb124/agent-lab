@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.frontend.cookie_consent import COOKIE_CONSENT_TEXT_VERSION
 from core.middleware.auth.route_config import RouteMatcher

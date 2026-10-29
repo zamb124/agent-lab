@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from tests.files.chunked_upload_helpers import (
     chunked_upload_file,

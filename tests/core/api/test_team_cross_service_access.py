@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service

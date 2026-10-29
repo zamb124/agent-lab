@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from apps.idle_worker.tasks.mail_idle_supervisor import (
+from apps.idle.tasks.mail_idle_supervisor import (
     _idle_one_binding,
     mail_idle_supervisor_task,
 )
@@ -43,7 +43,7 @@ async def test_idle_exists_enqueues_sync(
         enqueued.append((company_id, mailbox_binding_id))
 
     monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_idle_supervisor.enqueue_mail_sync_binding",
+        "apps.idle.tasks.mail_idle_supervisor.enqueue_mail_sync_binding",
         _fake_enqueue,
     )
     woke = await _idle_one_binding(
@@ -77,7 +77,7 @@ async def test_idle_timeout_does_not_enqueue(
         enqueued.append((company_id, mailbox_binding_id))
 
     monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_idle_supervisor.enqueue_mail_sync_binding",
+        "apps.idle.tasks.mail_idle_supervisor.enqueue_mail_sync_binding",
         _fake_enqueue,
     )
     woke = await _idle_one_binding(
@@ -94,7 +94,7 @@ async def test_idle_supervisor_respects_idle_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_idle_supervisor.get_settings",
+        "apps.idle.tasks.mail_idle_supervisor.get_settings",
         lambda: SimpleNamespace(
             mail_sync=MailSyncConfig(enabled=True, idle_enabled=False)
         ),

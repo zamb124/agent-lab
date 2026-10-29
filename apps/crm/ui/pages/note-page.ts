@@ -45,11 +45,8 @@ import type {
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-function anyRecord(value: unknown): Record<string, any> | null {
-    if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
-    for (const [key, field] of Object.entries(value)) row[key] = field;
-    return row;
+function anyRecord(value: unknown): Record<string, unknown> | null {
+    return isPlainRecord(value) ? value : null;
 }
 
 const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
@@ -69,7 +66,7 @@ export class CRMNotePage extends CRMNamespacePage {
         _markdownFormatProgress: { state: true },
     };
     declare noteId: string;
-    declare _card: Record<string, any> | null;
+    declare _card: Record<string, unknown> | null;
     declare _cardError: string;
     declare _mode: 'view' | 'edit';
     declare _mobileHeaderPanel: string;
@@ -186,12 +183,12 @@ export class CRMNotePage extends CRMNamespacePage {
     private _tasks: ResourceController;
     private _analyzeOp: OpController;
     private _markdownFormatOp: OpController;
-    private _markdownFormatUiTimer: any;
+    private _markdownFormatUiTimer: number | null;
     private _lastRequestedId: string;
     private _draftVersionInitialized: boolean;
-    private _lastDraftVersion: any;
-    private _lastAutoOpenedDraftVersion: any;
-    private _noteToolbarHost: any;
+    private _lastDraftVersion: number | null;
+    private _lastAutoOpenedDraftVersion: number | null;
+    private _noteToolbarHost: HTMLElement | null;
 
     constructor() {
         super();
@@ -229,8 +226,8 @@ export class CRMNotePage extends CRMNamespacePage {
             if (payload === null) {
                 return;
             }
-            const mf = payload.markdown_format;
-            const phase = mf && typeof mf.phase === 'string' ? mf.phase : '';
+            const format = isPlainRecord(payload.markdown_format) ? payload.markdown_format : null;
+            const phase = format !== null && typeof format.phase === 'string' ? format.phase : '';
             if (phase === 'started') {
                 this._markdownFormatting = true;
                 this._markdownFormatProgress = null;
@@ -238,8 +235,8 @@ export class CRMNotePage extends CRMNamespacePage {
                 return;
             }
             if (phase === 'partial') {
-                const done = mf && typeof mf.chunks_done === 'number' ? mf.chunks_done : 0;
-                const total = mf && typeof mf.chunks_total === 'number' ? mf.chunks_total : 0;
+                const done = format !== null && typeof format.chunks_done === 'number' ? format.chunks_done : 0;
+                const total = format !== null && typeof format.chunks_total === 'number' ? format.chunks_total : 0;
                 this._markdownFormatProgress = { done, total };
                 this.requestUpdate();
                 return;
@@ -250,13 +247,7 @@ export class CRMNotePage extends CRMNamespacePage {
             // Entity fields — из payload.note / crm/entities merge; related-граф
             // не перезагружаем на каждый note push (analyze — через crm/task/updated).
             const note = payload.note;
-            if (
-                note
-                && typeof note === 'object'
-                && typeof note.entity_id === 'string'
-                && this._card
-                && typeof this._card === 'object'
-            ) {
+            if (isPlainRecord(note) && typeof note.entity_id === 'string' && this._card !== null) {
                 this._card = { ...this._card, entity: note };
             }
             this.requestUpdate();
@@ -266,8 +257,8 @@ export class CRMNotePage extends CRMNamespacePage {
                 return;
             }
             const p = anyRecord(event.payload);
-            const result = p !== null && p.result ? p.result : null;
-            if (!result || typeof result !== 'object') {
+            const result = p !== null && isPlainRecord(p.result) ? p.result : null;
+            if (result === null) {
                 throw new Error('crm/entity_card SUCCEEDED: payload.result missing');
             }
             this._card = result;
@@ -278,9 +269,9 @@ export class CRMNotePage extends CRMNamespacePage {
                 return;
             }
             const p = anyRecord(event.payload);
-            const err = p && p.error ? p.error : null;
+            const err = p !== null && isPlainRecord(p.error) ? p.error : null;
             this._card = null;
-            this._cardError = err && typeof err.message === 'string' ? err.message : 'load_failed';
+            this._cardError = err !== null && typeof err.message === 'string' ? err.message : 'load_failed';
         });
         this.useEvent(this._tasks.resource.events.LIST_LOADED, () => {
             this.requestUpdate();
@@ -511,7 +502,7 @@ export class CRMNotePage extends CRMNamespacePage {
         this._loadAnalyzeTasks();
     }
 
-    _resolveNote(): Record<string, any> | null {
+    _resolveNote(): Record<string, unknown> | null {
         return anyRecord(this._entities.byId[this.noteId]);
     }
 
@@ -586,7 +577,7 @@ export class CRMNotePage extends CRMNamespacePage {
         this.navigate('note', { itemId: created.entity_id });
     }
 
-    _waitForResourceResult(controller: ResourceController, requestedId: string): Promise<Record<string, any> | null> {
+    _waitForResourceResult(controller: ResourceController, requestedId: string): Promise<Record<string, unknown> | null> {
         const bus = controller.bus;
         const successType = controller.resource.events.CREATED;
         const failedType = controller.resource.events.CREATE_FAILED;
@@ -678,21 +669,19 @@ export class CRMNotePage extends CRMNamespacePage {
         this._reloadCardOnly();
     }
 
-    _noteLabel(note: Record<string, any> | null): string {
+    _noteLabel(note: Record<string, unknown> | null): string {
         if (!note) return '';
         if (typeof note.name === 'string' && note.name.trim().length > 0) return note.name.trim();
         if (typeof note.entity_id === 'string') return note.entity_id;
         return '';
     }
 
-    _draftVersion(note: Record<string, any> | null): number | null {
-        const attrs = note && typeof note.attributes === 'object' && note.attributes !== null
-            ? note.attributes
-            : null;
-        const draft = attrs && typeof attrs.ai_analysis_draft === 'object' && attrs.ai_analysis_draft !== null
-            ? attrs.ai_analysis_draft
-            : null;
-        if (draft === null || typeof draft.draft_version !== 'number') {
+    _draftVersion(note: Record<string, unknown> | null): number | null {
+        if (note === null || !isPlainRecord(note.attributes)) {
+            return null;
+        }
+        const draft = note.attributes.ai_analysis_draft;
+        if (!isPlainRecord(draft) || typeof draft.draft_version !== 'number') {
             return null;
         }
         return draft.draft_version;

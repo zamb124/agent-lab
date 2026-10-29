@@ -9,7 +9,7 @@ from typing import cast as type_cast
 from typing import override
 from urllib.parse import unquote, urlparse
 
-import httpx
+import httpx2
 
 from core.config import get_settings
 from core.config.models import RAGProviderConfig
@@ -37,7 +37,7 @@ from ..base_provider import BaseRAGProvider, validate_metadata_filters
 logger = get_logger(__name__)
 
 
-def _agentset_json_object(response: httpx.Response, field_name: str) -> JsonObject:
+def _agentset_json_object(response: httpx2.Response, field_name: str) -> JsonObject:
     return require_json_object(type_cast(JsonValue, response.json()), field_name)
 
 
@@ -102,7 +102,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         try:
             response = await self._client.post("/v1/namespace", json=payload)
             _ = response.raise_for_status()
-        except httpx.HTTPStatusError as e:
+        except httpx2.HTTPStatusError as e:
             if e.response.status_code == 409:
                 logger.info("rag.agentset.namespace_exists", name=name, slug=slug)
                 namespaces = await self.list_namespaces()
@@ -126,7 +126,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             except Exception:
                 error_detail = f" Тело ответа: {e.response.text[:500]}"
 
-            raise httpx.HTTPStatusError(
+            raise httpx2.HTTPStatusError(
                 f"Failed to create namespace in AgentSet (name='{name}', slug='{slug}'): {e.response.status_code} - {e.response.reason_phrase}{error_detail}",
                 request=e.request,
                 response=e.response,

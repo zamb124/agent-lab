@@ -11,6 +11,7 @@
 
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
+import type { PropertyValues } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-http-headers-editor.js';
@@ -32,7 +33,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -42,12 +43,12 @@ export class FlowsMcpNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
 ;
 
@@ -119,8 +120,8 @@ export class FlowsMcpNodeEditor extends PlatformElement {
     private _servers: ResourceController;
     private _tools: ResourceController;
     private _sync: OpController;
-    private _mcpGetPending: any;
-    private _draftGenFullId: any;
+    private _mcpGetPending: string | null;
+    private _draftGenFullId: string | null;
     private _prevInputMappingKeyCount: number;
 
     constructor() {
@@ -129,7 +130,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'mcp';
+        this.flowNodeType = 'mcp';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -142,10 +143,10 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         this._draftGenFullId = null;
         this._prevInputMappingKeyCount = 0;
         this.useEvent('flows/tools/item_loaded', (ev) => {
-            if (!ev || !isPlainObject(ev.payload) || !isPlainObject((ev as any).payload.item)) {
+            if (!ev || !isPlainObject(ev.payload) || !isPlainObject((ev).payload.item)) {
                 return;
             }
-            const loadedId = (ev as any).payload.item.tool_id;
+            const loadedId = (ev).payload.item.tool_id;
             if (typeof loadedId !== 'string' || loadedId.length === 0) {
                 return;
             }
@@ -160,13 +161,13 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         });
     }
 
-    override updated(changed: any) {
+    override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         this._mcpFlattenLegacyNested();
         this._applyMcpToolFetchAndDraft();
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
@@ -176,46 +177,46 @@ export class FlowsMcpNodeEditor extends PlatformElement {
      */
     _mcpFieldBundle() {
         const o = asObject(this.nodeConfig);
-        const nest = isPlainObject((o as any).config) ? (o as any).config : null;
+        const nest = isPlainObject((o).config) ? (o).config : null;
         let serverId = '';
-        if (typeof (o as any).server_id === 'string' && (o as any).server_id.length > 0) {
-            serverId = (o as any).server_id;
-        } else if (typeof (o as any).mcp_server_id === 'string' && (o as any).mcp_server_id.length > 0) {
-            serverId = (o as any).mcp_server_id;
+        if (typeof (o).server_id === 'string' && (o).server_id.length > 0) {
+            serverId = (o).server_id;
+        } else if (typeof (o).mcp_server_id === 'string' && (o).mcp_server_id.length > 0) {
+            serverId = (o).mcp_server_id;
         } else if (nest && typeof nest.server_id === 'string' && nest.server_id.length > 0) {
             serverId = nest.server_id;
         } else if (nest && typeof nest.mcp_server_id === 'string' && nest.mcp_server_id.length > 0) {
             serverId = nest.mcp_server_id;
         }
         let toolName = '';
-        if (typeof (o as any).tool_name === 'string' && (o as any).tool_name.length > 0) {
-            toolName = (o as any).tool_name;
-        } else if (typeof (o as any).mcp_tool_name === 'string' && (o as any).mcp_tool_name.length > 0) {
-            toolName = (o as any).mcp_tool_name;
+        if (typeof (o).tool_name === 'string' && (o).tool_name.length > 0) {
+            toolName = (o).tool_name;
+        } else if (typeof (o).mcp_tool_name === 'string' && (o).mcp_tool_name.length > 0) {
+            toolName = (o).mcp_tool_name;
         } else if (nest && typeof nest.tool_name === 'string' && nest.tool_name.length > 0) {
             toolName = nest.tool_name;
         } else if (nest && typeof nest.mcp_tool_name === 'string' && nest.mcp_tool_name.length > 0) {
             toolName = nest.mcp_tool_name;
         }
         let headers;
-        if (isPlainObject((o as any).headers)) {
-            headers = (o as any).headers;
+        if (isPlainObject((o).headers)) {
+            headers = (o).headers;
         } else if (nest && isPlainObject(nest.headers)) {
             headers = nest.headers;
         } else {
             headers = {};
         }
         let stateMapping;
-        if (isPlainObject((o as any).state_mapping)) {
-            stateMapping = (o as any).state_mapping;
+        if (isPlainObject((o).state_mapping)) {
+            stateMapping = (o).state_mapping;
         } else if (nest && isPlainObject(nest.state_mapping)) {
             stateMapping = nest.state_mapping;
         } else {
             stateMapping = {};
         }
         let inputMapping;
-        if (isPlainObject((o as any).input_mapping)) {
-            inputMapping = (o as any).input_mapping;
+        if (isPlainObject((o).input_mapping)) {
+            inputMapping = (o).input_mapping;
         } else if (nest && isPlainObject(nest.input_mapping)) {
             inputMapping = nest.input_mapping;
         } else {
@@ -234,7 +235,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         const o = asObject(this.nodeConfig);
         const b = this._mcpFieldBundle();
         return {
-            ...(o as Record<string, any>),
+            ...o,
             server_id: b.serverId,
             tool_name: b.toolName,
             headers: b.headers,
@@ -247,7 +248,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
      * Прямой ключ в byId (как в fetch) или совпадение item.tool_id — на случай
      * различий строки id в store и fullMcpToolId с ноды.
      */
-    _findToolRecordInStore(wantId: any) {
+    _findToolRecordInStore(wantId: unknown) {
         if (typeof wantId !== 'string' || wantId.length === 0) {
             return null;
         }
@@ -271,10 +272,10 @@ export class FlowsMcpNodeEditor extends PlatformElement {
 
     _mcpFlattenLegacyNested() {
         const o = asObject(this.nodeConfig);
-        if (typeof (o as any).server_id === 'string' && (o as any).server_id.length > 0) {
+        if (typeof (o).server_id === 'string' && (o).server_id.length > 0) {
             return;
         }
-        const nest = isPlainObject((o as any).config) ? (o as any).config : null;
+        const nest = isPlainObject((o).config) ? (o).config : null;
         if (!nest) {
             return;
         }
@@ -350,26 +351,21 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         this._emitPatch({ headers });
     }
 
-    async _onSync(serverId: any) {
+    async _onSync(serverId: string) {
         if (!serverId) return;
         await this._sync.run({ server_id: serverId });
     }
 
-    _findServer(servers: any, id: string) {
-        const found = servers.find((s: any) => s && s.server_id === id);
+    _findServer(servers: readonly unknown[], id: string) {
+        const found = servers.find((server) => isPlainObject(server) && server.server_id === id);
         return found ? found : null;
     }
 
     _onPickTool() {
         this.openModal('flows.tool_picker', {
             pickMode: 'mcp_only',
-            onPick: (detail: any) => {
-                if (!detail || typeof detail !== 'object') {
-                    return;
-                }
-                if (detail.kind !== 'tool') {
-                    return;
-                }
+            onPick: (detail: unknown) => {
+                if (!isPlainObject(detail) || detail.kind !== 'tool') return;
                 const toolId = detail.tool_id;
                 if (typeof toolId !== 'string' || toolId.length === 0) {
                     return;
@@ -384,16 +380,13 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         });
     }
 
-    _toolSchema(tool: any) {
-        if (!tool || typeof tool !== 'object') return null;
-        if (tool.parameters_schema && typeof tool.parameters_schema === 'object'
-            && tool.parameters_schema.properties && typeof tool.parameters_schema.properties === 'object') {
-            return tool.parameters_schema.properties;
-        }
-        return null;
+    _toolSchema(tool: unknown) {
+        if (!isPlainObject(tool) || !isPlainObject(tool.parameters_schema)) return null;
+        const properties = tool.parameters_schema.properties;
+        return isPlainObject(properties) ? properties : null;
     }
 
-    _resolveLoadedToolRecord(serverId: any, toolName: any) {
+    _resolveLoadedToolRecord(serverId: unknown, toolName: unknown) {
         if (typeof serverId !== 'string' || serverId.length === 0) {
             return null;
         }
@@ -404,15 +397,17 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         return isPlainObject(rec) ? rec : null;
     }
 
-    _selectionLabel(server: any, serverId: any, toolName: any, loaded: any) {
-        if (serverId.length === 0 || toolName.length === 0) {
+    _selectionLabel(server: unknown, serverId: unknown, toolName: unknown, loaded: unknown) {
+        if (typeof serverId !== 'string' || serverId.length === 0 || typeof toolName !== 'string' || toolName.length === 0) {
             return this.t('mcp_node_editor.tool_not_selected');
         }
-        const toolTitle = loaded && typeof loaded.title === 'string' && loaded.title.length > 0
-            ? loaded.title
+        const loadedRecord = isPlainObject(loaded) ? loaded : null;
+        const serverRecord = isPlainObject(server) ? server : null;
+        const toolTitle = loadedRecord !== null && typeof loadedRecord.title === 'string' && loadedRecord.title.length > 0
+            ? loadedRecord.title
             : toolName;
-        const serverLabel = server && typeof server.name === 'string' && server.name.length > 0
-            ? server.name
+        const serverLabel = serverRecord !== null && typeof serverRecord.name === 'string' && serverRecord.name.length > 0
+            ? serverRecord.name
             : serverId;
         return `${serverLabel} · ${toolTitle}`;
     }
@@ -438,7 +433,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this._mergedNodeForBase()}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'mcp'}
+                .flowNodeType=${this.flowNodeType.length > 0 ? this.flowNodeType : 'mcp'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

@@ -1,6 +1,6 @@
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.context import clear_context, set_context
 from core.docs.assistant import (

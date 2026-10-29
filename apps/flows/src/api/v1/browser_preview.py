@@ -8,7 +8,7 @@ import json
 from typing import Annotated, Literal
 from urllib.parse import quote
 
-import httpx
+import httpx2
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, Response
 
@@ -67,7 +67,7 @@ def _browser_control_url(session_id: str, suffix: str) -> str:
     return f"{base}/browser/api/v1/control/sessions/{encoded_session}/{suffix.lstrip('/')}"
 
 
-def _http_error_detail(exc: httpx.HTTPError) -> str:
+def _http_error_detail(exc: httpx2.HTTPError) -> str:
     message = str(exc).strip()
     exc_name = exc.__class__.__name__
     if message:
@@ -81,7 +81,7 @@ async def _browser_get(
     *,
     params: dict[str, str] | None = None,
     timeout: float = 8.0,
-) -> httpx.Response:
+) -> httpx2.Response:
     try:
         async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.DIRECT_ONLY) as client:
             response = await client.get(
@@ -90,11 +90,11 @@ async def _browser_get(
             )
             _ = await response.aread()
             return response
-    except httpx.HTTPError as exc:
+    except httpx2.HTTPError as exc:
         raise WsCommandError("upstream", _http_error_detail(exc), error_code="upstream") from exc
 
 
-def _response_detail(response: httpx.Response) -> str:
+def _response_detail(response: httpx2.Response) -> str:
     text = response.text
     if text:
         try:
@@ -131,7 +131,7 @@ _BROWSER_UPSTREAM_TRANSPORT: dict[int, tuple[str, str]] = {
 }
 
 
-def _raise_upstream_error(response: httpx.Response) -> None:
+def _raise_upstream_error(response: httpx2.Response) -> None:
     if response.status_code < 400:
         return
     pair = _BROWSER_UPSTREAM_TRANSPORT.get(response.status_code)

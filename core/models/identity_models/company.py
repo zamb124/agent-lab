@@ -124,9 +124,10 @@ class Company(PlatformModel):
     )
 
     @classmethod
-    async def page_named_after_system(
+    async def page_named_after_system_by_name_and_company_id_asc(
         cls, *, limit: int, offset: int
     ) -> tuple[list[Self], bool]:
+        """Окно компаний: при offset 0 первой идёт system, дальше ORDER BY name ASC, company_id ASC. limit < 1, offset < 0 и отсутствие system — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if offset < 0:

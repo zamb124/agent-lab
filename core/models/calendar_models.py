@@ -132,9 +132,10 @@ class CalendarEvent(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def by_source(
+    async def by_company_source_and_source_id(
         cls, company_id: str, source: str, source_id: str
     ) -> Self | None:
+        """Уникальный ключ company_id, source, source_id. Нет строки — None."""
         return await cls.objects.filter(
             company_id=_calendar_required(company_id, "company_id"),
             source=CalendarEventSource(source),
@@ -142,9 +143,10 @@ class CalendarEvent(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def upsert_by_event_id(cls, event: Self) -> None:
+    async def merge_by_event_id(cls, event: Self) -> None:
+        """Слияние по event_id. Возвращает None. Тот же source и source_id с другим event_id — ValueError. event_id другой компании — ValueError."""
         event_id = _calendar_required(event.event_id, "event_id")
-        clash = await cls.by_source(event.company_id, event.source, event.source_id)
+        clash = await cls.by_company_source_and_source_id(event.company_id, event.source, event.source_id)
         if clash is not None and clash.event_id != event_id:
             raise ValueError("calendar event already exists for this company, source and source_id")
         existing = await cls.objects.filter(event_id=event_id).get_or_none()
@@ -156,7 +158,8 @@ class CalendarEvent(PlatformModel):
         _ = await event.save()
 
     @classmethod
-    async def delete_in_company(cls, company_id: str, event_id: str) -> bool:
+    async def delete_by_company_and_event(cls, company_id: str, event_id: str) -> bool:
+        """Удаление события компании. Нет строки — False."""
         deleted = await cls.objects.filter(
             event_id=_calendar_required(event_id, "event_id"),
             company_id=_calendar_required(company_id, "company_id"),
@@ -164,9 +167,10 @@ class CalendarEvent(PlatformModel):
         return deleted > 0
 
     @classmethod
-    async def list_in_range(
+    async def list_overlapping_by_start_at_asc(
         cls, company_id: str, start_at: datetime, end_at: datetime, limit: int
     ) -> list[Self]:
+        """События, пересекающие окно, ORDER BY start_at ASC, не больше limit. Пустой company_id — ValueError company_id cannot be empty. limit в теле не проверяется."""
         return await cls.objects.filter(
             company_id=_calendar_required(company_id, "company_id"),
             start_at__lt=end_at,
@@ -174,13 +178,14 @@ class CalendarEvent(PlatformModel):
         ).order_by("start_at").limit(limit).all()
 
     @classmethod
-    async def list_platform_sync_meeting_reminder_window(
+    async def list_unsent_platform_meeting_reminders_by_start_at_asc(
         cls,
         *,
         window_start: datetime,
         window_end: datetime,
         limit: int,
     ) -> list[Self]:
+        """События платформы в полуинтервале start_at, с sync_link_token, sync_meeting = 1 и без sync_join_reminder_sent_at. ORDER BY start_at ASC, не больше limit. limit в теле не проверяется."""
         rows = await execute_raw(
             """
             SELECT event_id, company_id, source, source_id, namespace, kind, title,

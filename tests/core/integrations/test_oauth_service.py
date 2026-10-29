@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from core.integrations.models import IntegrationCredential, IntegrationProvider
@@ -23,11 +23,11 @@ from core.integrations.providers.amocrm import parse_amocrm_subdomain_from_refer
 class FakeHttpClient:
     """Фейковый HTTP-клиент, возвращает заданный ответ на POST."""
 
-    def __init__(self, responses: list[httpx.Response]) -> None:
+    def __init__(self, responses: list[httpx2.Response]) -> None:
         self._responses = list(responses)
         self._call_index = 0
 
-    async def post(self, url: str, **kwargs: Any) -> httpx.Response:
+    async def post(self, url: str, **kwargs: Any) -> httpx2.Response:
         if self._call_index >= len(self._responses):
             raise RuntimeError(f"FakeHttpClient: no response for call #{self._call_index}")
         resp = self._responses[self._call_index]
@@ -36,12 +36,12 @@ class FakeHttpClient:
 
 
 @asynccontextmanager
-async def _fake_http_factory(responses: list[httpx.Response], **kwargs: Any):
+async def _fake_http_factory(responses: list[httpx2.Response], **kwargs: Any):
     """Заменяет get_httpx_client: возвращает FakeHttpClient."""
     yield FakeHttpClient(responses)
 
 
-_FAKE_REQUEST = httpx.Request("POST", "https://oauth2.googleapis.com/token")
+_FAKE_REQUEST = httpx2.Request("POST", "https://oauth2.googleapis.com/token")
 
 
 def _make_token_response(
@@ -51,7 +51,7 @@ def _make_token_response(
     *,
     status_code: int = 200,
     extra: dict[str, Any] | None = None,
-) -> httpx.Response:
+) -> httpx2.Response:
     body: dict[str, Any] = {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -61,15 +61,15 @@ def _make_token_response(
     }
     if extra:
         body.update(extra)
-    return httpx.Response(status_code=status_code, json=body, request=_FAKE_REQUEST)
+    return httpx2.Response(status_code=status_code, json=body, request=_FAKE_REQUEST)
 
 
 def _make_error_response(
     error: str,
     description: str = "",
     status_code: int = 400,
-) -> httpx.Response:
-    return httpx.Response(
+) -> httpx2.Response:
+    return httpx2.Response(
         status_code=status_code,
         json={"error": error, "error_description": description},
         request=_FAKE_REQUEST,
@@ -251,7 +251,7 @@ class TestIntegrationCredential:
                 updated_at=now,
             ))
 
-        items = await IntegrationCredential.list_by_created_at_for_user(company_id=company_id, user_id=user_id)
+        items = await IntegrationCredential.list_by_created_at_for_user_asc(company_id=company_id, user_id=user_id)
         assert len(items) == 2
         services = {c.service for c in items}
         assert services == {"calendar", "docs"}
@@ -632,7 +632,7 @@ class TestOAuthService:
             value=json.dumps(state_payload),
         )
 
-        no_refresh_resp = httpx.Response(200, json={
+        no_refresh_resp = httpx2.Response(200, json={
             "access_token": "acc",
             "expires_in": 3600,
             "token_type": "Bearer",

@@ -45,7 +45,7 @@ class SyncThread(PlatformModel):
     title: str | None = DbField(default=None, max_length=255)
 
     @classmethod
-    async def list_in_channel(
+    async def list_in_channel_by_created_at_desc(
         cls,
         company_id: str,
         channel_id: str,
@@ -53,7 +53,7 @@ class SyncThread(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
-        """Треды канала, ORDER BY created_at DESC, окно limit и offset."""
+        """Треды канала, ORDER BY created_at DESC. Окно limit и offset. limit и offset в теле не проверяются."""
         return await cls.objects.filter(
             company_id=company_id,
             channel_id=channel_id,

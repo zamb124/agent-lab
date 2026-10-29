@@ -3,6 +3,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { CrmNoteComposeSlice } from '../crm.types.js';
 
 export const noteComposeSlice = createSlice({
@@ -19,11 +20,15 @@ export const noteComposeSlice = createSlice({
     extraReducer: (state: CrmNoteComposeSlice, event) => {
         switch (event.type) {
             case 'crm/note_compose/description_set': {
-                const payload = (event.payload as Record<string, any>);
-                if (!payload || typeof payload.description !== 'string') {
+                const payload = event.payload;
+                if (!isPlainRecord(payload)) {
                     return state;
                 }
-                return { ...state, description: payload.description };
+                const description = payload.description;
+                if (typeof description !== 'string') {
+                    return state;
+                }
+                return { ...state, description };
             }
             default:
                 return state;

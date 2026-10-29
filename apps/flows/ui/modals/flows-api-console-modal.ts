@@ -25,44 +25,64 @@ const TAB_KEYS = Object.freeze(['start', 'examples', 'fields', 'run']);
 const LANG_KEYS = Object.freeze(['curl', 'python', 'javascript']);
 const MODE_KEYS = Object.freeze(['stream', 'sync', 'async']);
 const SYSTEM_VARIABLE_KEYS = Object.freeze(listSystemVariableKeys());
-const METHOD_ROWS = Object.freeze([
-    ['SendStreamingMessage', 'api_console.method_stream'],
-    ['SendMessage', 'api_console.method_send'],
-    ['GetTask', 'api_console.method_get'],
-    ['CancelTask', 'api_console.method_cancel'],
-    ['SubscribeToTask', 'api_console.method_subscribe_to_task'],
-    ['GetExtendedAgentCard', 'api_console.method_card'],
-    ['*TaskPushNotificationConfig', 'api_console.method_push'],
-] as [string, string][]);
-const JSON_RPC_FIELD_ROWS = Object.freeze([
-    ['jsonrpc', 'api_console.field_jsonrpc'],
-    ['id', 'api_console.field_id'],
-    ['method', 'api_console.field_method'],
-    ['params', 'api_console.field_params'],
-    ['params.message', 'api_console.field_params_message'],
-    ['params.message.messageId', 'api_console.field_message_id'],
-    ['params.message.role', 'api_console.field_role'],
-    ['params.message.parts', 'api_console.field_parts'],
-    ['params.message.contextId', 'api_console.field_context_id'],
-    ['params.message.taskId', 'api_console.field_task_id'],
-    ['params.metadata', 'api_console.field_metadata'],
-    ['params.metadata.branch', 'api_console.field_branch'],
-    ['params.metadata.variables', 'api_console.field_variables'],
-    ['params.metadata.version', 'api_console.field_version'],
-    ['params.metadata.breakpoints', 'api_console.field_breakpoints'],
-    ['params.metadata.triggers', 'api_console.field_triggers'],
-    ['params.configuration.returnImmediately', 'api_console.field_return_immediately'],
-] as [string, string][]);
-const VARIABLE_FIELD_ROWS = Object.freeze([
-    ['value', 'api_console.var_field_value'],
-    ['secret', 'api_console.var_field_secret'],
-    ['public', 'api_console.var_field_public'],
-    ['title', 'api_console.var_field_title'],
-    ['description', 'api_console.var_field_description'],
-    ['order', 'api_console.var_field_order'],
-]) as [string, string][];
 
-function _apiBranchId(branchId: any) {
+function labelRow(name: string, key: string): [string, string] {
+    return [name, key];
+}
+
+const METHOD_ROWS = Object.freeze([
+    labelRow('SendStreamingMessage', 'api_console.method_stream'),
+    labelRow('SendMessage', 'api_console.method_send'),
+    labelRow('GetTask', 'api_console.method_get'),
+    labelRow('CancelTask', 'api_console.method_cancel'),
+    labelRow('SubscribeToTask', 'api_console.method_subscribe_to_task'),
+    labelRow('GetExtendedAgentCard', 'api_console.method_card'),
+    labelRow('*TaskPushNotificationConfig', 'api_console.method_push'),
+]);
+const JSON_RPC_FIELD_ROWS = Object.freeze([
+    labelRow('jsonrpc', 'api_console.field_jsonrpc'),
+    labelRow('id', 'api_console.field_id'),
+    labelRow('method', 'api_console.field_method'),
+    labelRow('params', 'api_console.field_params'),
+    labelRow('params.message', 'api_console.field_params_message'),
+    labelRow('params.message.messageId', 'api_console.field_message_id'),
+    labelRow('params.message.role', 'api_console.field_role'),
+    labelRow('params.message.parts', 'api_console.field_parts'),
+    labelRow('params.message.contextId', 'api_console.field_context_id'),
+    labelRow('params.message.taskId', 'api_console.field_task_id'),
+    labelRow('params.metadata', 'api_console.field_metadata'),
+    labelRow('params.metadata.branch', 'api_console.field_branch'),
+    labelRow('params.metadata.variables', 'api_console.field_variables'),
+    labelRow('params.metadata.version', 'api_console.field_version'),
+    labelRow('params.metadata.breakpoints', 'api_console.field_breakpoints'),
+    labelRow('params.metadata.triggers', 'api_console.field_triggers'),
+    labelRow('params.configuration.returnImmediately', 'api_console.field_return_immediately'),
+]);
+const VARIABLE_FIELD_ROWS = Object.freeze([
+    labelRow('value', 'api_console.var_field_value'),
+    labelRow('secret', 'api_console.var_field_secret'),
+    labelRow('public', 'api_console.var_field_public'),
+    labelRow('title', 'api_console.var_field_title'),
+    labelRow('description', 'api_console.var_field_description'),
+    labelRow('order', 'api_console.var_field_order'),
+]);
+
+function isListed(values: readonly string[], value: unknown): value is string {
+    if (typeof value !== 'string') return false;
+    for (const item of values) {
+        if (item === value) return true;
+    }
+    return false;
+}
+
+function exampleForLanguage(examples: { curl: string; python: string; javascript: string }, language: string): string {
+    if (language === 'curl' || language === 'python' || language === 'javascript') {
+        return examples[language];
+    }
+    throw new Error(`flows-api-console-modal: unknown language ${language}`);
+}
+
+function _apiBranchId(branchId: unknown) {
     const raw = typeof branchId === 'string' && branchId.trim() !== '' ? branchId.trim() : 'base';
     return raw === 'base' ? 'default' : raw;
 }
@@ -72,11 +92,11 @@ function _safeToken(value: unknown) {
     return raw.replace(/[^a-zA-Z0-9_:-]/g, '_');
 }
 
-function _sampleContextId(flowId: string, branchId: any) {
+function _sampleContextId(flowId: string, branchId: unknown) {
     return `api_${_safeToken(flowId)}_${_safeToken(_apiBranchId(branchId))}_demo`;
 }
 
-function _normalizeVariable(raw: any) {
+function _normalizeVariable(raw: unknown) {
     if (raw === null) {
         return { value: '', secret: false, public: false, title: '', description: '', order: null };
     }
@@ -96,7 +116,7 @@ function _normalizeVariable(raw: any) {
     return { value: raw, secret: false, public: false, title: '', description: '', order: null };
 }
 
-function _visibleVariableValue(raw: any) {
+function _visibleVariableValue(raw: unknown) {
     const v = _normalizeVariable(raw);
     if (v.secret) {
         return '***';
@@ -107,7 +127,7 @@ function _visibleVariableValue(raw: any) {
     return JSON.stringify(v.value);
 }
 
-function _publicVariableEntries(variables: any) {
+function _publicVariableEntries(variables: unknown) {
     const obj = isPlainObject(variables) ? variables : {};
     return Object.entries(obj)
         .map(([key, raw]) => ({ key, ..._normalizeVariable(raw) }))
@@ -183,32 +203,32 @@ function _requestHeadersForMode(mode: string) {
     };
 }
 
-function _resultResponse(result: any) {
+function _resultResponse(result: unknown) {
     return isPlainObject(result) && isPlainObject(result.response) ? result.response : null;
 }
 
-function _resultRequest(result: any) {
+function _resultRequest(result: unknown) {
     return isPlainObject(result) && isPlainObject(result.request) ? result.request : null;
 }
 
-function _resultStreamEvents(result: any) {
+function _resultStreamEvents(result: unknown) {
     if (isPlainObject(result) && Array.isArray(result.stream_events)) {
         return result.stream_events;
     }
     if (isPlainObject(result) && Array.isArray(result.frames)) {
-        return result.frames.map((frame: any, index: number) => ({ index, event: 'message', data: frame }));
+        return result.frames.map((frame: unknown, index: number) => ({ index, event: 'message', data: frame }));
     }
     return [];
 }
 
-function _resultPollExchanges(result: any) {
+function _resultPollExchanges(result: unknown) {
     if (isPlainObject(result) && Array.isArray(result.poll_exchanges)) {
         return result.poll_exchanges;
     }
     return [];
 }
 
-function _responseBodyForResult(result: any) {
+function _responseBodyForResult(result: unknown) {
     const response = _resultResponse(result);
     if (response && 'body' in response) {
         return response.body;
@@ -219,7 +239,7 @@ function _responseBodyForResult(result: any) {
     return result;
 }
 
-function _rawResponseTextForResult(result: any) {
+function _rawResponseTextForResult(result: unknown) {
     const response = _resultResponse(result);
     if (response && typeof response.raw_text === 'string' && response.raw_text.length > 0) {
         return response.raw_text;
@@ -227,14 +247,14 @@ function _rawResponseTextForResult(result: any) {
     return _displayJson(_responseBodyForResult(result));
 }
 
-function _resultHeadersPayload(result: any) {
+function _resultHeadersPayload(result: unknown) {
     return {
         request: _resultRequest(result),
         response: _resultResponse(result),
     };
 }
 
-function _resultViewPayload(result: any, view: any) {
+function _resultViewPayload(result: unknown, view: unknown) {
     if (view === 'events') {
         return _resultStreamEvents(result);
     }
@@ -279,7 +299,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
     declare _messageText: string;
     declare _contextId: string;
     declare _variablesText: string;
-    declare _result: any;
+    declare _result: unknown;
     declare _resultView: string;
     declare _lastError: string;
 ;
@@ -364,7 +384,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 color: var(--text-primary);
-                overflow-wrap: anywhere;
+                overflow-wrap: unknownwhere;
             }
             .hero {
                 display: grid;
@@ -409,7 +429,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 color: var(--text-primary);
-                overflow-wrap: anywhere;
+                overflow-wrap: unknownwhere;
             }
             .section {
                 display: grid;
@@ -533,7 +553,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 color: var(--text-primary);
-                overflow-wrap: anywhere;
+                overflow-wrap: unknownwhere;
             }
             .pill-row {
                 display: flex;
@@ -637,7 +657,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 color: var(--text-primary);
                 font-family: var(--font-mono);
                 font-size: var(--text-xs);
-                overflow-wrap: anywhere;
+                overflow-wrap: unknownwhere;
             }
             .api-json-editor {
                 height: 260px;
@@ -691,7 +711,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 color: var(--text-primary);
                 font-family: var(--font-mono);
                 font-size: var(--text-xs);
-                overflow-wrap: anywhere;
+                overflow-wrap: unknownwhere;
             }
             .status-item[data-tone="ok"] {
                 border-color: var(--success-border);
@@ -710,7 +730,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 padding: var(--space-3);
                 line-height: 1.55;
                 white-space: pre-wrap;
-                overflow-wrap: anywhere;
+                overflow-wrap: unknownwhere;
             }
             .response-tabs {
                 margin-bottom: var(--space-2);
@@ -728,7 +748,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 color: var(--text-secondary);
                 line-height: 1.55;
                 white-space: pre-wrap;
-                overflow-wrap: anywhere;
+                overflow-wrap: unknownwhere;
                 min-height: 92px;
                 max-height: 220px;
                 overflow: auto;
@@ -786,7 +806,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
     ];
     private _editor: ControllerFor<'flows/editor'>;
     private _run: OpController;
-    private _localeSelect: SelectController<any>;
+    private _localeSelect: SelectController<string>;
 
     constructor() {
         super();
@@ -804,7 +824,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
         this._lastError = '';
         this._editor = this.useOp('flows/editor');
         this._run = this.useOp('flows/api_console_run');
-        this._localeSelect = this.select((s) => (s as any).i18n.locale);
+        this._localeSelect = this.select((state) => state.i18n.locale);
     }
 
     override willUpdate(changed: PropertyValues<this>): void {
@@ -825,26 +845,26 @@ export class FlowsApiConsoleModal extends PlatformModal {
         if (typeof this._messageText !== 'string') {
             this._messageText = this.t('api_console.default_message');
         }
-        if ((this._messageText.length as any) === 0) {
+        if ((this._messageText.length) === 0) {
             this._messageText = this.t('api_console.default_message');
         }
         if (typeof this._contextId !== 'string') {
             this._contextId = _sampleContextId(this.flowId, this.branchId);
         }
-        if ((this._contextId.length as any) === 0) {
+        if ((this._contextId.length) === 0) {
             this._contextId = _sampleContextId(this.flowId, this.branchId);
         }
         if (typeof this._variablesText !== 'string') {
             this._variablesText = '{}';
         }
-        if ((this._variablesText.trim() as any).length === 0) {
+        if ((this._variablesText.trim()).length === 0) {
             this._variablesText = '{}';
         }
     }
 
-    _setTab(tab: any) {
-        if (!TAB_KEYS.includes(tab)) {
-            throw new Error(`flows-api-console-modal: unknown tab ${tab}`);
+    _setTab(tab: unknown) {
+        if (!isListed(TAB_KEYS, tab)) {
+            throw new Error(`flows-api-console-modal: unknown tab ${String(tab)}`);
         }
         this._activeTab = tab;
     }
@@ -866,10 +886,10 @@ export class FlowsApiConsoleModal extends PlatformModal {
         this._lastError = '';
     }
 
-    _setResultView(view: any) {
+    _setResultView(view: unknown) {
         const tabs = this._resultTabs(isPlainObject(this._result) ? this._result : null);
-        if (!tabs.includes(view)) {
-            throw new Error(`flows-api-console-modal: unknown result view ${view}`);
+        if (!isListed(tabs, view)) {
+            throw new Error(`flows-api-console-modal: unknown result view ${String(view)}`);
         }
         this._resultView = view;
     }
@@ -880,12 +900,12 @@ export class FlowsApiConsoleModal extends PlatformModal {
 
     _flowConfig() {
         const state = this._flowState();
-        return isPlainObject((state as any).flowConfig) ? (state as any).flowConfig : {};
+        return isPlainObject((state).flowConfig) ? (state).flowConfig : {};
     }
 
     _branchData() {
         const state = this._flowState();
-        return isPlainObject((state as any).branchData) ? (state as any).branchData : {};
+        return isPlainObject((state).branchData) ? (state).branchData : {};
     }
 
     _variablesEntries() {
@@ -914,7 +934,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
         });
     }
 
-    _metadataForMode(variables: any) {
+    _metadataForMode(variables: unknown) {
         return {
             branch: _apiBranchId(this.branchId),
             variables,
@@ -925,7 +945,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
         const variables = _parseVariablesText(this._variablesText);
         const messageId = `msg_${_safeToken(this.flowId)}_${Date.now()}`;
         const mode = this._mode;
-        const params: any = {
+        const params: Record<string, unknown> = {
             message: {
                 messageId,
                 role: 'ROLE_USER',
@@ -947,7 +967,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
 
     _sampleBody(mode = this._mode) {
         const variables = _parseVariablesText(this._variablesText);
-        const params: any = {
+        const params: Record<string, unknown> = {
             message: {
                 messageId: 'msg_001',
                 role: 'ROLE_USER',
@@ -1162,8 +1182,7 @@ ${jsRequest}${asyncJsSuffix}`,
     }
 
     _currentExample() {
-        const examples = this._examples();
-        return (examples as Record<string, string>)[this._language];
+        return exampleForLanguage(this._examples(), this._language);
     }
 
     _currentExampleLanguage() {
@@ -1176,7 +1195,7 @@ ${jsRequest}${asyncJsSuffix}`,
         return 'text';
     }
 
-    async _copy(text: any) {
+    async _copy(text: unknown) {
         if (typeof text !== 'string') {
             throw new Error('flows-api-console-modal: copy text required');
         }
@@ -1482,16 +1501,16 @@ ${jsRequest}${asyncJsSuffix}`,
         `;
     }
 
-    _renderRowsTable(headers: any, rows: Record<string, any>[]) {
+    _renderRowsTable(headers: readonly unknown[], rows: readonly (readonly unknown[])[]) {
         return html`
             <div class="table-wrap">
                 <table>
                     <thead>
-                        <tr>${headers.map((header: any) => html`<th>${header}</th>`)}</tr>
+                        <tr>${headers.map((header) => html`<th>${header}</th>`)}</tr>
                     </thead>
                     <tbody>
-                        ${rows.map((row: any) => html`
-                            <tr>${row.map((cell: any) => html`<td>${cell}</td>`)}</tr>
+                        ${rows.map((row) => html`
+                            <tr>${row.map((cell) => html`<td>${cell}</td>`)}</tr>
                         `)}
                     </tbody>
                 </table>
@@ -1668,7 +1687,7 @@ ${jsRequest}${asyncJsSuffix}`,
         `;
     }
 
-    _resultTabs(result: any) {
+    _resultTabs(result: unknown) {
         if (!result) {
             return ['response'];
         }
@@ -1684,7 +1703,7 @@ ${jsRequest}${asyncJsSuffix}`,
         return tabs;
     }
 
-    _resultTabIcon(tab: any) {
+    _resultTabIcon(tab: unknown) {
         if (tab === 'headers') {
             return 'list';
         }
@@ -1703,7 +1722,7 @@ ${jsRequest}${asyncJsSuffix}`,
         return 'file-json';
     }
 
-    _visibleResultView(result: any) {
+    _visibleResultView(result: unknown) {
         const tabs = this._resultTabs(result);
         if (tabs.includes(this._resultView)) {
             return this._resultView;
@@ -1711,18 +1730,19 @@ ${jsRequest}${asyncJsSuffix}`,
         return tabs[0];
     }
 
-    _renderStatusStrip(result: any) {
+    _renderStatusStrip(result: unknown) {
         const response = _resultResponse(result);
+        const record = isPlainObject(result) ? result : null;
         const status = response && typeof response.status === 'number' ? response.status : 0;
         const tone = status >= 200 && status < 300 ? 'ok' : 'error';
-        const state = typeof result.terminal_state === 'string' && result.terminal_state.length > 0
-            ? result.terminal_state
+        const state = record !== null && typeof record.terminal_state === 'string' && record.terminal_state.length > 0
+            ? record.terminal_state
             : this.t('api_console.value_empty');
-        const taskId = typeof result.task_id === 'string' && result.task_id.length > 0
-            ? result.task_id
+        const taskId = record !== null && typeof record.task_id === 'string' && record.task_id.length > 0
+            ? record.task_id
             : this.t('api_console.value_empty');
-        const contextId = typeof result.context_id === 'string' && result.context_id.length > 0
-            ? result.context_id
+        const contextId = record !== null && typeof record.context_id === 'string' && record.context_id.length > 0
+            ? record.context_id
             : this.t('api_console.value_empty');
         const contentType = response && typeof response.content_type === 'string' && response.content_type.length > 0
             ? response.content_type
@@ -1757,9 +1777,10 @@ ${jsRequest}${asyncJsSuffix}`,
         `;
     }
 
-    _renderAssistantSummary(result: any) {
-        const responseText = typeof result.response_text === 'string' ? result.response_text.trim() : '';
-        const reasoningText = typeof result.reasoning_text === 'string' ? result.reasoning_text.trim() : '';
+    _renderAssistantSummary(result: unknown) {
+        const record = isPlainObject(result) ? result : null;
+        const responseText = record !== null && typeof record.response_text === 'string' ? record.response_text.trim() : '';
+        const reasoningText = record !== null && typeof record.reasoning_text === 'string' ? record.reasoning_text.trim() : '';
         return html`
             <div>
                 <div class="run-field-label">${this.t('api_console.assistant_text_title')}</div>

@@ -79,8 +79,6 @@ def explorer_hrefs(
         return "/settings", ""
     if object_type is AuthzObjectType.PLATFORM_NAMESPACE:
         return "/namespaces", ""
-    if object_type is AuthzObjectType.AGENT_DEVICE:
-        return "/settings", ""
     _ = namespace
     return "", ""
 
@@ -371,14 +369,14 @@ class AuthzExplorerHydrator:
         return []
 
     async def _search_wiki(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        pages = await WikiPage.list_alive_by_title(company_id, query, _SEARCH_LIMIT)
+        pages = await WikiPage.list_alive_by_title_asc(company_id, query, _SEARCH_LIMIT)
         return [
             _hit(AuthzObjectType.WIKI_PAGE, page.wiki_page_id, _clean_title(page.title), page.namespace)
             for page in pages
         ]
 
     async def _search_crm(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        entities = await CRMEntity.list_by_name(
+        entities = await CRMEntity.list_by_name_asc(
             company_id,
             query,
             limit=_SEARCH_LIMIT,
@@ -389,14 +387,14 @@ class AuthzExplorerHydrator:
         ]
 
     async def _search_office_documents(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        bindings = await FileRecord.list_with_catalog_by_original_name(company_id, query, _SEARCH_LIMIT)
+        bindings = await FileRecord.list_with_catalog_by_original_name_asc(company_id, query, _SEARCH_LIMIT)
         return [
             _hit(AuthzObjectType.DOCUMENT_FILE, binding.file_id, _clean_title(binding.original_name), "")
             for binding in bindings
         ]
 
     async def _search_office_catalogs(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        catalogs = await DocumentCatalog.list_by_title(
+        catalogs = await DocumentCatalog.list_by_title_asc(
             company_id,
             query,
             _SEARCH_LIMIT,
@@ -407,7 +405,7 @@ class AuthzExplorerHydrator:
         ]
 
     async def _search_flows(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        configs = await FlowConfig.list_current(limit=_SEARCH_LIMIT, offset=0)
+        configs = await FlowConfig.list_current_by_created_at_desc(limit=_SEARCH_LIMIT, offset=0)
         needle = query.casefold()
         hits: list[AuthzExplorerObjectHit] = []
         for config in configs:
@@ -418,7 +416,7 @@ class AuthzExplorerHydrator:
         return hits
 
     async def _search_sync(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        channels = await SyncChannel.list_by_name(
+        channels = await SyncChannel.list_by_name_asc(
             company_id, query, limit=_SEARCH_LIMIT
         )
         return [

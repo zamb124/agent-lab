@@ -11,6 +11,7 @@ import {
     flowCodeLanguageSegmentItems,
     normalizeFlowCodeLanguage,
 } from '../../_helpers/flows-code-languages.js';
+import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsCodeLanguageSegment extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -52,7 +53,11 @@ export class FlowsCodeLanguageSegment extends PlatformElement {
     }
 
     _onChange(e: CustomEvent) {
-        const next = normalizeFlowCodeLanguage((e.detail as Record<string, any>).value);
+        const detail = e.detail;
+        if (!isPlainObject(detail)) {
+            throw new Error('flows-code-language-segment: change detail required');
+        }
+        const next = normalizeFlowCodeLanguage(detail.value);
         this.value = next;
         this.emit('change', { value: next });
     }

@@ -136,16 +136,16 @@ function genId(prefix: string) {
     return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function pathFor(srcX: any, srcY: any, dstX: any, dstY: any) {
+function pathFor(srcX: number, srcY: number, dstX: number, dstY: number) {
     const dx = Math.abs(dstX - srcX) * 0.6;
     return `M ${srcX} ${srcY} C ${srcX + dx} ${srcY} ${dstX - dx} ${dstY} ${dstX} ${dstY}`;
 }
 
-function midpoint(srcX: any, srcY: any, dstX: any, dstY: any) {
+function midpoint(srcX: number, srcY: number, dstX: number, dstY: number) {
     return { x: (srcX + dstX) / 2, y: (srcY + dstY) / 2 };
 }
 
-function rectBoundaryAnchor(rect: any, target: any) {
+function rectBoundaryAnchor(rect: CanvasRect, target: CanvasPoint) {
     const cx = rect.x + rect.w / 2;
     const cy = rect.y + rect.h / 2;
     const dx = target.x - cx;
@@ -160,7 +160,7 @@ function rectBoundaryAnchor(rect: any, target: any) {
     };
 }
 
-function attachPathFor(srcX: any, srcY: any, dstX: any, dstY: any) {
+function attachPathFor(srcX: number, srcY: number, dstX: number, dstY: number) {
     const dx = dstX - srcX;
     const dy = dstY - srcY;
     if (Math.abs(dx) >= Math.abs(dy)) {
@@ -173,6 +173,120 @@ function attachPathFor(srcX: any, srcY: any, dstX: any, dstY: any) {
     return `M ${srcX} ${srcY} C ${srcX} ${srcY + dir * c} ${dstX} ${dstY - dir * c} ${dstX} ${dstY}`;
 }
 
+
+interface CanvasPoint {
+    x: number;
+    y: number;
+}
+
+interface CanvasViewBox {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+interface CanvasRect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+interface NodeCanvasDrag {
+    type: 'node';
+    primaryId: string;
+    ids: string[];
+    offsets: Record<string, CanvasPoint>;
+    startX: number;
+    startY: number;
+    shiftKey: boolean;
+}
+
+interface StickyCanvasDrag {
+    type: 'sticky';
+    noteId: string;
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    lastNotes?: unknown;
+}
+
+type CanvasDrag = NodeCanvasDrag | StickyCanvasDrag;
+
+interface CanvasConnection {
+    fromNode: string;
+    fromPort: string | null;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+}
+
+interface CanvasSelectionRect {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+}
+
+interface CanvasPan {
+    startClientX: number;
+    startClientY: number;
+    origVB: CanvasViewBox;
+    screenScale: number;
+}
+
+interface CanvasChipRef {
+    nodeId: string;
+    side: string;
+    index: number;
+}
+
+interface CanvasVariableWire {
+    fromNodeId: string;
+    path: string;
+    type: string;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+}
+
+interface CanvasPointerOrigin {
+    x: number;
+    y: number;
+    button: number;
+}
+
+interface CanvasStickyResize {
+    noteId: string;
+    startClientX: number;
+    startClientY: number;
+    origW: number;
+    origH: number;
+    lastNotes?: unknown;
+}
+
+interface CanvasStickyLink {
+    noteId: string;
+}
+
+type PaletteDndMode = 'node' | 'resource';
+
+interface DataflowNodeVisibility {
+    isSelected: boolean;
+    isMulti: boolean;
+    showAllWires: boolean;
+}
+
+interface TerminalEndMark {
+    nodeId: string;
+    node: Record<string, unknown>;
+    outPort: unknown;
+}
+
 function canvasHostSvg(root: ParentNode): SVGSVGElement | null {
     const svgEl = root.querySelector('svg.canvas-host');
     if (svgEl === null) return null;
@@ -180,6 +294,66 @@ function canvasHostSvg(root: ParentNode): SVGSVGElement | null {
         throw new Error('flows-flow-canvas: canvas host is not an SVG element');
     }
     return svgEl;
+}
+
+interface DropAtPoint {
+    local: CanvasPoint;
+}
+
+interface PlacedNode {
+    nodeId: string;
+    local: CanvasPoint;
+}
+
+interface CodeNodePlacement extends PlacedNode {
+    name: string;
+    config: Record<string, unknown>;
+}
+
+interface FlowNodePlacement extends PlacedNode {
+    name: string;
+    flowId: string;
+}
+
+interface McpNodePlacement extends PlacedNode {
+    name: string;
+    server_id: unknown;
+    tool_name: unknown;
+    headers: unknown;
+    state_mapping: unknown;
+}
+
+interface PaletteDropContext {
+    local: CanvasPoint;
+    nodeType: string;
+    resourceType: string;
+    connectorId: string;
+    htmlTargetNodeId: string | null;
+}
+
+function canvasViewBox(value: unknown): CanvasViewBox {
+    if (!isPlainObject(value)) {
+        return { x: 0, y: 0, w: 1600, h: 1000 };
+    }
+    const x = value.x;
+    const y = value.y;
+    const w = value.w;
+    const h = value.h;
+    if (typeof x !== 'number' || typeof y !== 'number' || typeof w !== 'number' || typeof h !== 'number') {
+        return { x: 0, y: 0, w: 1600, h: 1000 };
+    }
+    return { x, y, w, h };
+}
+
+function captureCanvasPointer(root: ParentNode, event: Event): void {
+    const host = canvasHostSvg(root);
+    if (host === null) {
+        throw new Error('flows-flow-canvas: canvas host required');
+    }
+    if (!(event instanceof PointerEvent)) {
+        throw new Error('flows-flow-canvas: pointer event required');
+    }
+    host.setPointerCapture(event.pointerId);
 }
 
 function dragTransfer(event: Event): DataTransfer | null {
@@ -193,6 +367,28 @@ function requireDragTransfer(event: Event): DataTransfer {
         throw new Error('flows-flow-canvas: dataTransfer required');
     }
     return transfer;
+}
+
+function canvasStringIds(value: unknown): string[] {
+    const ids: string[] = [];
+    for (const item of asArray(value)) {
+        if (typeof item !== 'string') {
+            throw new Error('flows-flow-canvas: id must be a string');
+        }
+        ids.push(item);
+    }
+    return ids;
+}
+
+function canvasRecords(value: unknown): Record<string, unknown>[] {
+    const records: Record<string, unknown>[] = [];
+    for (const item of asArray(value)) {
+        if (!isPlainObject(item)) {
+            throw new Error('flows-flow-canvas: record required');
+        }
+        records.push(item);
+    }
+    return records;
 }
 
 function pointerStillInside(start: EventTarget | null, zone: Element): boolean {
@@ -232,19 +428,19 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
     declare flowId: string;
     declare branchId: string;
-    declare _drag: Record<string, any> | null;
-    declare _connection: Record<string, any> | null;
-    declare _selectionRect: Record<string, any> | null;
+    declare _drag: CanvasDrag | null;
+    declare _connection: CanvasConnection | null;
+    declare _selectionRect: CanvasSelectionRect | null;
     declare _spacePressed: boolean;
-    declare _pan: Record<string, any> | null;
+    declare _pan: CanvasPan | null;
     declare _hoverEdgeIndex: number;
     declare _paletteDndActive: boolean;
-    declare _paletteDndHoverNodeId: any;
-    declare _paletteDndMode: any;
-    declare _variableDropHoverNodeId: any;
-    declare _hoverNodeId: any;
-    declare _hoverChipRef: Record<string, any> | null;
-    declare _variableWire: Record<string, any> | null;
+    declare _paletteDndHoverNodeId: string | null;
+    declare _paletteDndMode: PaletteDndMode | null;
+    declare _variableDropHoverNodeId: string | null;
+    declare _hoverNodeId: string | null;
+    declare _hoverChipRef: CanvasChipRef | null;
+    declare _variableWire: CanvasVariableWire | null;
 ;
 
     static override styles: CSSResultGroup = [
@@ -1258,16 +1454,16 @@ export class FlowsFlowCanvas extends PlatformElement {
     private _codeAgentEnsure: OpController;
     private _codeAgentCopyTree: OpController;
     private _codeAgentDelete: OpController;
-    private _lineageSet: any;
-    private _highlightWireKeys: any;
-    private _highlightChipKeys: any;
-    private _dataTableCreateInFlight: Set<any>;
-    private _codeAgentEnsureInFlight: Set<any>;
-    private _stickyResize: any;
-    private _stickyLinkMode: any;
-    private _pointerDownAt: any;
+    private _lineageSet: Set<unknown> | null;
+    private _highlightWireKeys: Set<unknown> | null;
+    private _highlightChipKeys: Set<unknown> | null;
+    private _dataTableCreateInFlight: Set<string>;
+    private _codeAgentEnsureInFlight: Set<string>;
+    private _stickyResize: CanvasStickyResize | null;
+    private _stickyLinkMode: CanvasStickyLink | null;
+    private _pointerDownAt: CanvasPointerOrigin | null;
     private _pointerMoved: boolean;
-    private _lastAutoFitKey: any;
+    private _lastAutoFitKey: string | null;
 
     constructor() {
         super();
@@ -1342,10 +1538,21 @@ export class FlowsFlowCanvas extends PlatformElement {
     _state() { return asObject(this._editor.state); }
     _branchData() { return getBranchData(this._state()); }
     _nodes() { return getBranchNodes(this._state()); }
+
+    _selectedNodeIds(): string[] {
+        const ids = canvasStringIds((this._state()).multiSelection);
+        if (ids.length > 0) {
+            return ids;
+        }
+        const selected = (this._state()).selectedNodeId;
+        if (typeof selected === 'string' && selected.length > 0) {
+            return [selected];
+        }
+        return [];
+    }
     _edges() { return getBranchEdges(this._state()); }
-    _viewBox(): { x: any; y: any; w: any; h: any } {
-        const vb = (this._state() as any).viewBox;
-        return (isPlainObject(vb) ? vb : { x: 0, y: 0, w: 1600, h: 1000 }) as any;
+    _viewBox(): CanvasViewBox {
+        return canvasViewBox(this._state().viewBox);
     }
 
     _iconAssetSrc(name: string) {
@@ -1388,11 +1595,11 @@ export class FlowsFlowCanvas extends PlatformElement {
         `;
     }
 
-    _renderCodeLanguageIcon(language: any, size: number) {
+    _renderCodeLanguageIcon(language: string, size: number) {
         return html`<flows-code-language-icon language=${language} size=${size}></flows-code-language-icon>`;
     }
 
-    _reflectionExitsForNode(node: any) {
+    _reflectionExitsForNode(node: Record<string, unknown>) {
         if (!this._isReflectionNode(node)) {
             return [];
         }
@@ -1400,7 +1607,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         return listReflectionExits(policy);
     }
 
-    _portCoords(node: any, side: any, outPort: any = null) {
+    _portCoords(node: Record<string, unknown>, side: string, outPort: unknown = null) {
         const px = asNumber(node.pos_x);
         const x = side === 'in' ? px : px + NODE_W;
         const h = getNodeCanvasHeight(node);
@@ -1412,11 +1619,11 @@ export class FlowsFlowCanvas extends PlatformElement {
         return { x, y };
     }
 
-    _isReflectionNode(node: any) {
+    _isReflectionNode(node: Record<string, unknown>) {
         return isPlainObject(node) && node.type === 'reflection';
     }
 
-    _resolveOutPortForEdge(fromNode: any, edge: any) {
+    _resolveOutPortForEdge(fromNode: Record<string, unknown>, edge: Record<string, unknown>) {
         if (!this._isReflectionNode(fromNode) || !isPlainObject(edge)) {
             return null;
         }
@@ -1425,7 +1632,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             return null;
         }
         const exits = this._reflectionExitsForNode(fromNode);
-        if (exits.some((item: any) => item.id === port)) {
+        if (exits.some((item: { id: string }) => item.id === port)) {
             return port;
         }
         return null;
@@ -1441,7 +1648,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         return scale;
     }
 
-    _localPoint(clientX: any, clientY: any) {
+    _localPoint(clientX: number, clientY: number) {
         const svgEl = canvasHostSvg(this.renderRoot);
         if (!svgEl) return { x: 0, y: 0 };
         const pt = svgEl.createSVGPoint();
@@ -1476,12 +1683,16 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._clearPaletteDndVisual();
     }
 
-    _findNodeAtLocal(local: any) {
+    _findNodeAtLocal(local: CanvasPoint) {
         const nodes = this._nodes();
         let hit = null;
-        for (const [id, node] of Object.entries(nodes)) {
-            const x = asNumber((node as any).pos_x);
-            const y = asNumber((node as any).pos_y);
+        for (const [id, rawNode] of Object.entries(nodes)) {
+            if (!isPlainObject(rawNode)) {
+                continue;
+            }
+            const node = rawNode;
+            const x = asNumber(node.pos_x);
+            const y = asNumber(node.pos_y);
             const w = NODE_W;
             const h = getNodeCanvasHeight(node);
             if (local.x >= x && local.x <= x + w && local.y >= y && local.y <= y + h) {
@@ -1491,12 +1702,16 @@ export class FlowsFlowCanvas extends PlatformElement {
         return hit;
     }
 
-    _findNodeAtLocalForVariableWire(local: any) {
+    _findNodeAtLocalForVariableWire(local: CanvasPoint) {
         const nodes = this._nodes();
         let hit = null;
-        for (const [id, node] of Object.entries(nodes)) {
-            const x = asNumber((node as any).pos_x);
-            const y = asNumber((node as any).pos_y);
+        for (const [id, rawNode] of Object.entries(nodes)) {
+            if (!isPlainObject(rawNode)) {
+                continue;
+            }
+            const node = rawNode;
+            const x = asNumber(node.pos_x);
+            const y = asNumber(node.pos_y);
             const h = getNodeCanvasHeight(node);
             const left = x - DATAFLOW_CHIP_ZONE_W;
             const right = x + NODE_W + DATAFLOW_CHIP_ZONE_W;
@@ -1510,7 +1725,7 @@ export class FlowsFlowCanvas extends PlatformElement {
     /* ===== Document hotkeys ===== */
     _onDocKeyDown(e: KeyboardEvent) {
         const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
-        const isEditable = path.some((el: any) => {
+        const isEditable = path.some((el) => {
             if (!(el instanceof HTMLElement)) return false;
             const tag = el.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
@@ -1524,7 +1739,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         const cmd = e.metaKey || e.ctrlKey;
         if ((e.key === 'Delete' || e.key === 'Backspace')) {
-            const hasSelection = Boolean((this._state() as any).selectedNodeId) || asArray((this._state() as any).multiSelection).length > 0;
+            const hasSelection = Boolean((this._state()).selectedNodeId) || canvasStringIds((this._state()).multiSelection).length > 0;
             if (!hasSelection) return;
             e.preventDefault();
             void this._deleteSelection();
@@ -1542,19 +1757,19 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         if (cmd && e.key.toLowerCase() === 'z' && !e.shiftKey) {
             e.preventDefault();
-            (this._editor.undo({}) as any);
+            (this._editor.undo({}));
             return;
         }
         if (cmd && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
             e.preventDefault();
-            (this._editor.redo({}) as any);
+            (this._editor.redo({}));
             return;
         }
         if (e.key === 'F2' || e.key === 'Enter') {
-            const sel = (this._state() as any).selectedNodeId;
+            const sel = (this._state()).selectedNodeId;
             if (sel) {
                 e.preventDefault();
-                (this._editor.selectNode({ nodeId: sel }) as any);
+                (this._editor.selectNode({ nodeId: sel }));
             }
             return;
         }
@@ -1566,8 +1781,8 @@ export class FlowsFlowCanvas extends PlatformElement {
                 this.requestUpdate();
                 return;
             }
-            (this._editor.setMultiSelection({ nodeIds: [] }) as any);
-            (this._editor.closePanel({}) as any);
+            (this._editor.setMultiSelection({ nodeIds: [] }));
+            (this._editor.closePanel({}));
             return;
         }
         if (e.shiftKey && e.key.toLowerCase() === 's') {
@@ -1588,12 +1803,10 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     /* ===== Hotkey actions ===== */
     async _deleteSelection() {
-        const ids = asArray((this._state() as any).multiSelection);
-        const single = (this._state() as any).selectedNodeId;
-        const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
+        const targetIds = this._selectedNodeIds();
         if (targetIds.length === 0) return;
         if (!this.flowId) return;
-        const inheritedIds = asArray((this._state() as any).inheritedNodeIds);
+        const inheritedIds = canvasStringIds((this._state()).inheritedNodeIds);
         const deletableIds = targetIds.filter((id) => !inheritedIds.includes(id));
         if (deletableIds.length === 0) {
             this.toast('flows:toast.cant_delete_inherited', { type: 'warning' });
@@ -1604,7 +1817,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         const nodesSnapshot = asObject(this._branchData().nodes);
         for (const id of deletableIds) {
-            const node = (nodesSnapshot as any)[id];
+            const node = (nodesSnapshot)[id];
             if (isPlainObject(node) && node.type === 'code_agent') {
                 const catalogId = typeof node.catalog_id === 'string' ? node.catalog_id : '';
                 await this._codeAgentDelete.run({
@@ -1624,31 +1837,29 @@ export class FlowsFlowCanvas extends PlatformElement {
             return !deletableIds.includes(from_node) && !deletableIds.includes(to_node);
         });
         const next = { ...data, nodes: newNodes, edges: newEdges };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.pushHistory({ snapshot: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.setMultiSelection({ nodeIds: [] }) as any);
-        (this._editor.closePanel({}) as any);
+        (this._editor.updateBranchData({ data: next }));
+        (this._editor.pushHistory({ snapshot: next }));
+        (this._editor.setDirty({ dirty: true }));
+        (this._editor.setMultiSelection({ nodeIds: [] }));
+        (this._editor.closePanel({}));
     }
 
     _selectAll() {
         const ids = Object.keys(this._nodes());
-        (this._editor.setMultiSelection({ nodeIds: ids }) as any);
+        (this._editor.setMultiSelection({ nodeIds: ids }));
     }
 
     async _duplicateSelection() {
-        const ids = asArray((this._state() as any).multiSelection);
-        const single = (this._state() as any).selectedNodeId;
-        const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
+        const targetIds = this._selectedNodeIds();
         if (targetIds.length === 0) return;
         const data = this._branchData();
         const nodes = { ...asObject(data.nodes) };
         const newIds = [];
         for (const id of targetIds) {
             const orig = nodes[id];
-            if (!orig) continue;
+            if (!isPlainObject(orig)) continue;
             const copyId = genId('n');
-            const copy: any = {
+            const copy: Record<string, unknown> = {
                 ...orig,
                 pos_x: asNumber(orig.pos_x) + 30,
                 pos_y: asNumber(orig.pos_y) + 30,
@@ -1673,32 +1884,31 @@ export class FlowsFlowCanvas extends PlatformElement {
             newIds.push(copyId);
         }
         const next = { ...data, nodes };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.pushHistory({ snapshot: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.setMultiSelection({ nodeIds: newIds }) as any);
+        (this._editor.updateBranchData({ data: next }));
+        (this._editor.pushHistory({ snapshot: next }));
+        (this._editor.setDirty({ dirty: true }));
+        (this._editor.setMultiSelection({ nodeIds: newIds }));
     }
 
     _moveSelectionByArrow(key: string) {
-        const ids = asArray((this._state() as any).multiSelection);
-        const single = (this._state() as any).selectedNodeId;
-        const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
+        const targetIds = this._selectedNodeIds();
         if (targetIds.length === 0) return;
         const dx = key === 'ArrowLeft' ? -10 : key === 'ArrowRight' ? 10 : 0;
         const dy = key === 'ArrowUp' ? -10 : key === 'ArrowDown' ? 10 : 0;
         const data = this._branchData();
         const nodes = { ...asObject(data.nodes) };
         for (const id of targetIds) {
-            if (!nodes[id]) continue;
+            const current = nodes[id];
+            if (!isPlainObject(current)) continue;
             nodes[id] = {
-                ...nodes[id],
-                pos_x: asNumber(nodes[id].pos_x) + dx,
-                pos_y: asNumber(nodes[id].pos_y) + dy,
+                ...current,
+                pos_x: asNumber(current.pos_x) + dx,
+                pos_y: asNumber(current.pos_y) + dy,
             };
         }
         const next = { ...data, nodes };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
+        (this._editor.updateBranchData({ data: next }));
+        (this._editor.setDirty({ dirty: true }));
     }
 
     _addStickyNoteAtCenter() {
@@ -1711,11 +1921,11 @@ export class FlowsFlowCanvas extends PlatformElement {
             text: '',
             color_token: 'warning_bg',
         };
-        (this._editor.addStickyNote({ note }) as any);
-        this._persistStickyNotes([...asArray((this._state() as any).stickyNotes), note]);
+        (this._editor.addStickyNote({ note }));
+        this._persistStickyNotes([...canvasRecords((this._state()).stickyNotes), note]);
     }
 
-    _persistStickyNotes(notes: any) {
+    _persistStickyNotes(notes: readonly unknown[]) {
         if (!this.flowId) return;
         void this._stickyUpsert.run({ flow_id: this.flowId, sticky_notes: notes });
     }
@@ -1729,7 +1939,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (factor === 1) return;
         const vb = this._viewBox();
         const pivot = this._localPoint(e.clientX, e.clientY);
-        (this._editor.setViewBox as any)({
+        (this._editor.setViewBox)({
             viewBox: zoomViewBoxAroundPoint(vb, factor, pivot.x, pivot.y),
         });
     }
@@ -1748,13 +1958,17 @@ export class FlowsFlowCanvas extends PlatformElement {
         const node = this._nodes()[nodeId];
         if (!node) return;
         const nodes = this._nodes();
-        const currentMulti = asArray((this._state() as any).multiSelection);
+        const currentMulti = canvasStringIds((this._state()).multiSelection);
         const isInMulti = currentMulti.includes(nodeId);
-        const draggedIds = isInMulti && currentMulti.length > 0 ? currentMulti : [nodeId];
-        const offsets = {};
+        const draggedIds: string[] = [];
+        for (const rawId of isInMulti && currentMulti.length > 0 ? currentMulti : [nodeId]) {
+            if (typeof rawId === 'string' && rawId.length > 0) draggedIds.push(rawId);
+        }
+        const offsets: Record<string, CanvasPoint> = {};
         for (const id of draggedIds) {
-            if (!nodes[id]) continue;
-            (offsets as any)[id] = { x: asNumber(nodes[id].pos_x), y: asNumber(nodes[id].pos_y) };
+            const draggedNode = nodes[id];
+            if (!isPlainObject(draggedNode)) continue;
+            offsets[id] = { x: asNumber(draggedNode.pos_x), y: asNumber(draggedNode.pos_y) };
         }
         this._drag = {
             type: 'node',
@@ -1764,19 +1978,19 @@ export class FlowsFlowCanvas extends PlatformElement {
             startX: e.clientX, startY: e.clientY,
             shiftKey: e.shiftKey,
         };
-        (this.renderRoot.querySelector('svg.canvas-host') as any).setPointerCapture((e as any).pointerId);
+        captureCanvasPointer(this.renderRoot, e);
     }
 
-    _onPointerDownPort(e: MouseEvent, nodeId: string, side: any, outPort = null) {
+    _onPointerDownPort(e: MouseEvent, nodeId: string, side: string, outPort: unknown = null) {
         this._pointerDownAt = { x: e.clientX, y: e.clientY, button: e.button };
         this._pointerMoved = false;
         if (e.button !== 0 || side !== 'out') return;
         e.stopPropagation();
         const node = this._nodes()[nodeId];
-        if (!node || this._isPortlessNode(node)) return;
+        if (!isPlainObject(node) || this._isPortlessNode(node)) return;
         const exits = this._reflectionExitsForNode(node);
         const resolvedPort = typeof outPort === 'string'
-            && exits.some((item: any) => item.id === outPort)
+            && exits.some((item: { id?: unknown }) => item.id === outPort)
             ? outPort
             : null;
         const start = this._portCoords(node, 'out', resolvedPort);
@@ -1788,7 +2002,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             x2: start.x,
             y2: start.y,
         };
-        (this.renderRoot.querySelector('svg.canvas-host') as any).setPointerCapture((e as any).pointerId);
+        captureCanvasPointer(this.renderRoot, e);
     }
 
     _onPointerDownBackground(e: MouseEvent) {
@@ -1797,7 +2011,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (e.button === 0 && e.shiftKey) {
             const local = this._localPoint(e.clientX, e.clientY);
             this._selectionRect = { x0: local.x, y0: local.y, x1: local.x, y1: local.y };
-            (this.renderRoot.querySelector('svg.canvas-host') as any).setPointerCapture((e as any).pointerId);
+            captureCanvasPointer(this.renderRoot, e);
             return;
         }
         if (e.button === 0 || e.button === 1) {
@@ -1809,7 +2023,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 origVB: { ...vb },
                 screenScale: this._getSvgScreenScale(),
             };
-            (this.renderRoot.querySelector('svg.canvas-host') as any).setPointerCapture((e as any).pointerId);
+            captureCanvasPointer(this.renderRoot, e);
         }
     }
 
@@ -1824,7 +2038,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const scale = (this._pan).screenScale;
             const dx = (e.clientX - (this._pan).startClientX) / scale;
             const dy = (e.clientY - (this._pan).startClientY) / scale;
-            (this._editor.setViewBox({ viewBox: { x: vb.x - dx, y: vb.y - dy, w: vb.w, h: vb.h } }) as any);
+            (this._editor.setViewBox({ viewBox: { x: vb.x - dx, y: vb.y - dy, w: vb.w, h: vb.h } }));
             return;
         }
         if ((this._drag)?.type === 'node') {
@@ -1840,15 +2054,15 @@ export class FlowsFlowCanvas extends PlatformElement {
                 if (!orig || !nodes[id]) continue;
                 let newX = orig.x + dx;
                 let newY = orig.y + dy;
-                if ((this._state() as any).smartGuidesEnabled !== false && id === (this._drag).primaryId) {
+                if ((this._state()).smartGuidesEnabled !== false && id === (this._drag).primaryId) {
                     const snap = this._snapToGuides(newX, newY, id, nodes);
                     newX = snap.x; newY = snap.y;
                     guides.push(...snap.guides);
                 }
                 nodes[id] = { ...nodes[id], pos_x: newX, pos_y: newY };
             }
-            (this._editor.updateBranchData({ data: { ...data, nodes } }) as any);
-            (this._editor.setSmartGuides({ guides }) as any);
+            (this._editor.updateBranchData({ data: { ...data, nodes } }));
+            (this._editor.setSmartGuides({ guides }));
             return;
         }
         const drag = this._drag;
@@ -1857,11 +2071,11 @@ export class FlowsFlowCanvas extends PlatformElement {
             const startLocal = this._localPoint(drag.startX, drag.startY);
             const dx = local.x - startLocal.x;
             const dy = local.y - startLocal.y;
-            const next = asArray((this._state() as any).stickyNotes).map((n) => n.id === drag.noteId
+            const next = canvasRecords((this._state()).stickyNotes).map((n) => n.id === drag.noteId
                 ? { ...n, x: drag.origX + dx, y: drag.origY + dy }
                 : n);
             const moved = next.find((n) => n.id === drag.noteId);
-            if (moved) (this._editor.updateStickyNote({ note: moved }) as any);
+            if (moved) (this._editor.updateStickyNote({ note: moved }));
             drag.lastNotes = next;
             return;
         }
@@ -1891,15 +2105,16 @@ export class FlowsFlowCanvas extends PlatformElement {
             return;
         }
         if (this._stickyResize) {
+            const resize = this._stickyResize;
             const local = this._localPoint(e.clientX, e.clientY);
-            const startLocal = this._localPoint(this._stickyResize.startClientX, this._stickyResize.startClientY);
+            const startLocal = this._localPoint(resize.startClientX, resize.startClientY);
             const dx = local.x - startLocal.x;
             const dy = local.y - startLocal.y;
-            const notes = asArray((this._state() as any).stickyNotes).map((n) => n.id === this._stickyResize.noteId
-                ? { ...n, width: Math.max(80, this._stickyResize.origW + dx), height: Math.max(60, this._stickyResize.origH + dy) }
+            const notes = canvasRecords((this._state()).stickyNotes).map((n) => n.id === resize.noteId
+                ? { ...n, width: Math.max(80, resize.origW + dx), height: Math.max(60, resize.origH + dy) }
                 : n);
-            (this._editor.updateStickyNote as any)({ note: notes.find((n) => n.id === this._stickyResize.noteId) });
-            this._stickyResize.lastNotes = notes;
+            (this._editor.updateStickyNote)({ note: notes.find((n) => n.id === resize.noteId) });
+            resize.lastNotes = notes;
         }
     }
 
@@ -1908,8 +2123,8 @@ export class FlowsFlowCanvas extends PlatformElement {
             const wasClick = !this._pointerMoved && (this._pan).origVB && this._pointerDownAt?.button === 0;
             this._pan = null;
             if (wasClick) {
-                (this._editor.setMultiSelection({ nodeIds: [] }) as any);
-                (this._editor.closePanel({}) as any);
+                (this._editor.setMultiSelection({ nodeIds: [] }));
+                (this._editor.closePanel({}));
             }
             this._pointerDownAt = null;
             return;
@@ -1918,7 +2133,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const drag = this._drag;
             this._drag = null;
             if (this._pointerMoved) {
-                const notes = Array.isArray((drag).lastNotes) ? (drag).lastNotes : asArray((this._state() as any).stickyNotes);
+                const notes = Array.isArray((drag).lastNotes) ? (drag).lastNotes : canvasRecords((this._state()).stickyNotes);
                 this._persistStickyNotes(notes);
             }
             this._pointerDownAt = null;
@@ -1927,20 +2142,20 @@ export class FlowsFlowCanvas extends PlatformElement {
         if ((this._drag)?.type === 'node') {
             const drag = this._drag;
             this._drag = null;
-            (this._editor.setSmartGuides({ guides: [] }) as any);
+            (this._editor.setSmartGuides({ guides: [] }));
             if (this._pointerMoved) {
-                (this._editor.pushHistory as any)({ snapshot: { ...this._branchData() } });
-                (this._editor.setDirty({ dirty: true }) as any);
+                (this._editor.pushHistory)({ snapshot: { ...this._branchData() } });
+                (this._editor.setDirty({ dirty: true }));
             } else {
                 const nodeId = (drag).primaryId;
-                const currentMulti = asArray((this._state() as any).multiSelection);
+                const currentMulti = canvasStringIds((this._state()).multiSelection);
                 if ((drag).shiftKey) {
                     const next = currentMulti.includes(nodeId)
                         ? currentMulti.filter((x) => x !== nodeId)
                         : [...currentMulti, nodeId];
-                    (this._editor.setMultiSelection({ nodeIds: next }) as any);
+                    (this._editor.setMultiSelection({ nodeIds: next }));
                 } else {
-                    (this._editor.selectNode({ nodeId }) as any);
+                    (this._editor.selectNode({ nodeId }));
                 }
             }
             this._pointerDownAt = null;
@@ -1963,6 +2178,9 @@ export class FlowsFlowCanvas extends PlatformElement {
                 const fromNodeId = (this._connection).fromNode;
                 const fromN = nodes[fromNodeId];
                 const toN = nodes[targetNodeId];
+                if (!isPlainObject(fromN) || !isPlainObject(toN)) {
+                    throw new Error('flows-flow-canvas: edge endpoint node required');
+                }
                 if (this._isPortlessNode(fromN) || this._isPortlessNode(toN)) {
                     const evaluationEndpoint = this._isEvaluationNode(fromN)
                         || this._isEvaluationNode(toN);
@@ -1987,9 +2205,9 @@ export class FlowsFlowCanvas extends PlatformElement {
                     }
                     const edges = [...asArray(data.edges), newEdge];
                     const next = { ...data, edges };
-                    (this._editor.updateBranchData({ data: next }) as any);
-                    (this._editor.pushHistory({ snapshot: next }) as any);
-                    (this._editor.setDirty({ dirty: true }) as any);
+                    (this._editor.updateBranchData({ data: next }));
+                    (this._editor.pushHistory({ snapshot: next }));
+                    (this._editor.setDirty({ dirty: true }));
                 }
             }
             this._connection = null;
@@ -2017,15 +2235,19 @@ export class FlowsFlowCanvas extends PlatformElement {
             const maxY = Math.max((r).y0, (r).y1);
             const ids = [];
             const nodes = this._nodes();
-            for (const [id, node] of Object.entries(nodes)) {
-                const nx = asNumber((node as any).pos_x);
-                const ny = asNumber((node as any).pos_y);
+            for (const [id, rawNode] of Object.entries(nodes)) {
+                if (!isPlainObject(rawNode)) {
+                    continue;
+                }
+                const node = rawNode;
+                const nx = asNumber(node.pos_x);
+                const ny = asNumber(node.pos_y);
                 const nh = getNodeCanvasHeight(node);
                 if (nx + NODE_W >= minX && nx <= maxX && ny + nh >= minY && ny <= maxY) {
                     ids.push(id);
                 }
             }
-            (this._editor.setMultiSelection({ nodeIds: ids }) as any);
+            (this._editor.setMultiSelection({ nodeIds: ids }));
             this._selectionRect = null;
             this._pointerDownAt = null;
             return;
@@ -2033,7 +2255,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (this._stickyResize) {
             const notes = Array.isArray(this._stickyResize.lastNotes)
                 ? this._stickyResize.lastNotes
-                : asArray((this._state() as any).stickyNotes);
+                : canvasRecords((this._state()).stickyNotes);
             this._persistStickyNotes(notes);
             this._stickyResize = null;
         }
@@ -2041,21 +2263,22 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     /* ===== Привязка к умным направляющим ===== */
-    _snapToGuides(x: any, y: any, draggedId: any, nodes: any) {
+    _snapToGuides(x: number, y: number, draggedId: string, nodes: Record<string, unknown>) {
         let snappedX = x;
         let snappedY = y;
         const guides = [];
         const draggedNode = nodes[draggedId];
-        const hSelf = draggedNode ? getNodeCanvasHeight(draggedNode) : NODE_H;
+        const hSelf = isPlainObject(draggedNode) ? getNodeCanvasHeight(draggedNode) : NODE_H;
         const right = x + NODE_W;
         const bottom = y + hSelf;
         const cx = x + NODE_W / 2;
         const cy = y + hSelf / 2;
-        for (const [id, node] of Object.entries(nodes)) {
+        for (const [id, rawNode] of Object.entries(nodes)) {
             if (id === draggedId) continue;
-            const nx = asNumber((node as any).pos_x);
-            const ny = asNumber((node as any).pos_y);
-            const nh = getNodeCanvasHeight(node);
+            if (!isPlainObject(rawNode)) continue;
+            const nx = asNumber(rawNode.pos_x);
+            const ny = asNumber(rawNode.pos_y);
+            const nh = getNodeCanvasHeight(rawNode);
             const ncx = nx + NODE_W / 2;
             const ncy = ny + nh / 2;
             const nright = nx + NODE_W;
@@ -2071,12 +2294,12 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     /* ===== Контекстное меню ===== */
-    _onContextMenu(e: MouseEvent, target: any, targetId: any) {
+    _onContextMenu(e: MouseEvent, target: string, targetId: string) {
         e.preventDefault();
         e.stopPropagation();
         if (this._drag || this._connection || this._pan || this._selectionRect || this._stickyResize) return;
         if (this._pointerMoved) return;
-        (this._editor.openContextMenu as any)({ menu: { x: (e).clientX, y: (e).clientY, target, targetId: asString(targetId) } });
+        (this._editor.openContextMenu)({ menu: { x: (e).clientX, y: (e).clientY, target, targetId: asString(targetId) } });
     }
 
     _onContextMenuAction(e: CustomEvent) {
@@ -2084,23 +2307,26 @@ export class FlowsFlowCanvas extends PlatformElement {
         const kind = detail.kind;
         const target = detail.target;
         const targetId = detail.targetId;
+        if (typeof target !== 'string' || typeof targetId !== 'string') {
+            return;
+        }
         this._handleMenuAction(kind, target, targetId);
     }
 
-    _handleMenuAction(kind: unknown, target: any, targetId: any) {
+    _handleMenuAction(kind: unknown, target: string, targetId: string) {
         const data = this._branchData();
         if (target === 'node' && targetId) {
-            if (kind === 'open_properties') { (this._editor.selectNode({ nodeId: targetId }) as any); return; }
+            if (kind === 'open_properties') { (this._editor.selectNode({ nodeId: targetId })); return; }
             if (kind === 'toggle_entry') {
                 const next = { ...data, entry: data.entry === targetId ? null : targetId };
-                (this._editor.updateBranchData({ data: next }) as any);
-                (this._editor.setDirty({ dirty: true }) as any);
-                (this._editor.pushHistory({ snapshot: next }) as any);
+                (this._editor.updateBranchData({ data: next }));
+                (this._editor.setDirty({ dirty: true }));
+                (this._editor.pushHistory({ snapshot: next }));
                 return;
             }
-            if (kind === 'toggle_breakpoint') { (this._editor.toggleBreakpoint({ nodeId: targetId }) as any); return; }
-            if (kind === 'duplicate') { (this._editor.setMultiSelection({ nodeIds: [targetId] }) as any); void this._duplicateSelection(); return; }
-            if (kind === 'delete') { (this._editor.setMultiSelection({ nodeIds: [targetId] }) as any); void this._deleteSelection(); return; }
+            if (kind === 'toggle_breakpoint') { (this._editor.toggleBreakpoint({ nodeId: targetId })); return; }
+            if (kind === 'duplicate') { (this._editor.setMultiSelection({ nodeIds: [targetId] })); void this._duplicateSelection(); return; }
+            if (kind === 'delete') { (this._editor.setMultiSelection({ nodeIds: [targetId] })); void this._deleteSelection(); return; }
             if (kind === 'advanced_incoming_policy') { this.openModal('flows.incoming_policy', { nodeId: targetId }); return; }
         }
         if (target === 'edge') {
@@ -2109,9 +2335,9 @@ export class FlowsFlowCanvas extends PlatformElement {
             if (kind === 'delete_edge') {
                 const edges = asArray(data.edges).filter((_, i) => i !== edgeIndex);
                 const next = { ...data, edges };
-                (this._editor.updateBranchData({ data: next }) as any);
-                (this._editor.pushHistory({ snapshot: next }) as any);
-                (this._editor.setDirty({ dirty: true }) as any);
+                (this._editor.updateBranchData({ data: next }));
+                (this._editor.pushHistory({ snapshot: next }));
+                (this._editor.setDirty({ dirty: true }));
                 return;
             }
         }
@@ -2121,7 +2347,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             if (kind === 'reset_zoom') {
                 const vb = this._viewBox();
                 const d = FLOWS_EDITOR_DEFAULT_VIEWBOX;
-                (this._editor.setViewBox as any)({
+                (this._editor.setViewBox)({
                     viewBox: {
                         x: vb.x + vb.w / 2 - d.w / 2,
                         y: vb.y + vb.h / 2 - d.h / 2,
@@ -2140,10 +2366,10 @@ export class FlowsFlowCanvas extends PlatformElement {
         const nodes = Object.values(this._nodes());
         const vb = computeFitViewBox(nodes);
         if (vb === null) {
-            (this._editor.setViewBox({ viewBox: { ...FLOWS_EDITOR_DEFAULT_VIEWBOX } }) as any);
+            (this._editor.setViewBox({ viewBox: { ...FLOWS_EDITOR_DEFAULT_VIEWBOX } }));
             return;
         }
-        (this._editor.setViewBox({ viewBox: vb }) as any);
+        (this._editor.setViewBox({ viewBox: vb }));
     }
 
     /* ===== Создание через drag-and-drop ===== */
@@ -2182,18 +2408,19 @@ export class FlowsFlowCanvas extends PlatformElement {
         return Array.from(types).includes('application/x-flow-variable');
     }
 
-    _onOutputChipPointerDown(e: MouseEvent, fromNodeId: any, chip: any, chipIndex: any) {
+    _onOutputChipPointerDown(e: MouseEvent, fromNodeId: string, chip: Record<string, unknown>, chipIndex: number) {
         if (e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
         const path = dataflowChipLabel(chip);
         if (!path || typeof fromNodeId !== 'string' || fromNodeId.length === 0) return;
         const fromNode = this._nodes()[fromNodeId];
-        if (!fromNode) return;
+        if (!isPlainObject(fromNode)) return;
         const type = chip && typeof chip.type === 'string' ? chip.type : 'any';
         const df = this._dataflowForNode(fromNodeId);
-        const outputs = df && df.canvas && Array.isArray(df.canvas.outputs) ? df.canvas.outputs : [];
-        const inputs = df && df.canvas && Array.isArray(df.canvas.inputs) ? df.canvas.inputs : [];
+        const canvas = df !== null && isPlainObject(df.canvas) ? df.canvas : null;
+        const outputs = canvas !== null && Array.isArray(canvas.outputs) ? canvas.outputs : [];
+        const inputs = canvas !== null && Array.isArray(canvas.inputs) ? canvas.inputs : [];
         const resolvedIndex = typeof chipIndex === 'number' && chipIndex >= 0
             ? chipIndex
             : findOutputChipIndex(outputs, path);
@@ -2215,15 +2442,17 @@ export class FlowsFlowCanvas extends PlatformElement {
             x2: start.x,
             y2: start.y,
         };
-        (this.renderRoot.querySelector('svg.canvas-host') as any)?.setPointerCapture((e as any).pointerId);
+        captureCanvasPointer(this.renderRoot, e);
     }
 
-    _openVariableMapping(fromNodeId: any, sourcePath: any, sourceType: any, targetNodeId: any) {
-        if (!fromNodeId || !sourcePath || !targetNodeId || fromNodeId === targetNodeId) return;
+    _openVariableMapping(fromNodeId: string, sourcePath: unknown, sourceType: unknown, targetNodeId: unknown) {
+        if (typeof sourcePath !== 'string' || sourcePath.length === 0) return;
+        if (typeof targetNodeId !== 'string' || targetNodeId.length === 0) return;
+        if (fromNodeId.length === 0 || fromNodeId === targetNodeId) return;
         const nodes = this._nodes();
-        const nameOf = (nid: any) => {
-            const n = nodes && typeof nodes === 'object' ? nodes[nid] : null;
-            return n && typeof n.name === 'string' && n.name.length > 0 ? n.name : nid;
+        const nameOf = (nid: string) => {
+            const node = nodes[nid];
+            return isPlainObject(node) && typeof node.name === 'string' && node.name.length > 0 ? node.name : nid;
         };
         this.openModal('flows.variable_mapping', {
             fromNodeId,
@@ -2236,7 +2465,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         });
     }
 
-    _onOutputChipDragStart(e: Event, fromNodeId: any, chip: any) {
+    _onOutputChipDragStart(e: Event, fromNodeId: string, chip: Record<string, unknown>) {
         const path = this._dataflowChipLabel(chip);
         if (!path || typeof fromNodeId !== 'string' || fromNodeId.length === 0) return;
         const type = chip && typeof chip.type === 'string' ? chip.type : 'any';
@@ -2246,7 +2475,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         e.stopPropagation();
     }
 
-    _handleVariableDrop(e: Event, targetNodeId: any) {
+    _handleVariableDrop(e: Event, targetNodeId: string) {
         const dragged = requireDragTransfer(e).getData('application/x-flow-variable');
         if (dragged === '') return;
         const payload = JSON.parse(dragged);
@@ -2346,7 +2575,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._applyPaletteDrop({ local, nodeType, resourceType, connectorId, htmlTargetNodeId: null });
     }
 
-    _applyPaletteDrop(ctx: any) {
+    _applyPaletteDrop(ctx: PaletteDropContext) {
         const { local, nodeType, resourceType, connectorId, htmlTargetNodeId } = ctx;
         const data = this._branchData();
         if (nodeType) {
@@ -2385,10 +2614,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 };
                 const nodes = { ...asObject(data.nodes), [id]: newNode };
                 const next = { ...data, nodes };
-                (this._editor.updateBranchData({ data: next }) as any);
-                (this._editor.pushHistory({ snapshot: next }) as any);
-                (this._editor.setDirty({ dirty: true }) as any);
-                (this._editor.selectNode({ nodeId: id }) as any);
+                (this._editor.updateBranchData({ data: next }));
+                (this._editor.pushHistory({ snapshot: next }));
+                (this._editor.setDirty({ dirty: true }));
+                (this._editor.selectNode({ nodeId: id }));
                 return;
             }
             const id = genId('n');
@@ -2406,10 +2635,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                         : { ...base, config: {} };
             const nodes = { ...asObject(data.nodes), [id]: newNode };
             const next = { ...data, nodes };
-            (this._editor.updateBranchData({ data: next }) as any);
-            (this._editor.pushHistory({ snapshot: next }) as any);
-            (this._editor.setDirty({ dirty: true }) as any);
-            (this._editor.selectNode({ nodeId: id }) as any);
+            (this._editor.updateBranchData({ data: next }));
+            (this._editor.pushHistory({ snapshot: next }));
+            (this._editor.setDirty({ dirty: true }));
+            (this._editor.selectNode({ nodeId: id }));
             return;
         }
         if (resourceType) {
@@ -2434,6 +2663,9 @@ export class FlowsFlowCanvas extends PlatformElement {
             let newWrapperNodeId = null;
             if (attachId) {
                 const target = nextNodes[attachId];
+                if (!isPlainObject(target)) {
+                    throw new Error('flows-flow-canvas: attach target required');
+                }
                 const prevRes = isPlainObject(target.resources) ? { ...target.resources } : {};
                 prevRes[rid] = { resource_id: rid };
                 nextNodes = { ...nextNodes, [attachId]: { ...target, resources: prevRes } };
@@ -2450,23 +2682,23 @@ export class FlowsFlowCanvas extends PlatformElement {
                     },
                 };
             }
-            let next: Record<string, any> = { ...data, resources: flowResources, nodes: nextNodes };
+            let next: Record<string, unknown> = { ...data, resources: flowResources, nodes: nextNodes };
             if (newWrapperNodeId !== null) {
                 const ent = typeof next.entry === 'string' ? next.entry : '';
                 if (ent.length === 0 || !nextNodes[ent]) {
                     next = { ...next, entry: newWrapperNodeId };
                 }
             }
-            (this._editor.updateBranchData({ data: next }) as any);
-            (this._editor.pushHistory({ snapshot: next }) as any);
-            (this._editor.setDirty({ dirty: true }) as any);
+            (this._editor.updateBranchData({ data: next }));
+            (this._editor.pushHistory({ snapshot: next }));
+            (this._editor.setDirty({ dirty: true }));
             if (attachId) {
-                (this._editor.selectNode({ nodeId: attachId }) as any);
+                (this._editor.selectNode({ nodeId: attachId }));
                 const tnode = nextNodes[attachId];
-                const nm = typeof tnode.name === 'string' && tnode.name.length > 0 ? tnode.name : attachId;
+                const nm = isPlainObject(tnode) && typeof tnode.name === 'string' && tnode.name.length > 0 ? tnode.name : attachId;
                 this.toast('flows:canvas.resource_attached_to_node', { type: 'success', vars: { resource: resourceType, node: nm } });
             } else if (newWrapperNodeId !== null) {
-                (this._editor.selectNode({ nodeId: newWrapperNodeId }) as any);
+                (this._editor.selectNode({ nodeId: newWrapperNodeId }));
                 this.toast('flows:canvas.resource_dropped_new_node', { type: 'success', vars: { resource: resourceType } });
             }
             if (resourceType === 'data_table') {
@@ -2487,7 +2719,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             throw new Error('flows-flow-canvas: flowId required for DataTable create');
         }
         const data = this._branchData();
-        const resource = (asObject(data.resources) as any)[resourceId];
+        const resource = (asObject(data.resources))[resourceId];
         if (!isPlainObject(resource)) {
             throw new Error(`flows-flow-canvas: DataTable resource not found: ${resourceId}`);
         }
@@ -2515,15 +2747,15 @@ export class FlowsFlowCanvas extends PlatformElement {
                 return;
             }
             resources[resourceId] = { ...current, config: { ...currentCfg, file_id: created.file_id } };
-            (this._editor.updateBranchData({ data: { ...latest, resources } }) as any);
-            (this._editor.setDirty({ dirty: true }) as any);
+            (this._editor.updateBranchData({ data: { ...latest, resources } }));
+            (this._editor.setDirty({ dirty: true }));
             this.toast('flows:data_table_resource_editor.toast_created', { type: 'success' });
         } finally {
             this._dataTableCreateInFlight.delete(resourceId);
         }
     }
 
-    _onDropCodeNode(ctx: any) {
+    _onDropCodeNode(ctx: DropAtPoint) {
         const { local } = ctx;
         const nodeId = genId('n');
         this.openModal('flows.code_node_drop', {
@@ -2535,12 +2767,13 @@ export class FlowsFlowCanvas extends PlatformElement {
             onChooseTemplates: () => {
                 this.openModal('flows.tool_picker', {
                     pickMode: 'code_node',
-                    onCommit: (detail: any) => {
-                        if (!detail || typeof detail !== 'object' || !isPlainObject(detail.config)) {
+                    onCommit: (detail: unknown) => {
+                        if (!isPlainObject(detail) || !isPlainObject(detail.config)) {
                             throw new Error('flows-flow-canvas: code template commit must include config');
                         }
-                        const nm = typeof detail.nodeName === 'string' && detail.nodeName.length > 0
-                            ? detail.nodeName
+                        const nodeName = detail.nodeName;
+                        const nm = typeof nodeName === 'string' && nodeName.length > 0
+                            ? nodeName
                             : 'code';
                         this._placeCodeNode(
                             { nodeId, local, name: nm, config: detail.config },
@@ -2551,7 +2784,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         });
     }
 
-    _placeCodeNode(p: any) {
+    _placeCodeNode(p: CodeNodePlacement) {
         const { nodeId, local, name, config } = p;
         const data = this._branchData();
         const newNode = {
@@ -2563,19 +2796,19 @@ export class FlowsFlowCanvas extends PlatformElement {
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.pushHistory({ snapshot: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.selectNode({ nodeId }) as any);
+        (this._editor.updateBranchData({ data: next }));
+        (this._editor.pushHistory({ snapshot: next }));
+        (this._editor.setDirty({ dirty: true }));
+        (this._editor.selectNode({ nodeId }));
     }
 
-    _onDropFlowNode(ctx: any) {
+    _onDropFlowNode(ctx: DropAtPoint) {
         const { local } = ctx;
         const nodeId = genId('n');
         this.openModal('flows.tool_picker', {
             pickMode: 'flow_only',
-            onPick: (detail: any) => {
-                if (!detail || typeof detail !== 'object' || detail.kind !== 'flow') {
+            onPick: (detail: unknown) => {
+                if (!isPlainObject(detail) || detail.kind !== 'flow') {
                     return;
                 }
                 const flowId = detail.tool_id;
@@ -2584,7 +2817,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 }
                 const item = detail.item;
                 let name = flowId;
-                if (item && typeof item === 'object' && typeof item.title === 'string' && item.title.length > 0) {
+                if (isPlainObject(item) && typeof item.title === 'string' && item.title.length > 0) {
                     name = item.title;
                 }
                 this._placeFlowNode({ nodeId, local, name, flowId });
@@ -2592,7 +2825,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         });
     }
 
-    _placeFlowNode(p: any) {
+    _placeFlowNode(p: FlowNodePlacement) {
         const { nodeId, local, name, flowId } = p;
         const data = this._branchData();
         const newNode = {
@@ -2604,22 +2837,19 @@ export class FlowsFlowCanvas extends PlatformElement {
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.pushHistory({ snapshot: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.selectNode({ nodeId }) as any);
+        (this._editor.updateBranchData({ data: next }));
+        (this._editor.pushHistory({ snapshot: next }));
+        (this._editor.setDirty({ dirty: true }));
+        (this._editor.selectNode({ nodeId }));
     }
 
-    _onDropMcpNode(ctx: any) {
+    _onDropMcpNode(ctx: DropAtPoint) {
         const { local } = ctx;
         const nodeId = genId('n');
         this.openModal('flows.tool_picker', {
             pickMode: 'mcp_only',
-            onPick: (detail: any) => {
-                if (!detail || typeof detail !== 'object') {
-                    return;
-                }
-                if (detail.kind !== 'tool') {
+            onPick: (detail: unknown) => {
+                if (!isPlainObject(detail) || detail.kind !== 'tool') {
                     return;
                 }
                 const toolId = detail.tool_id;
@@ -2647,7 +2877,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         });
     }
 
-    _placeMcpNode(p: any) {
+    _placeMcpNode(p: McpNodePlacement) {
         const { nodeId, local, name, server_id, tool_name, headers, state_mapping } = p;
         if (typeof server_id !== 'string' || server_id.length === 0) {
             throw new Error('flows-flow-canvas: _placeMcpNode server_id required');
@@ -2674,13 +2904,13 @@ export class FlowsFlowCanvas extends PlatformElement {
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.pushHistory({ snapshot: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.selectNode({ nodeId }) as any);
+        (this._editor.updateBranchData({ data: next }));
+        (this._editor.pushHistory({ snapshot: next }));
+        (this._editor.setDirty({ dirty: true }));
+        (this._editor.selectNode({ nodeId }));
     }
 
-    _placeReflectionNode(p: any) {
+    _placeReflectionNode(p: PlacedNode) {
         const { nodeId, local } = p;
         const data = this._branchData();
         const newNode = {
@@ -2692,13 +2922,13 @@ export class FlowsFlowCanvas extends PlatformElement {
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.pushHistory({ snapshot: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.selectNode({ nodeId }) as any);
+        (this._editor.updateBranchData({ data: next }));
+        (this._editor.pushHistory({ snapshot: next }));
+        (this._editor.setDirty({ dirty: true }));
+        (this._editor.selectNode({ nodeId }));
     }
 
-    _placeCodeAgentNode(p: any) {
+    _placeCodeAgentNode(p: PlacedNode) {
         const { nodeId, local } = p;
         const data = this._branchData();
         const newNode = {
@@ -2710,10 +2940,10 @@ export class FlowsFlowCanvas extends PlatformElement {
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
-        (this._editor.updateBranchData({ data: next }) as any);
-        (this._editor.pushHistory({ snapshot: next }) as any);
-        (this._editor.setDirty({ dirty: true }) as any);
-        (this._editor.selectNode({ nodeId }) as any);
+        (this._editor.updateBranchData({ data: next }));
+        (this._editor.pushHistory({ snapshot: next }));
+        (this._editor.setDirty({ dirty: true }));
+        (this._editor.selectNode({ nodeId }));
         void this._ensureCodeAgentSource(nodeId);
     }
 
@@ -2748,8 +2978,8 @@ export class FlowsFlowCanvas extends PlatformElement {
                 return;
             }
             nodes[nodeId] = { ...current, catalog_id: ensured.catalog_id };
-            (this._editor.updateBranchData({ data: { ...latest, nodes } }) as any);
-            (this._editor.setDirty({ dirty: true }) as any);
+            (this._editor.updateBranchData({ data: { ...latest, nodes } }));
+            (this._editor.setDirty({ dirty: true }));
         } finally {
             this._codeAgentEnsureInFlight.delete(nodeId);
         }
@@ -2759,28 +2989,30 @@ export class FlowsFlowCanvas extends PlatformElement {
     _onStickyChange(e: CustomEvent) {
         const detail = e.detail;
         if (!detail || !detail.noteId) return;
-        const notes = asArray((this._state() as any).stickyNotes).map((n) => n.id === detail.noteId ? { ...n, text: detail.text } : n);
-        (this._editor.updateStickyNote as any)({ note: notes.find((n) => n.id === detail.noteId) });
+        const notes: Record<string, unknown>[] = canvasRecords((this._state()).stickyNotes).map((note) => (
+            note.id === detail.noteId ? { ...note, text: detail.text } : note
+        ));
+        (this._editor.updateStickyNote)({ note: notes.find((n) => n.id === detail.noteId) });
         this._persistStickyNotes(notes);
     }
 
     _onStickyRemove(e: CustomEvent) {
         const noteId = e.detail?.noteId;
         if (!noteId) return;
-        (this._editor.removeStickyNote({ id: noteId }) as any);
-        const notes = asArray((this._state() as any).stickyNotes).filter((n) => n.id !== noteId);
+        (this._editor.removeStickyNote({ id: noteId }));
+        const notes = canvasRecords((this._state()).stickyNotes).filter((n) => n.id !== noteId);
         this._persistStickyNotes(notes);
     }
 
-    _onStickyResizeStart(e: CustomEvent, note: any) {
+    _onStickyResizeStart(e: CustomEvent, note: Record<string, unknown>) {
         const detail = e.detail;
         if (!detail) return;
         this._stickyResize = {
             noteId: detail.noteId,
             startClientX: detail.x,
             startClientY: detail.y,
-            origW: note.width,
-            origH: note.height,
+            origW: asNumber(note.width),
+            origH: asNumber(note.height),
         };
         const svg = this.renderRoot.querySelector('svg.canvas-host');
         if (svg && typeof detail.pointerId === 'number') {
@@ -2792,7 +3024,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
     }
 
-    _onStickyDragStart(e: CustomEvent, note: any) {
+    _onStickyDragStart(e: CustomEvent, note: Record<string, unknown>) {
         const detail = e.detail;
         if (!detail) return;
         this._drag = {
@@ -2814,11 +3046,11 @@ export class FlowsFlowCanvas extends PlatformElement {
     _onStickyCollapseToggle(e: CustomEvent) {
         const detail = e.detail;
         if (!detail || !detail.noteId) return;
-        const notes = asArray((this._state() as any).stickyNotes).map((n) => n.id === detail.noteId
+        const notes = canvasRecords((this._state()).stickyNotes).map((n) => n.id === detail.noteId
             ? { ...n, collapsed: Boolean(detail.collapsed) }
             : n);
         const updated = notes.find((n) => n.id === detail.noteId);
-        if (updated) (this._editor.updateStickyNote({ note: updated }) as any);
+        if (updated) (this._editor.updateStickyNote({ note: updated }));
         this._persistStickyNotes(notes);
     }
 
@@ -2826,11 +3058,11 @@ export class FlowsFlowCanvas extends PlatformElement {
         const detail = e.detail;
         if (!detail || !detail.noteId) return;
         if (detail.isLinked) {
-            const notes = asArray((this._state() as any).stickyNotes).map((n) => n.id === detail.noteId
+            const notes = canvasRecords((this._state()).stickyNotes).map((n) => n.id === detail.noteId
                 ? { ...n, attached_node_id: null }
                 : n);
             const updated = notes.find((n) => n.id === detail.noteId);
-            if (updated) (this._editor.updateStickyNote({ note: updated }) as any);
+            if (updated) (this._editor.updateStickyNote({ note: updated }));
             this._persistStickyNotes(notes);
             this._stickyLinkMode = null;
             this.requestUpdate();
@@ -2846,29 +3078,29 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.requestUpdate();
     }
 
-    _attachStickyToNode(noteId: any, nodeId: string) {
-        const notes = asArray((this._state() as any).stickyNotes).map((n) => n.id === noteId
+    _attachStickyToNode(noteId: string, nodeId: string) {
+        const notes = canvasRecords((this._state()).stickyNotes).map((n) => n.id === noteId
             ? { ...n, attached_node_id: nodeId }
             : n);
         const updated = notes.find((n) => n.id === noteId);
-        if (updated) (this._editor.updateStickyNote({ note: updated }) as any);
+        if (updated) (this._editor.updateStickyNote({ note: updated }));
         this._persistStickyNotes(notes);
         this._stickyLinkMode = null;
         this.requestUpdate();
     }
 
     /** Tester/judge (`store.evaluation_role`) — harness-only, не execution-граф. */
-    _isEvaluationNode(node: any) {
+    _isEvaluationNode(node: Record<string, unknown>) {
         return isEvaluationRoleNode(node);
     }
 
     /** Resource или evaluation — без портов, END и connect. */
-    _isPortlessNode(node: any) {
+    _isPortlessNode(node: Record<string, unknown>) {
         return isPortlessCanvasNode(node);
     }
 
     /* ===== Render ===== */
-    _renderFanInBadge(id: string, node: any) {
+    _renderFanInBadge(id: string, node: Record<string, unknown>) {
         const policy = node.incoming_policy === 'all' ? 'all' : 'any';
         const h = getNodeCanvasHeight(node);
         const cy = h / 2;
@@ -2912,41 +3144,44 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _dataflowForNode(nodeId: string) {
-        const state = this._state();
-        const nodes = (state)?.dataflow?.nodes;
-        if (!nodes || typeof nodes !== 'object') return null;
-        const df = nodes[nodeId];
-        return df && typeof df === 'object' ? df : null;
+        const dataflow = this._state().dataflow;
+        if (!isPlainObject(dataflow) || !isPlainObject(dataflow.nodes)) return null;
+        const df = dataflow.nodes[nodeId];
+        return isPlainObject(df) ? df : null;
     }
 
-    _dataflowChipLabel(chip: any) {
+    _dataflowChipLabel(chip: Record<string, unknown>) {
         return dataflowChipLabel(chip);
     }
 
     _nodeLabel(nodeId: string) {
         if (typeof nodeId !== 'string' || nodeId.length === 0) return '';
-        const nodes = this._nodes();
-        const node = nodes && typeof nodes === 'object' ? nodes[nodeId] : null;
-        const name = node && typeof node.name === 'string' ? node.name : '';
+        const node = this._nodes()[nodeId];
+        const name = isPlainObject(node) && typeof node.name === 'string' ? node.name : '';
         return name.length > 0 ? name : nodeId;
     }
 
     _dataflowProblems(nodeId: string) {
         const df = this._dataflowForNode(nodeId);
-        const canvas = df && typeof df.canvas === 'object' ? df.canvas : null;
+        const canvas = df !== null && isPlainObject(df.canvas) ? df.canvas : null;
         return countNodeDataflowProblems(canvas);
     }
 
-    _dataWires(nodes: any) {
-        const df = (this._state())?.dataflow?.nodes;
+    _dataWires(nodes: Record<string, unknown>) {
+        const dataflow = this._state().dataflow;
+        const df = isPlainObject(dataflow) ? dataflow.nodes : null;
         return buildDataWires(df, nodes);
     }
 
-    _renderDataWire(wire: any, nodes: any) {
-        const fromNode = nodes[wire.from];
-        const toNode = nodes[wire.to];
-        if (!fromNode || !toNode) return svg``;
-        const dataflowNodes = (this._state())?.dataflow?.nodes;
+    _renderDataWire(wire: Record<string, unknown>, nodes: Record<string, unknown>) {
+        const fromKey = wire.from;
+        const toKey = wire.to;
+        if (typeof fromKey !== 'string' || typeof toKey !== 'string') return svg``;
+        const fromNode = nodes[fromKey];
+        const toNode = nodes[toKey];
+        if (!isPlainObject(fromNode) || !isPlainObject(toNode)) return svg``;
+        const dataflow = this._state().dataflow;
+        const dataflowNodes = isPlainObject(dataflow) && isPlainObject(dataflow.nodes) ? dataflow.nodes : null;
         const endpoints = resolveDataWireEndpoints(
             wire,
             fromNode,
@@ -2960,8 +3195,13 @@ export class FlowsFlowCanvas extends PlatformElement {
         const mid = midpoint(start.x, start.y, end.x, end.y);
         const wireKey = dataWireKey(wire);
         const wireKind = dataWireChipKind(wire);
-        const chipWireHighlightActive = this._highlightWireKeys instanceof Set && this._highlightWireKeys.size > 0;
-        const highlighted = chipWireHighlightActive && this._highlightWireKeys.has(wireKey);
+        const wireKeys = this._highlightWireKeys;
+        let chipWireHighlightActive = false;
+        let highlighted = false;
+        if (wireKeys instanceof Set && wireKeys.size > 0) {
+            chipWireHighlightActive = true;
+            highlighted = wireKeys.has(wireKey);
+        }
         const dimmed = chipWireHighlightActive && !highlighted;
         return svg`
             <g class="data-wire" data-wire-key=${wireKey}>
@@ -3007,7 +3247,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
     }
 
-    _isPointerStillInChipHitZone(event: MouseEvent, nodeId: string, side: any, chipIndex: any) {
+    _isPointerStillInChipHitZone(event: MouseEvent, nodeId: string, side: string, chipIndex: number) {
         const hit = this.renderRoot.querySelector(
             `rect.node-dataflow-chip-hit[data-chip-node-id="${nodeId}"][data-chip-side="${side}"][data-chip-index="${chipIndex}"]`,
         );
@@ -3015,7 +3255,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         return pointerStillInside(event.relatedTarget, hit);
     }
 
-    _onChipPointerEnter(nodeId: string, side: any, chipIndex: any) {
+    _onChipPointerEnter(nodeId: string, side: string, chipIndex: number) {
         if (this._variableWire) return;
         const cur = this._hoverChipRef;
         if (cur && (cur).nodeId === nodeId && (cur).side === side && (cur).index === chipIndex) return;
@@ -3024,7 +3264,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.requestUpdate();
     }
 
-    _onChipPointerLeave(event: MouseEvent, nodeId: string, side: any, chipIndex: any) {
+    _onChipPointerLeave(event: MouseEvent, nodeId: string, side: string, chipIndex: number) {
         if (this._variableWire) return;
         if (this._isPointerStillInChipHitZone(event, nodeId, side, chipIndex)) return;
         const cur = this._hoverChipRef;
@@ -3034,7 +3274,10 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
     }
 
-    _isDataflowVisibleForNode(nodeId: string, { isSelected, isMulti, showAllWires }: any) {
+    _isDataflowVisibleForNode(nodeId: string, flags: DataflowNodeVisibility) {
+        const isSelected = flags.isSelected;
+        const isMulti = flags.isMulti;
+        const showAllWires = flags.showAllWires;
         if (showAllWires) return true;
         if (isSelected || isMulti) return true;
         if (this._hoverNodeId === nodeId) return true;
@@ -3045,26 +3288,27 @@ export class FlowsFlowCanvas extends PlatformElement {
         return false;
     }
 
-    _renderNodeDataflowEdgeChips(id: string, h: any) {
+    _renderNodeDataflowEdgeChips(id: string, h: number) {
         const df = this._dataflowForNode(id);
-        if (!df || !df.canvas || typeof df.canvas !== 'object') return svg``;
-        const inputs = Array.isArray(df.canvas.inputs) ? df.canvas.inputs : [];
-        const outputs = Array.isArray(df.canvas.outputs) ? df.canvas.outputs : [];
+        const canvas = df !== null && isPlainObject(df.canvas) ? df.canvas : null;
+        if (canvas === null) return svg``;
+        const inputs = Array.isArray(canvas.inputs) ? canvas.inputs : [];
+        const outputs = Array.isArray(canvas.outputs) ? canvas.outputs : [];
         if (inputs.length === 0 && outputs.length === 0) return svg``;
         const layout = dataflowNodeChipLayout(h, inputs, outputs);
         const y = layout.stackY;
         const chipHostHeight = layout.chipHostHeight;
-        const isChipWireHighlighted = (side: any, chipIndex: any) => {
+        const isChipWireHighlighted = (side: string, chipIndex: number) => {
             if (!(this._highlightChipKeys instanceof Set)) return false;
             return this._highlightChipKeys.has(chipRefKey({ nodeId: id, side, index: chipIndex }));
         };
-        const renderStack = (chips: any, side: any) => html`
+        const renderStack = (chips: readonly Record<string, unknown>[], side: string) => html`
             <div
                 xmlns="http://www.w3.org/1999/xhtml"
                 class="node-dataflow-stack"
                 data-side=${side}
             >
-                ${chips.map((chip: any, chipIndex: any) => {
+                ${chips.map((chip: Record<string, unknown>, chipIndex: number) => {
                     const label = this._dataflowChipLabel(chip);
                     const status = chip && chip.status === 'missing' ? 'missing' : 'ok';
                     const type = chip && typeof chip.type === 'string' ? chip.type : '';
@@ -3106,7 +3350,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             </div>
         `;
         const inputChipHitX = -DATAFLOW_CHIP_ZONE_W + (DATAFLOW_CHIP_HOST_W - DATAFLOW_CHIP_W);
-        const renderInputHits = () => inputs.map((chip: any, index: number) => {
+        const renderInputHits = () => inputs.map((chip: Record<string, unknown>, index: number) => {
             const rect = dataflowChipRect(y, layout.inputHeights, index);
             return svg`
                 <rect
@@ -3123,7 +3367,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 ></rect>
             `;
         });
-        const renderOutputHits = () => outputs.map((chip: any, index: number) => {
+        const renderOutputHits = () => outputs.map((chip: Record<string, unknown>, index: number) => {
             const rect = dataflowChipRect(y, layout.outputHeights, index);
             const label = this._dataflowChipLabel(chip);
             return svg`
@@ -3177,7 +3421,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         `;
     }
 
-    _renderNodeRunOrbit(h: any, runtimeState: any) {
+    _renderNodeRunOrbit(h: number, runtimeState: string) {
         const path = buildNodeOrbitPath(NODE_W, h, NODE_RADIUS);
         const perimeter = nodeOrbitPerimeter(NODE_W, h, NODE_RADIUS);
         const tone = runtimeState === 'breakpoint-hit' ? 'warning' : 'info';
@@ -3208,25 +3452,25 @@ export class FlowsFlowCanvas extends PlatformElement {
         e.stopPropagation();
     }
 
-    _onNodeRunResultToggle(e: Event, nodeId: string, runIndex: any) {
+    _onNodeRunResultToggle(e: Event, nodeId: string, runIndex: number) {
         e.preventDefault();
         e.stopPropagation();
-        (this._editor.toggleNodeRunResultExpand({ nodeId, runIndex }) as any);
+        (this._editor.toggleNodeRunResultExpand({ nodeId, runIndex }));
     }
 
-    _openNodeRunResultInspector(e: Event, nodeId: string, runIndex: any, selectedPath?: any) {
+    _openNodeRunResultInspector(e: Event, nodeId: string, runIndex: number, selectedPath?: string) {
         e.preventDefault();
         e.stopPropagation();
-        const props: any = { nodeId, runIndex };
+        const props: Record<string, unknown> = { nodeId, runIndex };
         if (typeof selectedPath === 'string' && selectedPath.length > 0) {
             props.selectedPath = selectedPath;
         }
         this.openModal('flows.node_run_result', props);
     }
 
-    _renderNodeRunResult(nodeId: string, cardHeight: any, runtimeState: any) {
+    _renderNodeRunResult(nodeId: string, cardHeight: number, runtimeState: string | null) {
         const state = this._state();
-        if (!(state as any).showCanvasRunResults) {
+        if (!(state).showCanvasRunResults) {
             return '';
         }
         const y = cardHeight + CANVAS_RUN_RESULT_GAP;
@@ -3252,7 +3496,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 </foreignObject>
             `;
         }
-        const resultsMap = (state as any).nodeRunResults;
+        const resultsMap = (state).nodeRunResults;
         if (!isPlainObject(resultsMap)) {
             return '';
         }
@@ -3268,15 +3512,15 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (kind !== 'ok' && kind !== 'error') {
             throw new Error('flows-flow-canvas: node run result kind must be ok or error');
         }
-        let runIndex = latest.run_index;
-        if (typeof runIndex !== 'number' || !Number.isFinite(runIndex)) {
-            runIndex = results.length - 1;
-        }
+        const rawRunIndex = latest.run_index;
+        const runIndex = typeof rawRunIndex === 'number' && Number.isFinite(rawRunIndex)
+            ? Math.floor(rawRunIndex)
+            : results.length - 1;
         const expandKey = nodeRunResultExpandKey(nodeId, runIndex);
-        const expandedKeys = asArray((state as any).expandedNodeRunKeys);
+        const expandedKeys = asArray((state).expandedNodeRunKeys);
         const expanded = expandedKeys.includes(expandKey);
-        const viewModel = buildNodeRunViewModel(latest, (key: string, params: any) => this.t(key, params));
-        const pillH = getNodeRunResultPillHeight(latest, expanded, (key: string, params: any) => this.t(key, params));
+        const viewModel = buildNodeRunViewModel(latest, (key: string, params: Record<string, string | number>) => this.t(key, params));
+        const pillH = getNodeRunResultPillHeight(latest, expanded, (key: string, params: Record<string, string | number>) => this.t(key, params));
         const metaParts = [];
         const durationMs = latest.duration_ms;
         if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
@@ -3387,7 +3631,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         `;
     }
 
-    _renderNode(id: string, node: any, inDegree: any) {
+    _renderNode(id: string, node: Record<string, unknown>, inDegree: number) {
         const x = asNumber(node.pos_x);
         const y = asNumber(node.pos_y);
         const h = getNodeCanvasHeight(node);
@@ -3395,12 +3639,14 @@ export class FlowsFlowCanvas extends PlatformElement {
         const maxShown = MAX_CHIPS_SHOWN;
         const visibleTools = canvasTools.slice(0, maxShown);
         const moreTools = canvasTools.length - visibleTools.length;
-        const meta = getNodeTypeMeta(node.type);
+        const nodeTypeName = typeof node.type === 'string' ? node.type : '';
+        const meta = getNodeTypeMeta(nodeTypeName);
         const nodeStyle = `--node-accent: ${getCategoryToken(meta.category)};`;
+        const nodeLanguage = typeof node.language === 'string' ? node.language : '';
         const isCodeNode = node.type === 'code';
         const isDatasourceNode = node.type === 'datasource';
         const nodeIcon = isCodeNode
-            ? this._renderCodeLanguageIcon(node.language, 28)
+            ? this._renderCodeLanguageIcon(nodeLanguage, 28)
             : this._renderCanvasIcon(
                 isDatasourceNode
                     ? datasourceIconName(typeof node.connector_id === 'string' ? node.connector_id : '')
@@ -3408,23 +3654,23 @@ export class FlowsFlowCanvas extends PlatformElement {
                 18,
             );
         const state = this._state();
-        const multi = asArray((state as any).multiSelection);
-        const isSelected = (state as any).selectedNodeId === id;
+        const multi = asArray((state).multiSelection);
+        const isSelected = (state).selectedNodeId === id;
         const isMulti = multi.includes(id) && multi.length > 1;
-        const hasBp = asArray((state as any).breakpointNodeIds).includes(id);
-        const isBpHit = (state as any).breakpointHitNodeId === id;
+        const hasBp = asArray((state).breakpointNodeIds).includes(id);
+        const isBpHit = (state).breakpointHitNodeId === id;
         let runtimeState = null;
         if (isBpHit) runtimeState = 'breakpoint-hit';
-        else if (asArray((state as any).runningNodeIds).includes(id)) runtimeState = 'running';
-        else if (isPlainObject((state as any).erroredNodes) && (state as any).erroredNodes[id]) runtimeState = 'error';
-        else if (asArray((state as any).completedNodeIds).includes(id)) runtimeState = 'completed';
-        const isInherited = asArray((state as any).inheritedNodeIds).includes(id);
+        else if (asArray((state).runningNodeIds).includes(id)) runtimeState = 'running';
+        else if (isPlainObject((state).erroredNodes) && (state).erroredNodes[id]) runtimeState = 'error';
+        else if (asArray((state).completedNodeIds).includes(id)) runtimeState = 'completed';
+        const isInherited = asArray((state).inheritedNodeIds).includes(id);
         const isPortless = this._isPortlessNode(node);
         const typeSubtitle = canvasNodeTypeSubtitle(node);
         const problems = this._dataflowProblems(id);
         const showFanInEffective = !isPortless && inDegree >= 2;
         const hasToolStrip = canvasTools.length > 0;
-        const showAllWires = Boolean((state as any).showDataWires);
+        const showAllWires = Boolean((state).showDataWires);
         const dataflowVisible = this._isDataflowVisibleForNode(id, { isSelected, isMulti, showAllWires });
         const foBody = html`
             <div
@@ -3455,10 +3701,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                             const tid = ref.tool_id;
                             const label = getToolLabel(ref);
                             const inferredLanguage = inferToolRefLanguage(ref);
-                            const isLanguageTool = (inferredLanguage as any).length > 0;
+                            const isLanguageTool = typeof inferredLanguage === 'string' && inferredLanguage.length > 0;
                             const chipStyle = `--tool-accent: ${getCategoryToken(tm.category)};`;
                             const chipIcon = isLanguageTool
-                                ? this._renderCodeLanguageIcon(inferredLanguage, 24)
+                                ? this._renderCodeLanguageIcon(typeof inferredLanguage === 'string' ? inferredLanguage : '', 24)
                                 : this._renderCanvasIcon(tm.icon, 14);
                             return html`
                                 <article
@@ -3471,7 +3717,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                                     title=${label}
                                     @pointerdown=${(e: Event) => {
                                         e.stopPropagation();
-                                        (this._editor.selectNode({ nodeId: id, openToolId: tid }) as any);
+                                        (this._editor.selectNode({ nodeId: id, openToolId: tid }));
                                     }}
                                 >
                                     ${chipIcon}
@@ -3506,7 +3752,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 @contextmenu=${(e: MouseEvent) => this._onContextMenu(e, 'node', id)}
                 @mouseenter=${() => this._onNodeMouseEnter(id)}
                 @mouseleave=${(e: MouseEvent) => this._onNodeMouseLeave(e, id)}
-                @dblclick=${() => (this._editor.selectNode({ nodeId: id }) as any)}
+                @dblclick=${() => (this._editor.selectNode({ nodeId: id }))}
             >
                 <rect class="node-aura" x="-5" y="-5" width=${NODE_W + 10} height=${h + 10} rx=${NODE_RADIUS + 5} ry=${NODE_RADIUS + 5}></rect>
                 <rect class="node-card" x="0" y="0" width=${NODE_W} height=${h} rx=${NODE_RADIUS} ry=${NODE_RADIUS}></rect>
@@ -3539,10 +3785,10 @@ export class FlowsFlowCanvas extends PlatformElement {
         `;
     }
 
-    _renderOutPorts(nodeId: string, node: any, h: any) {
+    _renderOutPorts(nodeId: string, node: Record<string, unknown>, h: number) {
         if (this._isReflectionNode(node)) {
             const ports = this._reflectionExitsForNode(node);
-            return svg`${ports.map((port: any, index: number) => {
+            return svg`${ports.map((port: { id: string; label?: string }, index: number) => {
                 const cy = h * reflectionOutPortYFraction(port.id, ports);
                 const kind = index === 0
                     ? 'pass'
@@ -3584,24 +3830,24 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.openModal('flows.incoming_policy', { nodeId });
     }
 
-    _renderEdge(edge: any, i: number, nodes: any) {
+    _renderEdge(edge: Record<string, unknown>, i: number, nodes: Record<string, unknown>) {
         const { from_node: fromId, to_node: toId } = getEdgeEndpoints(edge);
         const fromNode = nodes[fromId];
         const toNode = nodes[toId];
-        if (!fromNode || !toNode) return svg``;
+        if (!isPlainObject(fromNode) || !isPlainObject(toNode)) return svg``;
         const outPort = this._resolveOutPortForEdge(fromNode, edge);
         const start = this._portCoords(fromNode, 'out', outPort);
         const end = this._portCoords(toNode, 'in');
         const condition = edge.condition === undefined ? null : edge.condition;
         const mid = midpoint(start.x, start.y, end.x, end.y);
         const editorState = this._state();
-        const inheritedKeys = Array.isArray((editorState as any).inheritedEdgeKeys) ? (editorState as any).inheritedEdgeKeys : [];
+        const inheritedKeys = Array.isArray((editorState).inheritedEdgeKeys) ? (editorState).inheritedEdgeKeys : [];
         const edgeKey = `${fromId}->${toId}`;
         const isInherited = inheritedKeys.includes(edgeKey);
         const edgeClass = isInherited ? 'edge inherited' : 'edge';
-        const failE = asArray((editorState as any).failedEdgeIndices);
-        const runE = asArray((editorState as any).runningEdgeIndices);
-        const compE = asArray((editorState as any).completedEdgeIndices);
+        const failE = asArray((editorState).failedEdgeIndices);
+        const runE = asArray((editorState).runningEdgeIndices);
+        const compE = asArray((editorState).completedEdgeIndices);
         let runState = null;
         if (failE.includes(i)) {
             runState = 'failed';
@@ -3644,7 +3890,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.openModal('flows.incoming_policy', { nodeId });
     }
 
-    _renderVirtualEnd(node: any, outPort = null, nodeId: string) {
+    _renderVirtualEnd(node: Record<string, unknown>, outPort: unknown = null, nodeId: string) {
         if (typeof nodeId !== 'string' || nodeId.length === 0) {
             throw new Error('flows-flow-canvas: virtual END nodeId required');
         }
@@ -3652,7 +3898,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         const { cx, cy } = terminalEndCenter(start);
         const stopHalf = 5;
         const editorState = this._state();
-        const endMap = (editorState as any).endWireRunStateByNodeId;
+        const endMap = (editorState).endWireRunStateByNodeId;
         const runState = isPlainObject(endMap) && typeof endMap[nodeId] === 'string'
             ? endMap[nodeId]
             : null;
@@ -3701,12 +3947,12 @@ export class FlowsFlowCanvas extends PlatformElement {
         `;
     }
 
-    _renderVirtualStart(node: any) {
+    _renderVirtualStart(node: Record<string, unknown>) {
         const end = this._portCoords(node, 'in');
         const { cx, cy } = terminalStartCenter(end);
         const editorState = this._state();
-        const runState = typeof (editorState as any).startWireRunState === 'string'
-            ? (editorState as any).startWireRunState
+        const runState = typeof (editorState).startWireRunState === 'string'
+            ? (editorState).startWireRunState
             : null;
         return svg`
             <g class="edge-group terminal-marker terminal-marker--start">
@@ -3749,7 +3995,7 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _renderSmartGuides() {
-        const guides = asArray((this._state() as any).smartGuides);
+        const guides = canvasRecords((this._state()).smartGuides);
         const vb = this._viewBox();
         return guides.map((g, i) => g.axis === 'v'
             ? svg`<line class="smart-guide" x1=${g.at} y1=${vb.y} x2=${g.at} y2=${vb.y + vb.h}></line>`
@@ -3757,7 +4003,7 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _renderStickyNotes() {
-        const notes = asArray((this._state() as any).stickyNotes);
+        const notes = canvasRecords((this._state()).stickyNotes);
         const linkPendingId = typeof this._stickyLinkMode?.noteId === 'string' ? this._stickyLinkMode.noteId : '';
         return notes.map((note) => {
             const collapsed = Boolean(note.collapsed);
@@ -3791,14 +4037,14 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _renderStickyAttachLines() {
-        const notes = asArray((this._state() as any).stickyNotes);
+        const notes = canvasRecords((this._state()).stickyNotes);
         const nodes = this._nodes();
         const out = [];
         for (const note of notes) {
             const nodeId = typeof note.attached_node_id === 'string' ? note.attached_node_id : '';
             if (!nodeId) continue;
             const node = nodes[nodeId];
-            if (!node) continue;
+            if (!isPlainObject(node)) continue;
             const collapsed = Boolean(note.collapsed);
             const wRaw = Number(note.width);
             const w = Number.isFinite(wRaw) && wRaw > 0 ? wRaw : STICKY_W;
@@ -3828,11 +4074,12 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _renderContextMenu() {
-        const menu = (this._state() as any).contextMenu;
-        if (!menu) return '';
+        const menu = (this._state()).contextMenu;
+        if (!isPlainObject(menu)) return '';
         const nodes = this._nodes();
         const tid = typeof menu.targetId === 'string' ? menu.targetId : '';
-        const portlessNode = menu.target === 'node' && tid.length > 0 && this._isPortlessNode(nodes[tid]);
+        const menuNode = nodes[tid];
+        const portlessNode = menu.target === 'node' && tid.length > 0 && isPlainObject(menuNode) && this._isPortlessNode(menuNode);
         return html`
             <flows-canvas-context-menu
                 .x=${menu.x}
@@ -3841,7 +4088,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 target-id=${asString(menu.targetId)}
                 .resourceNode=${portlessNode}
                 @action=${this._onContextMenuAction}
-                @close=${() => (this._editor.closeContextMenu({}) as any)}
+                @close=${() => (this._editor.closeContextMenu({}))}
             ></flows-canvas-context-menu>
         `;
     }
@@ -3851,24 +4098,25 @@ export class FlowsFlowCanvas extends PlatformElement {
         const skillsData = getBranchData(state);
         const nodes = getBranchNodes(state);
         const edges = getBranchEdges(state);
-        const activeTool = typeof (state as any).activeTool === 'string' && (state as any).activeTool.length > 0 ? (state as any).activeTool : 'select';
+        const activeTool = typeof (state).activeTool === 'string' && (state).activeTool.length > 0 ? (state).activeTool : 'select';
         const vb = this._viewBox();
         const vbStr = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;
         const panActive = Boolean(this._pan);
         const linkMode = Boolean(this._stickyLinkMode);
 
-        const terminalEnds: any[] = [];
+        const terminalEnds: TerminalEndMark[] = [];
         for (const [nid, n] of Object.entries(nodes)) {
-            if (this._isPortlessNode(n)) continue;
+            if (!isPlainObject(n) || this._isPortlessNode(n)) continue;
             const ports = listTerminalEndPorts(nid, n, edges, nodes);
             for (const outPort of ports) {
                 terminalEnds.push({ nodeId: nid, node: n, outPort });
             }
         }
-        const entryId = typeof (state as any).entryNodeId === 'string' && (state as any).entryNodeId.length > 0
-            ? (state as any).entryNodeId
+        const entryId = typeof (state).entryNodeId === 'string' && (state).entryNodeId.length > 0
+            ? (state).entryNodeId
             : (typeof skillsData.entry === 'string' && skillsData.entry.length > 0 ? skillsData.entry : null);
-        const entryNode = entryId && nodes[entryId] ? nodes[entryId] : null;
+        const entryCandidate = entryId ? nodes[entryId] : null;
+        const entryNode = isPlainObject(entryCandidate) ? entryCandidate : null;
 
         const inDegrees = new Map();
         for (const edge of edges) {
@@ -3878,7 +4126,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             inDegrees.set(to_node, prev + 1);
         }
 
-        const showAllWires = Boolean((state as any).showDataWires);
+        const showAllWires = Boolean((state).showDataWires);
         const hoverId = this._hoverNodeId;
         const chipHoverRef = this._hoverChipRef;
         const chipHoverActive = chipHoverRef
@@ -3887,24 +4135,24 @@ export class FlowsFlowCanvas extends PlatformElement {
             && ((chipHoverRef).side === 'in' || (chipHoverRef).side === 'out')
             && typeof (chipHoverRef).index === 'number'
             && (chipHoverRef).index >= 0;
-        let dataWires = [];
+        let dataWires: ReturnType<typeof buildDataWires> = [];
         this._lineageSet = null;
         this._highlightWireKeys = null;
         this._highlightChipKeys = null;
         if (showAllWires || hoverId || chipHoverActive) {
             const allWires = this._dataWires(nodes);
-            const dataflowNodes = (state as any).dataflow && typeof (state as any).dataflow === 'object'
-                ? (state as any).dataflow.nodes
-                : null;
+            const dataflowNodes = isPlainObject(state.dataflow) ? state.dataflow.nodes : null;
             if (chipHoverActive) {
-                this._highlightWireKeys = wiresForChipHover(allWires, chipHoverRef, dataflowNodes);
-                if (this._highlightWireKeys.size > 0) {
+                const wireKeys = wiresForChipHover(allWires, chipHoverRef, dataflowNodes);
+                this._highlightWireKeys = wireKeys;
+                if (wireKeys.size > 0) {
                     dataWires = allWires;
-                    this._lineageSet = buildLineageSetFromWireKeys(this._highlightWireKeys, allWires);
-                    this._highlightChipKeys = chipRefKeysForWireKeys(this._highlightWireKeys, allWires, dataflowNodes);
-                    this._highlightChipKeys.add(chipRefKey(chipHoverRef));
+                    this._lineageSet = buildLineageSetFromWireKeys(wireKeys, allWires);
+                    const chipKeys = chipRefKeysForWireKeys(wireKeys, allWires, dataflowNodes);
+                    chipKeys.add(chipRefKey(chipHoverRef));
+                    this._highlightChipKeys = chipKeys;
                 } else {
-                    this._highlightChipKeys = new Set([chipRefKey(chipHoverRef)]);
+                    this._highlightChipKeys = new Set<unknown>([chipRefKey(chipHoverRef)]);
                     if (showAllWires) {
                         dataWires = allWires;
                     } else if (hoverId) {
@@ -3972,7 +4220,12 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <g class="sticky-layer">${this._renderStickyNotes()}</g>
 
                 <g class="edges-layer">
-                    ${edges.map((edge: any, i: number) => this._renderEdge(edge, i, nodes))}
+                    ${edges.map((edge, i) => {
+                        if (!isPlainObject(edge)) {
+                            throw new Error('flows-flow-canvas: edge required');
+                        }
+                        return this._renderEdge(edge, i, nodes);
+                    })}
                     ${entryNode ? this._renderVirtualStart(entryNode) : ''}
                     ${terminalEnds.map(({ nodeId, node, outPort }) => this._renderVirtualEnd(node, outPort, nodeId))}
                     ${this._connection
@@ -3986,7 +4239,13 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <g class="guides-layer">${this._renderSmartGuides()}</g>
 
                 <g class="nodes-layer">
-                    ${Object.entries(nodes).map(([id, node]) => this._renderNode(id, node, inDegrees.has(id) ? inDegrees.get(id) : 0))}
+                    ${Object.entries(nodes).map(([id, node]) => {
+                        if (!isPlainObject(node)) {
+                            throw new Error('flows-flow-canvas: node required');
+                        }
+                        const degree = inDegrees.get(id);
+                        return this._renderNode(id, node, typeof degree === 'number' ? degree : 0);
+                    })}
                 </g>
 
                 <g class="data-wires-layer">${dataWires.map((wire) => this._renderDataWire(wire, nodes))}</g>

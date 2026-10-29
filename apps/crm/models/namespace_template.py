@@ -51,13 +51,14 @@ class NamespaceTemplate(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def page_for_company(
+    async def page_for_company_by_created_at_and_template_id_desc(
         cls,
         company_id: str,
         *,
         limit: int,
         offset: int,
     ) -> OffsetPage[NamespaceTemplate]:
+        """Страница шаблонов компании, ORDER BY created_at DESC, template_id DESC. limit < 1 и offset < 0 — ValueError."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         if offset < 0:

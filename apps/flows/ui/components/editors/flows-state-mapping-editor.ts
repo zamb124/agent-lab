@@ -18,7 +18,34 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
-function _parseInputSource(raw: any, allowPlatform: any) {
+type MappingSourceType = 'state' | 'var' | 'const' | 'platform';
+
+interface InputMappingRow {
+    param: string;
+    sourceType: MappingSourceType;
+    sourcePath: string;
+}
+
+interface OutputMappingRow {
+    resultKey: string;
+    stateField: string;
+}
+
+type MappingRow = InputMappingRow | OutputMappingRow;
+
+function isMappingSourceType(value: unknown): value is MappingSourceType {
+    return value === 'state' || value === 'var' || value === 'const' || value === 'platform';
+}
+
+function isInputMappingRow(row: MappingRow): row is InputMappingRow {
+    return 'param' in row;
+}
+
+function isOutputMappingRow(row: MappingRow): row is OutputMappingRow {
+    return 'resultKey' in row;
+}
+
+function _parseInputSource(raw: unknown, allowPlatform: boolean): { sourceType: MappingSourceType; sourcePath: string } {
     const s = String(raw);
     if (s === '@state') {
         return { sourceType: 'const', sourcePath: '@state' };
@@ -35,18 +62,18 @@ function _parseInputSource(raw: any, allowPlatform: any) {
     return { sourceType: 'const', sourcePath: s };
 }
 
-function _buildInputSource(sourceType: any, sourcePath: any) {
-    const p = typeof sourcePath === 'string' ? sourcePath : '';
+function _buildInputSource(sourceType: unknown, sourcePath: unknown): string {
+    const path = typeof sourcePath === 'string' ? sourcePath : '';
     if (sourceType === 'state') {
-        return `@state:${p}`;
+        return `@state:${path}`;
     }
     if (sourceType === 'var') {
-        return `@var:${p}`;
+        return `@var:${path}`;
     }
     if (sourceType === 'platform') {
-        return `@platform:${p}`;
+        return `@platform:${path}`;
     }
-    return p;
+    return path;
 }
 
 export class FlowsStateMappingEditor extends PlatformElement {
@@ -68,15 +95,15 @@ export class FlowsStateMappingEditor extends PlatformElement {
         _rows: { state: true },
     }
     declare syncKey: string;
-    declare mapping: Record<string, any> | null;
+    declare mapping: Record<string, unknown> | null;
     declare kind: string;
     declare title: string;
     declare allowPlatform: boolean;
-    declare stateSuggestions: any[];
-    declare varSuggestions: any[];
-    declare resultSuggestions: any[];
-    declare platformSuggestions: any[];
-    declare _rows: any[];
+    declare stateSuggestions: string[];
+    declare varSuggestions: string[];
+    declare resultSuggestions: string[];
+    declare platformSuggestions: string[];
+    declare _rows: MappingRow[];
 ;
 
     static override styles: CSSResultGroup = [
@@ -205,50 +232,57 @@ export class FlowsStateMappingEditor extends PlatformElement {
     }
 
     _syncRowsFromMapping() {
-        const m = this.mapping;
-        this._rows = [];
-        if (!m || typeof m !== 'object') {
+        const mapping = this.mapping;
+        const rows: MappingRow[] = [];
+        if (!mapping || typeof mapping !== 'object') {
+            this._rows = rows;
             return;
         }
         if (this._isOutput) {
-            for (const [k, v] of Object.entries(m)) {
-                (this._rows.push as any)({
-                    resultKey: k,
-                    stateField: String(v),
+            for (const [resultKey, stateField] of Object.entries(mapping)) {
+                rows.push({
+                    resultKey,
+                    stateField: String(stateField),
                 });
             }
         } else {
-            for (const [param, source] of Object.entries(m)) {
+            for (const [param, source] of Object.entries(mapping)) {
                 const parsed = _parseInputSource(source, this.allowPlatform === true);
-                (this._rows.push as any)({
+                rows.push({
                     param,
                     sourceType: parsed.sourceType,
                     sourcePath: parsed.sourcePath,
                 });
             }
         }
+        this._rows = rows;
     }
 
-    _buildMappingFromRows() {
+    _buildMappingFromRows(): Record<string, string> {
+        const mapping: Record<string, string> = {};
         if (this._isOutput) {
-            const mapping = {};
-            for (const r of (this._rows as any)) {
-                const a = typeof r.resultKey === 'string' ? r.resultKey.trim() : '';
-                const b = typeof r.stateField === 'string' ? r.stateField.trim() : '';
-                if (a.length === 0 || b.length === 0) {
+            for (const row of this._rows) {
+                if (!isOutputMappingRow(row)) {
+                    throw new Error('flows-state-mapping-editor: output row required');
+                }
+                const resultKey = row.resultKey.trim();
+                const stateField = row.stateField.trim();
+                if (resultKey.length === 0 || stateField.length === 0) {
                     continue;
                 }
-                (mapping as any)[a] = b;
+                mapping[resultKey] = stateField;
             }
             return mapping;
         }
-        const mapping = {};
-        for (const r of (this._rows as any)) {
-            const param = typeof r.param === 'string' ? r.param.trim() : '';
+        for (const row of this._rows) {
+            if (!isInputMappingRow(row)) {
+                throw new Error('flows-state-mapping-editor: input row required');
+            }
+            const param = row.param.trim();
             if (param.length === 0) {
                 continue;
             }
-            (mapping as any)[param] = _buildInputSource(r.sourceType, r.sourcePath);
+            mapping[param] = _buildInputSource(row.sourceType, row.sourcePath);
         }
         return mapping;
     }
@@ -277,40 +311,63 @@ export class FlowsStateMappingEditor extends PlatformElement {
     }
 
     _removeRow(idx: number) {
-        this._rows = (this._rows.filter as any)((_: any, i: number) => i !== idx);
+        this._rows = this._rows.filter((_, i) => i !== idx);
         this._emitChange();
     }
 
-    _updateInputRow(idx: number, patch: any) {
-        this._rows = (this._rows.map as any)((r: any, i: number) => (i === idx ? { ...r, ...patch } : r));
+    _updateInputRow(idx: number, patch: Partial<InputMappingRow>) {
+        this._rows = this._rows.map((row, i) => {
+            if (i !== idx) {
+                return row;
+            }
+            if (!isInputMappingRow(row)) {
+                throw new Error('flows-state-mapping-editor: input row required');
+            }
+            return { ...row, ...patch };
+        });
         this._emitChange();
     }
 
-    _updateOutputRow(idx: number, patch: any) {
-        this._rows = (this._rows.map as any)((r: any, i: number) => (i === idx ? { ...r, ...patch } : r));
+    _updateOutputRow(idx: number, patch: Partial<OutputMappingRow>) {
+        this._rows = this._rows.map((row, i) => {
+            if (i !== idx) {
+                return row;
+            }
+            if (!isOutputMappingRow(row)) {
+                throw new Error('flows-state-mapping-editor: output row required');
+            }
+            return { ...row, ...patch };
+        });
         this._emitChange();
     }
 
-    _suggestionsForInputSource(sourceType: any) {
+    _suggestionsForInputSource(sourceType: unknown): string[] {
         if (sourceType === 'var') {
-            return Array.isArray(this.varSuggestions) ? this.varSuggestions : [];
+            return this.varSuggestions;
         }
         if (sourceType === 'state') {
-            return Array.isArray(this.stateSuggestions) ? this.stateSuggestions : [];
+            return this.stateSuggestions;
         }
         if (sourceType === 'platform') {
-            return Array.isArray(this.platformSuggestions) ? this.platformSuggestions : [];
+            return this.platformSuggestions;
         }
         return [];
     }
 
-    _normalizedSuggestions(suggestions: any) {
-        return Array.isArray(suggestions)
-            ? suggestions.filter((item) => typeof item === 'string' && item.length > 0).slice(0, 120)
-            : [];
+    _normalizedSuggestions(suggestions: readonly unknown[]): string[] {
+        const values: string[] = [];
+        for (const item of suggestions) {
+            if (typeof item === 'string' && item.length > 0) {
+                values.push(item);
+            }
+            if (values.length === 120) {
+                break;
+            }
+        }
+        return values;
     }
 
-    _renderInputText(value: unknown, suggestions: any, onInput: any, placeholder = '') {
+    _renderInputText(value: unknown, suggestions: readonly unknown[], onInput: (value: string) => void, placeholder = '') {
         const values = this._normalizedSuggestions(suggestions);
         return html`
             <platform-field
@@ -320,7 +377,13 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 .value=${typeof value === 'string' ? value : ''}
                 .placeholder=${placeholder}
                 .suggestions=${values}
-                @change=${(e: CustomEvent) => onInput(typeof e.detail.value === 'string' ? e.detail.value : '')}
+                @change=${(e: CustomEvent) => {
+                    const next = e.detail.value;
+                    if (typeof next !== 'string') {
+                        throw new Error('flows-state-mapping-editor: field value required');
+                    }
+                    onInput(next);
+                }}
             ></platform-field>
         `;
     }
@@ -357,11 +420,11 @@ export class FlowsStateMappingEditor extends PlatformElement {
         return options;
     }
 
-    _renderSourceTypeSwitch(value: unknown, onChange: any) {
-        const allowed = this.allowPlatform === true
+    _renderSourceTypeSwitch(value: unknown, onChange: (sourceType: MappingSourceType) => void) {
+        const allowed: MappingSourceType[] = this.allowPlatform === true
             ? ['state', 'var', 'const', 'platform']
             : ['state', 'var', 'const'];
-        const current = allowed.includes(value as string) ? value : 'state';
+        const current = isMappingSourceType(value) && allowed.includes(value) ? value : 'state';
         const items = this._sourceTypeOptions().map((option) => ({
             value: option.value,
             icon: option.icon,
@@ -375,14 +438,20 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 .value=${current}
                 .items=${items}
                 aria-label=${this.t('state_mapping_editor.col_type')}
-                @change=${(e: CustomEvent) => onChange(e.detail.value)}
+                @change=${(e: CustomEvent) => {
+                    const next = e.detail.value;
+                    if (!isMappingSourceType(next)) {
+                        throw new Error('flows-state-mapping-editor: source type required');
+                    }
+                    onChange(next);
+                }}
             ></platform-segmented-control>
         `;
     }
 
     override render(): TemplateResult {
         const isOut = this._isOutput;
-        const empty = (this._rows.length as any) === 0;
+        const empty = this._rows.length === 0;
         return html`
             ${this.title
                 ? html`<div class="title" style="margin-bottom: var(--space-2); font-weight: var(--font-medium)">${this.title}</div>`
@@ -424,19 +493,23 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 : ''}
             <div class="map-wrap">
                 ${isOut
-                    ? (this._rows.map as any)((r: any, i: number) => html`
+                    ? this._rows.map((row, i) => {
+                        if (!isOutputMappingRow(row)) {
+                            throw new Error('flows-state-mapping-editor: output row required');
+                        }
+                        return html`
                         <div class="map-row output-grid">
                             ${this._renderInputText(
-                                r.resultKey,
+                                row.resultKey,
                                 this.resultSuggestions,
-                                (value: unknown) => this._updateOutputRow(i, { resultKey: value }),
+                                (value: string) => this._updateOutputRow(i, { resultKey: value }),
                                 this.t('state_mapping_editor.placeholder_result_key'),
                             )}
                             <span class="arrow" title="">→</span>
                             ${this._renderInputText(
-                                r.stateField,
+                                row.stateField,
                                 this.stateSuggestions,
-                                (value: unknown) => this._updateOutputRow(i, { stateField: value }),
+                                (value: string) => this._updateOutputRow(i, { stateField: value }),
                                 this.t('state_mapping_editor.placeholder_state_field'),
                             )}
                             <platform-button
@@ -450,29 +523,40 @@ export class FlowsStateMappingEditor extends PlatformElement {
                                 <platform-icon name="close" size="14"></platform-icon>
                             </platform-button>
                         </div>
-                    `)
-                    : (this._rows.map as any)((r: any, i: number) => html`
+                    `;
+                    })
+                    : this._rows.map((row, i) => {
+                        if (!isInputMappingRow(row)) {
+                            throw new Error('flows-state-mapping-editor: input row required');
+                        }
+                        return html`
                         <div class="map-row input-grid">
                             ${this._renderInputText(
-                                r.sourcePath,
-                                this._suggestionsForInputSource(r.sourceType),
-                                (value: unknown) => this._updateInputRow(i, { sourcePath: value }),
-                                r.sourceType === 'platform'
+                                row.sourcePath,
+                                this._suggestionsForInputSource(row.sourceType),
+                                (value: string) => this._updateInputRow(i, { sourcePath: value }),
+                                row.sourceType === 'platform'
                                     ? this.t('state_mapping_editor.placeholder_platform_key')
                                     : this.t('state_mapping_editor.placeholder_source_path'),
                             )}
                             <span class="sep" aria-hidden="true">|</span>
                             ${this._renderSourceTypeSwitch(
-                                r.sourceType,
-                                (sourceType: any) => this._updateInputRow(i, { sourceType }),
+                                row.sourceType,
+                                (sourceType: MappingSourceType) => this._updateInputRow(i, { sourceType }),
                             )}
                             <span class="arrow" aria-hidden="true">→</span>
                             <platform-field
                                 type="string"
                                 mode="edit"
                                 label=""
-                                .value=${r.param}
-                                @change=${(e: CustomEvent) => this._updateInputRow(i, { param: typeof e.detail.value === 'string' ? e.detail.value : '' })}
+                                .value=${row.param}
+                                @change=${(e: CustomEvent) => {
+                                    const next = e.detail.value;
+                                    if (typeof next !== 'string') {
+                                        throw new Error('flows-state-mapping-editor: parameter required');
+                                    }
+                                    this._updateInputRow(i, { param: next });
+                                }}
                             ></platform-field>
                             <platform-button
                                 variant="ghost"
@@ -485,7 +569,8 @@ export class FlowsStateMappingEditor extends PlatformElement {
                                 <platform-icon name="close" size="14"></platform-icon>
                             </platform-button>
                         </div>
-                    `)}
+                    `;
+                    })}
             </div>
         `;
     }

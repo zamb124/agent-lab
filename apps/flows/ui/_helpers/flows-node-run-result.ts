@@ -25,45 +25,35 @@ export const CANVAS_RUN_RESULT_VALUE_MAX = 48;
 export const CANVAS_RUN_RESULT_DIFF_PREVIEW_MAX = 48;
 export const CANVAS_RUN_RESULT_EXPANDED_DIFF_LINES = 8;
 
-/**
- * @typedef {(key: string, params?: Record<string, string>) => string} CanvasRunResultTranslate
- */
+type CanvasRunResultTranslate = (key: string, params?: Record<string, string>) => string;
 
-/**
- * @typedef {'null' | 'empty' | 'boolean' | 'number' | 'string' | 'markdown' | 'json_string' | 'status_map' | 'array' | 'object'} NodeRunValueKind
- */
+type NodeRunValueKind = 'null' | 'empty' | 'boolean' | 'number' | 'string' | 'markdown' | 'json_string' | 'status_map' | 'array' | 'object';
 
-/**
- * @typedef {{
- *   kind: NodeRunValueKind,
- *   preview: string,
- *   parsed: unknown,
- * }} NodeRunValueClassification
- */
+interface NodeRunValueClassification {
+    kind: NodeRunValueKind;
+    preview: string;
+    parsed: unknown;
+}
 
-/**
- * @typedef {{
- *   path: string,
- *   changeType: 'added' | 'changed' | 'removed',
- *   badge: string,
- *   badgeLabel: string,
- *   label: string,
- *   detail: string,
- *   valueKind: NodeRunValueKind,
- *   typeLabel: string,
- * }} NodeRunChangeRow
- */
+interface NodeRunChangeRow {
+    path: string;
+    changeType: 'added' | 'changed' | 'removed';
+    badge: string;
+    badgeLabel: string;
+    label: string;
+    detail: string;
+    valueKind: NodeRunValueKind;
+    typeLabel: string;
+}
 
-/**
- * @typedef {{
- *   headline: string,
- *   changeRows: NodeRunChangeRow[],
- *   omittedCount: number,
- *   hasMeta: boolean,
- * }} NodeRunViewModel
- */
+interface NodeRunViewModel {
+    headline: string;
+    changeRows: NodeRunChangeRow[];
+    omittedCount: number;
+    hasMeta: boolean;
+}
 
-const DEFAULT_I18N = Object.freeze({
+const DEFAULT_I18N: Record<string, string> = Object.freeze({
     'canvas_run_result.change_added': 'Added',
     'canvas_run_result.change_changed': 'Changed',
     'canvas_run_result.change_removed': 'Removed',
@@ -91,20 +81,20 @@ const DEFAULT_I18N = Object.freeze({
     'canvas_run_result.more_changes': '+{{count}} more',
 });
 
-/**
- * @param {CanvasRunResultTranslate | undefined} t
- * @returns {CanvasRunResultTranslate}
- */
-function _resolveTranslate(t: any) {
-    if (typeof t === 'function') {
-        return t;
+function isCanvasRunResultTranslate(value: unknown): value is CanvasRunResultTranslate {
+    return typeof value === 'function';
+}
+
+function _resolveTranslate(translate: unknown): CanvasRunResultTranslate {
+    if (isCanvasRunResultTranslate(translate)) {
+        return translate;
     }
-    return (key: string, params: any) => {
-        let text = (DEFAULT_I18N as any)[key];
+    return (key, params) => {
+        let text = DEFAULT_I18N[key];
         if (typeof text !== 'string') {
             throw new Error(`flows-node-run-result: missing default i18n key ${key}`);
         }
-        if (params) {
+        if (params !== undefined) {
             for (const [paramKey, paramValue] of Object.entries(params)) {
                 text = text.replace(`{{${paramKey}}}`, paramValue);
             }
@@ -127,7 +117,7 @@ function _isStatusEntry(value: unknown): value is Record<string, unknown> {
     if (!_isPlainObject(value)) {
         return false;
     }
-    return 'ok' in (value as any);
+    return 'ok' in value;
 }
 
 /**
@@ -169,11 +159,10 @@ function _formatStatusMap(value: Record<string, unknown>) {
         if (!_isStatusEntry(entry)) {
             continue;
         }
-        const statusEntry = /** @type {Record<string, unknown>} */ (entry);
-        const okValue = (statusEntry as any).ok;
+        const okValue = entry.ok;
         const statusText = okValue === true ? 'ok' : 'fail';
         let part = `${key}: ${statusText}`;
-        const latencyMs = (statusEntry as any).latency_ms;
+        const latencyMs = entry.latency_ms;
         if (typeof latencyMs === 'number' && Number.isFinite(latencyMs)) {
             part += ` · ${String(Math.round(latencyMs))} ms`;
         }
@@ -182,11 +171,7 @@ function _formatStatusMap(value: Record<string, unknown>) {
     return parts.join(', ');
 }
 
-/**
- * @param {string} text
- * @returns {{ ok: true, value: object } | { ok: false }}
- */
-function _parseJsonContainer(text: any) {
+function _parseJsonContainer(text: string): { ok: true; value: unknown } | { ok: false } {
     const trimmed = text.trim();
     if (trimmed.length === 0) {
         return { ok: false };
@@ -196,7 +181,7 @@ function _parseJsonContainer(text: any) {
         return { ok: false };
     }
     try {
-        const parsed = JSON.parse(trimmed);
+        const parsed: unknown = JSON.parse(trimmed);
         if (parsed !== null && typeof parsed === 'object') {
             return { ok: true, value: parsed };
         }
@@ -209,10 +194,7 @@ function _parseJsonContainer(text: any) {
     }
 }
 
-/**
- * @param {string} text
- */
-function _looksLikeMarkdown(text: any) {
+function _looksLikeMarkdown(text: string) {
     if (/^#{1,6}\s+\S/m.test(text)) {
         return true;
     }
@@ -225,11 +207,7 @@ function _looksLikeMarkdown(text: any) {
     return false;
 }
 
-/**
- * @param {unknown} value
- * @returns {NodeRunValueClassification}
- */
-export function classifyNodeRunValue(value: unknown) {
+export function classifyNodeRunValue(value: unknown): NodeRunValueClassification {
     if (value === undefined) {
         throw new Error('classifyNodeRunValue: value is undefined');
     }
@@ -267,15 +245,8 @@ export function classifyNodeRunValue(value: unknown) {
     throw new Error(`classifyNodeRunValue: unsupported type ${typeof value}`);
 }
 
-/**
- * @param {NodeRunValueClassification} classified
- * @param {CanvasRunResultTranslate | undefined} t
- */
-export function nodeRunValueKindLabel(classified: any, t: any) {
-    if (classified === null || typeof classified !== 'object') {
-        throw new Error('nodeRunValueKindLabel: classified is required');
-    }
-    t = _resolveTranslate(t);
+export function nodeRunValueKindLabel(classified: NodeRunValueClassification, translate: unknown) {
+    const t = _resolveTranslate(translate);
     const kind = classified.kind;
     if (kind === 'null') {
         return t('canvas_run_result.type_null');
@@ -311,18 +282,14 @@ export function nodeRunValueKindLabel(classified: any, t: any) {
         if (!_isPlainObject(classified.parsed)) {
             throw new Error('nodeRunValueKindLabel: object classification requires object parsed');
         }
-        const count = Object.keys(/** @type {Record<string, unknown>} */ (classified.parsed)).length;
+        const count = Object.keys(classified.parsed).length;
         return t('canvas_run_result.type_object', { count: String(count) });
     }
     throw new Error(`nodeRunValueKindLabel: unknown kind ${kind}`);
 }
 
-/**
- * @param {NodeRunValueClassification} classified
- * @param {CanvasRunResultTranslate} t
- * @param {number} maxLen
- */
-function _formatClassifiedCanvasValue(classified: any, t: any, maxLen: any) {
+function _formatClassifiedCanvasValue(classified: NodeRunValueClassification, translate: unknown, maxLen: number) {
+    const t = _resolveTranslate(translate);
     if (classified.kind === 'null') {
         return t('canvas_run_result.value_null');
     }
@@ -344,13 +311,8 @@ function _formatClassifiedCanvasValue(classified: any, t: any, maxLen: any) {
     throw new Error(`_formatClassifiedCanvasValue: unknown kind ${classified.kind}`);
 }
 
-/**
- * @param {unknown} value
- * @param {CanvasRunResultTranslate} t
- * @param {number} maxLen
- */
-export function formatCanvasValue(value: unknown, t: any, maxLen = CANVAS_RUN_RESULT_VALUE_MAX) {
-    t = _resolveTranslate(t);
+export function formatCanvasValue(value: unknown, translate: unknown, maxLen = CANVAS_RUN_RESULT_VALUE_MAX) {
+    const t = _resolveTranslate(translate);
     if (value === undefined) {
         throw new Error('formatCanvasValue: value is undefined');
     }
@@ -379,10 +341,10 @@ export function formatCanvasValue(value: unknown, t: any, maxLen = CANVAS_RUN_RE
         return t(key, { count });
     }
     if (_isStatusMap(value)) {
-        return truncateForCanvas(_formatStatusMap(/** @type {Record<string, unknown>} */ (value)), maxLen);
+        return truncateForCanvas(_formatStatusMap(value), maxLen);
     }
     if (_isPlainObject(value)) {
-        const entries = Object.entries(/** @type {Record<string, unknown>} */ (value));
+        const entries = Object.entries(value);
         const count = String(entries.length);
         const fieldsKey = entries.length === 1
             ? 'canvas_run_result.value_object_fields_one'
@@ -441,12 +403,7 @@ export function serializeNodeRunValue(value: unknown) {
     throw new Error(`serializeNodeRunValue: unknown kind ${classified.kind}`);
 }
 
-/**
- * @param {string} parentPath
- * @param {string | number} key
- * @param {boolean} isIndex
- */
-export function jsonTreeChildPath(parentPath: any, key: string | number, isIndex: any) {
+export function jsonTreeChildPath(parentPath: unknown, key: unknown, isIndex: unknown) {
     if (typeof parentPath !== 'string') {
         throw new Error('jsonTreeChildPath: parentPath must be a string');
     }
@@ -481,11 +438,7 @@ export function formatDiffPathLabel(path: string) {
     return path;
 }
 
-/**
- * @param {string} path
- * @param {string} primaryField
- */
-function _diffPathScore(path: string, primaryField: any) {
+function _diffPathScore(path: string, primaryField: string) {
     if (primaryField.length > 0) {
         if (path === primaryField || path.startsWith(`${primaryField}.`)) {
             return 0;
@@ -497,14 +450,17 @@ function _diffPathScore(path: string, primaryField: any) {
     return 2;
 }
 
-/**
- * @param {unknown[]} diff
- * @param {string} primaryField
- */
-function _sortDiffForDisplay(diff: any, primaryField: any) {
+function _diffEntryPath(entry: unknown): string {
+    if (!_isPlainObject(entry) || typeof entry.path !== 'string') {
+        throw new Error('node run result: diff entry path must be a string');
+    }
+    return entry.path;
+}
+
+function _sortDiffForDisplay(diff: unknown[], primaryField: string) {
     return [...diff].sort((left, right) => {
-        const leftPath = /** @type {{ path: string }} */ (left).path;
-        const rightPath = /** @type {{ path: string }} */ (right).path;
+        const leftPath = _diffEntryPath(left);
+        const rightPath = _diffEntryPath(right);
         const leftScore = _diffPathScore(leftPath, primaryField);
         const rightScore = _diffPathScore(rightPath, primaryField);
         if (leftScore !== rightScore) {
@@ -514,18 +470,14 @@ function _sortDiffForDisplay(diff: any, primaryField: any) {
     });
 }
 
-/**
- * @param {unknown} diffEntry
- * @param {'new' | 'old'} side
- */
-export function resolveInspectValue(diffEntry: any, side: any) {
-    if (diffEntry === null || typeof diffEntry !== 'object' || Array.isArray(diffEntry)) {
+export function resolveInspectValue(diffEntry: unknown, side: unknown) {
+    if (!_isPlainObject(diffEntry)) {
         throw new Error('resolveInspectValue: diff entry must be an object');
     }
     if (side !== 'new' && side !== 'old') {
         throw new Error('resolveInspectValue: side must be new or old');
     }
-    const entry = /** @type {Record<string, unknown>} */ (diffEntry);
+    const entry = diffEntry;
     if (side === 'new') {
         if (!('new_value' in entry)) {
             throw new Error('resolveInspectValue: new_value is required');
@@ -538,16 +490,11 @@ export function resolveInspectValue(diffEntry: any, side: any) {
     return entry.old_value;
 }
 
-/**
- * @param {unknown} diffEntry
- * @param {CanvasRunResultTranslate} t
- * @returns {NodeRunChangeRow}
- */
-function _buildChangeRow(diffEntry: any, t: any) {
-    if (diffEntry === null || typeof diffEntry !== 'object' || Array.isArray(diffEntry)) {
+function _buildChangeRow(diffEntry: unknown, translate: unknown): NodeRunChangeRow {
+    if (!_isPlainObject(diffEntry)) {
         throw new Error('buildNodeRunChangeRows: diff entry must be an object');
     }
-    const entry = /** @type {Record<string, unknown>} */ (diffEntry);
+    const entry = diffEntry;
     const path = entry.path;
     const changeType = entry.change_type;
     if (typeof path !== 'string') {
@@ -562,7 +509,7 @@ function _buildChangeRow(diffEntry: any, t: any) {
     if (!('new_value' in entry)) {
         throw new Error('buildNodeRunChangeRows: diff entry.new_value is required');
     }
-    t = _resolveTranslate(t);
+    const t = _resolveTranslate(translate);
     let badge = '~';
     let badgeLabel = t('canvas_run_result.change_changed');
     if (changeType === 'added') {
@@ -597,14 +544,8 @@ function _buildChangeRow(diffEntry: any, t: any) {
     };
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {CanvasRunResultTranslate | undefined} t
- * @param {{ limit?: number }} [options]
- * @returns {NodeRunChangeRow[]}
- */
-export function buildNodeRunChangeRows(result: any, t: any, options?: any) {
-    if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+export function buildNodeRunChangeRows(result: unknown, translate: unknown, options?: unknown): NodeRunChangeRow[] {
+    if (!_isPlainObject(result)) {
         throw new Error('buildNodeRunChangeRows: result must be an object');
     }
     const diff = result.diff;
@@ -615,7 +556,7 @@ export function buildNodeRunChangeRows(result: any, t: any, options?: any) {
     const sorted = _sortDiffForDisplay(diff, primaryField);
     let limit = sorted.length;
     if (options !== undefined) {
-        if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        if (!_isPlainObject(options)) {
             throw new Error('buildNodeRunChangeRows: options must be an object');
         }
         if ('limit' in options) {
@@ -626,57 +567,45 @@ export function buildNodeRunChangeRows(result: any, t: any, options?: any) {
             limit = Math.floor(rawLimit);
         }
     }
-    const rows = [];
+    const rows: NodeRunChangeRow[] = [];
     for (let i = 0; i < sorted.length && i < limit; i += 1) {
-        rows.push(_buildChangeRow(sorted[i], t));
+        const entry = sorted[i];
+        if (entry === undefined) {
+            throw new Error('node run result: diff entry missing');
+        }
+        rows.push(_buildChangeRow(entry, translate));
     }
     return rows;
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {CanvasRunResultTranslate} t
- */
-function _findDiffValue(result: any, pathPrefix: any) {
+function _findDiffValue(result: Record<string, unknown>, pathPrefix: string): unknown {
     const diff = result.diff;
     if (!Array.isArray(diff)) {
         return null;
     }
-    for (let i = 0; i < diff.length; i += 1) {
-        const entry = diff[i];
-        if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+    for (const entry of diff) {
+        if (!_isPlainObject(entry) || typeof entry.path !== 'string') {
             continue;
         }
-        const path = /** @type {{ path?: unknown }} */ (entry).path;
-        if (typeof path !== 'string') {
-            continue;
-        }
-        if (path === pathPrefix || path.startsWith(`${pathPrefix}.`)) {
+        if (entry.path === pathPrefix || entry.path.startsWith(`${pathPrefix}.`)) {
             if ('new_value' in entry) {
-                return /** @type {{ new_value: unknown }} */ (entry).new_value;
+                return entry.new_value;
             }
         }
     }
     return null;
 }
 
-/**
- * @param {string} preview
- */
-function _looksLikeRawJson(preview: any) {
+function _looksLikeRawJson(preview: string) {
     const trimmed = preview.trim();
     return trimmed.startsWith('{') || trimmed.startsWith('[');
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {CanvasRunResultTranslate | undefined} t
- */
-export function buildNodeRunHeadline(result: any, t: any) {
-    if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+export function buildNodeRunHeadline(result: unknown, translate: unknown) {
+    if (!_isPlainObject(result)) {
         throw new Error('buildNodeRunHeadline: result must be an object');
     }
-    t = _resolveTranslate(t);
+    const t = _resolveTranslate(translate);
     const kind = result.kind;
     if (kind === 'error') {
         const errorText = result.error;
@@ -783,19 +712,17 @@ export function buildNodeRunHeadline(result: any, t: any) {
         if (first === undefined) {
             throw new Error('node run result: change row missing');
         }
-        return truncateForCanvas(`${first.label!}: ${first.detail!}`, CANVAS_RUN_RESULT_PRIMARY_MAX);
+        return truncateForCanvas(`${first.label}: ${first.detail}`, CANVAS_RUN_RESULT_PRIMARY_MAX);
     }
 
     return '';
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {CanvasRunResultTranslate | undefined} t
- * @returns {NodeRunViewModel}
- */
-export function buildNodeRunViewModel(result: any, t: any) {
-    t = _resolveTranslate(t);
+export function buildNodeRunViewModel(result: unknown, translate: unknown): NodeRunViewModel {
+    if (!_isPlainObject(result)) {
+        throw new Error('buildNodeRunViewModel: result must be an object');
+    }
+    const t = _resolveTranslate(translate);
     const headline = buildNodeRunHeadline(result, t);
     const allRows = result.kind === 'ok' ? buildNodeRunChangeRows(result, t) : [];
     const limit = CANVAS_RUN_RESULT_EXPANDED_DIFF_LINES;
@@ -817,15 +744,11 @@ export function buildNodeRunViewModel(result: any, t: any) {
     };
 }
 
-/**
- * @param {string} text
- * @param {number} maxLen
- */
-export function truncateForCanvas(text: any, maxLen: any) {
+export function truncateForCanvas(text: unknown, maxLen: unknown) {
     if (typeof text !== 'string') {
         throw new Error('truncateForCanvas: text must be a string');
     }
-    if (!Number.isFinite(maxLen) || maxLen <= 0) {
+    if (typeof maxLen !== 'number' || !Number.isFinite(maxLen) || maxLen <= 0) {
         throw new Error('truncateForCanvas: maxLen must be a positive number');
     }
     if (text.length <= maxLen) {
@@ -837,10 +760,7 @@ export function truncateForCanvas(text: any, maxLen: any) {
     return `${text.slice(0, maxLen - 1)}…`;
 }
 
-/**
- * @param {unknown[]} results
- */
-export function pickLatestNodeRunResult(results: any) {
+export function pickLatestNodeRunResult(results: unknown): Record<string, unknown> | null {
     if (!Array.isArray(results)) {
         throw new Error('pickLatestNodeRunResult: results must be an array');
     }
@@ -848,17 +768,13 @@ export function pickLatestNodeRunResult(results: any) {
         return null;
     }
     const last = results[results.length - 1];
-    if (last === null || typeof last !== 'object' || Array.isArray(last)) {
+    if (!_isPlainObject(last)) {
         throw new Error('pickLatestNodeRunResult: last result must be an object');
     }
     return last;
 }
 
-/**
- * @param {unknown[]} results
- * @param {number} runIndex
- */
-export function findNodeRunResult(results: any, runIndex: any) {
+export function findNodeRunResult(results: unknown, runIndex: unknown): Record<string, unknown> {
     if (!Array.isArray(results) || results.length === 0) {
         throw new Error('findNodeRunResult: results must be a non-empty array');
     }
@@ -868,10 +784,10 @@ export function findNodeRunResult(results: any, runIndex: any) {
     const index = Math.floor(runIndex);
     for (let i = 0; i < results.length; i += 1) {
         const item = results[i];
-        if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+        if (!_isPlainObject(item)) {
             throw new Error('findNodeRunResult: result must be an object');
         }
-        const itemIndex = /** @type {{ run_index?: unknown }} */ (item).run_index;
+        const itemIndex = item.run_index;
         if (typeof itemIndex === 'number' && Number.isFinite(itemIndex) && Math.floor(itemIndex) === index) {
             return item;
         }
@@ -879,11 +795,10 @@ export function findNodeRunResult(results: any, runIndex: any) {
     throw new Error(`findNodeRunResult: no result for run_index ${String(index)}`);
 }
 
-/**
- * @param {unknown[]} results
- * @param {number} runIndex
- */
-export function isLatestNodeRun(results: any, runIndex: any) {
+export function isLatestNodeRun(results: unknown, runIndex: unknown) {
+    if (!Array.isArray(results)) {
+        throw new Error('isLatestNodeRun: results must be an array');
+    }
     const latest = pickLatestNodeRunResult(results);
     if (latest === null) {
         throw new Error('isLatestNodeRun: results must be non-empty');
@@ -897,19 +812,12 @@ export function isLatestNodeRun(results: any, runIndex: any) {
     return latestIndex === Math.floor(runIndex);
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {CanvasRunResultTranslate | undefined} t
- */
-export function buildNodeRunPrimaryLine(result: any, t: any) {
-    return buildNodeRunHeadline(result, t);
+export function buildNodeRunPrimaryLine(result: unknown, translate: unknown) {
+    return buildNodeRunHeadline(result, translate);
 }
 
-/**
- * @param {Record<string, unknown>} result
- */
-export function countNodeRunDiffChanges(result: any) {
-    if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+export function countNodeRunDiffChanges(result: unknown) {
+    if (!_isPlainObject(result)) {
         throw new Error('countNodeRunDiffChanges: result must be an object');
     }
     const diff = result.diff;
@@ -919,12 +827,8 @@ export function countNodeRunDiffChanges(result: any) {
     return diff.length;
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {string} path
- */
-export function findDiffEntryByPath(result: any, path: string) {
-    if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+export function findDiffEntryByPath(result: unknown, path: string): Record<string, unknown> {
+    if (!_isPlainObject(result)) {
         throw new Error('findDiffEntryByPath: result must be an object');
     }
     if (typeof path !== 'string' || path.length === 0) {
@@ -936,7 +840,7 @@ export function findDiffEntryByPath(result: any, path: string) {
     }
     for (let i = 0; i < diff.length; i += 1) {
         const entry = diff[i];
-        if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+        if (!_isPlainObject(entry)) {
             throw new Error('findDiffEntryByPath: diff entry must be an object');
         }
         if (entry.path === path) {
@@ -946,12 +850,8 @@ export function findDiffEntryByPath(result: any, path: string) {
     throw new Error(`findDiffEntryByPath: no diff entry for path ${path}`);
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {string} path
- */
-export function nodeRunDiffHasPath(result: any, path: string) {
-    if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+export function nodeRunDiffHasPath(result: unknown, path: string) {
+    if (!_isPlainObject(result)) {
         throw new Error('nodeRunDiffHasPath: result must be an object');
     }
     if (typeof path !== 'string' || path.length === 0) {
@@ -963,7 +863,7 @@ export function nodeRunDiffHasPath(result: any, path: string) {
     }
     for (let i = 0; i < diff.length; i += 1) {
         const entry = diff[i];
-        if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+        if (!_isPlainObject(entry)) {
             throw new Error('nodeRunDiffHasPath: diff entry must be an object');
         }
         if (entry.path === path) {
@@ -973,24 +873,15 @@ export function nodeRunDiffHasPath(result: any, path: string) {
     return false;
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {CanvasRunResultTranslate | undefined} t
- * @returns {string[]}
- */
-export function buildNodeRunDiffPreviewLines(result: any, t: any) {
-    const rows = buildNodeRunChangeRows(result, t, { limit: CANVAS_RUN_RESULT_EXPANDED_DIFF_LINES });
+export function buildNodeRunDiffPreviewLines(result: unknown, translate: unknown) {
+    const rows = buildNodeRunChangeRows(result, translate, { limit: CANVAS_RUN_RESULT_EXPANDED_DIFF_LINES });
     return rows.map((row) => truncateForCanvas(
         `${row.badge} ${row.label}  ${row.detail}`,
         CANVAS_RUN_RESULT_DIFF_PREVIEW_MAX,
     ));
 }
 
-/**
- * @param {string} text
- * @param {number} charsPerLine
- */
-function _estimateTextLineCount(text: any, charsPerLine: any) {
+function _estimateTextLineCount(text: string, charsPerLine: number) {
     if (text.length === 0) {
         return 0;
     }
@@ -1000,10 +891,7 @@ function _estimateTextLineCount(text: any, charsPerLine: any) {
     return Math.ceil(text.length / charsPerLine);
 }
 
-/**
- * @param {NodeRunChangeRow} row
- */
-function _estimateChangeRowHeight(row: any) {
+function _estimateChangeRowHeight(row: NodeRunChangeRow) {
     const labelLines = _estimateTextLineCount(row.label, CANVAS_RUN_RESULT_CHANGE_ROW_CHARS_PER_LINE);
     let bodyHeight = labelLines * CANVAS_RUN_RESULT_CHANGE_ROW_LABEL_LINE_H;
     const detailLines = _estimateTextLineCount(row.detail, CANVAS_RUN_RESULT_CHANGE_ROW_CHARS_PER_LINE);
@@ -1014,34 +902,26 @@ function _estimateChangeRowHeight(row: any) {
     return Math.max(CANVAS_RUN_RESULT_CHANGE_ROW_BADGE_H, bodyHeight);
 }
 
-/**
- * @param {NodeRunChangeRow[]} rows
- */
-function _estimateChangeListHeight(rows: Record<string, any>[]) {
+function _estimateChangeListHeight(rows: NodeRunChangeRow[]) {
     if (rows.length === 0) {
         return 0;
     }
     let height = CANVAS_RUN_RESULT_CHANGE_LIST_GAP;
-    for (let i = 0; i < rows.length; i += 1) {
-        height += _estimateChangeRowHeight(rows[i]);
+    for (const row of rows) {
+        height += _estimateChangeRowHeight(row);
     }
     height += (rows.length - 1) * CANVAS_RUN_RESULT_CHANGE_ROW_GAP;
     return height;
 }
 
-/**
- * @param {Record<string, unknown>} result
- * @param {boolean} expanded
- * @param {CanvasRunResultTranslate | undefined} t
- */
-export function getNodeRunResultPillHeight(result: any, expanded: any, t: any) {
+export function getNodeRunResultPillHeight(result: unknown, expanded: unknown, translate: unknown) {
     if (result === null || typeof result !== 'object' || Array.isArray(result)) {
         throw new Error('getNodeRunResultPillHeight: result must be an object');
     }
     if (typeof expanded !== 'boolean') {
         throw new Error('getNodeRunResultPillHeight: expanded must be a boolean');
     }
-    const viewModel = buildNodeRunViewModel(result, t);
+    const viewModel = buildNodeRunViewModel(result, translate);
     let height = CANVAS_RUN_RESULT_PILL_PAD_V + CANVAS_RUN_RESULT_BOTTOM_PAD;
     height += CANVAS_RUN_RESULT_HEADLINE_LINE_H * CANVAS_RUN_RESULT_HEADLINE_MAX_LINES;
     if (viewModel.hasMeta) {
@@ -1056,15 +936,11 @@ export function getNodeRunResultPillHeight(result: any, expanded: any, t: any) {
     return Math.max(CANVAS_RUN_RESULT_PILL_COLLAPSED_H, height);
 }
 
-/**
- * @param {string} nodeId
- * @param {number} runIndex
- */
-export function nodeRunResultExpandKey(nodeId: string, runIndex: any) {
+export function nodeRunResultExpandKey(nodeId: string, runIndex: unknown) {
     if (typeof nodeId !== 'string' || nodeId.length === 0) {
         throw new Error('nodeRunResultExpandKey: nodeId must be a non-empty string');
     }
-    if (!Number.isFinite(runIndex)) {
+    if (typeof runIndex !== 'number' || !Number.isFinite(runIndex)) {
         throw new Error('nodeRunResultExpandKey: runIndex must be a number');
     }
     return `${nodeId}:${String(Math.floor(runIndex))}`;

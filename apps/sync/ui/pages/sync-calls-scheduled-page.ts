@@ -3,9 +3,21 @@ import type {CSSResultGroup, TemplateResult} from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { resolveNonEmptyString } from '../_helpers/sync-id-resolvers.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/sync-chat-header.js';
+
+function linkRows(value: unknown[]): Record<string, unknown>[] {
+    const rows: Record<string, unknown>[] = [];
+    for (const row of value) {
+        if (!isPlainRecord(row)) {
+            throw new Error('sync-calls-scheduled-page: link must be an object');
+        }
+        rows.push(row);
+    }
+    return rows;
+}
 
 /**
  * sync-calls-scheduled-page — список запланированных встреч.
@@ -78,8 +90,11 @@ export class SyncCallsScheduledPage extends PlatformPage {
 
     _resolveItems() {
         const result = this._linksOp.lastResult;
-        if (Array.isArray(result)) return result as Record<string, unknown>[];
-        if (result && Array.isArray((result as { items?: unknown }).items)) return (result as { items: Record<string, unknown>[] }).items;
+        if (Array.isArray(result)) return linkRows(result);
+        if (isPlainRecord(result)) {
+            const items = result.items;
+            if (Array.isArray(items)) return linkRows(items);
+        }
         return [];
     }
 

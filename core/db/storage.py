@@ -85,13 +85,6 @@ class Storage:
                 "subdomain:",
                 "web_notification:",
                 "media_group:",
-                # Устройства и pairing ищутся по глобальному id до компании в контексте.
-                # company_id лежит в записи, а не в префиксе ключа.
-                "agent_pairing:",
-                "agent_device:",
-                "agent_tunnel_online:",
-                "agent_token_deny:",
-                "agent_token_jti_deny:",
                 # Маркер сида и дедуп email-триггера: company_id уже внутри ключа.
                 "flows:",
                 # Дедуп уведомлений и индекс вложений: компания и ящик уже внутри ключа.
@@ -184,7 +177,7 @@ class Storage:
         self, prefix: str, limit: int = 100, force_global: bool = False
     ) -> list[str]:
         final_prefix = self._company_key(prefix, force_global)
-        rows = await StorageEntry.by_key_prefix(
+        rows = await StorageEntry.list_unordered_by_key_prefix(
             final_prefix,
             alias=self._alias,
             limit=limit,
@@ -195,7 +188,7 @@ class Storage:
         self, prefix: str, limit: int = 1000, force_global: bool = False
     ) -> dict[str, str]:
         final_prefix = self._company_key(prefix, force_global)
-        rows = await StorageEntry.by_key_prefix(
+        rows = await StorageEntry.list_unordered_by_key_prefix(
             final_prefix,
             alias=self._alias,
             limit=limit,
@@ -223,7 +216,7 @@ class Storage:
         if limit < 1:
             raise ValueError("limit must be >= 1")
         final_prefix = self._company_key(prefix, force_global)
-        return await StorageEntry.list_by_prefix_json_text_equals(
+        return await StorageEntry.json_text_values_by_prefix_equals_created_at_asc_or_desc(
             final_prefix,
             field=field,
             equals=equals,
@@ -239,7 +232,7 @@ class Storage:
             return {}
         final_keys = [self._company_key(key, force_global) for key in keys]
         original_by_final = dict(zip(final_keys, keys, strict=True))
-        rows = await StorageEntry.by_keys(final_keys, alias=self._alias)
+        rows = await StorageEntry.list_unordered_by_keys(final_keys, alias=self._alias)
         return {
             original_by_final[row.key]: _encode_storage_value(row.value)
             for row in rows
@@ -277,7 +270,7 @@ class Storage:
         _require_storage_table(table_name)
         if offset < 0:
             raise ValueError("offset must be >= 0")
-        rows = await StorageEntry.by_key_prefix_updated(
+        rows = await StorageEntry.list_by_key_prefix_updated_at_desc(
             prefix,
             alias=self._alias,
             limit=limit,
@@ -293,7 +286,7 @@ class Storage:
         _require_storage_table(table_name)
         if len(keys) == 0:
             return {}
-        rows = await StorageEntry.by_keys(keys, alias=self._alias)
+        rows = await StorageEntry.list_unordered_by_keys(keys, alias=self._alias)
         return {row.key: _encode_storage_value(row.value) for row in rows}
 
 

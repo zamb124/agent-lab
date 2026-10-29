@@ -88,10 +88,10 @@ class StockResource(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_by_code_for_warehouse(
+    async def list_for_warehouse_by_code_asc(
         cls, company_id: str, warehouse_id: str
     ) -> list[Self]:
-        """Все ресурсы склада, ORDER BY code. Предела нет."""
+        """Все ресурсы склада, ORDER BY code ASC. Предела нет."""
         return await cls.objects.filter(
             company_id=company_id, warehouse_id=warehouse_id
         ).order_by("code").all()

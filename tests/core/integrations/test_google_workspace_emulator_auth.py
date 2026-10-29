@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import httpx
+import httpx2
 import pytest
 
 from apps.flows.di import FlowsDi
@@ -325,7 +325,7 @@ async def test_resolve_empty_raises_oauth_interrupt(
 
 @pytest.mark.asyncio
 async def test_google_workspace_authorize_returns_url(
-    flows_client: httpx.AsyncClient,
+    flows_client: httpx2.AsyncClient,
     auth_headers_system: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -344,7 +344,7 @@ async def test_google_workspace_authorize_returns_url(
 
 @pytest.mark.asyncio
 async def test_google_workspace_authorize_rejects_bad_return_path(
-    flows_client: httpx.AsyncClient,
+    flows_client: httpx2.AsyncClient,
     auth_headers_system: dict[str, str],
 ) -> None:
     resp = await flows_client.get(
@@ -357,7 +357,7 @@ async def test_google_workspace_authorize_rejects_bad_return_path(
 
 @pytest.mark.asyncio
 async def test_company_api_put_get_delete_and_system_put_forbidden(
-    flows_client: httpx.AsyncClient,
+    flows_client: httpx2.AsyncClient,
     auth_headers_system: dict[str, str],
     google_api_emulator: GoogleApiEmulatorHandle,
     unique_id: str,

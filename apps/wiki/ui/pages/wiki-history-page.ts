@@ -10,6 +10,13 @@ import type { PropertyValues } from '@platform/lib/lit-shim.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-user-chip.js';
 
 export interface WikiLineDiffRow {
     kind: 'same' | 'added' | 'removed';
@@ -22,12 +29,16 @@ interface WikiRevisionItem {
     created_at?: string | number | Date;
     [key: string]: unknown;
 }
-import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
-import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
-import '@platform/lib/components/glass-spinner.js';
-import '@platform/lib/components/platform-button.js';
-import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-user-chip.js';
+
+function isWikiRevisionItem(value: unknown): value is WikiRevisionItem {
+    return isPlainRecord(value);
+}
+
+function markdownField(value: unknown, key: string): string {
+    if (!isPlainRecord(value)) return '';
+    const field = value[key];
+    return typeof field === 'string' ? field : '';
+}
 
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
@@ -220,24 +231,32 @@ export class WikiHistoryPage extends PlatformPage {
     }
 
     private _revisionItems(): WikiRevisionItem[] {
-        const state = this._revisions.lastResult as { items?: unknown } | null;
+        const state = this._revisions.lastResult;
         if (state === null) {
             return [];
         }
-        if (typeof state !== 'object' || !Array.isArray(state.items)) {
+        if (!isPlainRecord(state)) {
             throw new Error('wiki revisions: lastResult.items required');
         }
-        return state.items as WikiRevisionItem[];
+        const items = state.items;
+        if (!Array.isArray(items)) {
+            throw new Error('wiki revisions: lastResult.items required');
+        }
+        const rows: WikiRevisionItem[] = [];
+        for (const item of items) {
+            if (!isWikiRevisionItem(item)) {
+                throw new Error('wiki revisions: revision must be an object');
+            }
+            rows.push(item);
+        }
+        return rows;
     }
 
     private async _selectRevision(revisionId: string): Promise<void> {
         this._selectedRevisionId = revisionId;
-        const revision = await this._revisionRead.run({ wiki_revision_id: revisionId }) as { text_markdown?: unknown } | null;
-        const current = this._markdown.lastResult as { markdown?: unknown } | null;
-        const currentText = current === null || typeof current.markdown !== 'string' ? '' : current.markdown;
-        const revisionText = revision !== null && typeof revision.text_markdown === 'string'
-            ? revision.text_markdown
-            : '';
+        const revision = await this._revisionRead.run({ wiki_revision_id: revisionId });
+        const currentText = markdownField(this._markdown.lastResult, 'markdown');
+        const revisionText = markdownField(revision, 'text_markdown');
         this._diffRows = buildLineDiff(revisionText, currentText);
     }
 

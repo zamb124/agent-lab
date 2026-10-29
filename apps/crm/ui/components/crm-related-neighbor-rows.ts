@@ -12,6 +12,7 @@ import type {
     PropertyDeclarations,
     TemplateResult,
 } from 'lit';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export class CRMRelatedNeighborRows extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -50,8 +51,13 @@ export class CRMRelatedNeighborRows extends PlatformElement {
 
     _thumbEntity(row: { otherEntity?: unknown; otherId?: unknown }): Record<string, any> {
         const other = row.otherEntity;
-        if (other !== null && other !== undefined && typeof other === 'object') {
-            return other as Record<string, any>;
+        if (other != null && typeof other === 'object') {
+            if (!isPlainRecord(other)) {
+                throw new Error('crm-related-neighbor-rows: otherEntity must be an object');
+            }
+            const entity: Record<string, any> = {};
+            for (const [key, field] of Object.entries(other)) entity[key] = field;
+            return entity;
         }
         return { entity_id: row.otherId as string, entity_type: '' };
     }
@@ -101,7 +107,11 @@ export class CRMRelatedNeighborRows extends PlatformElement {
         }
         return html`
             <div class="neighbor-rows">
-                ${(this.rows as Record<string, any>[]).map((row) => {
+                ${this.rows.map((raw) => {
+                    if (!isPlainRecord(raw)) {
+                        throw new Error('crm-related-neighbor-rows: row must be an object');
+                    }
+                    const row = raw;
                     if (!row || typeof row.relationshipId !== 'string' || row.relationshipId.length === 0) {
                         throw new Error('crm-related-neighbor-rows: row.relationshipId required');
                     }

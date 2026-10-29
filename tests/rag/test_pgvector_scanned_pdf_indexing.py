@@ -54,7 +54,7 @@ async def test_pgvector_indexes_scanned_pdf_with_hybrid_ocr(
     chunk_count = await _vector_chunk_count(ns_name, rag_company_id)
     assert chunk_count > 0
 
-    rows = await VectorDocument.list_by_namespace_and_document_id(ns_name, document_id)
+    rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, document_id)
     assert len(rows) > 0
     joined = " ".join(row.content for row in rows)
     assert joined.strip()

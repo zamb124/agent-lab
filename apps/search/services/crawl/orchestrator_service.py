@@ -7,7 +7,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-import httpx
+import httpx2
 
 from apps.search.config import SearchCrawlConfig
 from apps.search.services.crawl.fetch_service import CrawlFetchService
@@ -16,7 +16,7 @@ from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichme
 from apps.search.services.crawl.politeness_service import CrawlPolitenessService
 from apps.search.services.crawl.seed_loader import import_tranco_domains
 from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
-from apps.search_worker.tasks.task_names import (
+from apps.search.tasks.task_names import (
     CRAWL_DISCOVER_DOMAIN,
     CRAWL_ENRICH_URL,
     CRAWL_FETCH_URL,
@@ -63,7 +63,7 @@ from core.tasks import enqueue
 
 def _gone_http_status(exc: BaseException) -> int | None:
     """HTTP-статус окончательно недоступной страницы (404/410) или None."""
-    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (404, 410):
+    if isinstance(exc, httpx2.HTTPStatusError) and exc.response.status_code in (404, 410):
         return exc.response.status_code
     return None
 
@@ -121,7 +121,7 @@ class CrawlOrchestratorService:
             scheduled_domain_ids: set[str] = set()
             domains: list[CrawlDomain] = []
 
-            backlog_domains = await CrawlDomain.list_with_pending_urls(
+            backlog_domains = await CrawlDomain.list_active_by_pending_count_desc_and_domain_asc(
                 crawl_profile_id,
                 limit=max_domains,
             )
@@ -133,7 +133,7 @@ class CrawlOrchestratorService:
 
             remaining_slots = max_domains - len(domains)
             if remaining_slots > 0:
-                due_domains = await CrawlDomain.list_due(
+                due_domains = await CrawlDomain.list_due_by_next_crawl_after_asc(
                     crawl_profile_id,
                     now=now,
                     limit=remaining_slots,
@@ -263,7 +263,7 @@ class CrawlOrchestratorService:
         domain = await CrawlDomain.get(crawl_domain_id)
         if domain is None:
             raise PlatformNotFoundError(f"crawl domain not found: {crawl_domain_id}")
-        urls = await CrawlUrl.claim_pending_batch(crawl_domain_id, 1)
+        urls = await CrawlUrl.claim_pending_batch_by_sitemap_lastmod_and_created_at_desc(crawl_domain_id, 1)
         if not urls:
             return
         crawl_url = urls[0]
@@ -666,7 +666,7 @@ class CrawlOrchestratorService:
         profile_bundle = await CrawlProfile.require_with_index(crawl_profile_id)
         if not profile_bundle.profile.llm_enrichment_enabled:
             raise ValueError(f"llm enrichment disabled for crawl profile: {crawl_profile_id}")
-        crawl_url_ids = await CrawlUrl.list_indexed_missing_enrichment(
+        crawl_url_ids = await CrawlUrl.list_indexed_missing_enrichment_ids_by_error_desc_and_updated_at_asc(
             crawl_profile_id,
             limit=limit,
         )

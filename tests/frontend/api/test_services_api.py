@@ -6,7 +6,7 @@ Integration тесты для API проверки статуса сервисо
 """
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 EXPECTED_SERVICES = {"flows", "crm", "rag", "sync", "office", "provider_litserve", "worktracker", "secrets"}
 

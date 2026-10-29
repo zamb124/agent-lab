@@ -9,6 +9,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 interface WikiSearchHit {
     wiki_page_id?: unknown;
@@ -23,6 +24,26 @@ import '@platform/lib/components/platform-segmented-control.js';
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
     return String(value);
+}
+
+function searchHits(value: unknown): WikiSearchHit[] {
+    if (!isPlainRecord(value)) {
+        throw new Error('wiki search: result.items required');
+    }
+    const rawItems = value.items;
+    if (!Array.isArray(rawItems)) {
+        throw new Error('wiki search: result.items required');
+    }
+    const items: WikiSearchHit[] = [];
+    for (const row of rawItems) {
+        if (!isPlainRecord(row)) {
+            throw new Error('wiki search: hit must be an object');
+        }
+        const hit: WikiSearchHit = {};
+        for (const [key, field] of Object.entries(row)) hit[key] = field;
+        items.push(hit);
+    }
+    return items;
 }
 
 
@@ -158,7 +179,11 @@ export class WikiSearchPage extends PlatformPage {
     }
 
     private _onInput(event: Event) {
-        this._query = (event.target as HTMLInputElement).value;
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('wiki-search-page: search input required');
+        }
+        this._query = input.value;
         this._schedule();
     }
 
@@ -185,7 +210,7 @@ export class WikiSearchPage extends PlatformPage {
         }
         this._seq += 1;
         const seq = this._seq;
-        const result = await this._search.run({ query, mode: this._mode, limit: RESULT_LIMIT }) as { items?: unknown } | null;
+        const result = await this._search.run({ query, mode: this._mode, limit: RESULT_LIMIT });
         // Ответ на прошлый префикс не должен подменять текущую выдачу.
         if (seq !== this._seq) {
             return;
@@ -194,10 +219,7 @@ export class WikiSearchPage extends PlatformPage {
             this._items = [];
             return;
         }
-        if (typeof result !== 'object' || !Array.isArray(result.items)) {
-            throw new Error('wiki search: result.items required');
-        }
-        this._items = result.items as WikiSearchHit[];
+        this._items = searchHits(result);
     }
 
     private _modeOptions() {

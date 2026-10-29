@@ -20,6 +20,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 
 function grantUserId(user: { user_id: string } | null): string {
     if (user === null || user.user_id.length === 0) {
@@ -28,23 +29,18 @@ function grantUserId(user: { user_id: string } | null): string {
     return user.user_id;
 }
 
-function anyRecord(value: unknown): Record<string, any> | null {
-    if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
-    for (const [key, field] of Object.entries(value)) row[key] = field;
-    return row;
+function anyRecord(value: unknown): Record<string, unknown> | null {
+    return isPlainRecord(value) ? value : null;
 }
 
-function recordList(value: unknown): Record<string, any>[] {
+function recordList(value: unknown): Record<string, unknown>[] {
     if (!Array.isArray(value)) return [];
-    const rows: Record<string, any>[] = [];
+    const rows: Record<string, unknown>[] = [];
     for (const item of value) {
         if (!isPlainRecord(item)) {
             throw new Error('namespace-modal: list item must be an object');
         }
-        const row: Record<string, any> = {};
-        for (const [key, field] of Object.entries(item)) row[key] = field;
-        rows.push(row);
+        rows.push(item);
     }
     return rows;
 }
@@ -535,7 +531,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     private _grantCreateOp: OpController;
     private _grantRevokeOp: OpController;
     private _teamSearch: FacetsController;
-    private _authSel: SelectController<Record<string, any> | undefined>;
+    private _authSel: SelectController<AuthUser | null>;
     private _templateSeeded: boolean;
     private _editSeedAttempted: boolean;
     private _grantsLoaded: boolean;
@@ -566,7 +562,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._grantRevokeOp = this.useOp(GRANT_REVOKE_OP);
         this._teamSearch = this.useFacets(TEAM_SEARCH_FACETS);
 
-        this._authSel = this.select((s: Record<string, any>) => s.auth.user);
+        this._authSel = this.select((state) => state.auth.user);
         this._templateSeeded = false;
         this._editSeedAttempted = false;
         this._grantsLoaded = false;
@@ -664,14 +660,14 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._grantSubmitError = '';
     }
 
-    _grants(): Record<string, any>[] {
+    _grants(): Record<string, unknown>[] {
         const result = anyRecord(this._grantsListOp.lastResult);
         if (result === null || !Array.isArray(result.items)) return [];
         return recordList(result.items);
     }
 
     _hasPublicGrant() {
-        return this._grants().some((g: Record<string, any>) => g.grant_type === SUBJECT_PUBLIC);
+        return this._grants().some((grant) => grant.grant_type === SUBJECT_PUBLIC);
     }
 
     _onPickSubject(subject: string) {
@@ -693,10 +689,16 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._teamSearch.search('users', value);
     }
 
-    _onUserPick(user: Record<string, any>) {
+    _onUserPick(user: Record<string, unknown>) {
+        const userId = user.user_id;
+        if (typeof userId !== 'string' || userId.length === 0) {
+            throw new Error('namespace-modal: grant user required');
+        }
+        const name = typeof user.name === 'string' ? user.name : '';
+        const email = typeof user.email === 'string' ? user.email : '';
         this._grantSelectedUser = {
-            user_id: user.user_id,
-            label: user.email ? `${user.name} <${user.email}>` : user.name,
+            user_id: userId,
+            label: email.length > 0 ? `${name} <${email}>` : name,
         };
         this._grantUserQuery = '';
     }
@@ -764,11 +766,25 @@ export class CRMNamespaceModal extends PlatformFormModal {
         return 'lock';
     }
 
-    _formatGrantTarget(grant: Record<string, any>): string {
-        if (grant.grant_type === SUBJECT_PUBLIC) return this.t('namespace_modal.grants_target_public');
-        if (grant.grant_type === SUBJECT_USER) return grant.target_user_id || this.t('namespace_modal.grants_target_user_unknown');
-        if (grant.grant_type === SUBJECT_COMPANY) return grant.target_company_id || this.t('namespace_modal.grants_target_company_unknown');
-        return grant.grant_type;
+    _formatGrantTarget(grant: Record<string, unknown>): string {
+        const grantType = grant.grant_type;
+        if (typeof grantType !== 'string' || grantType.length === 0) {
+            throw new Error('namespace-modal: grant_type required');
+        }
+        if (grantType === SUBJECT_PUBLIC) return this.t('namespace_modal.grants_target_public');
+        if (grantType === SUBJECT_USER) {
+            const target = grant.target_user_id;
+            return typeof target === 'string' && target.length > 0
+                ? target
+                : this.t('namespace_modal.grants_target_user_unknown');
+        }
+        if (grantType === SUBJECT_COMPANY) {
+            const target = grant.target_company_id;
+            return typeof target === 'string' && target.length > 0
+                ? target
+                : this.t('namespace_modal.grants_target_company_unknown');
+        }
+        return grantType;
     }
 
     override willUpdate(changed: PropertyValues<this>): void {
@@ -829,12 +845,16 @@ export class CRMNamespaceModal extends PlatformFormModal {
         return original.trim() !== draft.trim();
     }
 
-    _onCreated(item: Record<string, any>) {
+    _onCreated(item: Record<string, unknown>) {
         const user = this._authSel.value;
         if (!user || typeof user.company_id !== 'string') {
             throw new Error('CRMNamespaceModal: cannot select created namespace without company_id');
         }
-        setPlatformNamespaceSelection(user.company_id, item.name);
+        const namespaceName = item.name;
+        if (typeof namespaceName !== 'string' || namespaceName.length === 0) {
+            throw new Error('CRMNamespaceModal: created namespace name required');
+        }
+        setPlatformNamespaceSelection(user.company_id, namespaceName);
         this.closeAfterSave();
     }
 
@@ -933,22 +953,30 @@ export class CRMNamespaceModal extends PlatformFormModal {
         const draft = this._createForm.draft;
         return html`
             <div class="template-grid">
-                ${recordList(items).map((template) => html`
+                ${recordList(items).map((template) => {
+                    const templateId = template.template_id;
+                    if (typeof templateId !== 'string' || templateId.length === 0) {
+                        throw new Error('namespace-modal: template_id required');
+                    }
+                    const templateName = typeof template.name === 'string' ? template.name : templateId;
+                    const templateDescription = typeof template.description === 'string' ? template.description : '';
+                    return html`
                     <button
                         type="button"
-                        class="template-card ${draft.template_id === template.template_id ? 'active' : ''}"
-                        @click=${() => this._onTemplateSelect(template.template_id)}
+                        class="template-card ${draft.template_id === templateId ? 'active' : ''}"
+                        @click=${() => this._onTemplateSelect(templateId)}
                     >
                         <div class="template-title">
                             <platform-icon name=${this._templateIcon(template.icon)} size="16"></platform-icon>
-                            ${template.name}
+                            ${templateName}
                         </div>
                         <div class="template-description">
-                            ${template.description ? template.description : this.t('namespace_modal.template_no_description')}
+                            ${templateDescription.length > 0 ? templateDescription : this.t('namespace_modal.template_no_description')}
                         </div>
-                        <div class="template-id">${template.template_id}</div>
+                        <div class="template-id">${templateId}</div>
                     </button>
-                `)}
+                `;
+                })}
             </div>
         `;
     }
@@ -959,27 +987,28 @@ export class CRMNamespaceModal extends PlatformFormModal {
         return value.length === 0 ? 'folder' : value;
     }
 
-    _namespaceItemForEdit(): Record<string, any> | null {
+    _namespaceItemForEdit(): Record<string, unknown> | null {
         if (this._isCreate() || typeof this.name !== 'string' || this.name.length === 0) {
             return null;
         }
         return anyRecord(this._namespaces.byId[this.name]);
     }
 
-    _connectedIntegrationBadges(item: Record<string, any> | null): Record<string, any>[] {
+    _connectedIntegrationBadges(item: Record<string, unknown> | null): Record<string, unknown>[] {
         if (!item || !Array.isArray(item.integration_badges)) {
             throw new Error('CRMNamespaceModal: integration_badges required');
         }
-        return item.integration_badges.filter(
-            (b: Record<string, any> | null): b is Record<string, any> =>
-                b !== null
-                && b.connected === true
-                && typeof b.provider_id === 'string'
-                && b.provider_id.length > 0,
-        );
+        const badges: Record<string, unknown>[] = [];
+        for (const badge of item.integration_badges) {
+            if (!isPlainRecord(badge)) continue;
+            if (badge.connected !== true) continue;
+            if (typeof badge.provider_id !== 'string' || badge.provider_id.length === 0) continue;
+            badges.push(badge);
+        }
+        return badges;
     }
 
-    _renderEditIntegrationsRow(item: Record<string, any>): TemplateResult {
+    _renderEditIntegrationsRow(item: Record<string, unknown>): TemplateResult {
         const badges = this._connectedIntegrationBadges(item);
         return html`
             <div class="form-group">
@@ -991,22 +1020,26 @@ export class CRMNamespaceModal extends PlatformFormModal {
                             class="namespace-integrations"
                             aria-label=${this.t('namespace_modal.integrations_aria')}
                         >
-                            ${badges.map(
-                                (b: Record<string, any>) => html`
+                            ${badges.map((badge) => {
+                                const providerId = badge.provider_id;
+                                if (typeof providerId !== 'string' || providerId.length === 0) {
+                                    throw new Error('namespace-modal: provider_id required');
+                                }
+                                return html`
                                     <span
                                         class="namespace-integration-icon-wrap"
-                                        title=${b.provider_id}
+                                        title=${providerId}
                                     >
                                         <img
                                             class="namespace-integration-icon"
-                                            src=${crmIntegrationIconHref(b.provider_id)}
+                                            src=${crmIntegrationIconHref(providerId)}
                                             alt=""
                                             loading="lazy"
                                             decoding="async"
                                         />
                                     </span>
-                                `,
-                            )}
+                                `;
+                            })}
                         </div>
                     `}
             </div>
@@ -1030,6 +1063,10 @@ export class CRMNamespaceModal extends PlatformFormModal {
             return html`<div class="meta-loading"><glass-spinner></glass-spinner></div>`;
         }
         if (!result) return null;
+        const usedTypeIds = result.used_type_ids;
+        if (!Array.isArray(usedTypeIds)) {
+            throw new Error('namespace-modal: used_type_ids required');
+        }
         return html`
             <div class="meta">
                 <div class="meta-row">
@@ -1038,7 +1075,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 </div>
                 <div class="meta-row">
                     <span>${this.t('namespace_modal.used_types')}</span>
-                    <strong>${result.used_type_ids.length}</strong>
+                    <strong>${usedTypeIds.length}</strong>
                 </div>
                 <div class="meta-row">
                     <span>${this.t('namespace_modal.can_update_types')}</span>
@@ -1185,7 +1222,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                         ? html`<div class="empty-block">${this.t('namespace_modal.grants_empty')}</div>`
                         : html`
                             <div class="grants-list">
-                                ${grants.map((g: Record<string, any>) => this._renderGrantItem(g))}
+                                ${grants.map((grant) => this._renderGrantItem(grant))}
                             </div>
                         `}
                 ${this._renderGrantForm()}
@@ -1193,22 +1230,28 @@ export class CRMNamespaceModal extends PlatformFormModal {
         `;
     }
 
-    _renderGrantItem(grant: Record<string, any>): TemplateResult {
+    _renderGrantItem(grant: Record<string, unknown>): TemplateResult {
         const target = this._formatGrantTarget(grant);
         return html`
             <div class="grant-item">
                 <div class="grant-icon">
-                    <platform-icon name=${this._iconForSubject(grant.grant_type)} size="14"></platform-icon>
+                    <platform-icon name=${this._iconForSubject(typeof grant.grant_type === 'string' ? grant.grant_type : '')} size="14"></platform-icon>
                 </div>
                 <div class="grant-content">
                     <div class="grant-target">${target}</div>
                 </div>
-                <span class="grant-role">${this.t(`namespace_modal.grants_role_${grant.role}`)}</span>
+                <span class="grant-role">${this.t(`namespace_modal.grants_role_${typeof grant.role === 'string' ? grant.role : ''}`)}</span>
                 <button
                     type="button"
                     class="revoke-btn"
                     ?disabled=${this._grantRevokeOp.busy}
-                    @click=${() => this._onRevokeGrant(grant.grant_id)}
+                    @click=${() => {
+                        const grantId = grant.grant_id;
+                        if (typeof grantId !== 'string' || grantId.length === 0) {
+                            throw new Error('namespace-modal: grant_id required');
+                        }
+                        this._onRevokeGrant(grantId);
+                    }}
                 >
                     ${this.t('namespace_modal.grants_revoke')}
                 </button>
@@ -1323,13 +1366,21 @@ export class CRMNamespaceModal extends PlatformFormModal {
                                             ? html`<div class="hint-row" style="padding: var(--space-2);">${this.t('namespace_modal.grants_user_searching')}</div>`
                                             : items.length === 0
                                                 ? html`<div class="hint-row" style="padding: var(--space-2);">${this.t('namespace_modal.grants_user_no_results')}</div>`
-                                                : items.map((u: Record<string, any>) => html`
-                                                    <button type="button" class="result-row" @click=${() => this._onUserPick(u)}>
+                                                : items.map((user) => {
+                                                    const userId = user.user_id;
+                                                    if (typeof userId !== 'string' || userId.length === 0) {
+                                                        throw new Error('namespace-modal: search user required');
+                                                    }
+                                                    const name = typeof user.name === 'string' ? user.name : '';
+                                                    const email = typeof user.email === 'string' ? user.email : '';
+                                                    return html`
+                                                    <button type="button" class="result-row" @click=${() => this._onUserPick(user)}>
                                                         <platform-icon name="user" size="14"></platform-icon>
-                                                        <span>${u.name}</span>
-                                                        ${u.email ? html`<span class="email">${u.email}</span>` : nothing}
+                                                        <span>${name}</span>
+                                                        ${email.length > 0 ? html`<span class="email">${email}</span>` : nothing}
                                                     </button>
-                                                `)}
+                                                `;
+                                                })}
                                     </div>
                                 `
                                 : html`<div class="hint-row">${this.t('namespace_modal.grants_user_min_query')}</div>`}

@@ -1118,7 +1118,7 @@ class AmoCRMIntegrationService:
             embedded = _as_json_object(data.get("_embedded"))
             fields_raw = embedded.get("custom_fields") if embedded is not None else None
             fields = fields_raw if isinstance(fields_raw, list) else []
-            et = await EntityType.by_company_namespace_and_type_id(
+            et = await EntityType.query_by_company_namespace_and_type_id(
                 company_id=company_id,
                 namespace=namespace_name,
                 type_id=type_id,

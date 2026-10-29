@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from core.clients.redis_client import RedisClient
@@ -129,12 +129,12 @@ class TestProxyStrategy:
     @pytest.mark.asyncio
     async def test_direct_only_failure(self):
         """Тест DIRECT_ONLY - прямой запрос не удался."""
-        import httpx
+        import httpx2
 
         with patch("core.http.client._request_direct_burst") as mock_direct:
-            mock_direct.side_effect = httpx.ConnectError("Connection failed")
+            mock_direct.side_effect = httpx2.ConnectError("Connection failed")
 
-            with pytest.raises(httpx.ConnectError):
+            with pytest.raises(httpx2.ConnectError):
                 await request_with_strategy(
                     "GET",
                     "https://example.com",
@@ -163,10 +163,10 @@ class TestProxyStrategy:
     @pytest.mark.asyncio
     async def test_proxy_only_without_proxy_configured(self):
         """Тест PROXY_ONLY - прокси не настроен."""
-        import httpx
+        import httpx2
 
         with patch("core.http.client._platform_proxy_active", return_value=False):
-            with pytest.raises(httpx.ConnectError, match="Proxy requested but not configured"):
+            with pytest.raises(httpx2.ConnectError, match="Proxy requested but not configured"):
                 await request_with_strategy(
                     "GET",
                     "https://example.com",
@@ -357,7 +357,7 @@ class TestProxyStrategy:
                 async def request(self, method, url, **kwargs):
                     return mock_resp
 
-            with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+            with patch("core.http.client.httpx2.AsyncClient", FakeAsyncClient):
                 with patch("core.http.client.egress_prefer_proxy_get", new_callable=AsyncMock, return_value=False):
                     with patch("core.http.client.egress_prefer_proxy_set", new_callable=AsyncMock):
                         async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
@@ -407,7 +407,7 @@ class TestProxyStrategy:
     async def test_smart_403_retries_via_proxy_when_configured(self):
         """SMART: 403 напрямую, затем успех через platform proxy."""
         first = ClosedCallResponse(403)
-        second = httpx.Response(200)
+        second = httpx2.Response(200)
 
         class FakeAsyncClient:
             def __init__(self, *args, **kwargs):
@@ -431,7 +431,7 @@ class TestProxyStrategy:
 
         with patch("core.http.client.egress_prefer_proxy_get", new_callable=AsyncMock, return_value=False):
             with patch("core.http.client.egress_prefer_proxy_set", new_callable=AsyncMock):
-                with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+                with patch("core.http.client.httpx2.AsyncClient", FakeAsyncClient):
                     with patch("core.http.client._platform_proxy_active", return_value=True):
                         with patch(
                             "core.http.client.SmartProxyClient._get_settings",
@@ -453,7 +453,7 @@ class TestProxyStrategy:
                 '"status":"FAILED_PRECONDITION"}}'
             ),
         )
-        second = httpx.Response(200)
+        second = httpx2.Response(200)
 
         class FakeAsyncClient:
             def __init__(self, *args, **kwargs):
@@ -477,7 +477,7 @@ class TestProxyStrategy:
 
         with patch("core.http.client.egress_prefer_proxy_get", new_callable=AsyncMock, return_value=False):
             with patch("core.http.client.egress_prefer_proxy_set", new_callable=AsyncMock):
-                with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+                with patch("core.http.client.httpx2.AsyncClient", FakeAsyncClient):
                     with patch("core.http.client._platform_proxy_active", return_value=True):
                         with patch(
                             "core.http.client.SmartProxyClient._get_settings",
@@ -515,7 +515,7 @@ class TestProxyStrategy:
                 "core.http.client.SmartProxyClient._request_via_proxy_rotation",
                 new_callable=AsyncMock,
             ) as mock_rotate:
-                with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+                with patch("core.http.client.httpx2.AsyncClient", FakeAsyncClient):
                     with patch("core.http.client._platform_proxy_active", return_value=True):
                         async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
                             r = await client.request("GET", "https://api.example.com/x")
@@ -542,7 +542,7 @@ class TestProxyStrategy:
             async def request(self, method, url, **kwargs):
                 return first
 
-        with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+        with patch("core.http.client.httpx2.AsyncClient", FakeAsyncClient):
             with patch("core.http.client._platform_proxy_active", return_value=False):
                 async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
                     r = await client.request("GET", "https://api.example.com/x")

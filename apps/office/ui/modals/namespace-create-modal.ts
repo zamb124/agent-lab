@@ -14,6 +14,8 @@ import type { FormController, OpController, ResourceController } from '@platform
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-namespace.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -103,7 +105,7 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
     private _templates: OpController;
     private _namespaces: ResourceController;
     private _form: FormController;
-    private _authSel: SelectController<unknown>;
+    private _authSel: SelectController<AuthUser | null>;
     private _templateSeeded: boolean;
 
 
@@ -114,7 +116,10 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
             this._templates.run(null);
         }
         this.useEvent(this._namespaces.resource.events.CREATED, (event) => {
-            this._onCreated((event.payload as Record<string, unknown>).item);
+            if (!isPlainRecord(event.payload)) {
+                throw new Error('OfficeNamespaceCreateModal: created payload required');
+            }
+            this._onCreated(event.payload.item);
         });
         this.useEvent(this._namespaces.resource.events.CREATE_FAILED, () => {
             this._form.openForm(this._form.draft);
@@ -133,9 +138,18 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
     }
 
     private _templateItems(): Array<Record<string, unknown>> {
-        const result = this._templates.lastResult as { items?: unknown } | null;
-        if (!result || !Array.isArray(result.items)) return [];
-        return result.items as Array<Record<string, unknown>>;
+        const result = this._templates.lastResult;
+        if (!isPlainRecord(result) || !Array.isArray(result.items)) {
+            return [];
+        }
+        const rows: Record<string, unknown>[] = [];
+        for (const item of result.items) {
+            if (!isPlainRecord(item)) {
+                throw new Error('namespace-create-modal: template must be an object');
+            }
+            rows.push(item);
+        }
+        return rows;
     }
 
     private _maybeSeedTemplate() {
@@ -163,11 +177,22 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
     }
 
     private _onCreated(item: unknown) {
-        const user = this._authSel.value as Record<string, unknown> | null;
-        if (!user || typeof user.company_id !== 'string') {
+        const user = this._authSel.value;
+        if (user === null) {
             throw new Error('OfficeNamespaceCreateModal: cannot select created namespace without company_id');
         }
-        setPlatformNamespaceSelection(user.company_id, (item as Record<string, unknown>).name as string);
+        const companyId = user.company_id;
+        if (typeof companyId !== 'string') {
+            throw new Error('OfficeNamespaceCreateModal: cannot select created namespace without company_id');
+        }
+        if (!isPlainRecord(item)) {
+            throw new Error('OfficeNamespaceCreateModal: created namespace required');
+        }
+        const name = item.name;
+        if (typeof name !== 'string' || name.length === 0) {
+            throw new Error('OfficeNamespaceCreateModal: created namespace name required');
+        }
+        setPlatformNamespaceSelection(companyId, name);
         this.closeAfterSave();
     }
 

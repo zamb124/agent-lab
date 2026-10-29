@@ -21,9 +21,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Iterator
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 import pytest
-from httpx import AsyncClient, Timeout
+from httpx2 import AsyncClient, Timeout
 from playwright.async_api import Page, expect
 
 from core.logging import get_logger
@@ -96,7 +96,7 @@ def _make_embed_host_handler(state: _EmbedHostState) -> type[BaseHTTPRequestHand
                     f"{proxy.platform_base_url.rstrip('/')}"
                     f"/frontend/api/embed/configs/{proxy.embed_id}/session-token"
                 )
-                with httpx.Client(timeout=20.0) as client:
+                with httpx2.Client(timeout=20.0) as client:
                     platform_response = client.post(
                         target_url,
                         headers={

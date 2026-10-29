@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.pytest_workers_profile import (
+from scripts.testing.pytest_workers_profile import (
     CollectPayload,
     FailureRow,
     _build_delta,

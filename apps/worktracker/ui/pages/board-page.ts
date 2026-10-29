@@ -14,6 +14,7 @@ import '../components/worktracker-page-header.js';
 import { reorderByInsertIndex } from '@platform/lib/utils/reorder-by-insert-index.js';
 import type { PropertyValues } from 'lit';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isJsonObject } from '@platform/lib/utils/json-object.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 
 interface BoardColumn {
@@ -43,6 +44,36 @@ function missingAsEmpty(value: unknown): string {
 function optionalZero(value: unknown): number {
     if (value === undefined || value === null) return 0;
     return Number(value);
+}
+
+function isBoardRecord(value: unknown): value is BoardRecord {
+    return isJsonObject(value);
+}
+
+function isBoardColumn(value: unknown): value is BoardColumn {
+    return isJsonObject(value);
+}
+
+function boardRecords(items: readonly unknown[]): BoardRecord[] {
+    const rows: BoardRecord[] = [];
+    for (const item of items) {
+        if (!isBoardRecord(item)) {
+            throw new Error('WorktrackerBoardPage: board must be an object');
+        }
+        rows.push(item);
+    }
+    return rows;
+}
+
+function createdBoardId(event: PlatformEvent): string | null {
+    if (!isJsonObject(event.payload)) {
+        return null;
+    }
+    const item = event.payload.item;
+    if (!isBoardRecord(item) || typeof item.board_id !== 'string') {
+        return null;
+    }
+    return item.board_id;
 }
 
 function dragText(transfer: DataTransfer | null, mime: string): string {
@@ -167,28 +198,20 @@ export class WorktrackerBoardPage extends PlatformPage {
         this._workItems = this.useResource('worktracker/work_items');
         this._moveOp = this.useOp('worktracker/work_item_move');
         this.useEvent(this._boards.resource.events.CREATED, (event: PlatformEvent) => {
-            const payload = event.payload as { item?: BoardRecord } | null;
-            if (!payload || typeof payload !== 'object' || !payload.item) {
+            const boardId = createdBoardId(event);
+            if (boardId === null) {
                 return;
             }
-            const item = payload.item;
-            if (typeof item.board_id !== 'string') {
-                return;
-            }
-            this._selectBoard(item.board_id);
+            this._selectBoard(boardId);
         });
         // Созданная задача уже смержена коллекцией; страница лишь переключается на её доску.
         this.useEvent(this._workItems.resource.events.CREATED, (event: PlatformEvent) => {
-            const payload = event.payload as { item?: BoardRecord } | null;
-            if (!payload || typeof payload !== 'object' || !payload.item) {
+            const boardId = createdBoardId(event);
+            if (boardId === null) {
                 return;
             }
-            const item = payload.item;
-            if (typeof item.board_id !== 'string') {
-                return;
-            }
-            if (this._activeBoardId !== item.board_id) {
-                this._selectBoard(item.board_id);
+            if (this._activeBoardId !== boardId) {
+                this._selectBoard(boardId);
             }
         });
     }
@@ -210,7 +233,7 @@ export class WorktrackerBoardPage extends PlatformPage {
             this._boards.get(this._activeBoardId);
             this._workItems.load({ board_id: this._activeBoardId });
         }
-        const boards = this._boards.items as BoardRecord[];
+        const boards = boardRecords(this._boards.items);
         if (boards.length === 0) {
             return;
         }
@@ -285,24 +308,31 @@ export class WorktrackerBoardPage extends PlatformPage {
     }
 
     private _activeBoard(): BoardRecord | null {
-        const boards = this._boards.items as BoardRecord[];
+        const boards = boardRecords(this._boards.items);
         const fromList = boards.find((b) => b.board_id === this._activeBoardId);
         if (fromList) {
             return fromList;
         }
-        const byId = this._boards.byId as Record<string, BoardRecord>;
-        if (byId && typeof byId === 'object' && byId[this._activeBoardId]) {
-            const cached = byId[this._activeBoardId];
-            return cached === undefined ? null : cached;
+        const byId = this._boards.byId;
+        if (!isJsonObject(byId)) {
+            return null;
         }
-        return null;
+        const cached = byId[this._activeBoardId];
+        return isBoardRecord(cached) ? cached : null;
     }
 
     private _sortedColumns(columns: unknown): BoardColumn[] {
         if (!Array.isArray(columns)) {
             throw new Error('WorktrackerBoardPage: columns must be an array');
         }
-        return (columns as BoardColumn[]).slice().sort((left, right) => optionalZero(left.position) - optionalZero(right.position));
+        const rows: BoardColumn[] = [];
+        for (const item of columns) {
+            if (!isBoardColumn(item)) {
+                throw new Error('WorktrackerBoardPage: column must be an object');
+            }
+            rows.push(item);
+        }
+        return rows.slice().sort((left, right) => optionalZero(left.position) - optionalZero(right.position));
     }
 
     private _itemsForColumn(columnId: string) {

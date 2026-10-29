@@ -38,8 +38,9 @@ function isOfMethod(value: unknown): boolean {
 
 function isCmModule(value: unknown): value is CmModule {
     if (!isPlainRecord(value)) return false;
-    if (!isPlainRecord(value.EditorState) || typeof value.EditorState.create !== 'function') return false;
-    if (!isOfMethod(value.EditorState.readOnly)) return false;
+    const editorState = value.EditorState;
+    if (typeof editorState !== 'function' || !('create' in editorState) || typeof editorState.create !== 'function') return false;
+    if (!('readOnly' in editorState) || !isOfMethod(editorState.readOnly)) return false;
     if (typeof value.EditorView !== 'function') return false;
     if (!('theme' in value.EditorView) || typeof value.EditorView.theme !== 'function') return false;
     if (!('updateListener' in value.EditorView) || !isOfMethod(value.EditorView.updateListener)) return false;

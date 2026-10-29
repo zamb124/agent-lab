@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import Response
+from httpx2 import Response
 
 from core.types import JsonObject, require_json_object
 from tests.wiki.conftest import API_PREFIX, PAGES_URL

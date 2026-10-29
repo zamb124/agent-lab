@@ -68,60 +68,60 @@ function readEvaluationUi(value: unknown): EvaluationUiState {
     };
 }
 
-function stringValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function stringValue(record: unknown, field: string) {
+    if (!isPlainRecord(record)) {
         return '';
     }
     const value = record[field];
     return typeof value === 'string' ? value : '';
 }
 
-function objectValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function objectValue(record: unknown, field: string): Record<string, unknown> | null {
+    if (!isPlainRecord(record)) {
         return null;
     }
     const value = record[field];
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    return isPlainRecord(value) ? value : null;
 }
 
-function itemsFromResult(result: any) {
-    if (!result || typeof result !== 'object') {
+function itemsFromResult(result: unknown): unknown[] {
+    if (!isPlainRecord(result)) {
         return [];
     }
     return Array.isArray(result.items) ? result.items : [];
 }
 
-function findById(items: Record<string, any>[], field: any, id: string) {
+function findById(items: readonly unknown[], field: string, id: string) {
     if (id.length === 0) {
         return null;
     }
-    const found = asArray(items).find((item) => stringValue(item, field) === id);
-    return found ? found : null;
+    const found = items.find((item) => stringValue(item, field) === id);
+    return found === undefined ? null : found;
 }
 
-function matrixCell(matrix: any, runId: any, caseId: any) {
-    if (!matrix || typeof matrix !== 'object') {
+function matrixCell(matrix: unknown, runId: string, caseId: string) {
+    if (!isPlainRecord(matrix)) {
         return null;
     }
     const found = asArray(matrix.cells).find((cell) => stringValue(cell, 'run_id') === runId && stringValue(cell, 'case_id') === caseId);
-    return found ? found : null;
+    return found === undefined ? null : found;
 }
 
-function caseIdForCaseRun(matrix: any, caseRunId: any) {
-    if (!matrix || typeof matrix !== 'object') {
+function caseIdForCaseRun(matrix: unknown, caseRunId: string) {
+    if (!isPlainRecord(matrix)) {
         return '';
     }
     const found = asArray(matrix.cells).find((cell) => stringValue(cell, 'case_run_id') === caseRunId);
-    return found ? stringValue(found, 'case_id') : '';
+    return found === undefined ? '' : stringValue(found, 'case_id');
 }
 
-function runStateIsActive(run: any) {
+function runStateIsActive(run: unknown) {
     const state = stringValue(run, 'state');
     return state === 'queued' || state === 'running';
 }
 
-function boolValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function boolValue(record: unknown, field: string) {
+    if (!isPlainRecord(record)) {
         return false;
     }
     return record[field] === true;
@@ -144,7 +144,7 @@ const STATIC_CASE_TEMPLATES = Object.freeze([
 ]);
 
 export class FlowsEvaluationPage extends PlatformPage {
-    private _handleFullscreenKeydown: any;
+    private _handleFullscreenKeydown: (event: Event) => void;
     static override properties: PropertyDeclarations = {
         flowId: { type: String, attribute: 'flow-id' },
         branchId: { type: String, attribute: 'branch-id' },
@@ -542,7 +542,7 @@ export class FlowsEvaluationPage extends PlatformPage {
             const key = `${this.flowId}:${this._branchId()}`;
             if (key !== this._loadKey) {
                 this._loadKey = key;
-                (this._ui.resetSelection(null) as any);
+                (this._ui.resetSelection(null));
                 void this._loadInitial();
             }
         }
@@ -555,7 +555,7 @@ export class FlowsEvaluationPage extends PlatformPage {
     _onFullscreenKeydown(event: KeyboardEvent) {
         if (event.key === 'Escape' && (this._evaluationUi()).fullscreenPanel.length > 0) {
             event.preventDefault();
-            (this._ui.setFullscreenPanel({ panel: '' }) as any);
+            (this._ui.setFullscreenPanel({ panel: '' }));
         }
     }
 
@@ -582,13 +582,13 @@ export class FlowsEvaluationPage extends PlatformPage {
         if (suites.length > 0) {
             const firstSuiteId = stringValue(suites[0], 'suite_id');
             if (firstSuiteId.length > 0) {
-                (this._ui.selectSuite({ suite_id: firstSuiteId }) as any);
+                (this._ui.selectSuite({ suite_id: firstSuiteId }));
                 await this._loadSuite(firstSuiteId);
             }
         }
     }
 
-    async _loadSuite(suiteId: any) {
+    async _loadSuite(suiteId: string) {
         if (suiteId.length === 0) {
             return;
         }
@@ -602,7 +602,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         ]);
     }
 
-    async _loadRun(runId: any) {
+    async _loadRun(runId: string) {
         if (runId.length === 0) {
             return;
         }
@@ -638,8 +638,8 @@ export class FlowsEvaluationPage extends PlatformPage {
             description: this.t(`evaluation.templates.${template.descriptionKey}`),
         }));
         const metricTemplates = this._catalogItems()
-            .filter((item: any) => stringValue(item, 'check_type') === 'builtin_metric')
-            .map((item: any) => {
+            .filter((item) => stringValue(item, 'check_type') === 'builtin_metric')
+            .map((item) => {
                 const evaluatorId = stringValue(item, 'evaluator_id');
                 const catalogCategory = stringValue(item, 'category');
                 let category = boolValue(item, 'requires_llm') ? 'quality' : 'deterministic';
@@ -733,14 +733,14 @@ export class FlowsEvaluationPage extends PlatformPage {
             return;
         }
         this._creatingCase = false;
-        (this._ui.selectSuite({ suite_id: suiteId }) as any);
+        (this._ui.selectSuite({ suite_id: suiteId }));
         await this._loadSuite(suiteId);
     }
 
     _selectCase(event: CustomEvent) {
         const caseId = stringValue(event.detail, 'case_id');
         this._creatingCase = false;
-        (this._ui.selectCase({ case_id: caseId }) as any);
+        (this._ui.selectCase({ case_id: caseId }));
     }
 
     async _selectRun(event: CustomEvent) {
@@ -748,7 +748,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         if (runId.length === 0) {
             return;
         }
-        (this._ui.selectRun({ run_id: runId }) as any);
+        (this._ui.selectRun({ run_id: runId }));
         await this._loadRun(runId);
     }
 
@@ -757,15 +757,15 @@ export class FlowsEvaluationPage extends PlatformPage {
         const runId = stringValue(detail, 'run_id');
         const caseRunId = stringValue(detail, 'case_run_id');
         if (runId.length > 0 && runId !== this._evaluationUi().selectedRunId) {
-            (this._ui.selectRun({ run_id: runId }) as any);
+            (this._ui.selectRun({ run_id: runId }));
             await this._loadRun(runId);
         }
         if (caseRunId.length > 0) {
-            (this._ui.selectCaseRun({ case_run_id: caseRunId }) as any);
+            (this._ui.selectCaseRun({ case_run_id: caseRunId }));
             await this._traceGet.run({ case_run_id: caseRunId });
             const caseId = caseIdForCaseRun(this._matrix(), caseRunId);
             if (caseId.length > 0) {
-                (this._ui.selectCase({ case_id: caseId }) as any);
+                (this._ui.selectCase({ case_id: caseId }));
             }
         }
     }
@@ -773,28 +773,28 @@ export class FlowsEvaluationPage extends PlatformPage {
     _setPanel(event: CustomEvent) {
         const panel = stringValue(event.detail, 'panel');
         if (panel.length > 0) {
-            (this._ui.setPanel({ panel }) as any);
+            (this._ui.setPanel({ panel }));
         }
     }
 
-    _toggleFullscreenPanel(panel: any, event: CustomEvent) {
+    _toggleFullscreenPanel(panel: string, event: CustomEvent) {
         event.stopPropagation();
         const nextPanel = this._evaluationUi().fullscreenPanel === panel ? '' : panel;
-        (this._ui.setFullscreenPanel({ panel: nextPanel }) as any);
+        (this._ui.setFullscreenPanel({ panel: nextPanel }));
     }
 
     _setRunScope(event: CustomEvent) {
         const scope = stringValue(event.detail, 'scope');
         if (scope.length > 0) {
-            (this._ui.setRunScope({ scope }) as any);
+            (this._ui.setRunScope({ scope }));
         }
     }
 
     _setRunOptions(event: CustomEvent) {
-        const detail = event.detail && typeof event.detail === 'object' ? event.detail : {};
-        (this._ui.setRunOptions as any)({
-            trials: typeof detail.trials === 'number' ? detail.trials : this._evaluationUi().trials,
-            max_concurrency: typeof detail.max_concurrency === 'number' ? detail.max_concurrency : this._evaluationUi().maxConcurrency,
+        const detail = isPlainRecord(event.detail) ? event.detail : null;
+        this._ui.setRunOptions({
+            trials: detail !== null && typeof detail.trials === 'number' ? detail.trials : this._evaluationUi().trials,
+            max_concurrency: detail !== null && typeof detail.max_concurrency === 'number' ? detail.max_concurrency : this._evaluationUi().maxConcurrency,
         });
     }
 
@@ -811,15 +811,15 @@ export class FlowsEvaluationPage extends PlatformPage {
         await this._suitesList.run({ flow_id: this.flowId });
         const suiteId = stringValue(result, 'suite_id');
         if (suiteId.length > 0) {
-            (this._ui.selectSuite({ suite_id: suiteId }) as any);
+            (this._ui.selectSuite({ suite_id: suiteId }));
             await this._loadSuite(suiteId);
         }
     }
 
     _startCreateCase() {
         this._creatingCase = true;
-        (this._ui.selectCase({ case_id: '' }) as any);
-        (this._ui.setPanel({ panel: 'case' }) as any);
+        (this._ui.selectCase({ case_id: '' }));
+        (this._ui.setPanel({ panel: 'case' }));
     }
 
     async _createCase(event: CustomEvent) {
@@ -838,7 +838,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         const caseId = stringValue(created, 'case_id');
         if (caseId.length > 0) {
             this._creatingCase = false;
-            (this._ui.selectCase({ case_id: caseId }) as any);
+            (this._ui.selectCase({ case_id: caseId }));
         }
     }
 
@@ -859,12 +859,12 @@ export class FlowsEvaluationPage extends PlatformPage {
         const caseId = stringValue(created, 'case_id');
         if (caseId.length > 0) {
             this._creatingCase = false;
-            (this._ui.selectCase({ case_id: caseId }) as any);
-            (this._ui.setPanel({ panel: 'case' }) as any);
+            (this._ui.selectCase({ case_id: caseId }));
+            (this._ui.setPanel({ panel: 'case' }));
         }
     }
 
-    _buildTemplateCaseBody(templateId: any) {
+    _buildTemplateCaseBody(templateId: string) {
         if (templateId.startsWith('builtin_metric:')) {
             const evaluatorId = templateId.slice('builtin_metric:'.length);
             return this._builtinMetricTemplateBody(evaluatorId);
@@ -1013,8 +1013,8 @@ export class FlowsEvaluationPage extends PlatformPage {
         }
     }
 
-    _builtinMetricTemplateBody(evaluatorId: any) {
-        const item = this._catalogItems().find((catalogItem: any) => stringValue(catalogItem, 'evaluator_id') === evaluatorId);
+    _builtinMetricTemplateBody(evaluatorId: string) {
+        const item = this._catalogItems().find((catalogItem) => stringValue(catalogItem, 'evaluator_id') === evaluatorId);
         if (!item || stringValue(item, 'check_type') !== 'builtin_metric') {
             throw new Error(`FlowsEvaluationPage: builtin metric template not found ${evaluatorId}`);
         }
@@ -1037,7 +1037,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         );
     }
 
-    _caseBody(name: string, description: any, tags: any, turns: any) {
+    _caseBody(name: string, description: unknown, tags: unknown, turns: unknown) {
         return {
             name,
             description,
@@ -1053,7 +1053,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         };
     }
 
-    _turn(input: any, checks: any) {
+    _turn(input: unknown, checks: unknown) {
         return {
             input: { type: 'text', content: input },
             checks,
@@ -1071,7 +1071,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         }
         await this._caseUpdate.run({ suite_id: suiteId, case_id: caseId, ...body });
         await this._loadSuite(suiteId);
-        (this._ui.selectCase({ case_id: caseId }) as any);
+        (this._ui.selectCase({ case_id: caseId }));
     }
 
     async _runEvaluation() {
@@ -1081,9 +1081,9 @@ export class FlowsEvaluationPage extends PlatformPage {
             return;
         }
         const ui = this._evaluationUi();
-        let scope: Record<string, any> = { type: 'suite' };
-        if (ui.runScope! === 'selected_case') {
-            if ((ui as any).selectedCaseId.length === 0) {
+        let scope: Record<string, unknown> = { type: 'suite' };
+        if (ui.runScope === 'selected_case') {
+            if (ui.selectedCaseId.length === 0) {
                 this.toast('evaluation.toast.case_required', { type: 'error' });
                 return;
             }
@@ -1102,7 +1102,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         const run = objectValue(result, 'run');
         const runId = stringValue(run, 'run_id');
         if (runId.length > 0) {
-            (this._ui.selectRun({ run_id: runId }) as any);
+            (this._ui.selectRun({ run_id: runId }));
             await this._loadRun(runId);
         }
         await this._loadSuite(suiteId);
@@ -1116,31 +1116,31 @@ export class FlowsEvaluationPage extends PlatformPage {
         }
         await this._runCancel.run({ run_id: runId });
         await this._loadRun(runId);
-        if ((suiteId as any).length > 0) {
+        if (suiteId.length > 0) {
             await this._loadSuite(suiteId);
         }
     }
 
     async _reloadCurrent() {
         const suiteId = this._evaluationUi().selectedSuiteId;
-        if ((suiteId as any).length > 0) {
+        if (suiteId.length > 0) {
             await this._loadSuite(suiteId);
         }
         const runId = this._evaluationUi().selectedRunId;
-        if ((runId as any).length > 0) {
+        if (runId.length > 0) {
             await this._loadRun(runId);
         }
     }
 
     async _selectCompareRun(event: CustomEvent) {
         const runId = stringValue(event.detail, 'run_id');
-        (this._ui.selectCompareRun({ run_id: runId }) as any);
+        (this._ui.selectCompareRun({ run_id: runId }));
     }
 
     async _compareRunsRequest() {
         const leftRunId = this._evaluationUi().selectedCompareRunId;
         const rightRunId = this._evaluationUi().selectedRunId;
-        if ((leftRunId as any).length === 0 || (rightRunId as any).length === 0 || leftRunId === rightRunId) {
+        if (leftRunId.length === 0 || rightRunId.length === 0 || leftRunId === rightRunId) {
             this.toast('evaluation.toast.compare_required', { type: 'error' });
             return;
         }
@@ -1150,7 +1150,7 @@ export class FlowsEvaluationPage extends PlatformPage {
     async _setBaseline() {
         const suiteId = this._evaluationUi().selectedSuiteId;
         const runId = this._evaluationUi().selectedRunId;
-        if ((suiteId as any).length === 0 || (runId as any).length === 0) {
+        if (suiteId.length === 0 || runId.length === 0) {
             this.toast('evaluation.toast.run_required', { type: 'error' });
             return;
         }
@@ -1168,7 +1168,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         const preference = stringValue(detail, 'preference');
         const matrix = this._matrix();
         let caseId = this._evaluationUi().selectedCaseId;
-        if ((caseId as any).length === 0) {
+        if (caseId.length === 0) {
             caseId = caseIdForCaseRun(matrix, this._evaluationUi().selectedCaseRunId);
         }
         const left = matrixCell(matrix, this._evaluationUi().selectedCompareRunId, caseId);
@@ -1211,7 +1211,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         const matrix = this._matrix();
         const caseRun = this._selectedCaseRun();
         const activePanel = ui.activePanel;
-        const fullscreenActive = (ui as any).fullscreenPanel.length > 0;
+        const fullscreenActive = ui.fullscreenPanel.length > 0;
         const flowLabel = typeof this.flowId === 'string' && this.flowId.length > 0 ? this.flowId : '';
         return html`
             <div class="lab">
@@ -1288,7 +1288,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         `;
     }
 
-    _renderPanelFrame(panel: any, title: string, content: any) {
+    _renderPanelFrame(panel: string, title: string, content: TemplateResult) {
         const active = this._evaluationUi().fullscreenPanel === panel;
         const frameClass = active ? 'panel-frame is-fullscreen' : 'panel-frame';
         const actionTitle = active ? this.t('evaluation.fullscreen.collapse') : this.t('evaluation.fullscreen.expand');
@@ -1313,7 +1313,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         `;
     }
 
-    _rightPanelTitle(activePanel: any, testCase: any) {
+    _rightPanelTitle(activePanel: string, testCase: unknown) {
         if (activePanel === 'case') {
             return stringValue(testCase, 'case_id').length > 0 ? this.t('evaluation.case_editor.edit_title') : this.t('evaluation.case_editor.create_title');
         }
@@ -1329,7 +1329,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         return this.t('evaluation.panels.unknown');
     }
 
-    _renderRightPanel(activePanel: any, suite: any, testCase: any, run: any, caseRun: any) {
+    _renderRightPanel(activePanel: string, suite: unknown, testCase: unknown, run: unknown, caseRun: unknown) {
         if (activePanel === 'case') {
             return html`
                 <flows-evaluation-case-editor
@@ -1375,7 +1375,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         return html`<div class="empty">${this.t('evaluation.panels.unknown')}</div>`;
     }
 
-    _renderMonitoringPanel(run: any) {
+    _renderMonitoringPanel(run: unknown) {
         const monitors = this._monitors();
         const policies = this._gatePolicies();
         const baselines = this._baselines();
@@ -1396,12 +1396,12 @@ export class FlowsEvaluationPage extends PlatformPage {
                     </div>
                     <span class="pill"><platform-icon name="shield" size="13"></platform-icon>${active ? this.t('evaluation.monitoring.active_run') : this.t('evaluation.monitoring.ready')}</span>
                 </div>
-                ${monitors.length > 0 ? monitors.map((monitor: any) => this._renderMonitor(monitor)) : html`<div class="empty">${this.t('evaluation.monitoring.empty')}</div>`}
+                ${monitors.length > 0 ? monitors.map((monitor) => this._renderMonitor(monitor)) : html`<div class="empty">${this.t('evaluation.monitoring.empty')}</div>`}
             </section>
         `;
     }
 
-    _renderMonitor(monitor: any) {
+    _renderMonitor(monitor: unknown) {
         return html`
             <div class="monitor-row">
                 <div>

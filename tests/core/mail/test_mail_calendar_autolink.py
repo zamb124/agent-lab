@@ -36,7 +36,7 @@ def mail_service_with_calendar(
 
 
 async def _calendar_credentials(company_id: str, user_id: str) -> list[IntegrationCredential]:
-    credentials = await IntegrationCredential.list_by_created_at_for_user(company_id, user_id)
+    credentials = await IntegrationCredential.list_by_created_at_for_user_asc(company_id, user_id)
     return [item for item in credentials if item.service == "calendar"]
 
 

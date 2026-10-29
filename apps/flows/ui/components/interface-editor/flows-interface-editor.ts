@@ -28,6 +28,9 @@ import '@platform/lib/components/platform-button.js';
 import {
     CONTAINER_TYPES,
     EDITOR_VIEWPORTS,
+    type CatalogEntry,
+    type DocumentProblem,
+    type FlowUiDocument,
     blockCatalog,
     catalogEntry,
     defaultBlock,
@@ -61,6 +64,21 @@ import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResul
 
 const HOST_EDITOR_EVENTS = ['editor-undo', 'editor-redo', 'editor-viewport', 'editor-preview', 'editor-templates', 'editor-assist'];
 
+interface EditorFrame {
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+}
+
+interface InlineEdit {
+    blockId: string;
+    property: string;
+    value: unknown;
+    frame: EditorFrame;
+    multiline: boolean;
+}
+
 function editorFrameWidth(viewport: unknown): number {
     switch (viewport) {
         case 'desktop':
@@ -82,8 +100,8 @@ function inlineTextControl(root: ParentNode): HTMLInputElement | HTMLTextAreaEle
 }
 
 export class FlowsInterfaceEditor extends PlatformElement {
-    private _onHostEditorEvent: any;
-    private _onKeyDown: any;
+    private _onHostEditorEvent: (event: Event) => void;
+    private _onKeyDown: (event: Event) => void;
     static i18nNamespace = 'flows';
 
     static override properties: PropertyDeclarations = {
@@ -96,13 +114,13 @@ export class FlowsInterfaceEditor extends PlatformElement {
         _inlineEdit: { state: true },
         _menuOpen: { state: true },
     }
-    declare interfaceConfig: any;
+    declare interfaceConfig: unknown;
     declare flowId: string;
     declare branchId: string;
-    declare _schema: any;
-    declare _frame: any;
-    declare _drop: any;
-    declare _inlineEdit: Record<string, any> | null;
+    declare _schema: unknown;
+    declare _frame: ReturnType<typeof blockFrame>;
+    declare _drop: ReturnType<typeof dropTargetFromEvent>;
+    declare _inlineEdit: InlineEdit | null;
     declare _menuOpen: boolean;
 ;
 
@@ -112,10 +130,10 @@ export class FlowsInterfaceEditor extends PlatformElement {
     private _schemaOp: OpController;
     private _assistOp: OpController;
     private _fileUpload: OpController;
-    private _catalog: readonly any[];
-    private _frozen: Set<any>;
+    private _catalog: readonly CatalogEntry[];
+    private _frozen: Set<string>;
     private _frameRaf: number;
-    private _resizeObserver: any;
+    private _resizeObserver: ResizeObserver | null;
 
     constructor() {
         super();
@@ -124,7 +142,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         this.branchId = 'default';
         this._schema = null;
         this._catalog = [];
-        this._frozen = new Set();
+        this._frozen = new Set<string>();
         this._frame = null;
         this._drop = null;
         this._inlineEdit = null;
@@ -136,8 +154,18 @@ export class FlowsInterfaceEditor extends PlatformElement {
         this._fileUpload = this.useOp('platform/file_create');
         this._frameRaf = 0;
         this._resizeObserver = null;
-        this._onKeyDown = (event: KeyboardEvent) => this._handleKeydown(event);
-        this._onHostEditorEvent = (event: CustomEvent) => this._handleHostEditorEvent(event);
+        this._onKeyDown = (event: Event) => {
+            if (!(event instanceof KeyboardEvent)) {
+                throw new Error('flows-interface-editor: keydown must be a KeyboardEvent');
+            }
+            this._handleKeydown(event);
+        };
+        this._onHostEditorEvent = (event: Event) => {
+            if (!(event instanceof CustomEvent)) {
+                throw new Error('flows-interface-editor: host editor event must be a CustomEvent');
+            }
+            this._handleHostEditorEvent(event);
+        };
     }
 
     override connectedCallback(): void {
@@ -192,14 +220,36 @@ export class FlowsInterfaceEditor extends PlatformElement {
         return `${this.flowId}:${this.branchId}`;
     }
 
-    get _draft() {
+    get _draft(): FlowUiDocument | null {
         const ui = this._ui.value;
-        return ui.history! !== null && ui.documentKey! === this._documentKey ? ui.history.present : null;
+        const history = ui.history;
+        if (history == null || ui.documentKey !== this._documentKey) return null;
+        return history.present;
+    }
+
+    _requireDraft(): FlowUiDocument {
+        const draft = this._draft;
+        if (draft === null) throw new Error('flows-interface-editor: draft required');
+        return draft;
     }
 
     get _page() {
         const draft = this._draft;
-        return draft === null ? null : findPage(draft, (this._ui).value.pageId);
+        const pageId = this._ui.value.pageId;
+        if (draft === null || typeof pageId !== 'string' || pageId === '') return null;
+        return findPage(draft, pageId);
+    }
+
+    _requirePage() {
+        const page = this._page;
+        if (page === null) throw new Error('flows-interface-editor: page required');
+        return page;
+    }
+
+    _requirePageId() {
+        const pageId = this._ui.value.pageId;
+        if (typeof pageId !== 'string' || pageId === '') throw new Error('flows-interface-editor: pageId required');
+        return pageId;
     }
 
     get _sampleState() {
@@ -212,11 +262,11 @@ export class FlowsInterfaceEditor extends PlatformElement {
         if ((this._ui).value.documentKey === this._documentKey) return;
         const drafts = readDrafts();
         const stored = Object.hasOwn(drafts, this._documentKey) ? drafts[this._documentKey] : null;
-        (this._ui.openDocument as any)({ documentKey: this._documentKey, document: stored ?? structuredClone(this.interfaceConfig) });
+        (this._ui.openDocument)({ documentKey: this._documentKey, document: stored ?? structuredClone(this.interfaceConfig) });
     }
 
-    _commit(document: any, coalesceKey: string | null = null) {
-        (this._ui.commitDocument({ document, coalesceKey }) as any);
+    _commit(document: unknown, coalesceKey: string | null = null) {
+        (this._ui.commitDocument({ document, coalesceKey }));
         writeDraft(this._documentKey, document);
     }
 
@@ -234,7 +284,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         const problems = this._problems;
         const current = (this._ui).value.problems;
         if (stableStringify(current) === stableStringify(problems)) return;
-        (this._ui.setProblems({ problems }) as any);
+        (this._ui.setProblems({ problems }));
     }
 
     _handleHostEditorEvent(event: CustomEvent) {
@@ -254,25 +304,25 @@ export class FlowsInterfaceEditor extends PlatformElement {
 
     undo() {
         if ((this._ui).value.history === null) return;
-        (this._ui.undo(null) as any);
+        (this._ui.undo(null));
     }
 
     redo() {
         if ((this._ui).value.history === null) return;
-        (this._ui.redo(null) as any);
+        (this._ui.redo(null));
     }
 
-    setViewport(viewport: any) {
+    setViewport(viewport: unknown) {
         if ((this._ui).value.history === null) return;
         if (typeof viewport !== 'string') return;
-        (this._ui.setViewport({ viewport }) as any);
+        (this._ui.setViewport({ viewport }));
     }
 
     openTemplates() {
-        this.openModal('flows.interface_template', { onApply: (document: any) => this._applyTemplate(document) });
+        this.openModal('flows.interface_template', { onApply: (document: unknown) => this._applyTemplate(document) });
     }
 
-    focusProblem(problem: any) {
+    focusProblem(problem: DocumentProblem) {
         this._focusProblem(problem);
     }
 
@@ -286,24 +336,24 @@ export class FlowsInterfaceEditor extends PlatformElement {
 
     // --- Команды ------------------------------------------------------------------------------
 
-    _insert(type: string, containerKey: any, index: number, columns: any = null) {
-        const page = this._page;
+    _insert(type: string, containerKey: string, index: number, columns: number | null = null) {
+        const page = this._requirePage();
         const entry = catalogEntry(this._catalog, type);
         const blockId = uniqueBlockId(page, type);
         const block = columns === null ? defaultBlock(entry, blockId, this._labels()) : withColumns(entry, blockId, columns, this._labels());
-        this._commit(insertBlock(this._draft, page.page_id, containerKey, index, block));
-        (this._ui.selectBlock({ blockId }) as any);
-        if (CONTAINER_TYPES.includes(type)) (this._ui.setSidebarTab({ tab: 'add' }) as any);
+        this._commit(insertBlock(this._requireDraft(), page.page_id, containerKey, index, block));
+        (this._ui.selectBlock({ blockId }));
+        if (CONTAINER_TYPES.includes(type)) (this._ui.setSidebarTab({ tab: 'add' }));
     }
 
-    _setProperty(blockId: any, property: any, value: unknown) {
-        const pageId = (this._ui).value.pageId;
-        this._commit(setBlockProperty(this._draft, pageId, blockId, property, value), `${blockId}:${property}`);
-        if (property === 'block_id') (this._ui.selectBlock({ blockId: value }) as any);
+    _setProperty(blockId: string, property: string, value: unknown) {
+        const pageId = this._requirePageId();
+        this._commit(setBlockProperty(this._requireDraft(), pageId, blockId, property, value), `${blockId}:${property}`);
+        if (property === 'block_id') (this._ui.selectBlock({ blockId: value }));
     }
 
-    async _uploadBlockImage(detail: any) {
-        if (!detail || typeof detail !== 'object') throw new Error('flows-interface-editor: image-upload detail required');
+    async _uploadBlockImage(detail: unknown) {
+        if (!isPlainRecord(detail)) throw new Error('flows-interface-editor: image-upload detail required');
         const { blockId, property, file } = detail;
         if (typeof blockId !== 'string' || blockId === '') throw new Error('flows-interface-editor: image-upload blockId required');
         if (typeof property !== 'string' || property === '') throw new Error('flows-interface-editor: image-upload property required');
@@ -318,56 +368,56 @@ export class FlowsInterfaceEditor extends PlatformElement {
         this._setProperty(blockId, property, result.url);
     }
 
-    _remove(blockId: any) {
-        this._commit(removeBlock(this._draft, (this._ui).value.pageId, blockId));
-        (this._ui.selectBlock({ blockId: '' }) as any);
+    _remove(blockId: string) {
+        this._commit(removeBlock(this._requireDraft(), this._requirePageId(), blockId));
+        (this._ui.selectBlock({ blockId: '' }));
     }
 
-    _moveWithin(blockId: any, delta: any) {
-        const page = this._page;
+    _moveWithin(blockId: string, delta: number) {
+        const page = this._requirePage();
         const { containerKey, index } = locateBlock(page, blockId);
         const target = index + delta;
         if (target < 0) return;
-        this._commit(moveBlock(this._draft, page.page_id, blockId, containerKey, delta > 0 ? target + 1 : target));
+        this._commit(moveBlock(this._requireDraft(), page.page_id, blockId, containerKey, delta > 0 ? target + 1 : target));
     }
 
-    _blockMenuAction(blockId: any, action: any) {
+    _blockMenuAction(blockId: string, action: string) {
         this._menuOpen = false;
-        const pageId = (this._ui).value.pageId;
+        const pageId = this._requirePageId();
         if (action === 'edit_html') { this._openHtmlEditor(blockId); return; }
-        if (action === 'duplicate') this._commit(duplicateBlock(this._draft, pageId, blockId));
-        else if (action === 'wrap') this._commit(wrapInSection(this._draft, pageId, blockId));
+        if (action === 'duplicate') this._commit(duplicateBlock(this._requireDraft(), pageId, blockId));
+        else if (action === 'wrap') this._commit(wrapInSection(this._requireDraft(), pageId, blockId));
         else if (action === 'remove') this._remove(blockId);
         else throw new Error(`interface editor: unknown block action ${action}`);
     }
 
-    _openHtmlEditor(blockId: any) {
-        const { block } = locateBlock(this._page, blockId);
+    _openHtmlEditor(blockId: string) {
+        const { block } = locateBlock(this._requirePage(), blockId);
         if (block.type !== 'html') throw new Error('interface editor: edit_html requires html block');
-        const statePaths = statePathCatalog({ dataflow: this._editor.state.dataflow, sampleState: this._sampleState, document: this._draft })
+        const statePaths = statePathCatalog({ dataflow: this._editor.state.dataflow, sampleState: this._sampleState, document: this._requireDraft() })
             .filter((entry) => !entry.protected).map((entry) => entry.path);
         this.openModal('flows.interface_html_editor', {
             source: typeof block.source === 'string' ? block.source : '',
             block,
             sampleState: this._sampleState,
             statePaths,
-            onApply: (source: any) => this._setProperty(block.block_id, 'source', source),
+            onApply: (source: unknown) => this._setProperty(block.block_id, 'source', source),
         });
     }
 
     _pageCommand(event: CustomEvent) {
         const { command, pageId, property, value } = event.detail;
-        const draft = this._draft;
+        const draft = this._requireDraft();
         if (command === 'add') {
             const page = { page_id: uniquePageId(draft), title: this.t('interface_editor.page_default_title'), show_title: false, blocks: [] };
             this._commit(insertPage(draft, page));
-            (this._ui.selectPage({ pageId: page.page_id }) as any);
+            (this._ui.selectPage({ pageId: page.page_id }));
         } else if (command === 'remove') {
             this._commit(removePage(draft, pageId));
-            (this._ui.selectPage({ pageId: this._draft.start_page_id }) as any);
+            (this._ui.selectPage({ pageId: this._requireDraft().start_page_id }));
         } else if (command === 'set') {
             this._commit(setPageProperty(draft, pageId, property, value), `page:${pageId}:${property}`);
-            if (property === 'page_id') (this._ui.selectPage({ pageId: value }) as any);
+            if (property === 'page_id') (this._ui.selectPage({ pageId: value }));
         } else if (command === 'start') {
             this._commit({ ...structuredClone(draft), start_page_id: pageId });
         } else {
@@ -375,15 +425,18 @@ export class FlowsInterfaceEditor extends PlatformElement {
         }
     }
 
-    _applyTemplate(document: any) {
+    _applyTemplate(document: unknown) {
+        if (!isPlainRecord(document) || typeof document.start_page_id !== 'string' || document.start_page_id === '') {
+            throw new Error('flows-interface-editor: template document requires start_page_id');
+        }
         this._commit(structuredClone(document));
-        (this._ui.selectPage({ pageId: document.start_page_id }) as any);
+        this._ui.selectPage({ pageId: document.start_page_id });
     }
 
-    async assist(instruction: any, scope: any) {
-        const draft = this._draft;
-        const pageId = (this._ui).value.pageId;
-        const blockId = scope === 'block' ? (this._ui).value.selectedBlockId : null;
+    async assist(instruction: unknown, scope: unknown) {
+        const draft = this._requireDraft();
+        const pageId = this._requirePageId();
+        const blockId = scope === 'block' ? this._ui.value.selectedBlockId : null;
         if (scope === 'block' && blockId === '') throw new Error('interface editor: assist for block requires selection');
         const result = await this._assistOp.run({ flow_id: this.flowId, branch_id: this.branchId, instruction, document: draft, page_id: pageId, block_id: blockId });
         if (!isPlainRecord(result)) return;
@@ -392,21 +445,22 @@ export class FlowsInterfaceEditor extends PlatformElement {
             if (!isPlainRecord(page) || !Array.isArray(page.blocks)) {
                 throw new Error('flows-interface-editor: assist page blocks required');
             }
-            this._commit(replacePageBlocks(this._draft, pageId, page.blocks));
+            this._commit(replacePageBlocks(this._requireDraft(), pageId, page.blocks));
             return;
         }
         if (!Array.isArray(result.blocks) || result.blocks.length === 0) {
             throw new Error('flows-interface-editor: assist blocks required');
         }
-        const { containerKey, index } = locateBlock(findPage(this._draft, pageId), blockId);
-        let next = removeBlock(this._draft, pageId, blockId);
-        result.blocks.forEach((block: any, offset: any) => { next = insertBlock(next, pageId, containerKey, index + offset, block); });
+        if (typeof blockId !== 'string' || blockId === '') throw new Error('flows-interface-editor: assist blockId required');
+        const { containerKey, index } = locateBlock(findPage(this._requireDraft(), pageId), blockId);
+        let next = removeBlock(this._requireDraft(), pageId, blockId);
+        result.blocks.forEach((block, offset) => { next = insertBlock(next, pageId, containerKey, index + offset, block); });
         this._commit(next);
         const first = result.blocks[0];
         if (!isPlainRecord(first) || typeof first.block_id !== 'string') {
             throw new Error('flows-interface-editor: assist block_id required');
         }
-        (this._ui.selectBlock as any)({ blockId: first.block_id });
+        (this._ui.selectBlock)({ blockId: first.block_id });
     }
 
     /**
@@ -434,14 +488,14 @@ export class FlowsInterfaceEditor extends PlatformElement {
      * Предпросмотр холста — живой Task на том же документе, что проверяет сервер:
      * несохранённый черновик коммитится и сохраняется перед запуском.
      */
-    async setCanvasPreview(preview: any) {
+    async setCanvasPreview(preview: boolean) {
         if (preview && this._dirty) {
             if (!this.commitDraft()) return;
             this.emit('interface-save-request');
             await this._flowSaved();
             if (this._editor.state.isDirty) return;
         }
-        (this._ui.setPreview({ preview }) as any);
+        (this._ui.setPreview({ preview }));
     }
 
     /** Страница сохраняет flow по ``interface-save-request``; ждём завершения этого сохранения. */
@@ -453,16 +507,19 @@ export class FlowsInterfaceEditor extends PlatformElement {
                 throw new Error('flows-interface-editor: setSaving event required');
             }
             const unsubscribe = this.useEvent(setSaving, (event) => {
-                if ((event as any).payload.saving) return;
+                if (!isPlainRecord(event.payload)) {
+                    throw new Error('flows-interface-editor: saving payload required');
+                }
+                if (event.payload.saving === true) return;
                 unsubscribe();
                 resolve();
             });
         });
     }
 
-    _focusProblem(problem: any) {
-        if (problem.pageId !== null && problem.pageId !== (this._ui).value.pageId) (this._ui.selectPage({ pageId: problem.pageId }) as any);
-        if (problem.blockId !== null) (this._ui.selectBlock({ blockId: problem.blockId }) as any);
+    _focusProblem(problem: DocumentProblem) {
+        if (problem.pageId !== null && problem.pageId !== (this._ui).value.pageId) (this._ui.selectPage({ pageId: problem.pageId }));
+        if (problem.blockId !== null) (this._ui.selectBlock({ blockId: problem.blockId }));
     }
 
     // --- Холст: выделение, DnD, inline ------------------------------------------------------
@@ -489,7 +546,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
     _onCanvasClick(event: Event) {
         if (this._inlineEdit !== null || (this._ui).value.preview) return;
         const blockId = blockIdFromEvent(event);
-        (this._ui.selectBlock({ blockId: blockId === null ? '' : blockId }) as any);
+        (this._ui.selectBlock({ blockId: blockId === null ? '' : blockId }));
         this.focus();
     }
 
@@ -497,7 +554,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         if ((this._ui).value.preview) return;
         const blockId = blockIdFromEvent(event);
         if (blockId === null) return;
-        const { block } = locateBlock(this._page, blockId);
+        const { block } = locateBlock(this._requirePage(), blockId);
         const property = inlineTextProperty(block.type);
         if (property === null) return;
         const frameHost = this.renderRoot.querySelector('.frame');
@@ -513,7 +570,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         });
     }
 
-    _finishInlineEdit(commit: any) {
+    _finishInlineEdit(commit: boolean) {
         const edit = this._inlineEdit;
         if (edit === null) return;
         this._inlineEdit = null;
@@ -553,10 +610,10 @@ export class FlowsInterfaceEditor extends PlatformElement {
             this._insert(payload.type, target.containerKey, target.index, payload.columns);
             return;
         }
-        this._commit(moveBlock(this._draft, (this._ui).value.pageId, payload.blockId, target.containerKey, target.index));
+        this._commit(moveBlock(this._requireDraft(), this._requirePageId(), payload.blockId, target.containerKey, target.index));
     }
 
-    _onHandleDragStart(event: DragEvent, blockId: any) {
+    _onHandleDragStart(event: DragEvent, blockId: string) {
         const transfer = event.dataTransfer;
         if (transfer === null) {
             throw new Error('flows-interface-editor: dataTransfer required');
@@ -568,29 +625,30 @@ export class FlowsInterfaceEditor extends PlatformElement {
     _handleKeydown(event: KeyboardEvent) {
         if (this._inlineEdit !== null || (this._ui).value.preview) return;
         const path = event.composedPath();
-        if (path.some((node: any) => node instanceof HTMLElement && (node.matches('input, textarea, select, [contenteditable="true"]') || node.classList.contains('cm-content')))) return;
+        if (path.some((node) => node instanceof HTMLElement && (node.matches('input, textarea, select, [contenteditable="true"]') || node.classList.contains('cm-content')))) return;
         const meta = event.metaKey || event.ctrlKey;
         const blockId = (this._ui).value.selectedBlockId;
         if (meta && event.key.toLowerCase() === 'z') {
             event.preventDefault();
-            if (event.shiftKey) (this._ui.redo(null) as any); else (this._ui.undo(null) as any);
+            if (event.shiftKey) (this._ui.redo(null)); else (this._ui.undo(null));
             return;
         }
-        if (blockId === '') return;
+        if (typeof blockId !== 'string' || blockId === '') return;
         if (meta && event.key.toLowerCase() === 'd') { event.preventDefault(); this._blockMenuAction(blockId, 'duplicate'); return; }
         if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); this._remove(blockId); return; }
         if (event.key === 'ArrowUp') { event.preventDefault(); this._moveWithin(blockId, -1); return; }
         if (event.key === 'ArrowDown') { event.preventDefault(); this._moveWithin(blockId, 1); return; }
-        if (event.key === 'Escape') (this._ui.selectBlock({ blockId: '' }) as any);
+        if (event.key === 'Escape') (this._ui.selectBlock({ blockId: '' }));
     }
 
     // --- Рендер -------------------------------------------------------------------------------
 
     _renderSelection() {
         const frame = this._frame;
-        const blockId = (this._ui).value.selectedBlockId;
-        if (frame === null || blockId === '' || this._page === null) return '';
-        const { block } = locateBlock(this._page, blockId);
+        const blockId = this._ui.value.selectedBlockId;
+        const page = this._page;
+        if (frame === null || typeof blockId !== 'string' || blockId === '' || page === null) return '';
+        const { block } = locateBlock(page, blockId);
         const items = [
             ...(block.type === 'html' ? [{ id: 'edit_html', label: this.t('interface_editor.html_open_editor'), icon: 'code' }] : []),
             { id: 'duplicate', label: this.t('interface_editor.block_duplicate'), icon: 'copy', hint: '⌘D' },
@@ -601,13 +659,23 @@ export class FlowsInterfaceEditor extends PlatformElement {
             <div class="label">
                 <span class="handle" draggable="true" title=${this.t('interface_editor.drag_hint')} @dragstart=${(event: DragEvent) => this._onHandleDragStart(event, blockId)}><platform-icon name="drag-handle" size="12"></platform-icon></span>
                 <span>${this.t(`interface_editor.block_${block.type}`)}</span>
-                ${renderAlignButtons({ block, t: (key) => this.t(key), setProperty: (id, name, value) => this._setProperty(id, name, value) })}
+                ${renderAlignButtons({ block, t: (key) => this.t(key), setProperty: (id, name, value) => {
+                    if (typeof id !== 'string' || id === '') throw new Error('flows-interface-editor: block id required');
+                    this._setProperty(id, name, value);
+                } })}
                 <platform-button ghost density="dense" icon-only class="kebab" aria-label=${this.t('interface_editor.block_menu')} @click=${(event: CustomEvent) => { event.stopPropagation(); this._menuOpen = !this._menuOpen; }}><platform-icon name="more-vert" size="12"></platform-icon></platform-button>
                 <platform-popover trigger="manual" .anchor=${this.renderRoot.querySelector('.kebab')} ?open=${this._menuOpen} role="menu" dismiss-on-outside @popover-dismiss=${() => { this._menuOpen = false; }}>
-                    <platform-menu compact .items=${items} @menu-select=${(event: CustomEvent) => this._blockMenuAction(blockId, event.detail.id)}></platform-menu>
+                    <platform-menu compact .items=${items} @menu-select=${(event: CustomEvent) => {
+                        const actionId = event.detail.id;
+                        if (typeof actionId !== 'string' || actionId === '') throw new Error('flows-interface-editor: block action required');
+                        this._blockMenuAction(blockId, actionId);
+                    }}></platform-menu>
                 </platform-popover>
             </div>
-            ${renderSpanHandle({ block, t: (key) => this.t(key), setProperty: (id, name, value) => this._setProperty(id, name, value), blockEl: blockElement(this._flowUi(), blockId) })}
+            ${renderSpanHandle({ block, t: (key) => this.t(key), setProperty: (id, name, value) => {
+                if (typeof id !== 'string' || id === '') throw new Error('flows-interface-editor: block id required');
+                this._setProperty(id, name, value);
+            }, blockEl: blockElement(this._flowUi(), blockId) })}
         </div>`;
     }
 
@@ -616,20 +684,23 @@ export class FlowsInterfaceEditor extends PlatformElement {
         if (draft === null || this._schema === null) return html`<div class="loading">${this.t('interface_editor.loading')}</div>`;
         const ui = this._ui.value;
         const page = this._page;
+        if (page === null) throw new Error('flows-interface-editor: page required');
         const problems = this._problems;
         const catalogPaths = statePathCatalog({ dataflow: this._editor.state.dataflow, sampleState: this._sampleState, document: draft });
         const selectedBlockId = ui.selectedBlockId;
         const selected = typeof selectedBlockId === 'string' && selectedBlockId !== '' ? locateBlock(page, selectedBlockId).block : null;
+        const drop = this._drop;
+        const inlineEdit = this._inlineEdit;
         return html`
             <flows-interface-pages-tabs .document=${draft} .pageId=${ui.pageId!}
-                @page-select=${(event: CustomEvent) => (this._ui.selectPage({ pageId: event.detail.pageId }) as any)}
+                @page-select=${(event: CustomEvent) => (this._ui.selectPage({ pageId: event.detail.pageId }))}
                 @page-command=${(event: CustomEvent) => this._pageCommand(event)}
             ></flows-interface-pages-tabs>
             <div class="body">
                 <aside class="sidebar">
                     <platform-segmented-control class="sidebar-tabs" density="compact" .value=${ui.sidebarTab!}
                         .items=${[{ value: 'add', label: this.t('interface_editor.tab_add') }, { value: 'properties', label: this.t('interface_editor.tab_properties') }]}
-                        @change=${(event: CustomEvent) => (this._ui.setSidebarTab({ tab: event.detail.value }) as any)}></platform-segmented-control>
+                        @change=${(event: CustomEvent) => (this._ui.setSidebarTab({ tab: event.detail.value }))}></platform-segmented-control>
                     ${ui.sidebarTab! === 'add'
                         ? html`<flows-interface-add-panel .catalog=${this._catalog}
                             @block-add=${(event: CustomEvent) => { const target = paletteInsertTarget(page, typeof selectedBlockId === 'string' ? selectedBlockId : null); this._insert(event.detail.type, target.containerKey, target.index, event.detail.columns); }}></flows-interface-add-panel>`
@@ -642,7 +713,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
                                 if (typeof pageId !== 'string' || pageId.length === 0) {
                                     throw new Error('flows-interface-editor: pageId required');
                                 }
-                                this._commit(setPageProperty(this._draft, pageId, event.detail.property, event.detail.value), `page:${pageId}:${event.detail.property}`);
+                                this._commit(setPageProperty(this._requireDraft(), pageId, event.detail.property, event.detail.value), `page:${pageId}:${event.detail.property}`);
                             }}
                             @image-upload=${(event: CustomEvent) => void this._uploadBlockImage(event.detail)}
                             @block-action=${(event: CustomEvent) => this._blockMenuAction(event.detail.blockId, event.detail.action)}
@@ -656,13 +727,13 @@ export class FlowsInterfaceEditor extends PlatformElement {
                             ? html`<platform-flow-ui profile="editor_test" display="panel" theme="auto" flow-id=${this.flowId} branch-id=${this.branchId} page-id=${ui.pageId!} base-url="/flows" .initialDocument=${draft}></platform-flow-ui>`
                             : html`<platform-flow-ui editing theme="auto" flow-id=${this.flowId} page-id=${ui.pageId!} .initialDocument=${draft} .sampleState=${this._sampleState}
                                 selected-block-id=${ui.selectedBlockId!}
-                                @flow-ui-navigation=${(event: CustomEvent) => { if (event.detail.pageId !== ui.pageId) (this._ui.selectPage({ pageId: event.detail.pageId }) as any); }}></platform-flow-ui>`}
+                                @flow-ui-navigation=${(event: CustomEvent) => { if (event.detail.pageId !== ui.pageId) (this._ui.selectPage({ pageId: event.detail.pageId })); }}></platform-flow-ui>`}
                         ${this._renderSelection()}
-                        ${this._drop !== null ? html`<div class="drop-line" style=${`top:${(this._drop).indicator.top}px;left:${(this._drop).indicator.left}px;width:${(this._drop).indicator.width}px`}></div>` : nothing}
-                        ${this._inlineEdit !== null ? html`<textarea class="inline-edit" data-canon="inline-edit" .value=${this._inlineEdit.value}
-                            style=${`top:${(this._inlineEdit).frame.top}px;left:${(this._inlineEdit).frame.left}px;width:${(this._inlineEdit).frame.width}px;min-height:${Math.max((this._inlineEdit).frame.height, 36)}px`}
+                        ${drop !== null ? html`<div class="drop-line" style=${`top:${drop.indicator.top}px;left:${drop.indicator.left}px;width:${drop.indicator.width}px`}></div>` : nothing}
+                        ${inlineEdit !== null ? html`<textarea class="inline-edit" data-canon="inline-edit" .value=${inlineEdit.value}
+                            style=${`top:${inlineEdit.frame.top}px;left:${inlineEdit.frame.left}px;width:${inlineEdit.frame.width}px;min-height:${Math.max(inlineEdit.frame.height, 36)}px`}
                             @blur=${() => this._finishInlineEdit(true)}
-                            @keydown=${(event: KeyboardEvent) => { const action = inlineEditKeyAction(event, (this._inlineEdit as any).multiline); if (action !== null) { event.preventDefault(); this._finishInlineEdit(action === 'commit'); } }}></textarea>` : nothing}
+                            @keydown=${(event: KeyboardEvent) => { const action = inlineEditKeyAction(event, inlineEdit.multiline); if (action !== null) { event.preventDefault(); this._finishInlineEdit(action === 'commit'); } }}></textarea>` : nothing}
                     </div>
                 </div>
             </div>

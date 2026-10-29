@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.mcp_catalog_provisioner import MCPCatalogProvisionStats
 
@@ -144,7 +143,7 @@ async def test_init_company_resources_for_regular_company(
     set_context(test_context)
 
     try:
-        agents = await FlowConfig.list_current(limit=1000)
+        agents = await FlowConfig.list_current_by_created_at_desc(limit=1000)
         agent_ids = [agent.flow_id for agent in agents]
 
         print(f"📋 Загруженные агенты в {test_company_id}: {agent_ids}")
@@ -209,7 +208,7 @@ async def test_flows_loader_filter_public(di, unique_id: str):
 
         print(f"📊 С фильтром: {stats_filtered}")
 
-        agents_filtered = await FlowConfig.list_current(limit=1000)
+        agents_filtered = await FlowConfig.list_current_by_created_at_desc(limit=1000)
         filtered_count = len(agents_filtered)
 
         # Очищаем для второго теста
@@ -224,7 +223,7 @@ async def test_flows_loader_filter_public(di, unique_id: str):
 
         print(f"📊 Без фильтра: {stats_all}")
 
-        agents_all = await FlowConfig.list_current(limit=1000)
+        agents_all = await FlowConfig.list_current_by_created_at_desc(limit=1000)
         all_count = len(agents_all)
 
         # Без фильтра должно быть больше или равно
@@ -292,119 +291,4 @@ async def test_system_vs_company_loading(di, unique_id: str):
         f"✅ System имеет больше или равно агентов: "
         f"{system_agents_count} >= {company_agents_count}"
     )
-
-
-@pytest.mark.asyncio
-async def test_init_company_resources_bootstraps_public_agent_toolkits(
-    di,
-    unique_id: str,
-) -> None:
-    from apps.flows.src.tasks.company_init_tasks import init_company_resources
-    from core.context import clear_context, set_context
-    from core.models.context_models import Context
-    from core.models.identity_models import Company, User
-
-    test_company_id = f"test_toolkits_{unique_id}"
-    clear_context()
-
-    result = await init_company_resources(
-        company_id=test_company_id,
-        company_name=f"Toolkits {unique_id}",
-        subdomain=f"toolkits-{unique_id}",
-        di=di,
-    )
-
-    assert result["status"] == "completed"
-    assert result["agent_toolkits"] == 6
-
-    test_context = Context(
-        user=User(user_id="test_user", name="Test User"),
-        active_company=Company(
-            company_id=test_company_id,
-            name=f"Toolkits {unique_id}",
-            subdomain=f"toolkits-{unique_id}",
-        ),
-        session_id="test_session",
-        channel="test",
-    )
-    set_context(test_context)
-    try:
-        lara = await AgentToolkit.by_toolkit_id("lara")
-        assert lara is not None
-        assert lara.default_enabled is True
-        assert "lara" in lara.flow_ids
-        toolkit = await AgentToolkit.by_toolkit_id("humanitec_core")
-        assert toolkit is not None
-        assert toolkit.default_enabled is False
-        assert "humanitec_agent" in toolkit.flow_ids
-        public_ids = {
-            "humanitec_core",
-            "networkle",
-            "docs",
-            "lara",
-            "files",
-            "browser",
-        }
-        toolkits = await AgentToolkit.list_agent_toolkits()
-        loaded_ids = {item.toolkit_id for item in toolkits}
-        assert public_ids.issubset(loaded_ids)
-    finally:
-        clear_context()
-
-
-@pytest.mark.asyncio
-async def test_init_company_resources_rebootstrap_preserves_toolkit_membership(
-    di,
-    unique_id: str,
-) -> None:
-    from apps.flows.src.tasks.company_init_tasks import init_company_resources
-    from core.context import clear_context, set_context
-    from core.models.context_models import Context
-    from core.models.identity_models import Company, User
-
-    test_company_id = f"test_toolkits_merge_{unique_id}"
-    extra_flow = f"extra_flow_{unique_id}"
-    clear_context()
-
-    await init_company_resources(
-        company_id=test_company_id,
-        company_name=f"Toolkits merge {unique_id}",
-        subdomain=f"toolkits-merge-{unique_id}",
-        di=di,
-    )
-
-    test_context = Context(
-        user=User(user_id="test_user", name="Test User"),
-        active_company=Company(
-            company_id=test_company_id,
-            name=f"Toolkits merge {unique_id}",
-            subdomain=f"toolkits-merge-{unique_id}",
-        ),
-        session_id="test_session",
-        channel="test",
-    )
-    set_context(test_context)
-    try:
-        toolkit = await AgentToolkit.by_toolkit_id("humanitec_core")
-        assert toolkit is not None
-        updated = toolkit.model_copy(update={"flow_ids": [*toolkit.flow_ids, extra_flow]})
-        _ = await AgentToolkit.set(updated)
-    finally:
-        clear_context()
-
-    await init_company_resources(
-        company_id=test_company_id,
-        company_name=f"Toolkits merge {unique_id}",
-        subdomain=f"toolkits-merge-{unique_id}",
-        di=di,
-    )
-
-    set_context(test_context)
-    try:
-        merged = await AgentToolkit.by_toolkit_id("humanitec_core")
-        assert merged is not None
-        assert extra_flow in merged.flow_ids
-        assert "humanitec_agent" in merged.flow_ids
-    finally:
-        clear_context()
 

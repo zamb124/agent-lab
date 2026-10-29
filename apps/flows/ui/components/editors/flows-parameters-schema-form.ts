@@ -18,6 +18,11 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-json-editor.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import { isPlainObject } from '../../_helpers/flows-resolvers.js';
+
+function fieldDef(raw: unknown): Record<string, unknown> {
+    return isPlainObject(raw) ? raw : {};
+}
 
 export class FlowsParametersSchemaForm extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -60,14 +65,17 @@ export class FlowsParametersSchemaForm extends PlatformElement {
         const s = this.schema;
         if (!s || typeof s !== 'object') return [];
         return Object.entries(s).map(([key, raw]) => {
-            const def = raw && typeof raw === 'object' ? raw : {};
+            const def = fieldDef(raw);
+            const type = def.type;
+            const description = def.description;
+            const enumValues = def.enum;
             return {
                 key,
-                type: typeof (def as Record<string, any>).type === 'string' ? (def as Record<string, any>).type : 'string',
-                description: typeof (def as Record<string, any>).description === 'string' ? (def as Record<string, any>).description : '',
-                required: Boolean((def as Record<string, any>).required),
+                type: typeof type === 'string' ? type : 'string',
+                description: typeof description === 'string' ? description : '',
+                required: Boolean(def.required),
                 defaultValue: 'default' in def ? def.default : undefined,
-                enumValues: Array.isArray((def as Record<string, any>).enum) ? (def as Record<string, any>).enum : null,
+                enumValues: Array.isArray(enumValues) ? enumValues : null,
             };
         });
     }

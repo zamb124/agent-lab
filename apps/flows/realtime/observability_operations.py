@@ -246,7 +246,7 @@ async def op_flows_traces_search(
 ) -> ObservabilityTraceSearchResponse:
     _ = user
     _ = di
-    traces, total = await Span.trace_group_page_and_span_count(
+    traces, total = await Span.trace_group_page_by_start_time_desc_and_span_count(
         flow_id=payload.flow_id,
         task_id=payload.task_id,
         limit=payload.limit,
@@ -316,7 +316,7 @@ async def op_flows_traces_handoff_chain(
     if trace_id is None:
         raise_not_found(LookupError("handoff_trace_id not set on parent session"))
     tempo_spans = await _tempo_spans(di.tempo_client.get_trace(trace_id))
-    db_spans = await Span.list_for_trace(trace_id)
+    db_spans = await Span.list_for_trace_by_start_time_asc(trace_id)
     all_spans: list[JsonObject] = []
     seen: set[str] = set()
     for span in tempo_spans:

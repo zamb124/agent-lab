@@ -18,7 +18,11 @@ import '../resources/flows-data-table-resource-editor.js';
  * @param {(e: CustomEvent) => void} onChange — detail: { resourceId, patch }
  * @param {{ compactHeader?: boolean, flowId?: string, nodeId?: string }} [options]
  */
-export function renderResourceDefinitionEditor(resource: any, onChange: any, options = {}) {
+export function renderResourceDefinitionEditor(
+    resource: any,
+    onChange: any,
+    options: { compactHeader?: boolean; flowId?: string; nodeId?: string } = {},
+) {
     if (!isPlainObject(resource)) {
         return html``;
     }
@@ -26,7 +30,9 @@ export function renderResourceDefinitionEditor(resource: any, onChange: any, opt
     if (id.length === 0) {
         return html``;
     }
-    const compactHeader = (options as Record<string, any>).compactHeader === true;
+    const compactHeader = options.compactHeader === true;
+    const nodeId = typeof options.nodeId === 'string' ? options.nodeId : '';
+    const flowId = typeof options.flowId === 'string' ? options.flowId : '';
     switch (resource.type) {
         case 'llm':
             return html`<flows-llm-resource-editor .resourceId=${id} .resource=${resource}
@@ -38,12 +44,12 @@ export function renderResourceDefinitionEditor(resource: any, onChange: any, opt
                 @change=${onChange}></flows-llm-context-resource-editor>`;
         case 'rag':
             return html`<flows-rag-resource-editor .resourceId=${id} .resource=${resource}
-                .nodeId=${typeof (options as Record<string, any>).nodeId === 'string' ? (options as Record<string, any>).nodeId : ''}
+                .nodeId=${nodeId}
                 .compactHeader=${compactHeader}
                 @change=${onChange}></flows-rag-resource-editor>`;
         case 'data_table':
             return html`<flows-data-table-resource-editor .resourceId=${id} .resource=${resource}
-                .flowId=${typeof (options as Record<string, any>).flowId === 'string' ? (options as Record<string, any>).flowId : ''}
+                .flowId=${flowId}
                 .compactHeader=${compactHeader}
                 @change=${onChange}></flows-data-table-resource-editor>`;
         case 'code':

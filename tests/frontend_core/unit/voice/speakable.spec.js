@@ -8,7 +8,7 @@
  *  - склейку всех text-частей через `extractSpeakableText`.
  *
  * Пары с Python: при любом расхождении whitelist ломается CI-проверка
- * `scripts/check_speakable_parity.py`.
+ * `scripts/gates/voice/speakable_parity.py`.
  */
 
 import { describe, it, expect } from 'vitest';

@@ -30,7 +30,7 @@ class WorkQueueAccessPort(Protocol):
 
     async def sync_queue_deleted(self, work_queue_id: str) -> None: ...
 
-    async def list_member_rows(
+    async def list_member_rows_by_user_id_asc(
         self, work_queue_id: str
     ) -> list[tuple[str, WorkQueueMemberRelation]]: ...
 

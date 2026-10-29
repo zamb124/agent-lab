@@ -6,6 +6,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { CrmGraphViewSlice } from '../crm.types.js';
 
 const DEFAULT_SEARCH_INPUT = Object.freeze({
@@ -18,6 +19,58 @@ const DEFAULT_SELECTION = Object.freeze({
     nodeId: null,
     edgeId: null,
 });
+
+function eventRecord(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
+
+function viewModeOf(value: unknown): '3d' | 'mindmap' | null {
+    return value === '3d' || value === 'mindmap' ? value : null;
+}
+
+function depthOf(value: unknown): number | null {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+        return null;
+    }
+    return Math.min(5, Math.max(1, value));
+}
+
+function optionalId(value: unknown): string | null {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function selectionFrom(value: unknown): { nodeId: string | null; edgeId: string | null } | null {
+    if (!isPlainRecord(value)) {
+        return null;
+    }
+    return {
+        nodeId: optionalId(value.nodeId),
+        edgeId: optionalId(value.edgeId),
+    };
+}
+
+function searchFrom(value: unknown): { query: string; mode: string; minScore: number } | null {
+    if (!isPlainRecord(value)) {
+        return null;
+    }
+    const queryValue = value.query;
+    const mode = value.mode;
+    const minScoreValue = value.minScore;
+    const query = typeof queryValue === 'string' ? queryValue : '';
+    let searchMode = 'hybrid';
+    if (mode === 'text' || mode === 'semantic' || mode === 'hybrid') {
+        searchMode = mode;
+    }
+    let minScore = 0;
+    if (typeof minScoreValue === 'number' && Number.isFinite(minScoreValue)) {
+        minScore = minScoreValue;
+    }
+    return { query, mode: searchMode, minScore };
+}
 
 export const graphViewSlice = createSlice({
     name: 'crm/graph_view',
@@ -47,146 +100,72 @@ export const graphViewSlice = createSlice({
     extraReducer: (state: CrmGraphViewSlice, event) => {
         switch (event.type) {
             case 'crm/graph_view/hydrated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || typeof p !== 'object') {
+                const p = eventRecord(event.payload);
+                if (p === null) {
                     return state;
                 }
                 let next = { ...state };
-                if (p.viewMode === '3d' || p.viewMode === 'mindmap') {
-                    next = { ...next, viewMode: p.viewMode };
+                const viewMode = viewModeOf(p.viewMode);
+                if (viewMode !== null) {
+                    next = { ...next, viewMode };
                 }
-                if (typeof p.maxDepth === 'number' && Number.isInteger(p.maxDepth)) {
-                    const d = Math.min(5, Math.max(1, p.maxDepth));
-                    next = { ...next, maxDepth: d };
+                const maxDepth = depthOf(p.maxDepth);
+                if (maxDepth !== null) {
+                    next = { ...next, maxDepth };
                 }
-                if (typeof p.displayDepth === 'number' && Number.isInteger(p.displayDepth)) {
-                    const dd = Math.min(5, Math.max(1, p.displayDepth));
-                    next = { ...next, displayDepth: dd };
+                const displayDepth = depthOf(p.displayDepth);
+                if (displayDepth !== null) {
+                    next = { ...next, displayDepth };
                 }
-                if (p.selection && typeof p.selection === 'object') {
-                    const nodeIdRaw = p.selection.nodeId;
-                    const edgeIdRaw = p.selection.edgeId;
-                    const nodeId =
-                        nodeIdRaw === null || nodeIdRaw === undefined
-                            ? null
-                            : typeof nodeIdRaw === 'string'
-                              ? nodeIdRaw.trim().length > 0
-                                  ? nodeIdRaw.trim()
-                                  : null
-                              : null;
-                    const edgeId =
-                        edgeIdRaw === null || edgeIdRaw === undefined
-                            ? null
-                            : typeof edgeIdRaw === 'string'
-                              ? edgeIdRaw.trim().length > 0
-                                  ? edgeIdRaw.trim()
-                                  : null
-                              : null;
-                    next = {
-                        ...next,
-                        selection: Object.freeze({ nodeId, edgeId }),
-                    };
+                const selection = selectionFrom(p.selection);
+                if (selection !== null) {
+                    next = { ...next, selection: Object.freeze(selection) };
                 }
-                if (p.searchInput && typeof p.searchInput === 'object') {
-                    const q = p.searchInput.query;
-                    const mode = p.searchInput.mode;
-                    const ms = p.searchInput.minScore;
-                    const query = typeof q === 'string' ? q : '';
-                    let searchMode = 'hybrid';
-                    if (mode === 'text' || mode === 'semantic' || mode === 'hybrid') {
-                        searchMode = mode;
-                    }
-                    let minScore = 0;
-                    if (typeof ms === 'number' && Number.isFinite(ms)) {
-                        minScore = ms;
-                    }
-                    next = {
-                        ...next,
-                        searchInput: Object.freeze({
-                            query,
-                            mode: searchMode,
-                            minScore,
-                        }),
-                    };
+                const searchInput = searchFrom(p.searchInput);
+                if (searchInput !== null) {
+                    next = { ...next, searchInput: Object.freeze(searchInput) };
                 }
                 return next;
             }
             case 'crm/graph_view/view_mode_updated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || (p.viewMode !== '3d' && p.viewMode !== 'mindmap')) {
+                const p = eventRecord(event.payload);
+                const viewMode = p === null ? null : viewModeOf(p.viewMode);
+                if (viewMode === null) {
                     return state;
                 }
-                return { ...state, viewMode: p.viewMode };
+                return { ...state, viewMode };
             }
             case 'crm/graph_view/max_depth_updated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || typeof p.maxDepth !== 'number' || !Number.isInteger(p.maxDepth)) {
+                const p = eventRecord(event.payload);
+                const maxDepth = p === null ? null : depthOf(p.maxDepth);
+                if (maxDepth === null) {
                     return state;
                 }
-                const d = Math.min(5, Math.max(1, p.maxDepth));
-                return { ...state, maxDepth: d };
+                return { ...state, maxDepth };
             }
             case 'crm/graph_view/display_depth_updated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || typeof p.displayDepth !== 'number' || !Number.isInteger(p.displayDepth)) {
+                const p = eventRecord(event.payload);
+                const displayDepth = p === null ? null : depthOf(p.displayDepth);
+                if (displayDepth === null) {
                     return state;
                 }
-                const dd = Math.min(5, Math.max(1, p.displayDepth));
-                return { ...state, displayDepth: dd };
+                return { ...state, displayDepth };
             }
             case 'crm/graph_view/selection_updated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || !p.selection || typeof p.selection !== 'object') {
+                const p = eventRecord(event.payload);
+                const selection = p === null ? null : selectionFrom(p.selection);
+                if (selection === null) {
                     return state;
                 }
-                const nodeIdRaw = p.selection.nodeId;
-                const edgeIdRaw = p.selection.edgeId;
-                const nodeId =
-                    nodeIdRaw === null || nodeIdRaw === undefined
-                        ? null
-                        : typeof nodeIdRaw === 'string'
-                          ? nodeIdRaw.trim().length > 0
-                              ? nodeIdRaw.trim()
-                              : null
-                          : null;
-                const edgeId =
-                    edgeIdRaw === null || edgeIdRaw === undefined
-                        ? null
-                        : typeof edgeIdRaw === 'string'
-                          ? edgeIdRaw.trim().length > 0
-                              ? edgeIdRaw.trim()
-                              : null
-                          : null;
-                return {
-                    ...state,
-                    selection: Object.freeze({ nodeId, edgeId }),
-                };
+                return { ...state, selection: Object.freeze(selection) };
             }
             case 'crm/graph_view/search_input_updated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || !p.searchInput || typeof p.searchInput !== 'object') {
+                const p = eventRecord(event.payload);
+                const searchInput = p === null ? null : searchFrom(p.searchInput);
+                if (searchInput === null) {
                     return state;
                 }
-                const q = p.searchInput.query;
-                const mode = p.searchInput.mode;
-                const ms = p.searchInput.minScore;
-                const query = typeof q === 'string' ? q : '';
-                let searchMode = 'hybrid';
-                if (mode === 'text' || mode === 'semantic' || mode === 'hybrid') {
-                    searchMode = mode;
-                }
-                let minScore = 0;
-                if (typeof ms === 'number' && Number.isFinite(ms)) {
-                    minScore = ms;
-                }
-                return {
-                    ...state,
-                    searchInput: Object.freeze({
-                        query,
-                        mode: searchMode,
-                        minScore,
-                    }),
-                };
+                return { ...state, searchInput: Object.freeze(searchInput) };
             }
             default:
                 return state;

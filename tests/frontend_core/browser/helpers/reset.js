@@ -33,7 +33,6 @@ const TEST_PLATFORM_BRAND = {
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
     apexOrigin: 'http://localhost:8002/',
     supportedDomains: ['humanitec.ru', 'linnex.io', 'localhost', 'lvh.me'],
-    agentProductName: 'HumanitecAgent',
     modelsProductName: 'Humanitec Models',
     voiceProductName: 'Humanitec Voice',
     llmsDisplayLabel: 'Humanitec LLMs',

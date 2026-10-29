@@ -11,7 +11,7 @@ import asyncio
 import time
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.tool_reference import ToolReference
@@ -133,7 +133,7 @@ async def test_company_creation_with_agents_initialization(
         # Ждем пока агенты появятся в БД
         agents_loaded = False
         for attempt in range(max_wait):
-            agents = await FlowConfig.list_current(limit=1000)
+            agents = await FlowConfig.list_current_by_created_at_desc(limit=1000)
 
             if len(agents) > 0:
                 agents_loaded = True
@@ -147,7 +147,7 @@ async def test_company_creation_with_agents_initialization(
         )
 
         # Проверка что загружены ТОЛЬКО public агенты
-        agents = await FlowConfig.list_current(limit=1000)
+        agents = await FlowConfig.list_current_by_created_at_desc(limit=1000)
         agent_ids = [agent.flow_id for agent in agents]
 
         print(f"📋 Загруженные агенты: {agent_ids}")
@@ -174,7 +174,7 @@ async def test_company_creation_with_agents_initialization(
         print("✅ Internal агенты отфильтрованы корректно")
 
         # Шаг 6: Проверка что tools тоже загружены
-        tools = await ToolReference.list_in_tool_id_order(limit=1000)
+        tools = await ToolReference.list_by_tool_id_asc(limit=1000)
 
         print(f"Загружено tools: {len(tools)} шт")
 

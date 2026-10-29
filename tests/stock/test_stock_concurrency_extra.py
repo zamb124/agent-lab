@@ -73,7 +73,7 @@ async def _reserved_move(env: StockEnv, qty: Decimal) -> StockMove:
     _ = await env.di.move_engine.assign_transfer(
         company_id=env.company_id, transfer_id=transfer.transfer_id
     )
-    moves = await StockMove.list_for_transfer(
+    moves = await StockMove.list_for_transfer_by_created_at_asc(
         env.company_id, transfer.transfer_id
     )
     return moves[0]
@@ -136,7 +136,7 @@ class TestConcurrentScanCommits:
         )
         assert quant.quantity == Decimal("5")
         assert quant.reserved_quantity == Decimal("0")
-        open_left = await StockMoveLine.list_for_move(
+        open_left = await StockMoveLine.list_open_for_move_by_created_at_asc(
             env.company_id, move.move_id
         )
         assert open_left == []
@@ -195,7 +195,7 @@ class TestConcurrentClaims:
         _ = await _receipt(env, Decimal("5"), Decimal("2"))
         move = await _reserved_move(env, Decimal("3"))
         line = (
-            await StockMoveLine.list_for_move(env.company_id, move.move_id)
+            await StockMoveLine.list_open_for_move_by_created_at_asc(env.company_id, move.move_id)
         )[0]
         results = await asyncio.gather(
             *(

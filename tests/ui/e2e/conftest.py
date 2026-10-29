@@ -14,17 +14,6 @@ from tests.ui.perf.collector import (
 )
 from tests.ui.perf.report import rebuild_summary
 
-_AGENT_SETTINGS_EMPTY_STATE_TESTS = frozenset({
-    "test_f3_settings_agent_devices_empty",
-    "test_f4_settings_agent_audit_empty",
-})
-_AGENT_SETTINGS_MUTATING_TESTS = frozenset({
-    "test_f9_settings_agent_devices_after_pair",
-    "test_f10_settings_agent_revoke_device",
-    "test_f11_settings_agent_policy_shell_toggle",
-    "test_f12_settings_agent_audit_after_register",
-})
-_AGENT_SETTINGS_MODULE_SUFFIX = "test_frontend_settings_agent.py"
 # Жёсткий бюджет UI E2E: сломанный locator/ожидание не должны жечь минуты.
 # Дольше — opt-in `scenario(timeout_seconds=N)` и/или `@pytest.mark.timeout(N)` (15..360).
 _UI_E2E_TIMEOUT_SECONDS = 15
@@ -71,27 +60,6 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             pytest.mark.timeout(_resolve_ui_e2e_timeout_seconds(item), func_only=True),
             append=False,
         )
-
-    positions = [
-        (index, item)
-        for index, item in enumerate(items)
-        if item.nodeid.endswith(_AGENT_SETTINGS_MODULE_SUFFIX)
-    ]
-    if not positions:
-        return
-
-    agent_items = [item for _, item in positions]
-    early = [item for item in agent_items if item.name in _AGENT_SETTINGS_EMPTY_STATE_TESTS]
-    late = [item for item in agent_items if item.name in _AGENT_SETTINGS_MUTATING_TESTS]
-    middle = [
-        item
-        for item in agent_items
-        if item.name not in _AGENT_SETTINGS_EMPTY_STATE_TESTS
-        and item.name not in _AGENT_SETTINGS_MUTATING_TESTS
-    ]
-    reordered = early + middle + late
-    for position, new_item in zip((index for index, _ in positions), reordered):
-        items[position] = new_item
 
 
 @pytest.fixture(autouse=True)

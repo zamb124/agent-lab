@@ -15,6 +15,14 @@ import type {
     TemplateResult,
 } from 'lit';
 
+function inputNumber(event: Event): number {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        throw new Error('graph-timeline: input required');
+    }
+    return Number(input.value);
+}
+
 export class CRMGraphTimeline extends PlatformElement {
     static i18nNamespace = 'crm';
 
@@ -178,7 +186,7 @@ export class CRMGraphTimeline extends PlatformElement {
     }
 
     _onStartInput(e: Event) {
-        let start = Math.min(Number((e.target as HTMLInputElement).value), this.endPercent);
+        let start = Math.min(inputNumber(e), this.endPercent);
         let end = this.endPercent;
         if (this._timelineSpanOk()) {
             const c = clampTimelinePercents(start, end, this.minTimestamp, this.maxTimestamp);
@@ -195,7 +203,7 @@ export class CRMGraphTimeline extends PlatformElement {
 
     _onEndInput(e: Event) {
         let start = this.startPercent;
-        let end = Math.max(Number((e.target as HTMLInputElement).value), this.startPercent);
+        let end = Math.max(inputNumber(e), this.startPercent);
         if (this._timelineSpanOk()) {
             const c = clampTimelinePercents(start, end, this.minTimestamp, this.maxTimestamp);
             start = c.startPercent;

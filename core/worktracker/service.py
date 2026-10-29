@@ -562,7 +562,7 @@ class WorkItemService:
         viewable = set(await self._queue_access.list_viewable_queue_ids(user_id=user_id))
         return [
             queue
-            for queue in await WorkQueue.list_by_created_at(company_id)
+            for queue in await WorkQueue.list_by_created_at_asc(company_id)
             if queue.work_queue_id in viewable
         ]
 
@@ -607,7 +607,7 @@ class WorkItemService:
         return True
 
     async def list_queue_members(self, work_queue_id: str) -> list[WorkQueueMember]:
-        rows = await self._queue_access.list_member_rows(work_queue_id)
+        rows = await self._queue_access.list_member_rows_by_user_id_asc(work_queue_id)
         return [
             WorkQueueMember(
                 work_queue_id=work_queue_id,
@@ -681,7 +681,7 @@ class WorkItemService:
         return board
 
     async def list_boards(self, company_id: str, *, namespace: str | None = None) -> list[Board]:
-        boards = await Board.company_boards(company_id, namespace=namespace)
+        boards = await Board.list_for_company_by_created_at_asc(company_id, namespace=namespace)
         if boards:
             return boards
         return [await self.ensure_generic_board(company_id=company_id, namespace=namespace)]
@@ -710,7 +710,7 @@ class WorkItemService:
         namespace: str | None = None,
     ) -> Board:
         """Найти доску по (namespace, board_key) или создать с дефолтными колонками."""
-        boards = await Board.company_boards(company_id, namespace=namespace)
+        boards = await Board.list_for_company_by_created_at_asc(company_id, namespace=namespace)
         for board in boards:
             if board.board_key == board_key:
                 return board

@@ -175,7 +175,7 @@ def assert_lara_attach(flow: FlowConfig) -> None:
     tool_ids = set(node_tool_ids(main))
     assert tool_ids == {"ask_user"}
     assert not (tool_ids & forbidden_tools)
-    device_standing = {"ask_user", "device_tools_list", "device_tools_call"}
+    device_standing = {"ask_user"}
     for branch_id, branch in (flow.branches or {}).items():
         if branch.nodes is None:
             continue

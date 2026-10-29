@@ -193,7 +193,7 @@ export class CRMTasksPage extends CRMNamespacePage {
         }
         const mobile = detail.mobile === true || isMobileViewport();
         this._selectedId = detail.work_item_id;
-        this._selectedItem = detail.item && typeof detail.item === 'object' ? detail.item as Record<string, any> : null;
+        this._selectedItem = isPlainRecord(detail.item) ? detail.item : null;
         if (mobile) {
             this.navigate('task', { workItemId: detail.work_item_id });
             return;

@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
 from apps.crm.models.task import CRMTask

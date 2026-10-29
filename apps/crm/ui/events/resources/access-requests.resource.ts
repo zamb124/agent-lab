@@ -16,6 +16,7 @@ import {
     removeItem,
     upsertItem,
 } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const ACCESS_REQUEST_UPDATE_SUCCEEDED = 'crm/access_request_update/succeeded';
 
@@ -45,15 +46,25 @@ export const accessRequestsResource = createResourceCollection({
         if (event.type !== ACCESS_REQUEST_UPDATE_SUCCEEDED) {
             return state;
         }
-        const request = (event.payload as Record<string, any>).result;
-        if (!request || typeof request.access_request_id !== 'string') {
+        const payload = event.payload;
+        if (!isPlainRecord(payload)) {
+            throw new Error('crm/access_requests: update payload must be an object');
+        }
+        const request = payload.result;
+        if (!isPlainRecord(request) || typeof request.access_request_id !== 'string') {
             return state;
         }
-        const listStatus = state.lastListQuery && state.lastListQuery.payload
-            ? (state.lastListQuery.payload as Record<string, any>).status
-            : undefined;
+        const accessRequestId = request.access_request_id;
+        const listQuery = state.lastListQuery;
+        let listStatus: unknown;
+        if (listQuery && listQuery.payload != null) {
+            if (!isPlainRecord(listQuery.payload)) {
+                throw new Error('crm/access_requests: list query payload must be an object');
+            }
+            listStatus = listQuery.payload.status;
+        }
         if (typeof listStatus === 'string' && listStatus.length > 0 && request.status !== listStatus) {
-            return removeItem(state, request.access_request_id, 'access_request_id');
+            return removeItem(state, accessRequestId, 'access_request_id');
         }
         return upsertItem(state, request, 'access_request_id');
     },

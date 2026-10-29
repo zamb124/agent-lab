@@ -56,11 +56,8 @@ class OfficeDocumentRevision(PlatformModel):
                 [file_id],
                 using="office",
             )
-            latest = await (
-                cls.objects.filter(file_id=file_id)
-                .order_by("-revision_number")
-                .first()
-            )
+            revisions = await cls.list_by_revision_number_desc(file_id, limit=1)
+            latest = revisions[0] if len(revisions) > 0 else None
             revision_number = 1 if latest is None else latest.revision_number + 1
             return await cls.objects.create(
                 instance=cls(

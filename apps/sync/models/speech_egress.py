@@ -72,7 +72,7 @@ class SyncCallSpeechEgressTrack(PlatformModel):
 
     @classmethod
     async def list_by_created_at_asc_for_call(cls, call_id: str, company_id: str) -> list[Self]:
-        """Сегменты речи звонка компании, ORDER BY created_at по возрастанию. Предела нет."""
+        """Сегменты речи звонка компании, ORDER BY created_at по возрастанию ASC. Предела нет."""
         return await cls.objects.filter(
             call_id=call_id,
             company_id=company_id,

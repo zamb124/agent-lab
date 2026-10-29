@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const SHOW_AFTER_MS = 30_000;
 const SHOW_AFTER_SCROLL_Y = 480;
@@ -131,9 +132,9 @@ export class LandingFloatingCta extends PlatformElement {
 
     async _loadTelegramUrl() {
         const res = await this._bundleOp.run(null);
-        if (!res || typeof res !== 'object') return;
-        const marketing = (res as Record<string, any>).marketing;
-        if (!marketing || typeof marketing !== 'object') {
+        if (!isPlainRecord(res)) return;
+        const marketing = res.marketing;
+        if (!isPlainRecord(marketing)) {
             throw new Error('landing-floating-cta: marketing missing');
         }
         const url = marketing.telegram_community_url;

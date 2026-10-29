@@ -25,10 +25,9 @@ from core.clients.voice_resolver import (
     reset_voice_resolver_for_tests,
     resolve_stt_settings,
 )
-from core.models.voice_models import CompanyVoiceProvider
 from core.config import get_settings
-from core.models.voice_models import VoiceKind
 from core.logging.scope import SystemLogScope
+from core.models.voice_models import CompanyVoiceProvider, VoiceKind
 
 pytestmark = pytest.mark.timeout(15)
 

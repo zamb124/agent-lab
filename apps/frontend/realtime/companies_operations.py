@@ -12,7 +12,7 @@ import uuid
 from pydantic import Field
 
 from apps.frontend.di import Di
-from apps.idle_worker.tasks.task_names import TASK_INIT_NEW_COMPANY
+from apps.idle.tasks.task_names import TASK_INIT_NEW_COMPANY
 from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 from core.identity.company_membership import (
     remove_company_membership,

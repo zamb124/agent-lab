@@ -87,7 +87,7 @@ class UserPersonService:
                 await self._sync_person_fields_from_user(existing, user)
                 return existing_id
 
-        member_type = await EntityType.by_company_namespace_and_type_id(
+        member_type = await EntityType.query_by_company_namespace_and_type_id(
             company_id=company_id,
             namespace=USER_PERSON_NAMESPACE,
             type_id=MEMBER_ENTITY_TYPE,
@@ -197,7 +197,7 @@ class UserPersonService:
         ent = await CRMEntity.get(eid)
         if ent is None or ent.company_id != company_id:
             return None
-        et = await EntityType.by_company_namespace_and_type_id(
+        et = await EntityType.query_by_company_namespace_and_type_id(
             company_id=company_id,
             namespace=ent.namespace,
             type_id=ent.entity_type,

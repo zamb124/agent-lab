@@ -13,7 +13,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
-import { asArray, asString } from '../_helpers/flows-resolvers.js';
+import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { AGENT_SKILL_ICON } from '../_helpers/agent-skill-map.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
@@ -29,11 +29,11 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
         _query: { state: true },
         _selected: { state: true },
     }
-    declare excludeIds: any[];
-    declare onPick: any;
-    declare onPickBatch: any;
+    declare excludeIds: string[];
+    declare onPick: ((skill: Record<string, unknown>) => void) | null;
+    declare onPickBatch: ((skills: readonly Record<string, unknown>[]) => void) | null;
     declare _query: string;
-    declare _selected: any[];
+    declare _selected: string[];
 ;
 
     static override styles: CSSResultGroup = [
@@ -136,8 +136,9 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
 
     _filtered() {
         const excluded = this._excluded();
-        const q = (this._query.trim() as any).toLowerCase();
+        const q = this._query.trim().toLowerCase();
         return asArray(this._skills.items).filter((item) => {
+            if (!isPlainObject(item)) return false;
             const id = asString(item.agent_skill_id);
             if (id.length === 0 || excluded.has(id)) return false;
             if (q.length === 0) return true;
@@ -156,21 +157,31 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
     }
 
     _toggle(id: string) {
-        if ((this._selected.includes(id) as any)) {
-            this._selected = (this._selected.filter as any)((x: any) => x !== id);
+        if (this._selected.includes(id)) {
+            this._selected = this._selected.filter((selectedId) => selectedId !== id);
             return;
         }
         this._selected = [...this._selected, id];
     }
 
     _confirm() {
-        const selectedItems = asArray(this._skills.items).filter((item) =>
-            (this._selected.includes(item.agent_skill_id) as any),
-        );
+        const selectedItems: Record<string, unknown>[] = [];
+        for (const item of asArray(this._skills.items)) {
+            if (!isPlainObject(item)) {
+                continue;
+            }
+            if (this._selected.includes(asString(item.agent_skill_id))) {
+                selectedItems.push(item);
+            }
+        }
         if (typeof this.onPickBatch === 'function') {
             this.onPickBatch(selectedItems);
         } else if (typeof this.onPick === 'function' && selectedItems.length === 1) {
-            this.onPick(selectedItems[0]);
+            const only = selectedItems[0];
+            if (only === undefined) {
+                throw new Error('agent-skill-picker: selected skill required');
+            }
+            this.onPick(only);
         }
         this.close();
     }
@@ -180,7 +191,7 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
         this.navigate('agent_skills');
     }
 
-    _cardMeta(item: any) {
+    _cardMeta(item: Record<string, unknown>) {
         const toolsCount = asArray(item.tool_refs).length;
         const depsCount = asArray(item.depends_on).length;
         const refsCount = asArray(item.references).length;
@@ -220,13 +231,17 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
                         : html`
                             <div class="grid">
                                 ${items.map((item) => {
-                                    const selected = (this._selected.includes(item.agent_skill_id) as any);
+                                    if (!isPlainObject(item)) {
+                                        throw new Error('agent-skill-picker: skill required');
+                                    }
+                                    const skillId = asString(item.agent_skill_id);
+                                    const selected = this._selected.includes(skillId);
                                     return html`
                                         <platform-picker-card
                                             ?selected=${selected}
-                                            .title=${item.name}
-                                            .subtitle=${item.description}
-                                            @click=${() => this._toggle(item.agent_skill_id)}
+                                            .title=${asString(item.name)}
+                                            .subtitle=${asString(item.description)}
+                                            @click=${() => this._toggle(skillId)}
                                         >
                                             <platform-icon slot="icon" name=${AGENT_SKILL_ICON} size="20"></platform-icon>
                                             ${this._cardMeta(item)}
@@ -252,10 +267,10 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
                     </platform-button>
                     <platform-button
                         variant="primary"
-                        ?disabled=${(this._selected.length as any) === 0}
+                        ?disabled=${this._selected.length === 0}
                         @click=${this._confirm}
                     >
-                        ${this.t('agent_skill_picker_modal.add', { n: (this._selected.length as any) })}
+                        ${this.t('agent_skill_picker_modal.add', { n: this._selected.length })}
                     </platform-button>
                 </div>
             </div>

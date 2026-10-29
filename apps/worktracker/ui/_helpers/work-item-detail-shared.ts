@@ -2,6 +2,8 @@
  * Общие хелперы для UI деталей WorkItem.
  */
 
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
 export const TERMINAL_STATES = new Set(['done', 'cancelled', 'failed']);
 
 export interface WorkItemAssignment {
@@ -61,18 +63,21 @@ export function assigneeUserId(item: WorkItemLike): string {
     return '';
 }
 
+function readWorkItemField(value: unknown): WorkItemLike | null | undefined {
+    if (value == null || typeof value !== 'object') return undefined;
+    if (!isPlainRecord(value)) return null;
+    const item: WorkItemLike = {};
+    for (const [key, field] of Object.entries(value)) item[key] = field;
+    return item;
+}
+
 export function workItemFromEventPayload(payload: unknown): WorkItemLike | null {
-    if (!payload || typeof payload !== 'object') {
-        return null;
-    }
-    if ('item' in payload && payload.item && typeof payload.item === 'object') {
-        return payload.item as WorkItemLike;
-    }
-    if ('work_item' in payload && payload.work_item && typeof payload.work_item === 'object') {
-        return payload.work_item as WorkItemLike;
-    }
-    if ('result' in payload && payload.result && typeof payload.result === 'object') {
-        return payload.result as WorkItemLike;
+    if (!isPlainRecord(payload)) return null;
+    for (const key of ['item', 'work_item', 'result']) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
+        const item = readWorkItemField(payload[key]);
+        if (item === undefined) continue;
+        return item;
     }
     return null;
 }

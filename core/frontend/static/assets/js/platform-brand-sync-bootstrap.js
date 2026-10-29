@@ -28,7 +28,6 @@
         var isProduction = protocol === 'https' && portSuffix === '';
         window.__PLATFORM_BRAND__ = {
             platformName: String(brand.platform_name || 'Platform'),
-            agentProductName: String(brand.agent_product_name || 'Platform Agent'),
             modelsProductName: String(brand.models_product_name || 'Platform Models'),
             voiceProductName: String(brand.voice_product_name || 'Platform Voice'),
             llmsDisplayLabel: String(brand.llms_display_label || 'Platform LLMs'),

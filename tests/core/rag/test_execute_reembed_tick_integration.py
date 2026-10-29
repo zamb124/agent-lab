@@ -342,7 +342,7 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
 async def test_orphan_cleanup_tick_removes_orphan_company_chunks(
     rag_provider_pgvector, unique_id, rag_worker_di
 ) -> None:
-    from apps.rag_worker.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
+    from apps.rag.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
 
     chunk_null = f"orphan_null_{unique_id}"
     chunk_empty = f"orphan_empty_{unique_id}"
@@ -373,7 +373,7 @@ async def test_orphan_cleanup_tick_removes_orphan_company_chunks(
 
 @pytest.mark.asyncio
 async def test_orphan_cleanup_tick_requires_schedule_task_id(rag_worker_di) -> None:
-    from apps.rag_worker.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
+    from apps.rag.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
 
     with pytest.raises(ValueError, match="schedule_task_id"):
         await rag_cleanup_orphan_company_chunks_tick(schedule_task_id="  ", di=rag_worker_di)

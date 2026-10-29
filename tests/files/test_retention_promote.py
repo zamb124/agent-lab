@@ -6,9 +6,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.create_spec import FileSourceKind
 from core.files.models import FileRecord, FileStatus
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.retention import FileRetentionKind
 from core.files.retention_promote import promote_file_retention_record
 

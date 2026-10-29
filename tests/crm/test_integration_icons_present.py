@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 
-
 def test_each_registered_integration_has_svg(crm_di) -> None:
     root = Path(__file__).resolve().parents[2] / "apps" / "crm" / "ui" / "assets" / "integrations"
     for provider_id in crm_di.integration_registry.known_provider_ids():

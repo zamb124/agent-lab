@@ -11,7 +11,7 @@ import time
 from collections.abc import Iterable
 from typing import cast
 
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_str, optional_object_dict
 from tests.sync.api._helpers import upload_platform_file

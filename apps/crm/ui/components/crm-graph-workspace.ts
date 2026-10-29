@@ -72,6 +72,7 @@ import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { graphCanvasViewFromParam } from '../_helpers/graph-view-mode.js';
 import type { GraphCanvasViewMode } from '../_helpers/graph-view-mode.js';
 import type { CrmGraphUiSlice, CrmGraphViewSlice } from '../events/crm.types.js';
+import type { RouterState } from '@platform/lib/events/reducers/router.js';
 
 const VIEW_MODES = ['influence', 'related', 'path'];
 const PANEL_IDS = ['search', 'timeline', 'legend', 'meta'];
@@ -105,15 +106,39 @@ function _parseTimestamp(rawValue: unknown): number | null {
     return Number.isFinite(ts) ? ts : null;
 }
 
-function _getEdgeId(edge: Record<string, any>): string {
-    const edgeId = edge.edge_id || edge.relationship_id || edge.id;
-    if (typeof edgeId === 'string' && edgeId.trim().length > 0) {
+function requireEntityId(record: Record<string, unknown>): string {
+    if (typeof record.entity_id !== 'string' || record.entity_id.length === 0) {
+        throw new Error('CRMGraphWorkspace: entity_id required');
+    }
+    return record.entity_id;
+}
+
+function graphText(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function firstGraphText(record: Record<string, unknown>, keys: readonly string[]): string {
+    for (const key of keys) {
+        const text = graphText(record[key]);
+        if (text.length > 0) {
+            return text;
+        }
+    }
+    return '';
+}
+
+function _getEdgeId(edge: Record<string, unknown>): string {
+    const edgeId = firstGraphText(edge, ['edge_id', 'relationship_id', 'id']);
+    if (edgeId.length > 0) {
         return edgeId;
     }
-    const sourceId = edge.source_id || edge.source_entity_id || edge.source;
-    const targetId = edge.target_id || edge.target_entity_id || edge.target;
-    const relationType = edge.relationship_type || edge.type || 'related';
-    return `${sourceId}:${targetId}:${relationType}`;
+    const sourceId = firstGraphText(edge, ['source_id', 'source_entity_id', 'source']);
+    const targetId = firstGraphText(edge, ['target_id', 'target_entity_id', 'target']);
+    if (sourceId.length === 0 || targetId.length === 0) {
+        throw new Error('CRMGraphWorkspace: edge endpoints required');
+    }
+    const relationType = firstGraphText(edge, ['relationship_type', 'type']);
+    return `${sourceId}:${targetId}:${relationType.length > 0 ? relationType : 'related'}`;
 }
 
 interface _MindmapCanvasEl extends Element {
@@ -122,11 +147,11 @@ interface _MindmapCanvasEl extends Element {
 }
 
 interface _GraphCanvasEl extends Element {
-    flyToNode(target: Record<string, any>): void;
+    flyToNode(target: Record<string, unknown>): void;
     fitToViewport(): void;
 }
 
-type _NodeClickLike = CustomEvent | { detail: Record<string, any> };
+type _NodeClickLike = CustomEvent | { detail: Record<string, unknown> };
 
 export class CRMGraphWorkspace extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -195,15 +220,15 @@ export class CRMGraphWorkspace extends PlatformElement {
     declare _timelineMinTimestamp: number;
     declare _timelineMaxTimestamp: number;
     declare _contextMenu: { x: number; y: number; nodeId: string; edgeId: string } | null;
-    declare _graphNodes: Record<string, any>[];
-    declare _graphEdges: Record<string, any>[];
-    declare _shortestPathEdges: Record<string, any>[];
+    declare _graphNodes: Record<string, unknown>[];
+    declare _graphEdges: Record<string, unknown>[];
+    declare _shortestPathEdges: Record<string, unknown>[];
     declare _defaultOverviewActive: boolean;
     declare _overviewSeedEntityIds: string[];
     declare _canvasPathState: string;
     declare _canvasPathHint: string;
     declare _mergeAnchorId: string;
-    declare _entitiesById: Map<string, Record<string, any>>;
+    declare _entitiesById: Map<string, Record<string, unknown>>;
     declare _loading: boolean;
     declare _mindmapRootStack: string[];
 
@@ -507,7 +532,7 @@ export class CRMGraphWorkspace extends PlatformElement {
     ];
 
     private _crmNamespaceSel: SelectController<string | null>;
-    private _routerSel: SelectController<{ routeKey: any; params: any; search: any }>;
+    private _routerSel: SelectController<Pick<RouterState, 'routeKey' | 'params' | 'search'>>;
     private _graphUi: ControllerFor<'crm/graph_ui'>;
     private _graphView: ControllerFor<'crm/graph_view'>;
     private _entityTypes: ResourceController;
@@ -522,7 +547,7 @@ export class CRMGraphWorkspace extends PlatformElement {
     private _entitySearchOp: OpController;
     private _personOp: OpController;
     private _pendingSearchFocusId: string;
-    private _relatedNodesPending: Record<string, any>[];
+    private _relatedNodesPending: Record<string, unknown>[];
     private _relatedNodeIds: Set<string>;
     private _searchDebounceTimer: ReturnType<typeof setTimeout> | null;
     private _timelineReloadTimer: ReturnType<typeof setTimeout> | null;
@@ -575,10 +600,10 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._pendingPathLookups = null;
         this._lastNamespaceLoaded = undefined;
         this._crmNamespaceSel = this.select(selectCrmApiNamespace);
-        this._routerSel = this.select((s: Record<string, any>) => ({
-            routeKey: s.router.routeKey,
-            params: s.router.params,
-            search: s.router.search,
+        this._routerSel = this.select((state) => ({
+            routeKey: state.router.routeKey,
+            params: state.router.params,
+            search: state.router.search,
         }));
 
         this._graphUi = this.useSlice('crm/graph_ui');
@@ -872,7 +897,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         const namespace = this._currentNamespace();
         const timelineParams = this._getTimelineQueryParams();
         const nq = crmNamespaceForOptionalQuery(namespace);
-        const dateLeaves: Record<string, any>[] = [];
+        const dateLeaves: Record<string, unknown>[] = [];
         if (typeof timelineParams.created_at_from === 'string') {
             dateLeaves.push({ field: 'created_at', op: '$gte', value: timelineParams.created_at_from });
         }
@@ -886,17 +911,17 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     async _onEntitiesLookupLoaded(response: Record<string, unknown> | null): Promise<void> {
-        const items: Record<string, any>[] = response && Array.isArray(response.items) ? response.items : [];
-        const map = new Map<string, Record<string, any>>();
-        items.forEach((item: Record<string, any>) => {
+        const items: Record<string, unknown>[] = response && Array.isArray(response.items) ? response.items : [];
+        const map = new Map<string, Record<string, unknown>>();
+        items.forEach((item: Record<string, unknown>) => {
             if (item && typeof item.entity_id === 'string') {
                 map.set(item.entity_id, item);
             }
         });
         this._entitiesById = map;
         this._overviewSeedEntityIds = items
-            .filter((item: Record<string, any>) => item && item.entity_type === 'note')
-            .map((item: Record<string, any>) => item.entity_id)
+            .filter((item) => item.entity_type === 'note' && typeof item.entity_id === 'string')
+            .map((item) => requireEntityId(item))
             .slice(0, 20);
 
         if (this._canvasView === 'mindmap') {
@@ -927,12 +952,12 @@ export class CRMGraphWorkspace extends PlatformElement {
                 this._pathSourceId = this._selectedRootId;
             }
             if (!this._pathTargetId && items.length > 1) {
-                const target = items.find((entity: Record<string, any>) => entity.entity_id !== this._pathSourceId);
+                const target = items.find((entity: Record<string, unknown>) => entity.entity_id !== this._pathSourceId);
                 const first = items[0];
                 if (first === undefined) {
                     throw new Error('CRMGraphWorkspace: entity missing');
                 }
-                this._pathTargetId = target ? target.entity_id : first.entity_id;
+                this._pathTargetId = target === undefined ? requireEntityId(first) : requireEntityId(target);
             }
             this._rebuildGraphByMode();
             return;
@@ -943,18 +968,18 @@ export class CRMGraphWorkspace extends PlatformElement {
             if (first === undefined) {
                 throw new Error('CRMGraphWorkspace: entity missing');
             }
-            this._selectedRootId = first.entity_id;
+            this._selectedRootId = requireEntityId(first);
         }
         if (!this._pathSourceId && items.length > 0) {
             this._pathSourceId = this._selectedRootId;
         }
         if (!this._pathTargetId && items.length > 1) {
-            const target = items.find((entity: Record<string, any>) => entity.entity_id !== this._pathSourceId);
+            const target = items.find((entity: Record<string, unknown>) => entity.entity_id !== this._pathSourceId);
             const first = items[0];
             if (first === undefined) {
                 throw new Error('CRMGraphWorkspace: entity missing');
             }
-            this._pathTargetId = target ? target.entity_id : first.entity_id;
+            this._pathTargetId = target === undefined ? requireEntityId(first) : requireEntityId(target);
         }
         this._rebuildGraphByMode();
     }
@@ -992,7 +1017,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         const pending = this._pendingSearchFocusId;
         if (typeof pending === 'string' && pending.length > 0) {
             this._pendingSearchFocusId = '';
-            const nodeHit = this._graphNodes.some((n: Record<string, any>) => {
+            const nodeHit = this._graphNodes.some((n: Record<string, unknown>) => {
                 if (!n || typeof n !== 'object') {
                     return false;
                 }
@@ -1024,7 +1049,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._loading = false;
             return;
         }
-        const nodeMap = new Map<string, Record<string, any>>();
+        const nodeMap = new Map<string, Record<string, unknown>>();
         const rootEntity = this._entitiesById.get(this._selectedRootId);
         if (rootEntity) {
             nodeMap.set(this._selectedRootId, {
@@ -1040,7 +1065,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         (['incoming', 'outgoing', 'undirected'] as const).forEach((bucket) => {
             const collection = response[bucket];
             if (!Array.isArray(collection)) return;
-            collection.forEach((node: Record<string, any>) => {
+            collection.forEach((node: Record<string, unknown>) => {
                 if (node && typeof node.entity_id === 'string') {
                     nodeMap.set(node.entity_id, node);
                 }
@@ -1061,9 +1086,12 @@ export class CRMGraphWorkspace extends PlatformElement {
         }
         const relationType = this._relationshipTypeFilter.trim();
         const allowed = this._relatedNodeIds;
-        const filtered = relationships.filter((edge: Record<string, any>) => {
+        const filtered = relationships.filter((edge: Record<string, unknown>) => {
             const source = edge.source_entity_id;
             const target = edge.target_entity_id;
+            if (typeof source !== 'string' || typeof target !== 'string') {
+                return false;
+            }
             if (!allowed.has(source) || !allowed.has(target)) return false;
             if (relationType.length > 0 && edge.relationship_type !== relationType) return false;
             return true;
@@ -1136,12 +1164,12 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._loading = false;
     }
 
-    _mergePathEdgesByKind(directedEdges: Record<string, any>[], undirectedEdges: Record<string, any>[]): Record<string, any>[] {
-        const merged = new Map<string, Record<string, any>>();
-        directedEdges.forEach((edge: Record<string, any>) => {
+    _mergePathEdgesByKind(directedEdges: Record<string, unknown>[], undirectedEdges: Record<string, unknown>[]): Record<string, unknown>[] {
+        const merged = new Map<string, Record<string, unknown>>();
+        directedEdges.forEach((edge: Record<string, unknown>) => {
             merged.set(_getEdgeId(edge), { ...edge, path_kind: 'directed' });
         });
-        undirectedEdges.forEach((edge: Record<string, any>) => {
+        undirectedEdges.forEach((edge: Record<string, unknown>) => {
             const id = _getEdgeId(edge);
             const existing = merged.get(id);
             if (!existing) {
@@ -1154,10 +1182,10 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     _onSearchLoaded(response: Record<string, unknown> | null): void {
-        const all: Record<string, any>[] = response && Array.isArray(response.items) ? response.items : [];
+        const all: Record<string, unknown>[] = response && Array.isArray(response.items) ? response.items : [];
         // Порог min score действует только для узлов с числовым score из поиска; узлы без score не трактуем как 0.
         const items = this._minScore > 0
-            ? all.filter((entry: Record<string, any>) => {
+            ? all.filter((entry: Record<string, unknown>) => {
                 if (typeof entry.score !== 'number') {
                     return true;
                 }
@@ -1172,7 +1200,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             return;
         }
         const entityIds = items
-            .map((entry: Record<string, any>) => entry.entity_id)
+            .map((entry: Record<string, unknown>) => entry.entity_id)
             .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
         const focusId = entityIds.length > 0 ? entityIds[0] : '';
         this._pendingSearchFocusId = typeof focusId === 'string' ? focusId : '';
@@ -1345,7 +1373,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         return colors;
     }
 
-    _nodeColor(node: Record<string, any> | null): string {
+    _nodeColor(node: Record<string, unknown> | null): string {
         if (node && node.access === false) return '#7f7f8f';
         const entityType = node && typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
         if (!entityType) return '#bca8ff';
@@ -1353,7 +1381,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         return colors.get(entityType) || '#bca8ff';
     }
 
-    _isEdgeDirected(edge: Record<string, any>): boolean {
+    _isEdgeDirected(edge: Record<string, unknown>): boolean {
         if (typeof edge.is_directed === 'boolean') return edge.is_directed;
         const relType = edge.relationship_type || edge.type;
         const relationshipType = this._relationshipTypes.items.find((item) => item.type_id === relType);
@@ -1733,9 +1761,10 @@ export class CRMGraphWorkspace extends PlatformElement {
                 return;
             }
             if (types.length === 0) return;
-            const selectedEdge = this._graphEdges.find((edge: Record<string, any>) => _getEdgeId(edge) === this._selectedEdgeId);
-            if (selectedEdge && selectedEdge.relationship_type) {
-                this._relationshipTypeFilter = selectedEdge.relationship_type;
+            const selectedEdge = this._graphEdges.find((edge: Record<string, unknown>) => _getEdgeId(edge) === this._selectedEdgeId);
+            const relationshipType = selectedEdge === undefined ? undefined : selectedEdge.relationship_type;
+            if (typeof relationshipType === 'string' && relationshipType.length > 0) {
+                this._relationshipTypeFilter = relationshipType;
             } else {
                 const firstType = types[0];
                 if (firstType === undefined) {
@@ -1855,8 +1884,8 @@ export class CRMGraphWorkspace extends PlatformElement {
                               .selectedEdgeId=${this._selectedEdgeId}
                               .pathSourceId=${this._pathSourceId}
                               .pathTargetId=${this._pathTargetId}
-                              .nodeColorFn=${(node: Record<string, any>) => this._nodeColor(node)}
-                              .edgeDirectedFn=${(edge: Record<string, any>) => this._isEdgeDirected(edge)}
+                              .nodeColorFn=${(node: Record<string, unknown>) => this._nodeColor(node)}
+                              .edgeDirectedFn=${(edge: Record<string, unknown>) => this._isEdgeDirected(edge)}
                               .relationshipTypeColors=${relTypeColors}
                               .relationshipTypeLabels=${relationshipLabelsPlain}
                               .incidentWeightSubtitleFn=${(sum: unknown) => this._incidentWeightSubtitle(sum)}

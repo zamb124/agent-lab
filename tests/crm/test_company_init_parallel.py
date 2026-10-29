@@ -69,7 +69,7 @@ async def test_initialize_company_parallel_workers_share_one_mapping(
     mapping: CompanyMapping | None = await CompanyMapping.get(company_id)
     assert mapping is not None
     organizations = (
-        await CRMEntity.cursor_page(
+        await CRMEntity.cursor_page_by_created_at_and_entity_id_desc(
             entity_type="organization",
             namespace="default",
             company_id=company_id,

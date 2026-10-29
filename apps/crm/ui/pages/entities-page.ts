@@ -52,32 +52,57 @@ import type {
     OpController,
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
 const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
 const STATUS_FILTERS = ['active', 'archived'];
 const BULK_STATUSES = ['pending', 'approved', 'rejected'];
 
-function _compareEntityTypesByLabel(a: Record<string, any>, b: Record<string, any>): number {
-    const an = typeof a.name === 'string' ? a.name : a.type_id;
-    const bn = typeof b.name === 'string' ? b.name : b.type_id;
-    return an.localeCompare(bn, undefined, { sensitivity: 'base' });
+function requireEntityId(row: Record<string, unknown>): string {
+    if (typeof row.entity_id !== 'string' || row.entity_id.length === 0) {
+        throw new Error('entities-page: entity_id required');
+    }
+    return row.entity_id;
 }
 
-function _sortedEntityTypesForChips(items: unknown): Record<string, any>[] {
+function requireTypeId(row: Record<string, unknown>): string {
+    if (typeof row.type_id !== 'string' || row.type_id.length === 0) {
+        throw new Error('entities-page: entity type id required');
+    }
+    return row.type_id;
+}
+
+function typeLabel(row: Record<string, unknown>): string {
+    if (typeof row.name === 'string' && row.name.length > 0) return row.name;
+    return requireTypeId(row);
+}
+
+function _compareEntityTypesByLabel(a: Record<string, unknown>, b: Record<string, unknown>): number {
+    return typeLabel(a).localeCompare(typeLabel(b), undefined, { sensitivity: 'base' });
+}
+
+function _sortedEntityTypesForChips(items: unknown): Record<string, unknown>[] {
     if (!Array.isArray(items)) return [];
-    const list = (items as Record<string, any>[]).filter((t) => t && typeof t.type_id === 'string' && t.type_id.length > 0);
+    const list: Record<string, unknown>[] = [];
+    for (const item of items) {
+        if (!isPlainRecord(item)) continue;
+        const typeId = item.type_id;
+        if (typeof typeId !== 'string' || typeId.length === 0) continue;
+        list.push(item);
+    }
     const sorted = [...list];
     sorted.sort(_compareEntityTypesByLabel);
     return sorted;
 }
 
-function _entityTypeChipGroups(items: unknown): { root: Record<string, any>; members: Record<string, any>[] }[] {
+function _entityTypeChipGroups(items: unknown): { root: Record<string, unknown>; members: Record<string, unknown>[] }[] {
     const sorted = _sortedEntityTypesForChips(items);
     if (sorted.length === 0) return [];
-    const inSet = new Set<string>(sorted.map((t: Record<string, any>) => t.type_id));
-    const roots: Record<string, any>[] = [];
+    const inSet = new Set<string>(sorted.map((row) => requireTypeId(row)));
+    const roots: Record<string, unknown>[] = [];
     for (const t of sorted) {
         const p = typeof t.parent_type_id === 'string' ? t.parent_type_id : '';
         if (p.length === 0 || !inSet.has(p)) {
@@ -86,20 +111,20 @@ function _entityTypeChipGroups(items: unknown): { root: Record<string, any>; mem
     }
     roots.sort(_compareEntityTypesByLabel);
 
-    function collectDescendants(parentId: string): Record<string, any>[] {
-        const direct = sorted.filter((x: Record<string, any>) => x.parent_type_id === parentId);
+    function collectDescendants(parentId: string): Record<string, unknown>[] {
+        const direct = sorted.filter((row) => row.parent_type_id === parentId);
         direct.sort(_compareEntityTypesByLabel);
-        const out: Record<string, any>[] = [];
+        const out: Record<string, unknown>[] = [];
         for (const c of direct) {
             out.push(c);
-            out.push(...collectDescendants(c.type_id));
+            out.push(...collectDescendants(requireTypeId(c)));
         }
         return out;
     }
 
     return roots.map((root) => ({
         root,
-        members: [root, ...collectDescendants(root.type_id)],
+        members: [root, ...collectDescendants(requireTypeId(root))],
     }));
 }
 
@@ -1304,9 +1329,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     private _aggregate: OpController;
     private _bulkDelete: OpController;
     private _bulkUpdate: OpController;
-    private _authSel: SelectController<Record<string, any> | undefined>;
-    private _routeKeySel: SelectController<string | undefined>;
-    private _localeSel: SelectController<string | undefined>;
+    private _authSel: SelectController<AuthUser | null>;
+    private _routeKeySel: SelectController<string | null>;
+    private _localeSel: SelectController<string>;
     private _entitiesMergeFirstId: string;
     private _debounceTimer: ReturnType<typeof setTimeout> | null;
     private _scrollObserver: IntersectionObserver | null;
@@ -1357,13 +1382,11 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         this._bulkDelete = this.useOp('crm/entity_bulk_delete');
         this._bulkUpdate = this.useOp('crm/entity_bulk_update');
 
-        this._authSel = this.select((s: Record<string, any>) => s.auth.user);
-        this._routeKeySel = this.select((s: Record<string, any>) => s.router.routeKey as string | undefined);
-        this._localeSel = this.select((s: Record<string, any>) => {
-            const loc = s.i18n && typeof s.i18n.locale === 'string' ? s.i18n.locale.trim() : '';
-            if (loc.length > 0) {
-                return loc;
-            }
+        this._authSel = this.select((state) => state.auth.user);
+        this._routeKeySel = this.select((state) => state.router.routeKey);
+        this._localeSel = this.select((state) => {
+            const loc = state.i18n.locale.trim();
+            if (loc.length > 0) return loc;
             return 'en';
         });
         this._onEmbeddedDetailLeftGraphTab = () => {
@@ -1525,7 +1548,11 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     }
 
     _onSearchInput(event: Event) {
-        this._query = (event.target as HTMLInputElement).value;
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('entities-page: search input required');
+        }
+        this._query = target.value;
         this._reloadListDebounced();
     }
 
@@ -1534,7 +1561,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         if (this._query.trim().length > 0) this._reloadListDebounced();
     }
 
-    _normalizedListSubtype(typeRow: Record<string, any>): string | null {
+    _normalizedListSubtype(typeRow: Record<string, unknown>): string | null {
         const s = typeRow.list_entity_subtype;
         if (s === undefined || s === null) {
             return null;
@@ -1548,7 +1575,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         return s;
     }
 
-    _isEntityTypeChipActive(typeRow: Record<string, any>): boolean {
+    _isEntityTypeChipActive(typeRow: Record<string, unknown>): boolean {
         if (typeof typeRow.list_entity_type !== 'string' || typeRow.list_entity_type.length === 0) {
             throw new Error('CRMEntitiesPage: list_entity_type required on entity type row');
         }
@@ -1562,12 +1589,16 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         return selSub === expSub;
     }
 
-    _onEntityTypeChipToggle(typeRow: Record<string, any>): void {
+    _onEntityTypeChipToggle(typeRow: Record<string, unknown>): void {
         if (this._isEntityTypeChipActive(typeRow)) {
             this._selectedType = null;
             this._selectedSubtype = null;
         } else {
-            this._selectedType = typeRow.list_entity_type;
+            const listType = typeRow.list_entity_type;
+            if (typeof listType !== 'string' || listType.length === 0) {
+                throw new Error('CRMEntitiesPage: list_entity_type required on entity type row');
+            }
+            this._selectedType = listType;
             this._selectedSubtype = this._normalizedListSubtype(typeRow);
         }
         this._reloadList();
@@ -1599,7 +1630,13 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         this._reloadList();
     }
 
-    _onTagInputChange(e: Event) { this._tagInput = (e.target as HTMLInputElement).value; }
+    _onTagInputChange(e: Event) {
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) {
+            throw new Error('entities-page: tag input required');
+        }
+        this._tagInput = target.value;
+    }
 
     _onTagInputKeydown(e: KeyboardEvent) {
         if (e.key === 'Enter') {
@@ -1703,15 +1740,16 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         );
     }
 
-    _entityTypeConfig(entity: Record<string, any>): { icon: string; color: string; label: string } {
+    _entityTypeConfig(entity: Record<string, unknown>): { icon: string; color: string; label: string } {
         const items = this._entityTypes.items;
         if (Array.isArray(items)) {
-            const typeId =
-                typeof entity.entity_subtype === 'string' && entity.entity_subtype.length > 0
-                    ? entity.entity_subtype
-                    : entity.entity_type;
-            const match = items.find((t: Record<string, any>) => t.type_id === typeId);
-            if (match) {
+            const subtype = typeof entity.entity_subtype === 'string' && entity.entity_subtype.length > 0
+                ? entity.entity_subtype
+                : '';
+            const rootType = typeof entity.entity_type === 'string' ? entity.entity_type : '';
+            const typeId = subtype.length > 0 ? subtype : rootType;
+            const match = items.find((row) => isPlainRecord(row) && row.type_id === typeId);
+            if (isPlainRecord(match)) {
                 const nm = typeof match.name === 'string' ? match.name : '';
                 const label = nm.length > 0 ? nm : typeId;
                 return {
@@ -1744,13 +1782,16 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     }
 
     _formatDate(dateString: unknown): string {
-        if (!dateString) return '';
+        if (dateString === null || dateString === undefined || dateString === '') return '';
+        if (typeof dateString !== 'string' && typeof dateString !== 'number' && !(dateString instanceof Date)) {
+            throw new Error('entities-page: date must be a string, number, or Date');
+        }
         const raw = this._localeSel.value;
-        const locale = typeof raw === 'string' && raw.length > 0 ? raw : 'en';
-        return formatPlatformDate(dateString as string | number | Date, locale, { day: 'numeric', month: 'short' });
+        const locale = raw.length > 0 ? raw : 'en';
+        return formatPlatformDate(dateString, locale, { day: 'numeric', month: 'short' });
     }
 
-    _searchScorePercent(entity: Record<string, any> | null): number | null {
+    _searchScorePercent(entity: Record<string, unknown> | null): number | null {
         if (!entity || typeof entity.score !== 'number' || !Number.isFinite(entity.score)) {
             return null;
         }
@@ -1766,12 +1807,12 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         return `${normalized.slice(0, maxLength).trimEnd()}...`;
     }
 
-    _isEntityOwner(entity: Record<string, any>): boolean {
-        const user = this._authSel.value as Record<string, any> | null | undefined;
-        if (!user || typeof entity.user_id !== 'string') return false;
-        const uid = typeof user.user_id === 'string' ? user.user_id : null;
-        if (!uid) return false;
-        return entity.user_id === uid;
+    _isEntityOwner(entity: Record<string, unknown>): boolean {
+        const user = this._authSel.value;
+        if (user === null || typeof entity.user_id !== 'string') return false;
+        const userId = user.user_id;
+        if (typeof userId !== 'string') return false;
+        return entity.user_id === userId;
     }
 
     _onToggleSelect(entityId: string, checked: boolean): void {
@@ -1806,7 +1847,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         this._bulkUpdate.run({ items });
     }
 
-    async _confirmDeleteEntity(entity: Record<string, any> | null): Promise<void> {
+    async _confirmDeleteEntity(entity: Record<string, unknown> | null): Promise<void> {
         if (!entity || typeof entity.entity_id !== 'string') return;
         const displayName = typeof entity.name === 'string' && entity.name.trim().length > 0
             ? entity.name.trim()
@@ -1825,7 +1866,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         this._bulkDelete.run({ entity_ids: [entity.entity_id] });
     }
 
-    _onDeleteEntityFromList(event: Event, entity: Record<string, any>): void {
+    _onDeleteEntityFromList(event: Event, entity: Record<string, unknown>): void {
         event.stopPropagation();
         event.preventDefault();
         this._confirmDeleteEntity(entity);
@@ -2068,7 +2109,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 <div class="filters-row">
                     ${chipGroups.map((group) => html`
                         <div class="filter-chip-group" role="group">
-                            ${group.members.map((type: Record<string, any>) => html`
+                            ${group.members.map((type: Record<string, unknown>) => html`
                                 <button
                                     type="button"
                                     class="filter-chip ${this._isEntityTypeChipActive(type) ? 'active' : ''}"
@@ -2227,7 +2268,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         `;
     }
 
-    _semanticIndexListIcon(entity: Record<string, any>): TemplateResult | typeof nothing {
+    _semanticIndexListIcon(entity: Record<string, unknown>): TemplateResult | typeof nothing {
         const st = entity?.semantic_text_index_status;
         if (st !== 'pending_embedding' && st !== 'absent') return nothing;
         const shortKey = st === 'pending_embedding'
@@ -2240,21 +2281,21 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 role="img"
                 title=${this.t(tipKey)}
                 aria-label=${this.t(tipKey)}
-                @click=${(e: any) => e.stopPropagation()}
+                @click=${(e: Event) => e.stopPropagation()}
             >
                 <platform-icon name="zap" size="18" ?filled=${true}></platform-icon>
             </span>
         `;
     }
 
-    _renderEntityCard(entity: Record<string, any>): TemplateResult {
+    _renderEntityCard(entity: Record<string, unknown>): TemplateResult {
         const typeConfig = this._entityTypeConfig(entity);
         const bgColor = this._hexToRgba(typeConfig.color, 0.15);
-        const isActive = entity.entity_id === this._currentEntityId;
-        const isSelected = this._selectedIds.has(entity.entity_id);
+        const eid = requireEntityId(entity);
+        const isActive = eid === this._currentEntityId;
+        const isSelected = this._selectedIds.has(eid);
         const tags = Array.isArray(entity.tags) ? entity.tags.slice(0, 3) : [];
         const showDelete = this._isEntityOwner(entity);
-        const eid = entity.entity_id;
         const mergeSource = this._mergeDragSourceId === eid;
         const mergeHover = !this._isMobile
             && this._mergeDropHoverId === eid
@@ -2269,10 +2310,10 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                     ${isSelected ? 'selected' : ''}
                     ${mergeSource ? 'merge-drag-source' : ''}
                     ${mergeHover ? 'merge-drop-hover' : ''}"
-                @dragover=${(e: any) => this._onMergeCardDragOver(e, eid)}
-                @dragleave=${(e: any) => this._onMergeCardDragLeave(e, eid)}
-                @drop=${(e: any) => this._onMergeCardDrop(e, eid)}
-                @click=${(e: any) => this._onEntityListClick(eid, e)}
+                @dragover=${(e: DragEvent) => this._onMergeCardDragOver(e, eid)}
+                @dragleave=${(e: DragEvent) => this._onMergeCardDragLeave(e, eid)}
+                @drop=${(e: DragEvent) => this._onMergeCardDrop(e, eid)}
+                @click=${(e: MouseEvent) => this._onEntityListClick(eid, e)}
             >
                 <div class="card-header">
                     <div class="card-type-icon" style="background: ${bgColor}; color: ${typeConfig.color};">
@@ -2320,9 +2361,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                                     role="button"
                                     tabindex="0"
                                     aria-label=${this.t('entities_page.drag_merge_handle')}
-                                    @dragstart=${(e: any) => this._onMergeCardDragStart(e, eid)}
+                                    @dragstart=${(e: DragEvent) => this._onMergeCardDragStart(e, eid)}
                                     @dragend=${() => this._onMergeCardDragEnd()}
-                                    @click=${(e: any) => e.stopPropagation()}
+                                    @click=${(e: Event) => e.stopPropagation()}
                                 >
                                     <platform-icon name="drag-handle" size="18" ?filled=${true}></platform-icon>
                                 </div>
@@ -2357,7 +2398,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                                     draggable="false"
                                     title=${this.t('entities_page.delete_entity_tooltip')}
                                     aria-label=${this.t('entities_page.delete_entity_tooltip')}
-                                    @click=${(e: any) => this._onDeleteEntityFromList(e, entity)}
+                                    @click=${(e: Event) => this._onDeleteEntityFromList(e, entity)}
                                 >
                                     <platform-icon name="trash" size="16"></platform-icon>
                                 </button>
@@ -2369,10 +2410,10 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         `;
     }
 
-    _renderEntityTableRow(entity: Record<string, any>) {
+    _renderEntityTableRow(entity: Record<string, unknown>) {
         const typeConfig = this._entityTypeConfig(entity);
         const bgColor = this._hexToRgba(typeConfig.color, 0.15);
-        const eid = entity.entity_id;
+        const eid = requireEntityId(entity);
         const isActive = eid === this._currentEntityId;
         const isSelected = this._selectedIds.has(eid);
         const mergeHover = !this._isMobile
@@ -2382,10 +2423,10 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         return html`
             <tr
                 class="${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${mergeHover ? 'merge-drop-hover' : ''}"
-                @dragover=${(e: any) => this._onMergeCardDragOver(e, eid)}
-                @dragleave=${(e: any) => this._onMergeCardDragLeave(e, eid)}
-                @drop=${(e: any) => this._onMergeCardDrop(e, eid)}
-                @click=${(e: any) => this._onEntityListClick(eid, e)}
+                @dragover=${(e: DragEvent) => this._onMergeCardDragOver(e, eid)}
+                @dragleave=${(e: DragEvent) => this._onMergeCardDragLeave(e, eid)}
+                @drop=${(e: DragEvent) => this._onMergeCardDrop(e, eid)}
+                @click=${(e: MouseEvent) => this._onEntityListClick(eid, e)}
             >
                 <td class="table-col-grip">
                     ${!this._isMobile
@@ -2397,9 +2438,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                                 role="button"
                                 tabindex="0"
                                 aria-label=${this.t('entities_page.drag_merge_handle')}
-                                @dragstart=${(e: any) => this._onMergeCardDragStart(e, eid)}
+                                @dragstart=${(e: DragEvent) => this._onMergeCardDragStart(e, eid)}
                                 @dragend=${() => this._onMergeCardDragEnd()}
-                                @click=${(e: any) => e.stopPropagation()}
+                                @click=${(e: Event) => e.stopPropagation()}
                             >
                                 <platform-icon name="drag-handle" size="16" ?filled=${true}></platform-icon>
                             </span>
@@ -2428,7 +2469,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         `;
     }
 
-    _renderEntitiesTable(items: readonly Record<string, any>[]): TemplateResult {
+    _renderEntitiesTable(items: readonly Record<string, unknown>[]): TemplateResult {
         return html`
             <div class="entities-table-wrap">
                 <table class="entities-table">
@@ -2442,7 +2483,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                         </tr>
                     </thead>
                     <tbody>
-                        ${items.map((entity: Record<string, any>) => this._renderEntityTableRow(entity))}
+                        ${items.map((entity: Record<string, unknown>) => this._renderEntityTableRow(entity))}
                     </tbody>
                 </table>
             </div>
@@ -2470,8 +2511,17 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         `;
     }
 
+    _entityRows(): Record<string, unknown>[] {
+        const rows: Record<string, unknown>[] = [];
+        for (const item of this._entities.items) {
+            if (!isPlainRecord(item)) throw new Error('entities-page: entity must be an object');
+            rows.push(item);
+        }
+        return rows;
+    }
+
     override render(): TemplateResult {
-        const items = this._entities.items as readonly Record<string, any>[];
+        const items = this._entityRows();
         const loading = this._entities.loading;
         const loadingMore = this._entities.loadingMore;
         const listActive = !this._isMobile || this._mobileTab === 'list';
@@ -2529,7 +2579,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                                     ? this._renderEntitiesTable(items)
                                     : html`
                                         <div class="cards-grid">
-                                            ${items.map((entity: unknown) => this._renderEntityCard(entity as Record<string, any>))}
+                                            ${items.map((entity) => this._renderEntityCard(entity))}
                                         </div>
                                     `}
                                 ${loadingMore
@@ -2566,7 +2616,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                     ></button>
                     <aside
                         class="detail-panel detail-panel--overlay"
-                        @click=${(e: any) => e.stopPropagation()}
+                        @click=${(e: Event) => e.stopPropagation()}
                     >
                         <crm-entity-detail-page
                             embedded

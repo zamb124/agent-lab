@@ -162,7 +162,7 @@ class TestReorder:
             company_id=env.company_id
         )
         assert created == 1
-        open_moves = await StockMove.list_open_by_origin(
+        open_moves = await StockMove.list_unordered_open_by_origin(
             env.company_id, "reorder_rule", rule.rule_id
         )
         assert len(open_moves) == 1

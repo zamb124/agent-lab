@@ -9,7 +9,7 @@ E2E для OpenFGA grants (CRM sole authz).
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from core.utils.tokens import get_token_service
 from tests.crm.e2e._json_helpers import json_object, object_str

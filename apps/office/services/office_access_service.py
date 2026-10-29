@@ -224,7 +224,7 @@ class OfficeAccessService:
         namespace: str,
         user_id: str,
     ) -> list[tuple[DocumentCatalog, int]]:
-        candidates = await DocumentCatalog.list_by_title_key_in_namespace(company_id, namespace)
+        candidates = await DocumentCatalog.list_by_title_key_in_namespace_asc(company_id, namespace)
         if not candidates:
             return []
         checks = [
@@ -597,7 +597,7 @@ class OfficeAccessService:
         if target.kind != "catalog" or target.catalog is None:
             raise ValueError("Token does not belong to the catalog")
         catalog = target.catalog
-        bindings = await FileRecord.alive_in_catalog(
+        bindings = await FileRecord.list_alive_in_catalog_by_updated_at_desc(
             company_id=catalog.company_id,
             catalog_id=catalog.catalog_id,
         )

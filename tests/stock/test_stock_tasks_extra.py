@@ -80,10 +80,10 @@ async def _reserved_delivery_line(env: StockEnv, qty: Decimal) -> StockMoveLine:
     _ = await env.di.move_engine.assign_transfer(
         company_id=env.company_id, transfer_id=transfer.transfer_id
     )
-    moves = await StockMove.list_for_transfer(
+    moves = await StockMove.list_for_transfer_by_created_at_asc(
         env.company_id, transfer.transfer_id
     )
-    lines = await StockMoveLine.list_for_move(env.company_id, moves[0].move_id)
+    lines = await StockMoveLine.list_open_for_move_by_created_at_asc(env.company_id, moves[0].move_id)
     assert lines, "ожидалась строка резерва"
     return lines[0]
 
@@ -646,10 +646,10 @@ class TestUpdateMoveLine:
         _ = await env.di.move_engine.assign_transfer(
             company_id=env.company_id, transfer_id=transfer.transfer_id
         )
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             env.company_id, transfer.transfer_id
         )
-        lines = await StockMoveLine.list_for_move(
+        lines = await StockMoveLine.list_open_for_move_by_created_at_asc(
             env.company_id, moves[0].move_id
         )
         partner = virtual_location_id(

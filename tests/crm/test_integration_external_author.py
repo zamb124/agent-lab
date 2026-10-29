@@ -98,7 +98,7 @@ async def test_list_by_email_ci_finds_mixed_case(
         active_company_id="",
     )
     _ = await User.set(user)
-    found = await User.list_by_email_ci(email_lower)
+    found = await User.list_containing_email_ci_by_user_id_asc(email_lower)
     assert any(candidate.user_id == user.user_id for candidate in found)
 
 
@@ -133,9 +133,9 @@ async def test_list_by_query_matches_name_or_email_in_user_id_order(
     _ = await User.set(second)
     _ = await User.set(outsider)
 
-    found = await User.list_by_query(token, limit=20)
+    found = await User.list_matching_query_by_user_id_asc(token, limit=20)
     assert [row.user_id for row in found] == [first.user_id, second.user_id]
-    limited = await User.list_by_query(token, limit=1)
+    limited = await User.list_matching_query_by_user_id_asc(token, limit=1)
     assert [row.user_id for row in limited] == [first.user_id]
     with pytest.raises(ValueError, match="limit must be >= 1"):
-        _ = await User.list_by_query(token, limit=0)
+        _ = await User.list_matching_query_by_user_id_asc(token, limit=0)

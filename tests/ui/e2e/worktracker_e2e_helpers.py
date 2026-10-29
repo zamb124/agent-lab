@@ -8,7 +8,7 @@ import time
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-import httpx
+import httpx2
 from playwright.async_api import Locator, Page, Response, expect
 
 from tests.ui.apps import SERVICE_UI_REGISTRY
@@ -27,11 +27,11 @@ def worktracker_api_origin(origin: str) -> str:
     return urlunparse(parsed._replace(netloc=f"{parsed.hostname}:{wt_port}"))
 
 
-def _worktracker_client(origin: str, auth_token: str) -> httpx.AsyncClient:
+def _worktracker_client(origin: str, auth_token: str) -> httpx2.AsyncClient:
     from tests.ui.e2e_worker import ui_e2e_scope_headers
 
     api_origin = worktracker_api_origin(origin)
-    return httpx.AsyncClient(
+    return httpx2.AsyncClient(
         base_url=api_origin,
         cookies={"auth_token": auth_token},
         headers=ui_e2e_scope_headers(),
@@ -503,7 +503,7 @@ async def worktracker_api_complete_work_item_response(
     work_item_id: str,
     *,
     resolution_text: str = "",
-) -> httpx.Response:
+) -> httpx2.Response:
     async with _worktracker_client(origin, auth_token) as client:
         return await client.post(
             f"{WORKTRACKER_API_PREFIX}/work-items/{work_item_id}/complete",

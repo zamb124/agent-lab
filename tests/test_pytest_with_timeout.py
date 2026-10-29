@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_WRAPPER = _REPO_ROOT / "scripts" / "pytest_with_timeout.py"
+_WRAPPER = _REPO_ROOT / "scripts" / "testing" / "pytest_with_timeout.py"
 
 
 @pytest.mark.timeout(10)

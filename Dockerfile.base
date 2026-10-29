@@ -20,8 +20,8 @@ FROM ghcr.io/astral-sh/uv:bookworm-slim
 
 WORKDIR /app
 
-ARG NODE_MAJOR=24
-ARG GO_VERSION=1.26.1
+ARG NODE_MAJOR=26
+ARG GO_VERSION=1.27.3
 ARG DOTNET_CHANNEL=10.0
 
 # Free-threaded CPython (PEP 779). Default GIL=0 для всех процессов в этом образе.

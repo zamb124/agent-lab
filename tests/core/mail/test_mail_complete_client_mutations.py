@@ -270,7 +270,7 @@ async def test_prepare_send_local_creates_temp_sent_then_send_completes(
     )
     assert prepared.message_id == message_id
     assert prepared.accepted == ["peer@example.com"]
-    sent_rows = await StoredMailMessage.list_folder(
+    sent_rows = await StoredMailMessage.list_for_folder_by_date_at_and_uid_desc(
         binding.mailbox_binding_id,
         folder="Sent",
         limit=50,

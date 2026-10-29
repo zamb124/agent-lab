@@ -109,7 +109,7 @@ async def test_role_binding_members_acl_and_rag_namespace(
         company_id=company_id,
     )
     assert added.user_id == member_user_id
-    members = await mail_service.list_binding_members(
+    members = await mail_service.list_binding_members_by_user_id_asc(
         role_binding.mailbox_binding_id,
         company_id=company_id,
     )
@@ -181,7 +181,7 @@ async def test_role_binding_members_acl_and_rag_namespace(
         member_user_id,
         company_id=company_id,
     )
-    members_after = await mail_service.list_binding_members(
+    members_after = await mail_service.list_binding_members_by_user_id_asc(
         role_binding.mailbox_binding_id,
         company_id=company_id,
     )

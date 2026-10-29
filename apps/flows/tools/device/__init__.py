@@ -1,1 +1,0 @@
-"""Builtin tools тега `device`."""

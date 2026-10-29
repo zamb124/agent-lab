@@ -8,6 +8,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { AGENT_SKILL_ICON } from '../../_helpers/agent-skill-map.js';
+import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 export class FlowsAgentSkillsList extends PlatformElement {
@@ -19,7 +20,7 @@ export class FlowsAgentSkillsList extends PlatformElement {
         loading: { type: Boolean },
         query: { type: String },
     }
-    declare items: any[];
+    declare items: readonly unknown[];
     declare selectedId: string;
     declare loading: boolean;
     declare query: string;
@@ -134,7 +135,8 @@ export class FlowsAgentSkillsList extends PlatformElement {
     }
 
     _onQuery(e: Event) {
-        const value = (e as Record<string, any>)?.detail?.value;
+        const detail = e instanceof CustomEvent ? e.detail : null;
+        const value = isPlainObject(detail) ? detail.value : undefined;
         this.emit('skills-query', { query: typeof value === 'string' ? value : '' });
     }
 
@@ -142,16 +144,23 @@ export class FlowsAgentSkillsList extends PlatformElement {
         this.emit('skills-select', { agent_skill_id: id });
     }
 
-    _filtered() {
-        const items = Array.isArray(this.items) ? this.items : [];
-        const q = typeof this.query === 'string' ? this.query.trim().toLowerCase() : '';
-        if (q.length === 0) return items;
-        return items.filter((item) => {
-            const name = typeof (item as any).name === 'string' ? (item as any).name.toLowerCase() : '';
-            const desc = typeof (item as any).description === 'string' ? (item as any).description.toLowerCase() : '';
-            const id = typeof (item as any).agent_skill_id === 'string' ? (item as any).agent_skill_id.toLowerCase() : '';
-            return name.includes(q) || desc.includes(q) || id.includes(q);
-        });
+    _filtered(): Record<string, unknown>[] {
+        const q = this.query.trim().toLowerCase();
+        const matched: Record<string, unknown>[] = [];
+        for (const item of this.items) {
+            if (!isPlainObject(item)) {
+                throw new Error('flows-agent-skills-list: skill item must be an object');
+            }
+            if (q.length === 0) {
+                matched.push(item);
+                continue;
+            }
+            const name = skillString(item, 'name').toLowerCase();
+            const description = skillString(item, 'description').toLowerCase();
+            const id = skillId(item).toLowerCase();
+            if (name.includes(q) || description.includes(q) || id.includes(q)) matched.push(item);
+        }
+        return matched;
     }
 
     override render(): TemplateResult {
@@ -172,9 +181,9 @@ export class FlowsAgentSkillsList extends PlatformElement {
                         ${filtered.length === 0
                             ? html`<div class="empty">${this.t('agent_skills.list_empty')}</div>`
                             : filtered.map((item) => {
-                                const id = (item as any).agent_skill_id;
-                                const toolsCount = Array.isArray((item as any).tool_refs) ? (item as any).tool_refs.length : 0;
-                                const depsCount = Array.isArray((item as any).depends_on) ? (item as any).depends_on.length : 0;
+                                const id = skillId(item);
+                                const toolsCount = skillListLength(item, 'tool_refs');
+                                const depsCount = skillListLength(item, 'depends_on');
                                 return html`
                                     <article
                                         class="card"
@@ -191,9 +200,9 @@ export class FlowsAgentSkillsList extends PlatformElement {
                                     >
                                         <span class="card-name">
                                             <platform-icon name=${AGENT_SKILL_ICON} size="16"></platform-icon>
-                                            <span class="card-name-text">${(item as any).name}</span>
+                                            <span class="card-name-text">${skillString(item, 'name')}</span>
                                         </span>
-                                        <p class="card-desc">${(item as any).description}</p>
+                                        <p class="card-desc">${skillString(item, 'description')}</p>
                                         <div class="badges">
                                             ${toolsCount > 0
                                                 ? html`<span class="badge"><platform-icon name="wrench" size="12"></platform-icon>${this.t('agent_skills.badge_tools', { n: toolsCount })}</span>`
@@ -212,3 +221,28 @@ export class FlowsAgentSkillsList extends PlatformElement {
 }
 
 customElements.define('flows-agent-skills-list', FlowsAgentSkillsList);
+
+function skillString(item: Record<string, unknown>, field: string): string {
+    const value = item[field];
+    if (typeof value !== 'string') {
+        throw new Error(`flows-agent-skills-list: ${field} must be a string`);
+    }
+    return value;
+}
+
+function skillId(item: Record<string, unknown>): string {
+    const value = skillString(item, 'agent_skill_id');
+    if (value === '') {
+        throw new Error('flows-agent-skills-list: agent_skill_id must be a non-empty string');
+    }
+    return value;
+}
+
+function skillListLength(item: Record<string, unknown>, field: string): number {
+    const value = item[field];
+    if (value === undefined || value === null) return 0;
+    if (!Array.isArray(value)) {
+        throw new Error(`flows-agent-skills-list: ${field} must be an array`);
+    }
+    return value.length;
+}

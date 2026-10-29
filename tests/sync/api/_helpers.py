@@ -175,7 +175,7 @@ async def upload_platform_file_http(
     is_public: bool = True,
 ):
     """Upload через реальный frontend_service — нужен sync_worker и transcribe/STT."""
-    from httpx import AsyncClient
+    from httpx2 import AsyncClient
 
     from tests.files.chunked_upload_helpers import chunked_upload_file
 

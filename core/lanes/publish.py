@@ -62,7 +62,7 @@ async def relay_lane_commits(
     догон одной полосы: релеер публикует только события, чей каталог он
     знает, и не трогает чужие коммиты.
     """
-    commits = await LaneCommit.list_unpublished_by_lane_seq(
+    commits = await LaneCommit.list_unpublished_by_lane_id_and_lane_seq_asc(
         created_before=created_before, limit=limit, using=using, lane_id=lane_id
     )
     for commit in commits:

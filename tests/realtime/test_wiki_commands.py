@@ -16,7 +16,7 @@ from typing import Literal
 from urllib.parse import unquote
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.wiki.realtime.command_router import WIKI_OPERATIONS
 from core.di.platform import PlatformDi

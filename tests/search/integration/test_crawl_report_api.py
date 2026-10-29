@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from apps.search_worker.tasks.task_names import CRAWL_DISCOVER_DOMAIN
+from apps.search.tasks.task_names import CRAWL_DISCOVER_DOMAIN
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainSeed,
@@ -92,7 +92,7 @@ async def test_crawl_profile_summary_mixed_state(
         ],
         next_crawl_after=past,
     )
-    domains_page = await CrawlDomain.page_by_domain(
+    domains_page = await CrawlDomain.page_by_domain_asc(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=10,
@@ -114,12 +114,12 @@ async def test_crawl_profile_summary_mixed_state(
             SitemapEntry(url="https://active.example.com/page-indexed"),
         ],
     )
-    claimed = await CrawlUrl.claim_pending_batch(
+    claimed = await CrawlUrl.claim_pending_batch_by_sitemap_lastmod_and_created_at_desc(
         active_domain.crawl_domain_id,
         limit=1,
     )
     assert len(claimed) == 1
-    indexed_urls = await CrawlUrl.claim_pending_batch(
+    indexed_urls = await CrawlUrl.claim_pending_batch_by_sitemap_lastmod_and_created_at_desc(
         active_domain.crawl_domain_id,
         limit=1,
     )
@@ -172,7 +172,7 @@ async def test_list_crawl_domains_filter(
         [CrawlDomainSeed(domain="only-active.example.com", category="news")],
         next_crawl_after=now,
     )
-    domains_page = await CrawlDomain.page_by_domain(
+    domains_page = await CrawlDomain.page_by_domain_asc(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=10,
@@ -213,7 +213,7 @@ async def test_list_crawl_urls_fetching(
         next_crawl_after=now,
     )
     domain = (
-        await CrawlDomain.page_by_domain(
+        await CrawlDomain.page_by_domain_asc(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -224,7 +224,7 @@ async def test_list_crawl_urls_fetching(
         domain.crawl_domain_id,
         [SitemapEntry(url="https://urls.example.com/in-progress")],
     )
-    claimed = await CrawlUrl.claim_pending_batch(domain.crawl_domain_id, limit=1)
+    claimed = await CrawlUrl.claim_pending_batch_by_sitemap_lastmod_and_created_at_desc(domain.crawl_domain_id, limit=1)
     assert len(claimed) == 1
 
     response = await search_client.get(
@@ -309,7 +309,7 @@ async def test_run_crawl_domain_queues_discover(
         next_crawl_after=now + timedelta(days=1),
     )
     domain = (
-        await CrawlDomain.page_by_domain(
+        await CrawlDomain.page_by_domain_asc(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -351,7 +351,7 @@ async def _seed_crawl_urls(
         next_crawl_after=now,
     )
     domain = (
-        await CrawlDomain.page_by_domain(
+        await CrawlDomain.page_by_domain_asc(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -365,13 +365,13 @@ async def _seed_crawl_urls(
             SitemapEntry(url=f"https://detail-{unique_id}.example.com/indexed"),
         ],
     )
-    pending_batch = await CrawlUrl.claim_pending_batch(
+    pending_batch = await CrawlUrl.claim_pending_batch_by_sitemap_lastmod_and_created_at_desc(
         domain.crawl_domain_id,
         limit=1,
     )
     assert len(pending_batch) == 1
     pending_id = pending_batch[0].crawl_url_id
-    indexed_batch = await CrawlUrl.claim_pending_batch(
+    indexed_batch = await CrawlUrl.claim_pending_batch_by_sitemap_lastmod_and_created_at_desc(
         domain.crawl_domain_id,
         limit=1,
     )
@@ -494,7 +494,7 @@ async def test_get_crawl_url_detail_with_rag_content(
         next_crawl_after=now,
     )
     domain = (
-        await CrawlDomain.page_by_domain(
+        await CrawlDomain.page_by_domain_asc(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -505,7 +505,7 @@ async def test_get_crawl_url_detail_with_rag_content(
         domain.crawl_domain_id,
         [SitemapEntry(url=f"https://rag-detail-{unique_id}.example.com/page")],
     )
-    claimed = await CrawlUrl.claim_pending_batch(
+    claimed = await CrawlUrl.claim_pending_batch_by_sitemap_lastmod_and_created_at_desc(
         domain.crawl_domain_id,
         limit=1,
     )
@@ -643,7 +643,7 @@ async def test_patch_crawl_domain_pause_and_interval(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.page_by_domain(
+        await CrawlDomain.page_by_domain_asc(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -677,7 +677,7 @@ async def test_delete_crawl_domain(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.page_by_domain(
+        await CrawlDomain.page_by_domain_asc(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,
@@ -712,7 +712,7 @@ async def test_add_crawl_domain_urls(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.page_by_domain(
+        await CrawlDomain.page_by_domain_asc(
             crawl_profile_id=crawl_profile_id,
             status=None,
             limit=1,

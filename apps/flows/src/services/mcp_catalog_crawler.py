@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal, TypedDict
 from urllib.parse import quote, urljoin
 
-import httpx
+import httpx2
 from pydantic import ValidationError
 
 from apps.flows.config import get_settings
@@ -164,7 +164,7 @@ def upstream_url_is_probeable(url: str) -> bool:
     if "{" in url or "}" in url:
         return False
     try:
-        _ = httpx.URL(url)
+        _ = httpx2.URL(url)
     except ValueError:
         return False
     return True
@@ -217,11 +217,11 @@ async def _verify_catalog_entry(
         if "401" in message or "403" in message or "unauthorized" in message:
             return MCPCatalogVerifyStatus.AUTH_REQUIRED, MCPAuthPolicy.API_KEY, 0
         return MCPCatalogVerifyStatus.UNREACHABLE, MCPAuthPolicy.UNKNOWN, 0
-    except httpx.HTTPStatusError as exc:
+    except httpx2.HTTPStatusError as exc:
         if exc.response.status_code in (401, 403):
             return MCPCatalogVerifyStatus.AUTH_REQUIRED, MCPAuthPolicy.API_KEY, 0
         return MCPCatalogVerifyStatus.UNREACHABLE, MCPAuthPolicy.UNKNOWN, 0
-    except httpx.HTTPError:
+    except httpx2.HTTPError:
         return MCPCatalogVerifyStatus.UNREACHABLE, MCPAuthPolicy.UNKNOWN, 0
     except ValidationError:
         return MCPCatalogVerifyStatus.UNREACHABLE, MCPAuthPolicy.UNKNOWN, 0

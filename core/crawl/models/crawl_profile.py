@@ -132,10 +132,10 @@ class CrawlProfile(PlatformModel):
         return await cls.require_with_index(crawl_profile_id)
 
     @classmethod
-    async def with_index_page_by_crawl_profile_id(
+    async def with_index_page_by_crawl_profile_id_asc(
         cls, *, limit: int, offset: int
     ) -> OffsetPage[CrawlProfileWithIndex]:
-        """Страница всех профилей с индексом, ORDER BY crawl_profile_id. total — COUNT всех профилей."""
+        """Страница всех профилей с индексом, ORDER BY crawl_profile_id ASC. total — COUNT всех профилей."""
         total = await cls.objects.count()
         rows = await (
             cls.objects.order_by("crawl_profile_id").limit(limit).offset(offset).all()

@@ -22,7 +22,7 @@ from datetime import date, timedelta
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.crm.services.crm_work_item_service import CrmTaskWorkSeed
 from core.identity.flow_employee import flow_employee_user_id

@@ -28,7 +28,7 @@ async def test_platform_tracer_persists_exception_event(app, di, unique_id: str)
         async with tracer.platform_operation_span(operation_name):
             raise RuntimeError("agent-visible boom")
 
-    spans, _ = await Span.span_page_and_cursor_for_service(
+    spans, _ = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
         service_name="flows",
         operation_name=operation_name,
         limit=10,
@@ -64,7 +64,7 @@ async def test_platform_tracer_does_not_mark_flow_interrupt_as_error(
         async with tracer.platform_operation_span(operation_name):
             raise FlowInterrupt(question="Нужен ввод")
 
-    spans, _ = await Span.span_page_and_cursor_for_service(
+    spans, _ = await Span.span_page_and_cursor_for_service_by_start_time_and_span_id_desc(
         service_name="flows",
         operation_name=operation_name,
         limit=10,

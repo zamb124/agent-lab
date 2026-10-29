@@ -438,7 +438,7 @@ async def message_read_from_db(
     *,
     resolve_user: bool,
 ) -> MessageRead:
-    contents = await SyncMessageContent.list_for_message(m.message_id)
+    contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(m.message_id)
     sender = await sender_brief_for_message(m.sender_user_id, resolve_user=resolve_user)
     return message_read_from_entity(m=m, contents=contents, sender=sender)
 
@@ -644,7 +644,7 @@ class SyncMessageService:
         chronological = list(reversed(rows))
         items: list[MessageRead] = []
         for m in chronological:
-            contents = await SyncMessageContent.list_for_message(m.message_id)
+            contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(m.message_id)
             sender = await _listed_message_sender_brief(users_by_id, m.sender_user_id)
             items.append(message_read_from_entity(m=m, contents=contents, sender=sender))
 
@@ -690,7 +690,7 @@ class SyncMessageService:
                 "thread_id does not belong to channel_id",
                       error_code='ws_invalid_payload',
                   )
-        rows = await SyncMessage.list_alive_by_sent_at(
+        rows = await SyncMessage.list_alive_by_sent_at_asc(
             thread_id=thread_id,
             limit=limit,
             offset=offset,
@@ -707,7 +707,7 @@ class SyncMessageService:
         users_by_id = await User.get_many(user_ids)
         items: list[MessageRead] = []
         for m in rows:
-            contents = await SyncMessageContent.list_for_message(m.message_id)
+            contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(m.message_id)
             sender = await _listed_message_sender_brief(users_by_id, m.sender_user_id)
             items.append(message_read_from_entity(m=m, contents=contents, sender=sender))
         return OffsetPage[MessageRead](
@@ -868,7 +868,7 @@ class SyncMessageService:
             raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
         if m.deleted_at is not None:
             raise WsCommandError("forbidden", "Cannot forward a deleted message.", error_code='forbidden')
-        contents = await SyncMessageContent.list_for_message(m.message_id)
+        contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(m.message_id)
         body = MessageCreate(
             thread_id=thread_id,
             parent_message_id=None,
@@ -1033,7 +1033,7 @@ class SyncMessageService:
             raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
         if source.deleted_at is not None:
             raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
-        source_contents = await SyncMessageContent.list_for_message(message_id)
+        source_contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(message_id)
         try:
             processing_contents = set_audio_transcription_state(
                 source_contents,
@@ -1096,7 +1096,7 @@ class SyncMessageService:
             raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
         if source.deleted_at is not None:
             raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
-        source_contents = await SyncMessageContent.list_for_message(message_id)
+        source_contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(message_id)
         try:
             processing_contents = set_video_transcription_state(
                 source_contents,

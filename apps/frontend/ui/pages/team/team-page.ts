@@ -24,9 +24,40 @@ import '@platform/lib/components/fields/platform-field.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController, ResourceController} from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const INVITE_ROLES = Object.freeze(['developer', 'admin', 'viewer']);
 const ROLE_FILTER_KEYS = Object.freeze(['owner', 'admin', 'developer', 'viewer']);
+
+function memberUserId(member: Record<string, unknown>): string {
+    const userId = member.user_id;
+    if (typeof userId !== 'string' || userId === '') {
+        throw new Error('team-page: user_id required');
+    }
+    return userId;
+}
+
+function memberDisplayName(member: Record<string, unknown>, fallback: string): string {
+    const name = member.name;
+    if (typeof name === 'string' && name !== '') return name;
+    const email = member.email;
+    if (typeof email === 'string' && email !== '') return email;
+    return fallback;
+}
+
+function memberRoles(member: Record<string, unknown>): string[] {
+    const roles = member.roles;
+    if (roles === undefined || roles === null) return [];
+    if (!Array.isArray(roles)) return [];
+    const out: string[] = [];
+    for (const role of roles) {
+        if (typeof role !== 'string') {
+            throw new Error('team-page: role must be a string');
+        }
+        out.push(role);
+    }
+    return out;
+}
 
 export class FrontendTeamPage extends PlatformPage {
     static override styles: CSSResultGroup = [
@@ -192,7 +223,7 @@ export class FrontendTeamPage extends PlatformPage {
         _filterRole: { state: true },
     }
     declare _selectedRole: string;
-    declare _filterRole: any;
+    declare _filterRole: string | null;
 ;
 
     constructor() {
@@ -210,15 +241,23 @@ export class FrontendTeamPage extends PlatformPage {
         if (this._invite.busy) return;
         const role = this._selectedRole;
         const links = this._invite.state.links;
-        const cached = (links as Record<string, any>)[role];
+        if (!isPlainRecord(links)) {
+            throw new Error('team-page: invite links must be an object');
+        }
+        const cached = links[role];
         let link = typeof cached === 'string' && cached.length > 0 ? cached : '';
         if (link === '') {
             const result = await this._invite.run({ role });
-            if (!result || typeof (result as Record<string, any>).invite_url !== 'string' || (result as Record<string, any>).invite_url.length === 0) {
+            if (!isPlainRecord(result)) {
                 this.toast('team_page.err_invite', { type: 'error' });
                 return;
             }
-            link = (result as Record<string, any>).invite_url;
+            const inviteUrl = result.invite_url;
+            if (typeof inviteUrl !== 'string' || inviteUrl.length === 0) {
+                this.toast('team_page.err_invite', { type: 'error' });
+                return;
+            }
+            link = inviteUrl;
         }
         this.copyToClipboard(link, {
             success_i18n_key: 'team_page.toast_invite_copied',
@@ -226,25 +265,23 @@ export class FrontendTeamPage extends PlatformPage {
         });
     }
 
-    async _removeMember(member: Record<string, any>) {
-        const name = member.name || member.email || this.t('team_page.member_fallback');
+    async _removeMember(member: Record<string, unknown>) {
+        const name = memberDisplayName(member, this.t('team_page.member_fallback'));
         const message = this.t('team_page.confirm_remove', { name });
         if (!(await platformConfirm(message))) return;
-        this._members.remove(member.user_id);
+        this._members.remove(memberUserId(member));
     }
 
-    _isOwner(member: Record<string, any>) {
-        return Array.isArray(member.roles) && member.roles.includes('owner');
+    _isOwner(member: Record<string, unknown>) {
+        return memberRoles(member).includes('owner');
     }
 
-    _memberMatchesFilter(member: Record<string, any>) {
+    _memberMatchesFilter(member: Record<string, unknown>) {
         if (this._filterRole === null) return true;
-        const roles = member.roles;
-        if (!Array.isArray(roles)) return false;
-        return roles.includes(this._filterRole);
+        return memberRoles(member).includes(this._filterRole);
     }
 
-    _filteredItems(items: readonly Record<string, any>[]): readonly Record<string, any>[] {
+    _filteredItems(items: readonly Record<string, unknown>[]): readonly Record<string, unknown>[] {
         return items.filter((m) => this._memberMatchesFilter(m));
     }
 
@@ -282,10 +319,10 @@ export class FrontendTeamPage extends PlatformPage {
         `;
     }
 
-    _renderRoles(member: Record<string, any>) {
-        const roles = Array.isArray(member.roles) ? member.roles : [];
+    _renderRoles(member: Record<string, unknown>) {
+        const roles = memberRoles(member);
         if (roles.length === 0) return '';
-        return roles.map((r: string) => html`
+        return roles.map((r) => html`
             <span class="role-tag ${r === 'owner' ? 'owner' : ''}">${this.t(`team_roles.${r}`)}</span>
         `);
     }
@@ -342,11 +379,11 @@ export class FrontendTeamPage extends PlatformPage {
         `;
     }
 
-    _renderRow(m: Record<string, any>) {
+    _renderRow(m: Record<string, unknown>) {
         const isOwner = this._isOwner(m);
         return html`
             <tr>
-                <td><platform-user-chip user-id=${m.user_id} size="md"></platform-user-chip></td>
+                <td><platform-user-chip user-id=${memberUserId(m)} size="md"></platform-user-chip></td>
                 <td>${typeof m.email === 'string' ? m.email : ''}</td>
                 <td>
                     ${m.is_flow_employee === true
@@ -365,12 +402,12 @@ export class FrontendTeamPage extends PlatformPage {
         `;
     }
 
-    _renderCard(m: Record<string, any>) {
+    _renderCard(m: Record<string, unknown>) {
         const isOwner = this._isOwner(m);
         return html`
             <div class="member-card">
                 <div class="member-card-top">
-                    <platform-user-chip user-id=${m.user_id} size="md"></platform-user-chip>
+                    <platform-user-chip user-id=${memberUserId(m)} size="md"></platform-user-chip>
                     <div class="member-card-actions">
                         ${isOwner ? '' : html`
                             <button class="btn btn-ghost btn-danger" @click=${() => this._removeMember(m)}>
@@ -390,7 +427,7 @@ export class FrontendTeamPage extends PlatformPage {
         `;
     }
 
-    _renderMemberList(members: readonly Record<string, any>[]) {
+    _renderMemberList(members: readonly Record<string, unknown>[]) {
         const visible = this._filteredItems(members);
         if (visible.length === 0) {
             return this._renderFilterEmpty();

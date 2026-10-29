@@ -144,7 +144,7 @@ class TestPutawayRulesCrud:
         )
         assert paused.is_active is False
         # Неактивное правило не участвует в подборе кандидатов.
-        rules = await StockPutawayRule.candidates_for(
+        rules = await StockPutawayRule.list_active_matched_by_sequence_asc_and_specificity_desc(
             company_id=env.company_id,
             warehouse_id=wh_id,
             product_id=env.product.product_id,
@@ -224,7 +224,7 @@ class TestOwnerScopedPutaway:
             owner_entity_id="ent-owner-a",
             sequence=1,
         )
-        matched_owner = await StockPutawayRule.candidates_for(
+        matched_owner = await StockPutawayRule.list_active_matched_by_sequence_asc_and_specificity_desc(
             company_id=env.company_id,
             warehouse_id=wh_id,
             product_id=env.product.product_id,
@@ -237,7 +237,7 @@ class TestOwnerScopedPutaway:
             owned.rule_id,
             generic.rule_id,
         ]
-        matched_other = await StockPutawayRule.candidates_for(
+        matched_other = await StockPutawayRule.list_active_matched_by_sequence_asc_and_specificity_desc(
             company_id=env.company_id,
             warehouse_id=wh_id,
             product_id=env.product.product_id,
@@ -285,7 +285,7 @@ class TestReorderRoute:
             company_id=env.company_id
         )
         assert created == 1
-        moves = await StockMove.list_open_by_origin(
+        moves = await StockMove.list_unordered_open_by_origin(
             env.company_id, "reorder_rule", rule.rule_id
         )
         legs = {m.move_id: m for m in moves}
@@ -329,7 +329,7 @@ class TestQuantsOwnerFilter:
             _ = await env.di.move_engine.validate_transfer(
                 company_id=env.company_id, transfer_id=transfer.transfer_id
             )
-        rows_a = await StockQuant.list_by_product_and_location(
+        rows_a = await StockQuant.list_by_product_and_location_asc(
             env.company_id,
             location_id=env.warehouse.stock_location_id,
             product_id=env.product.product_id,
@@ -416,11 +416,11 @@ class TestAutoValidate:
             company_id=env.company_id, transfer_id=sale.transfer_id
         )
         assert result.state.value == "done"
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             env.company_id, sale.transfer_id
         )
         assert all(m.state == StockMoveState.DONE for m in moves)
-        lines = await StockMoveLine.list_for_moves(
+        lines = await StockMoveLine.list_for_moves_by_created_at_asc(
             env.company_id, [m.move_id for m in moves]
         )
         assert all(
@@ -460,7 +460,7 @@ class TestPutawayStrategies:
                 )
             ],
         )
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             env.company_id, transfer.transfer_id
         )
         return moves[0]
@@ -557,7 +557,7 @@ class TestPutawayStrategies:
         )
 
         move = await self._draft_incoming_move(env)
-        suggestions = await env.di.placement_service.suggest(
+        suggestions = await env.di.placement_service.suggest_by_allowed_group_rank_and_pick_sequence_asc(
             company_id=env.company_id,
             warehouse=env.warehouse,
             move=move,
@@ -571,7 +571,7 @@ class TestPutawayStrategies:
         assert suggestions[0].location_id == bin_stocked.location_id
         assert suggestions[1].location_id == bin_empty.location_id
 
-        with_rejected = await env.di.placement_service.suggest(
+        with_rejected = await env.di.placement_service.suggest_by_allowed_group_rank_and_pick_sequence_asc(
             company_id=env.company_id,
             warehouse=env.warehouse,
             move=move,
@@ -699,8 +699,8 @@ class TestWalkSequence:
         transfer_id = await self._outgoing_transfer(
             env, zone.location_id, Decimal("8")
         )
-        moves = await StockMove.list_for_transfer(env.company_id, transfer_id)
-        lines = await StockMoveLine.list_for_moves(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, transfer_id)
+        lines = await StockMoveLine.list_for_moves_by_created_at_asc(
             env.company_id, [m.move_id for m in moves]
         )
         # Дальняя ячейка закрыла бы FIFO первой, но sequence строки —
@@ -708,7 +708,7 @@ class TestWalkSequence:
         by_loc = {ln.location_id: ln.sequence for ln in lines}
         assert by_loc[bin_near.location_id] == 10
         assert by_loc[bin_far.location_id] == 90
-        queue = await StockMoveLine.list_queue(
+        queue = await StockMoveLine.list_open_queue_by_priority_desc_stop_sequence_and_created_at(
             env.company_id, env.warehouse.warehouse_id
         )
         assert queue[0].location_id == bin_near.location_id
@@ -724,13 +724,13 @@ class TestWalkSequence:
         # Два заказа: первый снимает из ближней ячейки, второй — из дальней.
         tr_a = await self._outgoing_transfer(env, bin_near.location_id, Decimal("2"))
         tr_b = await self._outgoing_transfer(env, bin_far.location_id, Decimal("2"))
-        lines_a = await StockMoveLine.list_for_moves(
+        lines_a = await StockMoveLine.list_for_moves_by_created_at_asc(
             env.company_id,
-            [m.move_id for m in await StockMove.list_for_transfer(env.company_id, tr_a)],
+            [m.move_id for m in await StockMove.list_for_transfer_by_created_at_asc(env.company_id, tr_a)],
         )
-        lines_b = await StockMoveLine.list_for_moves(
+        lines_b = await StockMoveLine.list_for_moves_by_created_at_asc(
             env.company_id,
-            [m.move_id for m in await StockMove.list_for_transfer(env.company_id, tr_b)],
+            [m.move_id for m in await StockMove.list_for_transfer_by_created_at_asc(env.company_id, tr_b)],
         )
         # Рейс: остановка B раньше A — строки дальней ячейки идут первыми.
         wave = await env.di.wave_service.create(
@@ -745,7 +745,7 @@ class TestWalkSequence:
             stop_transfer_ids=[tr_b, tr_a],
         )
         assert wave.stops == [tr_b, tr_a]
-        queue = await StockMoveLine.list_queue(
+        queue = await StockMoveLine.list_open_queue_by_priority_desc_stop_sequence_and_created_at(
             env.company_id, env.warehouse.warehouse_id
         )
         in_wave = [ln for ln in queue if ln.wave_id == wave.wave_id]

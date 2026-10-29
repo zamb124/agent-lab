@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Annotated, Literal
 
-import httpx
+import httpx2
 from pydantic import Field, TypeAdapter
 
 from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
@@ -287,7 +287,7 @@ class FlowUIClient:
         try:
             async with get_httpx_client(timeout=self.timeout) as client:
                 response = await client.get(url, headers=request_headers)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise FlowUIClientError(f"HTTP error GET {url}: {exc}") from exc
         if response.status_code != 200:
             raise FlowUIClientError(f"GET {url} failed: {response.status_code} - {response.text}")

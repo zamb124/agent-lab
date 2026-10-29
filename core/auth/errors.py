@@ -39,8 +39,8 @@ class PermissionDeniedA2AError(BaseModel):
     )
 
     @classmethod
-    def for_flow(cls, flow_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
-        """Создает ошибку для отказа доступа к flow."""
+    def denied_for_flow(cls, flow_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
+        """Ошибка отказа доступа к flow."""
         return cls(
             message=f"Permission denied for flow '{flow_id}'",
             data={
@@ -64,8 +64,8 @@ class PermissionDeniedA2AError(BaseModel):
         )
 
     @classmethod
-    def for_tool(cls, tool_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
-        """Создает ошибку для отказа доступа к tool."""
+    def denied_for_tool(cls, tool_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
+        """Ошибка отказа доступа к tool."""
         return cls(
             message=f"Permission denied for tool '{tool_id}'",
             data={

@@ -127,7 +127,7 @@ async def test_upload_without_s3_returns_503(auth_headers_system, monkeypatch, f
     import core.config.base as config_base
 
     config_base._settings_instance = None
-    from httpx import ASGITransport, AsyncClient
+    from httpx2 import ASGITransport, AsyncClient
 
     async with AsyncClient(transport=ASGITransport(app=frontend_app), base_url="http://testserver") as client:
         r = await client.post(

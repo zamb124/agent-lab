@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.tracing.models import Span
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401

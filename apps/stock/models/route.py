@@ -87,14 +87,14 @@ class StockRoute(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_active_by_name(
+    async def list_active_by_name_asc(
         cls,
         company_id: str,
         *,
         warehouse_id: str | None = None,
         limit: int = 200,
     ) -> list[Self]:
-        """Активные маршруты компании, ORDER BY name, limit по умолчанию 200, без offset. warehouse_id None не фильтрует."""
+        """Активные маршруты компании, ORDER BY name ASC, limit по умолчанию 200, без offset. warehouse_id None не фильтрует."""
         q = cls.objects.filter(company_id=company_id, is_active=True)
         if warehouse_id is not None:
             q = q.filter(warehouse_id=warehouse_id)

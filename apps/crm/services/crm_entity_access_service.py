@@ -179,7 +179,7 @@ class CrmEntityAccessService:
         return await self._filter_public_fields(entity)
 
     async def _filter_public_fields(self, entity: CRMEntity) -> JsonObject:
-        entity_type = await EntityType.by_company_namespace_and_type_id(
+        entity_type = await EntityType.query_by_company_namespace_and_type_id(
             company_id=entity.company_id,
             namespace=entity.namespace,
             type_id=entity.entity_type,

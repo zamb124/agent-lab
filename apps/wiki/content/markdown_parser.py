@@ -52,7 +52,7 @@ from apps.wiki.content.schema import (
     WikiMentionKind,
     WikiSchemaError,
     WikiTableAlign,
-    normalize_document,
+    normalize_document_in_serialization_order,
 )
 
 _MENTION_SCHEME_TO_KIND: Final[dict[str, WikiMentionKind]] = {
@@ -799,7 +799,7 @@ class _MarkdownReader:
         if not blocks:
             blocks = [ProseMirrorNode(type="paragraph")]
         try:
-            document = normalize_document(ProseMirrorNode(type="doc", content=blocks))
+            document = normalize_document_in_serialization_order(ProseMirrorNode(type="doc", content=blocks))
         except WikiSchemaError as exc:
             raise WikiMarkdownError(str(exc)) from exc
         return WikiMarkdownParseResult(document=document, notices=self._notices.result())

@@ -18,6 +18,8 @@ import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import type { TeamMemberRecord } from '@platform/lib/events/reducers/team.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
 const DEFAULT_EMPLOYEE_ROLES = ['member'];
@@ -50,7 +52,7 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
     declare _enabled: boolean;
     declare _displayName: string;
     declare _avatarUrl: string;
-    declare _curatorUserIds: any[];
+    declare _curatorUserIds: string[];
     declare _membersFilter: string;
     declare _hydrated: boolean;
 ;
@@ -220,9 +222,9 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
     private _flows: ResourceController;
     private _update: OpController;
     private _editor: ControllerFor<'flows/editor'>;
-    private _teamMembersSel: SelectController<any>;
-    private _teamLoadingSel: SelectController<any>;
-    private _authSel: SelectController<any>;
+    private _teamMembersSel: SelectController<TeamMemberRecord[]>;
+    private _teamLoadingSel: SelectController<boolean>;
+    private _authSel: SelectController<AuthUser | null>;
 
     constructor() {
         super();
@@ -237,9 +239,9 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
         this._flows = this.useResource('flows/flows');
         this._update = this.useOp('flows/flow_update');
         this._editor = this.useOp('flows/editor');
-        this._teamMembersSel = this.select((s) => (s as any).team.members);
-        this._teamLoadingSel = this.select((s) => (s as any).team.loading);
-        this._authSel = this.select((s) => (s as any).auth.user);
+        this._teamMembersSel = this.select((state) => state.team.members);
+        this._teamLoadingSel = this.select((state) => state.team.loading);
+        this._authSel = this.select((state) => state.auth.user);
     }
 
     override connectedCallback(): void {
@@ -264,8 +266,8 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
             this._membersFilter = '';
         }
         if (!this._hydrated && this.flowId) {
-            const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
-            if (item) {
+            const item = asArray(this._flows.items).find((flow) => isPlainObject(flow) && flow.flow_id === this.flowId);
+            if (isPlainObject(item)) {
                 this._hydrateFromItem(item);
             } else {
                 this._flows.get(this.flowId);
@@ -273,25 +275,26 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
         }
     }
 
-    _hydrateFromItem(item: any) {
+    _hydrateFromItem(item: Record<string, unknown>) {
         const employee = isPlainObject(item.employee) ? item.employee : emptyEmployee();
         this._enabled = employee.enabled === true;
-        this._displayName =
-            typeof employee.display_name === 'string' && employee.display_name.length > 0
-                ? employee.display_name
-                : '';
-        this._avatarUrl =
-            typeof employee.avatar_url === 'string' && employee.avatar_url.length > 0
-                ? employee.avatar_url
-                : '';
-        this._curatorUserIds = Array.isArray(employee.curator_user_ids)
-            ? employee.curator_user_ids.filter((id: string) => typeof id === 'string' && id.length > 0)
-            : [];
-        if (this._enabled && (this._curatorUserIds.length as any) === 0) {
+        const displayName = employee.display_name;
+        const avatarUrl = employee.avatar_url;
+        this._displayName = typeof displayName === 'string' && displayName.length > 0 ? displayName : '';
+        this._avatarUrl = typeof avatarUrl === 'string' && avatarUrl.length > 0 ? avatarUrl : '';
+        const curatorIds: string[] = [];
+        if (Array.isArray(employee.curator_user_ids)) {
+            for (const id of employee.curator_user_ids) {
+                if (typeof id === 'string' && id.length > 0) {
+                    curatorIds.push(id);
+                }
+            }
+        }
+        this._curatorUserIds = curatorIds;
+        if (this._enabled && this._curatorUserIds.length === 0) {
             const me = this._authSel.value;
-            const myId =
-                me && typeof me.user_id === 'string' && me.user_id.length > 0 ? me.user_id : null;
-            if (myId) {
+            const myId = me !== null && typeof me.user_id === 'string' && me.user_id.length > 0 ? me.user_id : null;
+            if (myId !== null) {
                 this._curatorUserIds = [myId];
             }
         }
@@ -299,32 +302,32 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
         this.isDirty = false;
     }
 
-    _humanMembers() {
+    _humanMembers(): Array<TeamMemberRecord & { user_id: string }> {
         const members = this._teamMembersSel.value;
-        if (!Array.isArray(members)) {
-            return [];
-        }
-        const q = (this._membersFilter.trim() as any).toLowerCase();
-        return members
-            .filter((m) => m && typeof m.user_id === 'string' && m.user_id.length > 0)
-            .filter((m) => m.is_flow_employee !== true)
-            .filter((m) => {
-                if (q.length === 0) {
-                    return true;
-                }
-                const name = typeof m.name === 'string' ? m.name.toLowerCase() : '';
-                const email = typeof m.email === 'string' ? m.email.toLowerCase() : '';
-                return name.includes(q) || email.includes(q) || m.user_id.toLowerCase().includes(q);
-            });
+        const query = this._membersFilter.trim().toLowerCase();
+        return members.filter((member): member is TeamMemberRecord & { user_id: string } => {
+            if (typeof member.user_id !== 'string' || member.user_id.length === 0) {
+                return false;
+            }
+            if (member.is_flow_employee === true) {
+                return false;
+            }
+            if (query.length === 0) {
+                return true;
+            }
+            const name = typeof member.name === 'string' ? member.name.toLowerCase() : '';
+            const email = typeof member.email === 'string' ? member.email.toLowerCase() : '';
+            return name.includes(query) || email.includes(query) || member.user_id.toLowerCase().includes(query);
+        });
     }
 
-    _isSelected(userId: any) {
-        return (this._curatorUserIds.indexOf(userId) as any) !== -1;
+    _isSelected(userId: string) {
+        return this._curatorUserIds.indexOf(userId) !== -1;
     }
 
-    _toggleCurator(userId: any) {
-        const idx = (this._curatorUserIds.indexOf(userId) as any);
-        const next = (this._curatorUserIds.slice() as any);
+    _toggleCurator(userId: string) {
+        const idx = this._curatorUserIds.indexOf(userId);
+        const next = this._curatorUserIds.slice();
         if (idx === -1) {
             next.push(userId);
         } else {
@@ -334,13 +337,12 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
         this.isDirty = true;
     }
 
-    _onEnableChange(checked: any) {
+    _onEnableChange(checked: unknown) {
         this._enabled = checked === true;
-        if (this._enabled && (this._curatorUserIds.length as any) === 0) {
+        if (this._enabled && this._curatorUserIds.length === 0) {
             const me = this._authSel.value;
-            const myId =
-                me && typeof me.user_id === 'string' && me.user_id.length > 0 ? me.user_id : null;
-            if (myId) {
+            const myId = me !== null && typeof me.user_id === 'string' && me.user_id.length > 0 ? me.user_id : null;
+            if (myId !== null) {
                 this._curatorUserIds = [myId];
             }
         }
@@ -357,12 +359,12 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
                 avatar_url: null,
             };
         }
-        const display = (this._displayName.trim() as any);
-        const avatar = (this._avatarUrl.trim() as any);
+        const display = this._displayName.trim();
+        const avatar = this._avatarUrl.trim();
         return {
             enabled: true,
             roles: DEFAULT_EMPLOYEE_ROLES.slice(),
-            curator_user_ids: (this._curatorUserIds.slice() as any),
+            curator_user_ids: this._curatorUserIds.slice(),
             display_name: display.length > 0 ? display : null,
             avatar_url: avatar.length > 0 ? avatar : null,
         };
@@ -375,7 +377,7 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
         if (!this._enabled) {
             return true;
         }
-        return (this._curatorUserIds.length as any) > 0;
+        return this._curatorUserIds.length > 0;
     }
 
     override renderHeader() {
@@ -392,7 +394,7 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
             return html`<div class="members-empty"><glass-spinner></glass-spinner></div>`;
         }
         const candidates = this._humanMembers();
-        const teamLoading = (this._teamLoadingSel as SelectController<any>).value === true;
+        const teamLoading = this._teamLoadingSel.value === true;
         return html`
             <div class="hero">
                 <div class="hero-icon">
@@ -538,28 +540,24 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
         if (!this.flowId || !this._canSubmit()) {
             return;
         }
-        if (this._enabled && (this._curatorUserIds.length as any) === 0) {
+        if (this._enabled && this._curatorUserIds.length === 0) {
             this.toast('employee_settings_modal.error_curators_required', { type: 'error' });
             return;
         }
-        const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
-        if (!item) {
+        const item = asArray(this._flows.items).find((flow) => isPlainObject(flow) && flow.flow_id === this.flowId);
+        if (!isPlainObject(item)) {
             throw new Error('flows-employee-settings-modal: flow item not loaded');
         }
         const employee = this._buildEmployeePayload();
         const body = { ...item, employee };
         await this._update.run({ ...body, flow_id: this.flowId });
 
-        const editorState = this._editor.state;
-        if (
-            isPlainObject(editorState) &&
-            isPlainObject(editorState.flowConfig) &&
-            (editorState as any).flowConfig.flow_id === this.flowId
-        ) {
-            const wasDirty = editorState.isDirty === true;
-            (this._editor.patchFlowConfig({ patch: { employee } }) as any);
+        const flowConfig = this._editor.state.flowConfig;
+        if (isPlainObject(flowConfig) && flowConfig.flow_id === this.flowId) {
+            const wasDirty = this._editor.state.isDirty === true;
+            this._editor.patchFlowConfig({ patch: { employee } });
             if (!wasDirty) {
-                (this._editor.setDirty({ dirty: false }) as any);
+                this._editor.setDirty({ dirty: false });
             }
         }
 

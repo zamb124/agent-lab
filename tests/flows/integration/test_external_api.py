@@ -10,7 +10,7 @@
 """
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
@@ -93,14 +93,14 @@ class TestExternalAPIClientWithConfig:
     @pytest.mark.asyncio
     async def test_client_call_echo(self, monkeypatch):
         """Вызов echo через клиент."""
-        import httpx
+        import httpx2
 
         async def mock_request(*args, **kwargs):
-            return httpx.Response(
+            return httpx2.Response(
                 200, json={"status": "completed", "data": {"result": "test message"}}
             )
 
-        monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
+        monkeypatch.setattr(httpx2.AsyncClient, "request", mock_request)
         config = ExternalAPIConfig(
             api_id="echo",
             name="Echo API",
@@ -167,17 +167,17 @@ class TestExternalAPINode:
     @pytest.mark.asyncio
     async def test_external_api_node_with_asgi(self, di, asgi_api_client, monkeypatch, unique_id):
         """ExternalAPINode с ASGI транспортом."""
-        import httpx
+        import httpx2
 
         async def mock_request(self, *args, **kwargs):
             url = kwargs.get("url", args[1] if len(args) > 1 else "")
             if "/echo" in str(url):
-                return httpx.Response(
+                return httpx2.Response(
                     200, json={"status": "completed", "data": {"result": "Hello from API"}}
                 )
-            raise httpx.RequestError("Unknown URL")
+            raise httpx2.RequestError("Unknown URL")
 
-        monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
+        monkeypatch.setattr(httpx2.AsyncClient, "request", mock_request)
         node = ExternalAPINode(
             node_id="echo_node",
             config={
@@ -202,10 +202,10 @@ class TestExternalAPINode:
     @pytest.mark.asyncio
     async def test_external_api_node_interrupt(self, di, monkeypatch, unique_id):
         """ExternalAPINode с interrupt."""
-        import httpx
+        import httpx2
 
         async def mock_request(self, *args, **kwargs):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "status": "waiting_input",
@@ -213,7 +213,7 @@ class TestExternalAPINode:
                 },
             )
 
-        monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
+        monkeypatch.setattr(httpx2.AsyncClient, "request", mock_request)
         node = ExternalAPINode(
             node_id="clarify_node",
             config={
@@ -237,15 +237,15 @@ class TestExternalAPINode:
     @pytest.mark.asyncio
     async def test_external_api_node_with_var(self, di, monkeypatch, unique_id):
         """ExternalAPINode с @var: переменными."""
-        import httpx
+        import httpx2
 
         captured_headers = {}
 
         async def mock_request(self, *args, **kwargs):
             captured_headers.update(kwargs.get("headers", {}))
-            return httpx.Response(200, json={"status": "completed", "data": {"ok": True}})
+            return httpx2.Response(200, json={"status": "completed", "data": {"ok": True}})
 
-        monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
+        monkeypatch.setattr(httpx2.AsyncClient, "request", mock_request)
         node = ExternalAPINode(
             node_id="auth_node",
             config={
@@ -291,14 +291,14 @@ class TestExternalAPITool:
     @pytest.mark.asyncio
     async def test_external_api_tool_execute(self, monkeypatch, unique_id):
         """Выполнение ExternalAPITool через _run_impl (обходит test mock)."""
-        import httpx
+        import httpx2
 
         async def mock_request(self, *args, **kwargs):
-            return httpx.Response(
+            return httpx2.Response(
                 200, json={"status": "completed", "data": {"result": "processed"}}
             )
 
-        monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
+        monkeypatch.setattr(httpx2.AsyncClient, "request", mock_request)
         tool = ExternalAPITool(
             api_id="process_tool",
             url="http://test/process",
@@ -345,10 +345,10 @@ class TestExternalAPITool:
     @pytest.mark.asyncio
     async def test_external_api_tool_with_response_mapping(self, monkeypatch, unique_id):
         """ExternalAPITool с маппингом ответа."""
-        import httpx
+        import httpx2
 
         async def mock_request(self, *args, **kwargs):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "status": "completed",
@@ -356,7 +356,7 @@ class TestExternalAPITool:
                 },
             )
 
-        monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
+        monkeypatch.setattr(httpx2.AsyncClient, "request", mock_request)
         tool = ExternalAPITool(
             api_id="calc",
             url="http://test/calc",
@@ -382,9 +382,9 @@ class TestFlowWithExternalAPI:
         from apps.flows.src.services.external_api_client import ExternalAPIClient
 
         async def mock_request(self, method, url, **kwargs):
-            import httpx
+            import httpx2
 
-            return httpx.Response(200, json={"status": "completed", "data": {"processed": True}})
+            return httpx2.Response(200, json={"status": "completed", "data": {"processed": True}})
 
         monkeypatch.setattr(ExternalAPIClient, "_request_with_proxy_fallback", mock_request)
         flow_config = FlowConfig(

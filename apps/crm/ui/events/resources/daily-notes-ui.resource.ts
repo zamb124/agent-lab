@@ -7,6 +7,7 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { CrmDailyNotesUiSlice } from '../crm.types.js';
 
 function _formatIsoDate(d: Date) {
@@ -39,10 +40,13 @@ export const dailyNotesUiSlice = createSlice({
     extraReducer: (state: CrmDailyNotesUiSlice, event) => {
         switch (event.type) {
             case 'crm/daily_notes_ui/range_updated': {
-                const p = (event.payload as Record<string, any>);
-                if (!p || typeof p.from !== 'string' || typeof p.to !== 'string') return state;
-                if (!ISO_DATE_RE.test(p.from) || !ISO_DATE_RE.test(p.to)) return state;
-                const next = Object.freeze({ from: p.from, to: p.to });
+                const p = event.payload;
+                if (!isPlainRecord(p)) return state;
+                const from = p.from;
+                const to = p.to;
+                if (typeof from !== 'string' || typeof to !== 'string') return state;
+                if (!ISO_DATE_RE.test(from) || !ISO_DATE_RE.test(to)) return state;
+                const next = Object.freeze({ from, to });
                 return { ...state, range: next };
             }
             default:

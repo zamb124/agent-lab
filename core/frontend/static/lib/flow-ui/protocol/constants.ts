@@ -1,7 +1,7 @@
 /**
  * Константы протокола Flow UI поверх A2A 1.0.
  * Значения совпадают с ``core/flow_ui/protocol.py`` (wire) и ``core/flow_ui/document.py``
- * (грамматика документа); паритет проверяет ``scripts/check_flow_ui_hard_cut.py``.
+ * (грамматика документа); паритет проверяет ``scripts/gates/flows/flow_ui_hard_cut.py``.
  */
 
 export const A2A_PROTOCOL_VERSION = '1.0';

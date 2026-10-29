@@ -7,20 +7,31 @@ import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
-function asArray(value: unknown) {
-    return Array.isArray(value) ? value : [];
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function stringValue(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function asArray(value: unknown): unknown[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const items: unknown[] = [];
+    for (const item of value) {
+        items.push(item);
+    }
+    return items;
+}
+
+function stringValue(record: unknown, field: string): string {
+    if (!isRecord(record)) {
         return '';
     }
     const value = record[field];
     return typeof value === 'string' ? value : '';
 }
 
-function numberOrNull(record: any, field: any) {
-    if (!record || typeof record !== 'object') {
+function numberOrNull(record: unknown, field: string): number | null {
+    if (!isRecord(record)) {
         return null;
     }
     const value = record[field];
@@ -39,10 +50,10 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
         compareResult: { type: Object },
         busy: { type: Boolean },
     }
-    declare runs: any[];
+    declare runs: unknown[];
     declare selectedRunId: string;
     declare selectedCompareRunId: string;
-    declare compareResult: Record<string, any> | null;
+    declare compareResult: Record<string, unknown> | null;
     declare busy: boolean;
 ;
 
@@ -194,7 +205,7 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
         this.busy = false;
     }
 
-    _onSelectableKeydown(event: KeyboardEvent, handler: any) {
+    _onSelectableKeydown(event: KeyboardEvent, handler: () => void) {
         if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
@@ -202,7 +213,7 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
         handler.call(this);
     }
 
-    _selectCompareRun(runId: any) {
+    _selectCompareRun(runId: string) {
         this.emit('compare-run-select', { run_id: runId });
     }
 
@@ -214,11 +225,11 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
         this.emit('baseline-set-request', null);
     }
 
-    _pairwise(mode: string, preference: any) {
+    _pairwise(mode: string, preference: string) {
         this.emit('pairwise-judge-request', { mode, preference });
     }
 
-    _judgeItems(compareEnabled: any) {
+    _judgeItems(compareEnabled: boolean) {
         return [
             { value: 'left_wins', label: this.t('evaluation.compare.left_wins'), disabled: !compareEnabled },
             { value: 'tie', label: this.t('evaluation.compare.tie'), disabled: !compareEnabled },
@@ -293,7 +304,7 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
         `;
     }
 
-    _renderRunChip(run: any) {
+    _renderRunChip(run: unknown) {
         const runId = stringValue(run, 'run_id');
         const state = stringValue(run, 'state');
         const active = runId === this.selectedCompareRunId;
@@ -313,15 +324,15 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
     }
 
     _compareCases() {
-        if (!this.compareResult || typeof this.compareResult !== 'object') {
+        if (this.compareResult === null) {
             return [];
         }
         return asArray(this.compareResult.cases);
     }
 
-    _renderDiff(item: any) {
-        const left = item && typeof item === 'object' ? item.left : null;
-        const right = item && typeof item === 'object' ? item.right : null;
+    _renderDiff(item: unknown) {
+        const left = isRecord(item) ? item.left : null;
+        const right = isRecord(item) ? item.right : null;
         const caseId = stringValue(item, 'case_id');
         const leftScore = numberOrNull(left, 'total_score');
         const rightScore = numberOrNull(right, 'total_score');

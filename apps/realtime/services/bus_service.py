@@ -150,7 +150,7 @@ class RealtimeBusService:
     async def _expired_commands(self, *, now: datetime, limit: int) -> list[PlatformEvent]:
         if limit < 1:
             raise ValueError("limit must be >= 1")
-        rows = await PlatformEventLog.list_expired_commands(now=now, limit=limit)
+        rows = await PlatformEventLog.list_expired_by_deadline_at_asc(now=now, limit=limit)
         return [row.platform_event() for row in rows]
 
     async def _has_terminal(self, causation_id: str) -> bool:

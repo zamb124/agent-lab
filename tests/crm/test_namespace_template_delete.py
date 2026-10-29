@@ -67,7 +67,7 @@ async def test_upsert_by_template_key_and_type_id_updates_same_row(unique_id: st
     assert updated.created_at == created.created_at
     assert updated.name == "Note renamed"
     assert updated.parent_type_id == "parent"
-    kept = await NamespaceTemplateType.list_for_template(other_key)
+    kept = await NamespaceTemplateType.list_for_template_by_type_id_asc(other_key)
     assert [item.entry_id for item in kept] == [other.entry_id]
     assert kept[0].name == "Other"
 
@@ -84,9 +84,9 @@ async def test_list_for_template_orders_by_type_id(unique_id: str) -> None:
         )
         _ = await NamespaceTemplateType.objects.create(instance=row)
 
-    listed = await NamespaceTemplateType.list_for_template(template_key)
+    listed = await NamespaceTemplateType.list_for_template_by_type_id_asc(template_key)
     assert [item.type_id for item in listed] == ["alpha", "zeta"]
-    assert await NamespaceTemplateType.list_for_template(f"missing-{unique_id}") == []
+    assert await NamespaceTemplateType.list_for_template_by_type_id_asc(f"missing-{unique_id}") == []
 
 
 async def test_delete_template_and_types_by_named_keys(unique_id: str) -> None:
@@ -125,7 +125,7 @@ async def test_delete_template_and_types_by_named_keys(unique_id: str) -> None:
     deleted_types = await NamespaceTemplateType.delete_by_template_key(template_key)
     assert deleted_types == 1
     assert await NamespaceTemplateType.delete_by_template_key(template_key) == 0
-    kept = await NamespaceTemplateType.list_for_template(other_key)
+    kept = await NamespaceTemplateType.list_for_template_by_type_id_asc(other_key)
     assert [item.type_id for item in kept] == ["kept"]
 
     assert await NamespaceTemplate.delete_by_id(template_key) is True

@@ -6,7 +6,7 @@ import re
 from typing import Literal
 from urllib.parse import urlparse
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from tests.office.helpers import upload_office_file_bytes
 

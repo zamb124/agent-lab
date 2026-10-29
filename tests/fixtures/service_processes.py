@@ -25,11 +25,11 @@ from fastapi import FastAPI
 from taskiq import AsyncTaskiqDecoratedTask
 
 from apps.crm.config import CRMSettings
-from apps.crm_worker.di import CrmWorkerDi
+from apps.crm.di import CrmDi
 from apps.flows.di import FlowsDi
-from apps.idle_worker.di import IdleWorkerDi
-from apps.rag_worker.config import RAGWorkerSettings
-from apps.rag_worker.di import RagWorkerDi
+from apps.idle.di import IdleDi
+from apps.rag.config import RAGSettings
+from apps.rag.di import RagDi
 from apps.sync.di import SyncDi
 from core.config import BaseSettings, get_settings, set_settings
 from core.config.loader import load_merged_config
@@ -66,9 +66,9 @@ class _WorkerProcess:
 
 
 _WORKER_PROCESSES: dict[type[ServiceDi], _WorkerProcess] = {
-    CrmWorkerDi: _WorkerProcess("crm_worker", "crm", CRMSettings),
-    RagWorkerDi: _WorkerProcess("rag_worker", "rag_worker", RAGWorkerSettings),
-    IdleWorkerDi: _WorkerProcess("idle_worker", "idle_worker", BaseSettings),
+    CrmDi: _WorkerProcess("crm_worker", "crm", CRMSettings),
+    RagDi: _WorkerProcess("rag_worker", "rag_worker", RAGSettings),
+    IdleDi: _WorkerProcess("idle_worker", "idle_worker", BaseSettings),
 }
 
 

@@ -31,35 +31,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function requireRecord(value: unknown, context: any) {
+function requireRecord(value: unknown, context: string) {
     if (!isRecord(value)) {
         throw new Error(`flows-durable-history-modal: ${context} object required`);
     }
     return value;
 }
 
-function optionalResultRecord(value: unknown, context: any) {
+function optionalResultRecord(value: unknown, context: string) {
     if (value === null || value === undefined) {
         return null;
     }
     return requireRecord(value, context);
 }
 
-function optionalRecord(value: unknown, context: any) {
+function optionalRecord(value: unknown, context: string) {
     if (value === null || value === undefined) {
         return {};
     }
     return requireRecord(value, context);
 }
 
-function requireString(value: unknown, context: any) {
+function requireString(value: unknown, context: string) {
     if (typeof value !== 'string' || value.length === 0) {
         throw new Error(`flows-durable-history-modal: ${context} string required`);
     }
     return value;
 }
 
-function optionalString(value: unknown, context: any) {
+function optionalString(value: unknown, context: string) {
     if (value === null || value === undefined) {
         return '';
     }
@@ -69,14 +69,14 @@ function optionalString(value: unknown, context: any) {
     return value;
 }
 
-function requireInteger(value: unknown, context: any) {
+function requireInteger(value: unknown, context: string) {
     if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
         throw new Error(`flows-durable-history-modal: ${context} non-negative integer required`);
     }
     return value;
 }
 
-function optionalHash(value: unknown, context: any) {
+function optionalHash(value: unknown, context: string) {
     if (value === null || value === undefined) {
         return null;
     }
@@ -99,30 +99,30 @@ function optionalParentBranchId(value: unknown) {
 function durableEvent(value: unknown) {
     const row = requireRecord(value, 'durable event');
     return {
-        event_id: requireString((row as any).event_id, 'event_id'),
-        execution_branch_id: requireString((row as any).execution_branch_id, 'execution_branch_id'),
-        sequence: requireInteger((row as any).sequence, 'sequence'),
-        event_type: requireString((row as any).event_type, 'event_type'),
-        created_at: optionalString((row as any).created_at, 'created_at'),
-        prev_state_hash: optionalHash((row as any).prev_state_hash, 'prev_state_hash'),
-        next_state_hash: requireString((row as any).next_state_hash, 'next_state_hash'),
-        payload: optionalRecord((row as any).payload, 'payload'),
-        state_delta: optionalRecord((row as any).state_delta, 'state_delta'),
+        event_id: requireString(row.event_id, 'event_id'),
+        execution_branch_id: requireString(row.execution_branch_id, 'execution_branch_id'),
+        sequence: requireInteger(row.sequence, 'sequence'),
+        event_type: requireString(row.event_type, 'event_type'),
+        created_at: optionalString(row.created_at, 'created_at'),
+        prev_state_hash: optionalHash(row.prev_state_hash, 'prev_state_hash'),
+        next_state_hash: requireString(row.next_state_hash, 'next_state_hash'),
+        payload: optionalRecord(row.payload, 'payload'),
+        state_delta: optionalRecord(row.state_delta, 'state_delta'),
     };
 }
 
 function durableBranch(value: unknown) {
     const row = requireRecord(value, 'durable branch');
     return {
-        execution_branch_id: requireString((row as any).execution_branch_id, 'branch execution_branch_id'),
-        parent_execution_branch_id: optionalParentBranchId((row as any).parent_execution_branch_id),
-        base_sequence: requireInteger((row as any).base_sequence, 'branch base_sequence'),
-        reason: optionalString((row as any).reason, 'branch reason'),
-        is_active: (row as any).is_active === true,
+        execution_branch_id: requireString(row.execution_branch_id, 'branch execution_branch_id'),
+        parent_execution_branch_id: optionalParentBranchId(row.parent_execution_branch_id),
+        base_sequence: requireInteger(row.base_sequence, 'branch base_sequence'),
+        reason: optionalString(row.reason, 'branch reason'),
+        is_active: row.is_active === true,
     };
 }
 
-function durableEventArray(value: unknown, context: any) {
+function durableEventArray(value: unknown, context: string) {
     if (value === undefined || value === null) {
         return [];
     }
@@ -132,7 +132,7 @@ function durableEventArray(value: unknown, context: any) {
     return value.map((item) => durableEvent(item));
 }
 
-function durableBranchArray(value: unknown, context: any) {
+function durableBranchArray(value: unknown, context: string) {
     if (value === undefined || value === null) {
         return [];
     }
@@ -164,18 +164,18 @@ function commandEffect(value: unknown) {
     }
     const row = requireRecord(effect, 'command effect');
     return {
-        activates_head: (row as any).activates_head === true,
+        activates_head: row.activates_head === true,
         source_execution_branch_id: requireString(
-            (row as any).source_execution_branch_id,
+            row.source_execution_branch_id,
             'effect source_execution_branch_id',
         ),
-        source_sequence: requireInteger((row as any).source_sequence, 'effect source_sequence'),
+        source_sequence: requireInteger(row.source_sequence, 'effect source_sequence'),
         source_events_after_base: requireInteger(
-            (row as any).source_events_after_base,
+            row.source_events_after_base,
             'effect source_events_after_base',
         ),
-        instance_status: optionalString((row as any).instance_status, 'effect instance_status'),
-        auto_resumes_run: (row as any).auto_resumes_run === true,
+        instance_status: optionalString(row.instance_status, 'effect instance_status'),
+        auto_resumes_run: row.auto_resumes_run === true,
     };
 }
 
@@ -244,9 +244,9 @@ export class FlowsDurableHistoryModal extends PlatformModal {
     declare _selectedBranchId: string;
     declare _selectedEventId: string;
     declare _selectedTab: string;
-    declare _stateJson: Record<string, any> | null;
+    declare _stateJson: Record<string, unknown> | null;
     declare _stateEditText: string;
-    declare _lastCommandResult: Record<string, any> | null;
+    declare _lastCommandResult: Record<string, unknown> | null;
     declare _showOutcome: boolean;
 ;
 
@@ -710,7 +710,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         return result === null ? [] : durableBranchArray(result.branches, 'branches');
     }
 
-    _historyTotal(events: any) {
+    _historyTotal(events: readonly DurableEventRow[]) {
         const result = optionalResultRecord(this._historyOp.lastResult, 'history result');
         if (result === null || result.total === null || result.total === undefined) {
             return events.length;
@@ -742,7 +742,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         }
         let count = 0;
         for (const row of this._historyEvents()) {
-            if ((row as any).sequence > (event as any).sequence) {
+            if (row.sequence > event.sequence) {
                 count += 1;
             }
         }
@@ -755,7 +755,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             return;
         }
         const branchesResult = await this._branchesOp.run({ session_id: sessionId });
-        const branches = durableBranchArray((requireRecord(branchesResult, 'branches result') as any).branches, 'branches');
+        const branches = durableBranchArray(requireRecord(branchesResult, 'branches result').branches, 'branches');
         if (this._selectedBranchId.length === 0) {
             for (const branch of branches) {
                 if (branch.is_active === true) {
@@ -772,7 +772,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         if (sessionId.length === 0) {
             return;
         }
-        const payload: any = {
+        const payload: Record<string, unknown> = {
             session_id: sessionId,
             limit: 1000,
             offset: 0,
@@ -816,7 +816,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         return lastEvent === undefined ? null : lastEvent;
     }
 
-    _onSelectableKeydown(event: KeyboardEvent, handler: any) {
+    _onSelectableKeydown(event: KeyboardEvent, handler: () => void) {
         if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
@@ -833,7 +833,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         this._showOutcome = false;
     }
 
-    _setBranch(branch: any) {
+    _setBranch(branch: unknown) {
         const row = durableBranch(branch);
         this._selectedBranchId = row.execution_branch_id;
         this._selectedEventId = '';
@@ -872,7 +872,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         }).format(date);
     }
 
-    _eventClass(event: DurableEventRow, selectedEventId: any) {
+    _eventClass(event: DurableEventRow, selectedEventId: string) {
         let cls = 'event-row';
         if (event.event_id.length > 0 && event.event_id === selectedEventId) {
             cls += ' event-row--selected';
@@ -883,7 +883,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         return cls;
     }
 
-    _phaseClass(phase: any) {
+    _phaseClass(phase: string) {
         let cls = 'event-phase';
         if (phase === 'fail') {
             cls += ' event-phase--fail';
@@ -958,7 +958,10 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         }
     }
 
-    async _applyCommandResult(result: any, toastKey: any) {
+    async _applyCommandResult(result: unknown, toastKey: string) {
+        if (result !== null && !isRecord(result)) {
+            throw new Error('flows-durable-history-modal: command result object required');
+        }
         this._lastCommandResult = result;
         this._showOutcome = true;
         this._selectedTab = 'command';
@@ -1011,7 +1014,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         const ok = await platformConfirm(
             this.t('durable_history_modal.confirm_rewind_message', {
                 sequence: String(event.sequence),
-                sequencePlus: String((event as any).sequence + 1),
+                sequencePlus: String(event.sequence + 1),
                 eventsAfter: String(eventsAfter),
                 terminalWarning,
             }),
@@ -1223,7 +1226,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                             role="button"
                             class=${this._eventClass(event, selectedEventId)}
                             @click=${() => this._selectEvent(event)}
-                            @keydown=${(eventKey: any) => this._onSelectableKeydown(eventKey, () => this._selectEvent(event))}
+                            @keydown=${(eventKey: KeyboardEvent) => this._onSelectableKeydown(eventKey, () => this._selectEvent(event))}
                         >
                             <div class="event-seq">#${event.sequence}</div>
                             <div class="event-main">

@@ -28,6 +28,16 @@ from core.datasources.sql_policy import bind_named_params, rewrite_placeholders_
 from core.types import JsonObject, JsonValue, require_json_value
 
 
+def _columns_sql_by_table_and_position_asc() -> str:
+    """Колонки currentDatabase, ORDER BY table ASC, position ASC."""
+    return (
+        "SELECT database, table, name, type "
+        "FROM system.columns "
+        "WHERE database = currentDatabase() "
+        "ORDER BY table, position"
+    )
+
+
 class ClickHouseDatasourceDriver:
     async def test(self, connection: DatasourceConnection, password: str) -> DatasourceTestResult:
         started = perf_counter()
@@ -51,14 +61,7 @@ class ClickHouseDatasourceDriver:
     ) -> DatasourceSchemaSnapshot:
         client = await self._connect(connection, password)
         try:
-            result = await client.query(
-                """
-                SELECT database, table, name, type
-                FROM system.columns
-                WHERE database = currentDatabase()
-                ORDER BY table, position
-                """
-            )
+            result = await client.query(_columns_sql_by_table_and_position_asc())
         finally:
             await client.close()
         return _schema_from_rows(

@@ -129,7 +129,7 @@ def _rag_document_dedup_key(rag_result: RAGSearchResult) -> str:
     raise ValueError("RAG search result must have canonical_url, document_id, or source_url")
 
 
-def _dedupe_rag_results(rag_results: list[RAGSearchResult]) -> list[RAGSearchResult]:
+def _dedupe_rag_results_by_score_desc(rag_results: list[RAGSearchResult]) -> list[RAGSearchResult]:
     best_by_key: dict[str, RAGSearchResult] = {}
     for rag_result in rag_results:
         dedup_key = _rag_document_dedup_key(rag_result)
@@ -139,6 +139,12 @@ def _dedupe_rag_results(rag_results: list[RAGSearchResult]) -> list[RAGSearchRes
     deduped = list(best_by_key.values())
     deduped.sort(key=lambda item: (-item.score, item.document_name))
     return deduped
+
+
+def _merged_by_score_desc(merged: list[WebSearchResult]) -> list[WebSearchResult]:
+    """Слияние провайдеров, score DESC, затем provider_rank и title ASC."""
+    merged.sort(key=lambda item: (-item.score, item.provider_rank, item.title))
+    return merged
 
 
 class IndexSearchProvider:
@@ -233,7 +239,7 @@ class IndexSearchProvider:
             merged: list[WebSearchResult] = []
             for batch in batches:
                 merged.extend(batch)
-            merged.sort(key=lambda item: (-item.score, item.provider_rank, item.title))
+            merged = _merged_by_score_desc(merged)
             ranked: list[WebSearchResult] = []
             for rank, item in enumerate(merged[:retrieve_limit], start=1):
                 ranked.append(item.model_copy(update={"rank": rank, "provider_rank": rank}))
@@ -337,7 +343,7 @@ class IndexSearchProvider:
             rag_results,
             weight=definition.retrieval.domain_authority_weight,
         )
-        deduped_rag = _dedupe_rag_results(rag_results)
+        deduped_rag = _dedupe_rag_results_by_score_desc(rag_results)
         out: list[WebSearchResult] = []
         for index, rag_result in enumerate(deduped_rag, start=1):
             mapped = self._map_result(

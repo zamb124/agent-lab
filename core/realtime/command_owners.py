@@ -1,10 +1,10 @@
 """Владелец `op_*` по первому сегменту PlatformEvent.type.
 
 Владелец есть только у сервиса с каталогом `<SVC>_OPERATIONS`
-(`apps/<svc>/realtime/command_router.py`) — гейт `scripts/check_command_owner_catalogs.py`.
-`frontend` — консоль компании (настройки, team, API-ключи, embed, LinnexAgent, billing,
+(`apps/<svc>/realtime/command_router.py`) — гейт `scripts/gates/backend/command_owner_catalogs.py`.
+`frontend` — консоль компании (настройки, team, API-ключи, embed, billing,
 админки system: platform_billing, platform_tracing, llm_model_scores, authz_explorer);
-его анонимные и pre-session маршруты (публичный сайт, инвайты, device protocol, webhooks)
+его анонимные и pre-session маршруты (публичный сайт, инвайты, webhooks)
 остаются HTTP-протоколом без команд.
 Протокольные сервисы (`voice`, `browser`, `guest_runtime`, `capability_gateway`,
 `code_runner_*`, `realtime`) команд по шине не принимают: их API — собственный протокол

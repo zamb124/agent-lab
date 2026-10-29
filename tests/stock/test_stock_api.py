@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from tests.fixtures.stock import API_PREFIX
 

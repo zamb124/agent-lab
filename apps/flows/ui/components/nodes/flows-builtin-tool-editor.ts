@@ -147,7 +147,7 @@ export class FlowsBuiltinToolEditor extends PlatformElement {
                 .flowId=${asString(this.flowId)}
                 .branchId=${asString(this.branchId)}
                 .nodeConfig=${cfg}
-                .nodeType=${'builtin'}
+                .flowNodeType=${'builtin'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

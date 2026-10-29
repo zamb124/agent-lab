@@ -125,24 +125,37 @@ customElements.define('crawl-report-structural-panel', CrawlReportStructuralPane
 export class CrawlReportFilterMetadataPanel extends PlatformElement {
     static i18nNamespace = 'frontend';
 
-    static override properties = {
+    static override properties: PropertyDeclarations = {
         filterMetadata: { type: Object },
         enrichmentSnapshot: { type: Object },
         locale: { type: String },
-    };
+    }
+    declare filterMetadata: Record<string, any> | null;
+    declare enrichmentSnapshot: Record<string, any> | null;
+    declare locale: string;
 
     static override styles: CSSResultGroup = CrawlReportStructuralPanel.styles;
 
     constructor() {
         super();
-        (this as Record<string, any>).filterMetadata = null;
-        (this as Record<string, any>).enrichmentSnapshot = null;
-        (this as Record<string, any>).locale = 'en';
+        this.filterMetadata = null;
+        this.enrichmentSnapshot = null;
+        this.locale = 'en';
     }
 
     _formatDate(value: unknown) {
-        if (!value) return '—';
-        return formatPlatformDate(value as string | number | Date, (this as Record<string, any>).locale);
+        if (typeof value === 'string') {
+            if (value.length === 0) return '—';
+            return formatPlatformDate(value, this.locale);
+        }
+        if (typeof value === 'number') {
+            if (!Number.isFinite(value) || value === 0) return '—';
+            return formatPlatformDate(value, this.locale);
+        }
+        if (value instanceof Date) {
+            return formatPlatformDate(value, this.locale);
+        }
+        return '—';
     }
 
     _label(prefix: string, slug: string) {
@@ -153,8 +166,8 @@ export class CrawlReportFilterMetadataPanel extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const meta = (this as Record<string, any>).filterMetadata;
-        const snapshot = (this as Record<string, any>).enrichmentSnapshot;
+        const meta = this.filterMetadata;
+        const snapshot = this.enrichmentSnapshot;
         if (!meta) {
             return html`<div class="meta-value">${this.t('crawl_report_page.enrichment_empty')}</div>`;
         }

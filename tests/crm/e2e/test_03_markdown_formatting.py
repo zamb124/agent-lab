@@ -7,7 +7,7 @@ User Story: Форматирование текста как в markdown для 
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_str
 

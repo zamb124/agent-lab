@@ -12,7 +12,7 @@ from uuid import uuid4
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
-import httpx
+import httpx2
 from pydantic import ConfigDict, Field
 
 from core.calendar.caldav_discovery import (
@@ -344,7 +344,7 @@ class CalDavClient:
                 principal_root = await self._propfind(
                     root_url, principal_body, depth="0", auth=auth
                 )
-            except httpx.HTTPStatusError as error:
+            except httpx2.HTTPStatusError as error:
                 # 401/403 — проблема доступа, а не адреса: следующий корень не поможет.
                 if error.response.status_code in {401, 403} or is_last_root:
                     raise
@@ -656,7 +656,7 @@ class CalendarService:
         )
         return return_path
 
-    async def list_events(
+    async def list_events_by_start_at_asc(
         self,
         company_id: str,
         user_id: str,
@@ -667,7 +667,7 @@ class CalendarService:
     ) -> list[CalendarEvent]:
         if _ensure_utc(start_at) >= _ensure_utc(end_at):
             raise ValueError("Calendar list range start_at must be before end_at")
-        local_events = await CalendarEvent.list_in_range(
+        local_events = await CalendarEvent.list_overlapping_by_start_at_asc(
             company_id=company_id,
             start_at=start_at,
             end_at=end_at,
@@ -748,7 +748,7 @@ class CalendarService:
                 invited_ids.add(attendee.attendee_id)
         if invited_emails:
             for email in invited_emails:
-                for member_user in await User.list_by_email_ci(email):
+                for member_user in await User.list_containing_email_ci_by_user_id_asc(email):
                     if member_user.user_id in company_member_ids or company_id in member_user.companies:
                         invited_ids.add(member_user.user_id)
         invited_ids.discard(organizer_user_id)
@@ -1003,7 +1003,7 @@ class CalendarService:
             created_at=created_at,
             updated_at=now,
         )
-        await CalendarEvent.upsert_by_event_id(event)
+        await CalendarEvent.merge_by_event_id(event)
         if event_id is None and event.source == CalendarEventSource.PLATFORM:
             await self._notify_attendees_about_event_invite(
                 event=event,
@@ -1022,7 +1022,7 @@ class CalendarService:
                 f"/sync/api/v1/calls/links/{token}",
             )
         await self._delete_external_links(event)
-        deleted = await CalendarEvent.delete_in_company(company_id=company_id, event_id=event_id)
+        deleted = await CalendarEvent.delete_by_company_and_event(company_id=company_id, event_id=event_id)
         if not deleted:
             raise RuntimeError(f"Failed to delete calendar event {event_id}")
 
@@ -1048,10 +1048,10 @@ class CalendarService:
         updated = event.model_copy(
             update={"metadata": md, "updated_at": datetime.now(timezone.utc)}
         )
-        await CalendarEvent.upsert_by_event_id(updated)
+        await CalendarEvent.merge_by_event_id(updated)
 
     async def list_integrations(self, user_id: str, company_id: str) -> list[CalendarIntegration]:
-        credentials = await IntegrationCredential.list_by_created_at_for_user(
+        credentials = await IntegrationCredential.list_by_created_at_for_user_asc(
             company_id=company_id,
             user_id=user_id,
         )
@@ -1172,7 +1172,7 @@ class CalendarService:
                     caldav_base_url=base_url,
                 ),
             )
-        except httpx.HTTPStatusError as error:
+        except httpx2.HTTPStatusError as error:
             if error.response.status_code not in {401, 403}:
                 raise
             # Пароль ящика не подошёл к CalDAV: у Mail.ru пароль внешнего
@@ -1219,7 +1219,7 @@ class CalendarService:
         """
         if not payload.source_id or not payload.source_id.strip():
             raise ValueError("iMIP calendar payload requires source_id")
-        existing = await CalendarEvent.by_source(
+        existing = await CalendarEvent.by_company_source_and_source_id(
             company_id=company_id,
             source=payload.source,
             source_id=payload.source_id,
@@ -1297,7 +1297,7 @@ class CalendarService:
 
             try:
                 imported, exported = await _run_google_sync(google_integration)
-            except httpx.HTTPStatusError as error:
+            except httpx2.HTTPStatusError as error:
                 if error.response.status_code != 401:
                     raise
                 google_integration = await self._refresh_google_access_token(integration=google_integration)
@@ -1348,7 +1348,7 @@ class CalendarService:
             start_at=start_at,
             end_at=end_at,
         )
-        existing = await CalendarEvent.list_in_range(
+        existing = await CalendarEvent.list_overlapping_by_start_at_asc(
             company_id=company_id,
             start_at=start_at - timedelta(days=3650),
             end_at=end_at + timedelta(days=3650),
@@ -1415,7 +1415,7 @@ class CalendarService:
                 created_at=matched.created_at if matched else now,
                 updated_at=now,
             )
-            await CalendarEvent.upsert_by_event_id(event)
+            await CalendarEvent.merge_by_event_id(event)
             imported += 1
         return imported
 
@@ -1441,7 +1441,7 @@ class CalendarService:
             start_at=start_at,
             end_at=end_at,
         )
-        existing = await CalendarEvent.list_in_range(
+        existing = await CalendarEvent.list_overlapping_by_start_at_asc(
             company_id=company_id,
             start_at=start_at - timedelta(days=3650),
             end_at=end_at + timedelta(days=3650),
@@ -1508,7 +1508,7 @@ class CalendarService:
                 created_at=matched.created_at if matched else now,
                 updated_at=now,
             )
-            await CalendarEvent.upsert_by_event_id(event)
+            await CalendarEvent.merge_by_event_id(event)
             imported += 1
         return imported
 
@@ -1521,7 +1521,7 @@ class CalendarService:
         start_at: datetime,
         end_at: datetime,
     ) -> int:
-        events = await CalendarEvent.list_in_range(
+        events = await CalendarEvent.list_overlapping_by_start_at_asc(
             company_id=company_id,
             start_at=start_at,
             end_at=end_at,
@@ -1578,7 +1578,7 @@ class CalendarService:
             event.external_refs = refs
             event.updated_by_user_id = user_id
             event.updated_at = datetime.now(timezone.utc)
-            await CalendarEvent.upsert_by_event_id(event)
+            await CalendarEvent.merge_by_event_id(event)
             exported += 1
         return exported
 
@@ -1595,7 +1595,7 @@ class CalendarService:
     ) -> int:
         if not credentials.username:
             raise ValueError(f"{provider} integration username is required")
-        events = await CalendarEvent.list_in_range(
+        events = await CalendarEvent.list_overlapping_by_start_at_asc(
             company_id=company_id,
             start_at=start_at,
             end_at=end_at,
@@ -1635,7 +1635,7 @@ class CalendarService:
             event.external_refs = refs
             event.updated_by_user_id = user_id
             event.updated_at = datetime.now(timezone.utc)
-            await CalendarEvent.upsert_by_event_id(event)
+            await CalendarEvent.merge_by_event_id(event)
             exported += 1
         return exported
 
@@ -1651,7 +1651,7 @@ class CalendarService:
         провайдера может быть несколько интеграций (по одной на ящик), поэтому
         различаем их по calendar_id из ref.
         """
-        credentials = await IntegrationCredential.list_by_user_provider_service(
+        credentials = await IntegrationCredential.list_by_user_provider_service_created_at_asc(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider(ref.provider),

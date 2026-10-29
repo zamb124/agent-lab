@@ -47,7 +47,7 @@ class StockPutawayRule(PlatformModel):
     """Пауза правила без удаления: сезонная зона, временный запрет."""
 
     @classmethod
-    async def candidates_for(
+    async def list_active_matched_by_sequence_asc_and_specificity_desc(
         cls,
         *,
         company_id: str,
@@ -57,7 +57,7 @@ class StockPutawayRule(PlatformModel):
         location_ids: list[str],
         owner_entity_id: str | None = None,
     ) -> list[Self]:
-        """Правила, чьи location_in покрывают направление; самые специфичные первыми."""
+        """Активные правила склада для location_ids. Товар, категория и владелец: None в правиле подходит всем, иначе точное совпадение. Порядок — sequence ASC, затем более частное правило раньше. Пустой location_ids в теле не отсекается."""
         rows = await cls.objects.filter(
             company_id=company_id,
             warehouse_id=warehouse_id,
@@ -113,10 +113,10 @@ class StockPutawayRule(PlatformModel):
         )
 
     @classmethod
-    async def list_by_sequence_and_rule_id_for_warehouse(
+    async def list_for_warehouse_by_sequence_and_rule_id_asc(
         cls, company_id: str, warehouse_id: str
     ) -> list[Self]:
-        """Все правила размещения склада, ORDER BY sequence, rule_id. Предела нет."""
+        """Все правила размещения склада, ORDER BY sequence, rule_id ASC. Предела нет."""
         return await cls.objects.filter(
             company_id=company_id, warehouse_id=warehouse_id
         ).order_by("sequence", "rule_id").all()

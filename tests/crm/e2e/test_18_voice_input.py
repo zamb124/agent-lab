@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_str
 from tests.fixtures.audio_bytes import minimal_wav_silence

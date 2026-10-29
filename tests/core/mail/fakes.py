@@ -11,7 +11,7 @@ from core.mail.exceptions import (
 from core.mail.imap_folders import (
     STANDARD_ENSURE_ROLES,
     ParsedImapListEntry,
-    build_mail_folder_list_result,
+    build_mail_folder_list_result_by_role_and_name_asc,
     standard_folder_name,
 )
 from core.mail.mime_parse import strip_attachment_payloads
@@ -361,7 +361,7 @@ class RecordingMailServerPort:
             for folder in self.imap_folders
         ]
         # Preserve explicit roles from seed folders (not only flags).
-        result = build_mail_folder_list_result(
+        result = build_mail_folder_list_result_by_role_and_name_asc(
             list_entries=entries,
             namespace_prefix=self.namespace_prefix,
             namespace_delimiter=self.delimiter,

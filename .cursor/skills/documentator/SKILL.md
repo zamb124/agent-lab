@@ -209,7 +209,7 @@ Fallback из `label_en`/`label` существует только для сов
     → docs_prepare.py и опубликованная документация
 ```
 
-`scripts/check_scenario_docs_quality.py` проверяет технический минимум, taxonomy, плоское размещение PNG и формат имени. Его успешный результат **не означает**, что учебный контракт этого skill выполнен.
+`scripts/gates/repo/scenario_docs_quality.py` проверяет технический минимум, taxonomy, плоское размещение PNG и формат имени. Его успешный результат **не означает**, что учебный контракт этого skill выполнен.
 
 ## Команды
 
@@ -228,7 +228,7 @@ Fallback из `label_en`/`label` существует только для сов
 
 **Фикстуры:** `scenario`, `*_ui` (`flows_ui`, `office_ui`, …), `ui_page_system` / `ui_page_company2` / `ui_page_anonymous`, `auth_token_*`, `unique_id`. Гость: `ui_page_anonymous` без cookie.
 
-**Seed:** использовать `httpx` с auth cookie или готовый repo helper, а не `page.evaluate(fetch)`. Технически подготовленные данные не выдавать за действия пользователя.
+**Seed:** использовать `httpx2` с auth cookie или готовый repo helper, а не `page.evaluate(fetch)`. Технически подготовленные данные не выдавать за действия пользователя.
 
 **Эталоны механики:** [`test_sync_complete_guide.py`](../../../tests/ui/e2e/test_sync_complete_guide.py) показывает использование `details`; [`test_flows_api_console_docs.py`](../../../tests/ui/e2e/test_flows_api_console_docs.py) показывает двуязычные `details`. Не копировать их объём целиком: новый сценарий обязан укладываться в 1–2 минуты и 4–7 шагов.
 
@@ -236,7 +236,7 @@ Fallback из `label_en`/`label` существует только для сов
 
 У **каждого** `@pytest.mark.scenario` обязательны `title_en` и `description_en`. У **каждого** `scenario.step` — `label_en`; если есть `details=` — также `details_en`. Финальные `**Result demonstration.**` и `**Summary.**` — в `details_en` последнего шага.
 
-Не допускать русский fallback в `README.en.md`. После правок EN-метаданных без E2E: `uv run python scripts/regenerate_scenario_readme_en.py`.
+Не допускать русский fallback в `README.en.md`. После правок EN-метаданных без E2E: `uv run python -m scripts.docs.regenerate_scenario_readme_en`.
 
 ## AppUI, origins и auth
 
@@ -276,7 +276,7 @@ Cookies из [`browser_auth.py`](../../../tests/ui/browser_auth.py): `auth_token
 
 ## Embed / ESM
 
-- В embed-closure разрешены только relative imports и `lit-shim`; `@platform/...` проверяет [`check_embed_esm_closure.py`](../../../scripts/check_embed_esm_closure.py).
+- В embed-closure разрешены только relative imports и `lit-shim`; `@platform/...` проверяет [`check_embed_esm_closure.py`](../../../scripts/gates/frontend/embed_esm_closure.py).
 - `embed_browser_http_stack_ready` должен зависеть от `secrets_service`, если flow использует переменные.
 - Host page и API base должны использовать согласованный origin `localhost:9004`.
 
@@ -328,8 +328,8 @@ Cookies из [`browser_auth.py`](../../../tests/ui/browser_auth.py): `auth_token
 |---|---|
 | [`tests/ui/conftest.py`](../../../tests/ui/conftest.py) | fixture `scenario`, страницы, персоны, light theme |
 | [`tests/ui/scenario_doc.py`](../../../tests/ui/scenario_doc.py) | поля шага, скриншоты и генерация README RU/EN |
-| [`scripts/check_scenario_docs_quality.py`](../../../scripts/check_scenario_docs_quality.py) | минимальный автоматический gate |
-| [`scripts/docs_prepare.py`](../../../scripts/docs_prepare.py) | публикация сценариев в дерево документации |
+| [`scripts/gates/repo/scenario_docs_quality.py`](../../../scripts/gates/repo/scenario_docs_quality.py) | минимальный автоматический gate |
+| [`scripts/docs/prepare.py`](../../../scripts/docs/prepare.py) | публикация сценариев в дерево документации |
 | [`tests/ui/harness.py`](../../../tests/ui/harness.py) | `AppUI` и origins |
 | [`tests/ui/apps.py`](../../../tests/ui/apps.py) | порты, shell selectors и subdomain |
 | [`tests/ui/browser_auth.py`](../../../tests/ui/browser_auth.py) | cookie domains |

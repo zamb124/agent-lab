@@ -17,7 +17,6 @@ const HUMANITEC_BRAND = {
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
     apexOrigin: 'https://humanitec.ru/',
     supportedDomains: ['humanitec.ru', 'linnex.io'],
-    agentProductName: 'HumanitecAgent',
     modelsProductName: 'Humanitec Models',
     voiceProductName: 'Humanitec Voice',
     llmsDisplayLabel: 'Humanitec LLMs',

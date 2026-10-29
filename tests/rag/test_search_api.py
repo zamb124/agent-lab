@@ -13,7 +13,7 @@ from core.rag.search_options_resolver import resolve_platform_search_options
 from tests.rag.helpers import upload_rag_document_bytes, wait_rag_document_status
 
 # Несколько HTTP + эмбеддинг/поиск за один тест; глобальный timeout=5s ловит SIGALRM,
-# фикстура rag_client закрывает httpx-клиент при teardown — возможен RuntimeError на await post.
+# фикстура rag_client закрывает httpx2-клиент при teardown — возможен RuntimeError на await post.
 pytestmark = pytest.mark.timeout(60)
 
 

@@ -282,7 +282,7 @@ class StockMoveEngine:
         (пишется в stock_decisions для аудита, применяется к dst move).
         """
         warehouse = await self._require_warehouse(company_id, transfer.warehouse_id)
-        moves = await StockMove.list_for_transfer(company_id, transfer.transfer_id)
+        moves = await StockMove.list_for_transfer_by_created_at_asc(company_id, transfer.transfer_id)
         dests: dict[str, str] = {}
         decisions: list[StockDecision] = []
         for move in moves:
@@ -331,7 +331,7 @@ class StockMoveEngine:
         источника → дефолт склада) выполняется вне транзакции; внутрь
         полосы уходит готовая карта ``move_id → стратегия``.
         """
-        moves = await StockMove.list_for_transfer(
+        moves = await StockMove.list_for_transfer_by_created_at_asc(
             company_id, transfer.transfer_id
         )
         open_moves = [
@@ -408,7 +408,7 @@ class StockMoveEngine:
         publish»: пока исходная проводка не закоммичена, будить
         следующее плечо нельзя — товар ещё не на промежуточной точке.
         """
-        moves = await StockMove.list_for_transfer(company_id, transfer_id)
+        moves = await StockMove.list_for_transfer_by_created_at_asc(company_id, transfer_id)
         posted = {
             m.move_id for m in moves if m.state == StockMoveState.DONE
         }

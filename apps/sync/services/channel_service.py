@@ -112,7 +112,7 @@ async def _find_existing_direct_for_pair(
     channel_access: SyncChannelAccessService,
 ) -> SyncChannel | None:
     """Один личный чат с собеседником в рамках namespace (без дублей create)."""
-    candidates = await SyncChannel.list_for_both_members(
+    candidates = await SyncChannel.list_for_both_members_by_type_and_name_asc(
         user_a,
         user_b,
         company_id=company_id,
@@ -308,7 +308,7 @@ class SyncChannelService:
         limit: int,
         offset: int,
     ) -> OffsetPage[ChannelRead]:
-        candidates = await SyncChannel.list_member_channels_by_type_and_name(
+        candidates = await SyncChannel.list_member_channels_by_type_and_name_asc(
             user_id,
             namespace=namespace,
             limit=limit,
@@ -317,7 +317,7 @@ class SyncChannelService:
         )
         channels = await self.filter_visible(candidates, user_id=user_id)
         channel_ids = [channel.channel_id for channel in channels]
-        summaries = await SyncMessage.channel_lane_summaries(
+        summaries = await SyncMessage.channel_lane_summaries_by_channel_id_asc_and_sent_at_desc(
             company_id=company_id,
             channel_ids=channel_ids,
             viewer_user_id=user_id,
@@ -481,7 +481,7 @@ class SyncChannelService:
         await SyncChannelMember.update_notifications_muted(
             channel_id, user_id, notifications_muted, company_id=company_id
         )
-        summaries = await SyncMessage.channel_lane_summaries(
+        summaries = await SyncMessage.channel_lane_summaries_by_channel_id_asc_and_sent_at_desc(
             company_id=company_id,
             channel_ids=[channel.channel_id],
             viewer_user_id=user_id,
@@ -550,12 +550,12 @@ class SyncChannelService:
             AuthzObject.sync_channel(channel_id), user_id=user_id
         ):
             raise WsCommandError("forbidden", "No access to channel.", error_code="forbidden")
-        rows = await self._channel_access.list_member_rows(channel_id)
+        rows = await self._channel_access.list_member_rows_by_user_id_asc(channel_id)
         return ListResponse[ChannelMemberRead](
             items=[ChannelMemberRead(user_id=uid, role=member_role) for uid, member_role in rows]
         )
 
-    async def list_company_members(
+    async def list_company_members_by_name_asc(
         self,
         *,
         company_id: str,
@@ -622,7 +622,7 @@ class SyncChannelService:
                 "not_found", "User is not in the company.", error_code="not_found"
             )
         if peer_user_id == user_id:
-            candidates = await SyncChannel.list_member_channels_by_type_and_name(
+            candidates = await SyncChannel.list_member_channels_by_type_and_name_asc(
                 user_id,
                 namespace=None,
                 limit=limit,
@@ -631,7 +631,7 @@ class SyncChannelService:
             )
             channels = await self.filter_visible(candidates, user_id=user_id)
         else:
-            candidates = await SyncChannel.list_for_both_members(
+            candidates = await SyncChannel.list_for_both_members_by_type_and_name_asc(
                 user_id,
                 peer_user_id,
                 limit=limit,
@@ -644,7 +644,7 @@ class SyncChannelService:
                 peer_user_id=peer_user_id,
             )
         channel_ids = [channel.channel_id for channel in channels]
-        summaries = await SyncMessage.channel_lane_summaries(
+        summaries = await SyncMessage.channel_lane_summaries_by_channel_id_asc_and_sent_at_desc(
             company_id=company_id,
             channel_ids=channel_ids,
             viewer_user_id=user_id,

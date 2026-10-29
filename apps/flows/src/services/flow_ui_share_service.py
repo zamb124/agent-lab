@@ -132,7 +132,7 @@ class FlowUIShareService:
         if state is None:
             raise ValueError("Flow UI session does not exist")
         _assert_owner(state, user_id)
-        return await FlowUIShareGrant.list_for_owner(
+        return await FlowUIShareGrant.list_for_owner_by_created_at_desc(
             company_id=company_id,
             flow_id=flow_id,
             context_id=context_id,

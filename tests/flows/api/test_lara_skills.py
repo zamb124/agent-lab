@@ -49,7 +49,7 @@ async def test_lara_flow_attaches_full_skill_roots(di, unique_id: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_lara_every_effective_branch_keeps_full_roots_and_device_tools(
+async def test_lara_every_effective_branch_keeps_full_roots(
     di,
     unique_id: str,
 ) -> None:
@@ -58,7 +58,6 @@ async def test_lara_every_effective_branch_keeps_full_roots_and_device_tools(
     branches = flow.branches
     assert branches is not None
     assert {
-        "linnex_agent",
         "console",
         "crm",
         "flows",
@@ -82,11 +81,7 @@ async def test_lara_every_effective_branch_keeps_full_roots_and_device_tools(
         main_obj = require_json_object(main, f"effective.{branch_id}.main")
         skills = require_json_array(main_obj.get("agent_skills", []), "agent_skills")
         assert [str(item) for item in skills] == list(LARA_PLATFORM_SKILL_ROOTS)
-        assert node_tool_ids(main_obj) == [
-            "ask_user",
-            "device_tools_list",
-            "device_tools_call",
-        ]
+        assert node_tool_ids(main_obj) == ["ask_user"]
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@
 import { html, css, nothing } from 'lit';
 import { CRMNamespacePage } from './crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -51,23 +52,25 @@ function requireSuggestId(suggest: { suggest_id?: unknown } | null | undefined, 
     return suggest.suggest_id;
 }
 
-function requireSuggestPayload(suggest: { payload?: unknown } | null | undefined, owner: string): Record<string, any> {
-    if (!suggest || !suggest.payload || typeof suggest.payload !== 'object' || Array.isArray(suggest.payload)) {
+function requireSuggestPayload(suggest: { payload?: unknown } | null | undefined, owner: string): Record<string, unknown> {
+    if (!suggest || !isPlainRecord(suggest.payload)) {
         throw new Error(`${owner}: suggest.payload object required`);
     }
-    return suggest.payload as Record<string, any>;
+    return suggest.payload;
 }
 
-function requireTargetEntityIds(suggest: { target_entity_ids?: unknown } | null | undefined, owner: string): string[] {
-    if (!suggest || !Array.isArray(suggest.target_entity_ids)) {
+function requireTargetEntityIds(suggest: unknown, owner: string): string[] {
+    if (!isPlainRecord(suggest) || !Array.isArray(suggest.target_entity_ids)) {
         throw new Error(`${owner}: suggest.target_entity_ids required`);
     }
+    const ids: string[] = [];
     for (const id of suggest.target_entity_ids) {
         if (typeof id !== 'string' || id.length === 0) {
             throw new Error(`${owner}: target entity id must be non-empty string`);
         }
+        ids.push(id);
     }
-    return suggest.target_entity_ids as string[];
+    return ids;
 }
 
 export class CRMSuggestsPage extends CRMNamespacePage {
@@ -470,7 +473,10 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         super.connectedCallback();
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._loadSuggests());
         this.useEvent(this._suggestsList.op.events.SUCCEEDED, (event) => {
-            this._prefetchTargetsFromPage((event.payload as Record<string, any>)?.result);
+            if (!isPlainRecord(event.payload)) {
+                throw new Error('CRMSuggestsPage: suggest list result required');
+            }
+            this._prefetchTargetsFromPage(event.payload.result);
         });
         this.useEvent(this._resolveOp.op.events.SUCCEEDED, () => {
             this.requestUpdate();
@@ -510,23 +516,23 @@ export class CRMSuggestsPage extends CRMNamespacePage {
     }
 
     _pageItems() {
-        const page = this._suggestsList.lastResult as { items?: unknown } | null;
+        const page = this._suggestsList.lastResult;
         if (page === null) {
             return [];
         }
-        if (!page || typeof page !== 'object' || !Array.isArray(page.items)) {
+        if (!isPlainRecord(page) || !Array.isArray(page.items)) {
             throw new Error('CRMSuggestsPage: suggests page items required');
         }
         return page.items;
     }
 
-    _prefetchTargetsFromPage(page: { items?: unknown } | null | undefined) {
-        if (!page || typeof page !== 'object' || !Array.isArray(page.items)) {
+    _prefetchTargetsFromPage(page: unknown) {
+        if (!isPlainRecord(page) || !Array.isArray(page.items)) {
             throw new Error('CRMSuggestsPage._prefetchTargetsFromPage: page.items required');
         }
         const ids = new Set<string>();
         for (const suggest of page.items) {
-            for (const id of requireTargetEntityIds(suggest as { target_entity_ids?: unknown }, 'CRMSuggestsPage._prefetchTargetsFromPage')) {
+            for (const id of requireTargetEntityIds(suggest, 'CRMSuggestsPage._prefetchTargetsFromPage')) {
                 ids.add(id);
             }
         }
@@ -541,9 +547,12 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         if (typeof entityId !== 'string' || entityId.length === 0) {
             throw new Error('CRMSuggestsPage._entityTitle: entityId required');
         }
-        const entity = this._entities.byId[entityId] as Record<string, any> | undefined;
-        if (entity && typeof entity.name === 'string' && entity.name.length > 0) {
-            return entity.name;
+        const entity = this._entities.byId[entityId];
+        if (isPlainRecord(entity)) {
+            const name = entity.name;
+            if (typeof name === 'string' && name.length > 0) {
+                return name;
+            }
         }
         return entityId;
     }
@@ -580,7 +589,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         }
     }
 
-    _suggestTypeLabel(suggest: Record<string, any>) {
+    _suggestTypeLabel(suggest: Record<string, unknown>) {
         switch (suggest.suggest_type) {
             case 'duplicate':
                 return this.t('suggests_page.type_duplicate');
@@ -591,7 +600,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         }
     }
 
-    _suggestIcon(suggest: Record<string, any>) {
+    _suggestIcon(suggest: Record<string, unknown>) {
         switch (suggest.suggest_type) {
             case 'duplicate':
                 return 'swap-horiz';
@@ -602,7 +611,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         }
     }
 
-    _resolveConfirm(suggest: Record<string, any>) {
+    _resolveConfirm(suggest: Record<string, unknown>) {
         switch (suggest.suggest_type) {
             case 'duplicate':
                 return {
@@ -621,7 +630,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         }
     }
 
-    async _onResolve(suggest: Record<string, any>) {
+    async _onResolve(suggest: Record<string, unknown>) {
         const namespace = this._currentNamespace();
         if (typeof namespace !== 'string' || namespace.length === 0) {
             throw new Error('CRMSuggestsPage._onResolve: namespace required');
@@ -639,7 +648,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         this._resolveOp.run({ namespace, suggest_id: requireSuggestId(suggest, 'CRMSuggestsPage._onResolve') });
     }
 
-    _onDismiss(suggest: Record<string, any>) {
+    _onDismiss(suggest: Record<string, unknown>) {
         const namespace = this._currentNamespace();
         if (typeof namespace !== 'string' || namespace.length === 0) {
             throw new Error('CRMSuggestsPage._onDismiss: namespace required');
@@ -668,7 +677,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         `;
     }
 
-    _renderDuplicateDetails(suggest: Record<string, any>) {
+    _renderDuplicateDetails(suggest: Record<string, unknown>) {
         const payload = requireSuggestPayload(suggest, 'CRMSuggestsPage._renderDuplicateDetails');
         if (typeof payload.survivor_entity_id !== 'string' || payload.survivor_entity_id.length === 0) {
             throw new Error('CRMSuggestsPage._renderDuplicateDetails: payload.survivor_entity_id required');
@@ -691,7 +700,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         `;
     }
 
-    _renderMissedEntityDetails(suggest: Record<string, any>) {
+    _renderMissedEntityDetails(suggest: Record<string, unknown>) {
         const payload = requireSuggestPayload(suggest, 'CRMSuggestsPage._renderMissedEntityDetails');
         if (typeof payload.note_id !== 'string' || payload.note_id.length === 0) {
             throw new Error('CRMSuggestsPage._renderMissedEntityDetails: payload.note_id required');
@@ -714,7 +723,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         `;
     }
 
-    _renderSuggestDetails(suggest: Record<string, any>) {
+    _renderSuggestDetails(suggest: Record<string, unknown>) {
         switch (suggest.suggest_type) {
             case 'duplicate':
                 return this._renderDuplicateDetails(suggest);
@@ -725,7 +734,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         }
     }
 
-    _renderSuggestActions(suggest: Record<string, any>) {
+    _renderSuggestActions(suggest: Record<string, unknown>) {
         if (suggest.status !== 'pending') {
             return nothing;
         }
@@ -754,7 +763,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
         `;
     }
 
-    _renderSuggest(suggest: Record<string, any>): TemplateResult {
+    _renderSuggest(suggest: Record<string, unknown>): TemplateResult {
         const status = suggest.status;
         if (typeof status !== 'string' || status.length === 0) {
             throw new Error('CRMSuggestsPage._renderSuggest: suggest.status required');

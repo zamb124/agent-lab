@@ -161,7 +161,8 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
     }
 
     override render(): TemplateResult {
-        const list = this._list.items as Array<Record<string, any>>;
+        const rawItems = this._list.items;
+        const list = Array.isArray(rawItems) ? rawItems : [];
         const loading = this._list.loading;
         const terminal = this._list.terminal;
         const error = this._list.error;

@@ -6,7 +6,7 @@ import hashlib
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.utils.tokens import TokenType, get_token_service
 from tests.files.chunked_upload_helpers import (

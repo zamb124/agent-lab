@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import copy
 import uuid
 from collections.abc import Mapping, Sequence
@@ -31,7 +30,6 @@ from apps.flows.src.models import (
     TriggerConfig,
     branch_payload_to_config,
 )
-from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.exception_absorb_allow import list_exception_absorb_allow_values
 from apps.flows.src.models.execution_limits import get_graph_max_iterations
@@ -666,7 +664,6 @@ async def validate_tool_nodes(nodes: dict[str, JsonObject]) -> None:
 def _flow_item_response(
     flow_cfg: FlowConfig,
     *,
-    agent_toolkit_ids: list[str],
     has_bundle_update: bool,
 ) -> FlowResponse:
     return FlowResponse(
@@ -692,7 +689,6 @@ def _flow_item_response(
         speech=speech_to_json(flow_cfg.speech),
         interface=flow_cfg.interface,
         employee=flow_cfg.employee,
-        agent_toolkit_ids=agent_toolkit_ids,
         headers=flow_cfg.headers,
         status=flow_cfg.status,
         last_health_check=(
@@ -710,7 +706,7 @@ async def op_flows_list(
 ) -> OffsetPage[FlowResponse]:
     _ = user
     scope = company_scope()
-    index = await FlowConfig.list_current_flow_index()
+    index = await FlowConfig.list_current_flow_index_by_created_at_desc()
     if payload.type is not None:
         index = [row for row in index if row.type == payload.type]
     catalog_ids = [row.flow_id for row in index]
@@ -722,20 +718,14 @@ async def op_flows_list(
         limit=payload.limit,
     )
     total = len(catalog_ids)
-    by_id = await FlowConfig.latest_by_flow_ids(page_ids)
+    by_id = await FlowConfig.found_current_by_flow_ids(page_ids)
     flows = [by_id[flow_id] for flow_id in page_ids if flow_id in by_id]
-    bundle_update_flags, toolkit_ids_by_flow = await asyncio.gather(
-        get_bundle_update_flags(flows, di, _flows_root()),
-        AgentToolkit.toolkit_ids_by_flow_ids(page_ids),
-    )
+    bundle_update_flags = await get_bundle_update_flags(flows, di, _flows_root())
     result: list[FlowResponse] = []
     for flow_cfg in flows:
-        if flow_cfg.flow_id not in toolkit_ids_by_flow:
-            raise KeyError(f"agent_toolkit_ids missing for flow_id={flow_cfg.flow_id}")
         result.append(
             _flow_item_response(
                 flow_cfg,
-                agent_toolkit_ids=toolkit_ids_by_flow[flow_cfg.flow_id],
                 has_bundle_update=bundle_update_flags[flow_cfg.flow_id],
             )
         )
@@ -759,7 +749,6 @@ async def op_flows_item(
     has_bundle_update = bundle_flags[flow_cfg.flow_id]
     return _flow_item_response(
         flow_cfg,
-        agent_toolkit_ids=await AgentToolkit.toolkit_ids_for_flow(flow_cfg.flow_id),
         has_bundle_update=has_bundle_update,
     )
 
@@ -819,13 +808,8 @@ async def op_flows_create(
     )
     await persist_flow_with_authz(di, flow_config)
     await sync_flow_employee(di.authz_service, di.mail_service, flow_config)
-    await AgentToolkit.replace_flow_toolkit_membership(
-        flow_id=flow_config.flow_id,
-        toolkit_ids=list(payload.agent_toolkit_ids),
-    )
     return _flow_item_response(
         flow_config,
-        agent_toolkit_ids=list(payload.agent_toolkit_ids),
         has_bundle_update=False,
     )
 
@@ -876,10 +860,6 @@ async def op_flows_update(
     )
     await persist_flow_with_authz(di, flow_config)
     await sync_flow_employee(di.authz_service, di.mail_service, flow_config)
-    await AgentToolkit.replace_flow_toolkit_membership(
-        flow_id=payload.flow_id,
-        toolkit_ids=list(payload.agent_toolkit_ids),
-    )
     await publish_event_to_user(
         user_id=company_scope().user_id,
         type="flows/flow/updated",
@@ -887,7 +867,6 @@ async def op_flows_update(
     )
     return _flow_item_response(
         flow_config,
-        agent_toolkit_ids=list(payload.agent_toolkit_ids),
         has_bundle_update=False,
     )
 
@@ -1110,7 +1089,6 @@ async def op_flows_version_item(
         raise_not_found(PlatformNotFoundError("Version not found"))
     return _flow_item_response(
         version_cfg,
-        agent_toolkit_ids=await AgentToolkit.toolkit_ids_for_flow(version_cfg.flow_id),
         has_bundle_update=False,
     )
 

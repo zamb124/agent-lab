@@ -115,7 +115,11 @@ export function listTerminalEndPorts(nodeId: string, node: any, edges: any, node
                 continue;
             }
             if (port === null && exits.length === 1) {
-                covered.add(exits[0].id);
+                const onlyExit = exits[0];
+                if (onlyExit === undefined) {
+                    throw new Error('flows-terminal-markers: reflection exit required');
+                }
+                covered.add(onlyExit.id);
                 continue;
             }
             if (port === null) {

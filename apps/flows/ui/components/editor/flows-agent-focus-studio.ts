@@ -222,7 +222,7 @@ export class FlowsAgentFocusStudio extends PlatformElement {
             const cached = this._flows.byId && this._flows.byId[flowId]
                 ? this._flows.byId[flowId]
                 : null;
-            if (isPlainObject(cached) && asString((cached as Record<string, any>).name).length > 0) {
+            if (isPlainObject(cached) && asString(cached.name).length > 0) {
                 return asString(cached.name);
             }
             return flowId;

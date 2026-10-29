@@ -55,7 +55,7 @@ async def op_integrations_credentials_list(
 ) -> ListResponse[CredentialInfo]:
     _ = payload, di
     company_id = require_active_company().company_id
-    credentials = await IntegrationCredential.list_by_created_at_for_user(
+    credentials = await IntegrationCredential.list_by_created_at_for_user_asc(
         company_id=company_id,
         user_id=user.user_id,
     )

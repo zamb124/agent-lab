@@ -37,7 +37,8 @@ class SyncMessageContent(PlatformModel):
     content_id: int | None = DbField(default=None, db_pk=True, db_column="id")
 
     @classmethod
-    async def list_for_message(cls, message_id: str) -> list[MessageContentModel]:
+    async def content_models_by_order_index_and_content_id_asc(cls, message_id: str) -> list[MessageContentModel]:
+        """Модели содержимого сообщения, не строки таблицы, ORDER BY order_index, content_id ASC. Предела нет. Пустой message_id не проверяется."""
         rows = await cls.objects.filter(message_id=message_id).order_by(
             "order_index", "content_id"
         ).all()

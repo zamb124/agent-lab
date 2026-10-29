@@ -207,12 +207,12 @@ class DocumentProcessingStatus(PlatformModel):
         return await cls.objects.filter(task_id=task_id).get_or_none()
 
     @classmethod
-    async def by_namespace_and_document_ids(
+    async def found_by_namespace_and_document_ids(
         cls,
         namespace_id: str,
         document_ids: list[str],
     ) -> dict[str, DocumentProcessingStatus]:
-        """Найденные строки namespace по document_id. Пустой список — {}. Отсутствующие id не входят."""
+        """Найденные строки namespace по document_id. Пустой список — {}. Чужой namespace и отсутствующие id не входят. Несколько строк одного document_id: какая осталась, не задано. Порядка нет. Пустые поля не проверяются."""
         if not document_ids:
             return {}
         rows = await DocumentProcessingStatus.objects.filter(
@@ -222,7 +222,7 @@ class DocumentProcessingStatus(PlatformModel):
         return {row.document_id: row for row in rows}
 
     @classmethod
-    async def list_by_namespace_and_status(
+    async def list_for_namespace_by_updated_at_desc(
         cls,
         namespace_id: str,
         status: list[str] | None = None,
@@ -250,7 +250,7 @@ class DocumentProcessingStatus(PlatformModel):
         return [_status_from_row(require_json_object(row, "document_status")) for row in rows]
 
     @classmethod
-    async def list_expired_namespace_document_pairs(
+    async def list_expired_namespace_document_pairs_by_completed_at_then_anchor_at_asc(
         cls,
         *,
         utc_now: datetime,

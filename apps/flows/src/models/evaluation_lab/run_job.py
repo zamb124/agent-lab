@@ -52,7 +52,8 @@ class EvaluationRunJob(CompanyScopedModel):
         return await cls.objects.filter(run_id=run_id).first()
 
     @classmethod
-    async def list_pending(cls, limit: int) -> list[Self]:
+    async def list_pending_by_created_at_and_run_job_id_asc(cls, limit: int) -> list[Self]:
+        """Задачи в PENDING, ORDER BY created_at, run_job_id ASC, не больше limit. limit < 1 — ValueError limit must be positive."""
         if limit < 1:
             raise ValueError("limit must be positive")
         return await (

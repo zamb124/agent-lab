@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from core.worktracker.models import (
     Board,

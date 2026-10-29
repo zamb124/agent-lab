@@ -4,6 +4,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-spinner.js';
@@ -34,6 +35,32 @@ const PROVIDERS = Object.freeze([
     { value: 'seaweedfs', label: 'SeaweedFS' },
     { value: 'aws', label: 'S3' },
 ]);
+
+function anyRecord(value: unknown): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        throw new Error('company-storage-settings: object required');
+    }
+    return value;
+}
+
+function recordList(value: unknown, label: string): Record<string, unknown>[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`company-storage-settings: ${label} must be an array`);
+    }
+    return value.map((item) => {
+        if (!isPlainRecord(item)) {
+            throw new Error(`company-storage-settings: ${label} row must be an object`);
+        }
+        return anyRecord(item);
+    });
+}
+
+function migrationProgress(value: unknown): Record<string, unknown> | null {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    return anyRecord(value);
+}
 
 export class CompanyStorageSettings extends PlatformElement {
     static override styles: CSSResultGroup = css`
@@ -144,7 +171,11 @@ export class CompanyStorageSettings extends PlatformElement {
         if (result === null) {
             return { storages: [], routes: [] };
         }
-        return result;
+        const snapshot = anyRecord(result);
+        return {
+            storages: recordList(snapshot.storages, 'storages'),
+            routes: recordList(snapshot.routes, 'routes'),
+        };
     }
 
     _stateLabel(state: string) {
@@ -155,22 +186,30 @@ export class CompanyStorageSettings extends PlatformElement {
         return this.t('settings_page.storage_state_verifying');
     }
 
-    _options(storages: Array<Record<string, any>>) {
+    _options(storages: Array<Record<string, unknown>>) {
         const options = [{ value: 'platform', label: this.t('settings_page.storage_platform') }];
         for (const row of storages) {
-            options.push({ value: row.storage_id, label: row.name });
+            const storageId = row.storage_id;
+            const name = row.name;
+            if (typeof storageId !== 'string' || storageId.length === 0 || typeof name !== 'string' || name.length === 0) {
+                throw new Error('company-storage-settings: storage option requires storage_id and name');
+            }
+            options.push({ value: storageId, label: name });
         }
         return options;
     }
 
-    _selected(routes: Array<Record<string, any>>, kindId: string) {
+    _selected(routes: Array<Record<string, unknown>>, kindId: string) {
         const match = routes.find((row) => row.source_kind === kindId);
         if (match === undefined) return 'platform';
+        if (typeof match.storage_id !== 'string' || match.storage_id.length === 0) {
+            throw new Error('company-storage-settings: route storage_id required');
+        }
         return match.storage_id;
     }
 
     _probeConnection() {
-        const draft = this._form.draft as Record<string, any>;
+        const draft = anyRecord(this._form.draft);
         this._probe.run({
             provider: draft.provider,
             endpoint_url: draft.endpoint_url,
@@ -182,9 +221,13 @@ export class CompanyStorageSettings extends PlatformElement {
         });
     }
 
-    async _deleteStorage(row: Record<string, any>) {
+    async _deleteStorage(row: Record<string, unknown>) {
+        const name = row.name;
+        if (typeof name !== 'string') {
+            throw new Error('company-storage-settings: storage name required');
+        }
         const ok = await platformConfirm(
-            this.t('settings_page.storage_delete_body', { name: row.name }),
+            this.t('settings_page.storage_delete_body', { name }),
             {
                 title: this.t('settings_page.storage_delete_title'),
                 variant: 'danger',
@@ -197,7 +240,7 @@ export class CompanyStorageSettings extends PlatformElement {
         this._remove.run({ storage_id: row.storage_id });
     }
 
-    _probeKeys(row: Record<string, any>) {
+    _probeKeys(row: Record<string, unknown>) {
         this._probe.run({
             provider: row.provider,
             endpoint_url: row.endpoint_url,
@@ -209,7 +252,7 @@ export class CompanyStorageSettings extends PlatformElement {
         });
     }
 
-    _saveKeys(row: Record<string, any>) {
+    _saveKeys(row: Record<string, unknown>) {
         this._rotate.run({
             storage_id: row.storage_id,
             access_key_id: this._rotateKey,
@@ -217,7 +260,7 @@ export class CompanyStorageSettings extends PlatformElement {
         });
     }
 
-    _startMove(row: Record<string, any>) {
+    _startMove(row: Record<string, unknown>) {
         this._move.run({
             source_storage_id: row.storage_id,
             target_storage_id: this._moveTarget,
@@ -231,17 +274,36 @@ export class CompanyStorageSettings extends PlatformElement {
         return this.t('settings_page.storage_migration_running');
     }
 
-    _assignRoute(kindId: string, storageId: Record<string, any>) {
+    _migrationState(progress: Record<string, unknown>): string {
+        if (typeof progress.state !== 'string' || progress.state.length === 0) {
+            throw new Error('company-storage-settings: migration state required');
+        }
+        return progress.state;
+    }
+
+    _migrationCounts(progress: Record<string, unknown>): { moved: string | number; total: string | number } {
+        const moved = progress.files_moved;
+        const total = progress.files_total;
+        if ((typeof moved !== 'number' && typeof moved !== 'string') || (typeof total !== 'number' && typeof total !== 'string')) {
+            throw new Error('company-storage-settings: migration counts required');
+        }
+        return { moved, total };
+    }
+
+    _assignRoute(kindId: string, storageId: unknown) {
+        if (typeof storageId !== 'string' || storageId.length === 0) {
+            throw new Error('company-storage-settings: route storage_id required');
+        }
         const sourceKind = kindId === 'default' ? null : kindId;
         this._route.run({ storage_id: storageId, source_kind: sourceKind });
     }
 
     override render(): TemplateResult {
         const snapshot = this._snapshot();
-        const storages = (snapshot as Record<string, any>).storages as Array<Record<string, any>>;
-        const routes = (snapshot as Record<string, any>).routes as Array<Record<string, any>>;
-        const draft = this._form.draft as Record<string, any>;
-        const progress = (this._progress.value as Record<string, any>).progress as Record<string, any>;
+        const storages = snapshot.storages;
+        const routes = snapshot.routes;
+        const draft = anyRecord(this._form.draft);
+        const progress = migrationProgress(this._progress.value.progress);
         const options = this._options(storages);
         return html`
             <p class="lead">${this.t('settings_page.storage_lead')}</p>
@@ -252,26 +314,32 @@ export class CompanyStorageSettings extends PlatformElement {
                     ${this._list.lastResult !== null && storages.length === 0
                         ? html`<p class="locked">${this.t('settings_page.storage_empty_connections')}</p>`
                         : nothing}
-                    ${storages.map((row) => html`
+                    ${storages.map((row) => {
+                        const storageId = row.storage_id;
+                        const state = row.state;
+                        if (typeof storageId !== 'string' || storageId.length === 0 || typeof state !== 'string') {
+                            throw new Error('company-storage-settings: storage row requires storage_id and state');
+                        }
+                        return html`
                         <article class="connection">
                             <div class="connection-head">
                                 <span class="name">${row.name}</span>
-                                <span class="state" data-state=${row.state}>${this._stateLabel(row.state)}</span>
+                                <span class="state" data-state=${state}>${this._stateLabel(state)}</span>
                             </div>
                             <div class="meta">${row.endpoint_url}</div>
                             <div class="meta">${row.bucket_name} · ${row.region_name}</div>
                             <div class="actions">
-                                <platform-button variant="secondary" @click=${() => { this._rotateId = row.storage_id; this.requestUpdate(); }}>
+                                <platform-button variant="secondary" @click=${() => { this._rotateId = storageId; this.requestUpdate(); }}>
                                     ${this.t('settings_page.storage_rotate')}
                                 </platform-button>
-                                <platform-button variant="secondary" @click=${() => { this._moveId = row.storage_id; this.requestUpdate(); }}>
+                                <platform-button variant="secondary" @click=${() => { this._moveId = storageId; this.requestUpdate(); }}>
                                     ${this.t('settings_page.storage_move')}
                                 </platform-button>
                                 <platform-button variant="danger" @click=${() => this._deleteStorage(row)}>
                                     ${this.t('settings_page.storage_delete')}
                                 </platform-button>
                             </div>
-                            ${this._rotateId === row.storage_id ? html`
+                            ${this._rotateId === storageId ? html`
                                 <platform-field type="text" label=${this.t('settings_page.storages_access_key')}
                                     .value=${this._rotateKey}
                                     @change=${(event: CustomEvent) => { this._rotateKey = event.detail.value; this.requestUpdate(); }}></platform-field>
@@ -287,17 +355,18 @@ export class CompanyStorageSettings extends PlatformElement {
                                     </platform-button>
                                 </div>
                             ` : nothing}
-                            ${this._moveId === row.storage_id ? html`
+                            ${this._moveId === storageId ? html`
                                 <platform-field type="enum" label=${this.t('settings_page.storage_move')}
                                     .value=${this._moveTarget}
-                                    .config=${{ values: options.filter((option) => option.value !== row.storage_id) }}
+                                    .config=${{ values: options.filter((option) => option.value !== storageId) }}
                                     @change=${(event: CustomEvent) => { this._moveTarget = event.detail.value; this.requestUpdate(); }}></platform-field>
                                 <platform-button variant="primary" ?disabled=${this._move.busy || this._moveTarget === ''} @click=${() => this._startMove(row)}>
                                     ${this.t('settings_page.storage_move_start')}
                                 </platform-button>
                             ` : nothing}
                         </article>
-                    `)}
+                    `;
+                    })}
                 </section>
                 <section class="card">
                     <h3>${this.t('settings_page.storage_new')}</h3>
@@ -352,7 +421,7 @@ export class CompanyStorageSettings extends PlatformElement {
             ${progress === null ? nothing : html`
                 <section class="card progress">
                     <h3>${this.t('settings_page.storage_migration_title')}</h3>
-                    <p>${this._migrationLabel(progress.state)} · ${this.t('settings_page.storage_migration_counts', { moved: progress.files_moved, total: progress.files_total })}</p>
+                    <p>${this._migrationLabel(this._migrationState(progress))} · ${this.t('settings_page.storage_migration_counts', this._migrationCounts(progress))}</p>
                     ${typeof progress.last_error === 'string' && progress.last_error !== ''
                         ? html`<p class="error">${progress.last_error}</p>`
                         : nothing}

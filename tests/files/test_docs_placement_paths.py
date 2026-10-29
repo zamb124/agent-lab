@@ -6,7 +6,11 @@ import pytest
 
 from core.documents.paths import source_catalog_path
 from core.files.create_spec import FileSourceKind, FileSourceRef
-from core.files.registry import DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS, PLACED_SOURCE_KINDS, is_docs_placement_exempt
+from core.files.registry import (
+    DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS,
+    PLACED_SOURCE_KINDS,
+    is_docs_placement_exempt,
+)
 
 
 def test_every_source_kind_is_placed_or_exempt() -> None:

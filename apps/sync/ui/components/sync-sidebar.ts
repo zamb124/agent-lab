@@ -23,7 +23,7 @@ import {
     sidebarSectionStyles,
 } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
-import '@platform/lib/components/layout/platform-service-sidebar.js';
+import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
@@ -85,7 +85,14 @@ export class SyncSidebar extends PlatformElement {
     }
 
     _onAdhocCallStarted() {
-        (this.renderRoot?.querySelector('platform-service-sidebar') as { closeMobile?: () => void } | null)?.closeMobile?.();
+        const root = this.renderRoot;
+        if (!root) return;
+        const shell = root.querySelector('platform-service-sidebar');
+        if (shell === null) return;
+        if (!(shell instanceof PlatformServiceSidebar)) {
+            throw new Error('sync-sidebar: service sidebar required');
+        }
+        shell.closeMobile();
     }
 
     override render(): TemplateResult {

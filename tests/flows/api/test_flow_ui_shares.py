@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.utils.tokens import TokenType, get_token_service
 from tests.flows._flow_ui_session import a2a_send, text_message

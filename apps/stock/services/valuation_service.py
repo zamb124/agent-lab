@@ -78,7 +78,7 @@ class ValuationService:
         оценка (приходы по счетам, списания по себестоимости, ручные
         переоценки).
         """
-        rows = await StockValueLayer.list_by_entry_no(
+        rows = await StockValueLayer.list_by_entry_no_asc(
             company_id,
             product_id=product_id,
             warehouse_id=warehouse_id,
@@ -110,7 +110,7 @@ class ValuationService:
             raise PlatformNotFoundError(
                 "Product not found", error_code="product_not_found"
             )
-        last = await StockValueLayer.last_for_product(company_id, product_id)
+        last = await StockValueLayer.last_for_product_by_entry_no_desc(company_id, product_id)
         total_value = last.value_after if last is not None else Decimal("0")
         total_qty = last.qty_after if last is not None else Decimal("0")
         if warehouse_id is not None:
@@ -182,7 +182,7 @@ class ValuationService:
             )
         delta = value_delta
         if new_price is not None:
-            last = await StockValueLayer.last_for_product(company_id, product_id)
+            last = await StockValueLayer.last_for_product_by_entry_no_desc(company_id, product_id)
             qty = last.qty_after if last is not None else Decimal("0")
             if qty <= Decimal("0"):
                 raise PlatformConflictError(

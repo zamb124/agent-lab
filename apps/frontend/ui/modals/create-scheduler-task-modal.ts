@@ -130,17 +130,27 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
     override async handleSubmit() {
         const trimmed = this._payloadJson.trim();
         const payload = trimmed ? JSON.parse(trimmed) : {};
-        const body = {
+        const body: {
+            target_service: string;
+            task_name: string;
+            schedule_type: string;
+            timezone: string;
+            payload: unknown;
+            queue_name?: string;
+            cron?: string;
+            interval_seconds?: number;
+            run_at?: string;
+        } = {
             target_service: this._targetService.trim(),
             task_name: this._taskName.trim(),
             schedule_type: this._scheduleType,
             timezone: this._timezone.trim() === '' ? 'UTC' : this._timezone.trim(),
             payload,
         };
-        if (this._queueName.trim()) (body as Record<string, any>).queue_name = this._queueName.trim();
-        if (this._scheduleType === 'cron') (body as Record<string, any>).cron = this._cron.trim();
-        if (this._scheduleType === 'interval') (body as Record<string, any>).interval_seconds = Number(this._intervalSeconds);
-        if (this._scheduleType === 'one_time') (body as Record<string, any>).run_at = new Date(this._runAt).toISOString();
+        if (this._queueName.trim()) body.queue_name = this._queueName.trim();
+        if (this._scheduleType === 'cron') body.cron = this._cron.trim();
+        if (this._scheduleType === 'interval') body.interval_seconds = Number(this._intervalSeconds);
+        if (this._scheduleType === 'one_time') body.run_at = new Date(this._runAt).toISOString();
         this._tasks.create(body);
         this.closeAfterSave();
     }

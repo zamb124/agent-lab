@@ -39,7 +39,16 @@ def csharp_lsp_command() -> list[str]:
         cache.mkdir(parents=True, exist_ok=True)
         env = _dotnet_env(dotnet)
         completed = subprocess.run(
-            [dotnet, "tool", "install", "csharp-ls", "--tool-path", str(cache)],
+            [
+                dotnet,
+                "tool",
+                "install",
+                "csharp-ls",
+                "--version",
+                "0.28.0",
+                "--tool-path",
+                str(cache),
+            ],
             check=False,
             capture_output=True,
             text=True,

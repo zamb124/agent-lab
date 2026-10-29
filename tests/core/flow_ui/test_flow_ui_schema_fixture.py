@@ -18,7 +18,7 @@ def test_schema_fixture_matches_grammar() -> None:
     expected = FlowUIDocument.model_json_schema()
     expected["x-flow-ui-frozen-state-fields"] = sorted(FROZEN_STATE_FIELDS)
     assert json.loads(FIXTURE.read_text(encoding="utf-8")) == expected, (
-        "run: uv run python scripts/generate_flow_ui_schema_fixture.py"
+        "run: uv run python -m scripts.generate.flow_ui_schema_fixture"
     )
 
 
@@ -26,7 +26,7 @@ def test_templates_fixture_matches_gallery() -> None:
     templates = flow_ui_templates("en")
     expected = OffsetPage[FlowUITemplate](items=templates, total=len(templates), limit=200, offset=0)
     assert json.loads(TEMPLATES_FIXTURE.read_text(encoding="utf-8")) == expected.model_dump(mode="json"), (
-        "run: uv run python scripts/generate_flow_ui_schema_fixture.py"
+        "run: uv run python -m scripts.generate.flow_ui_schema_fixture"
     )
 
 

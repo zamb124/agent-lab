@@ -112,7 +112,7 @@ class TestLaneIdempotency:
             ],
         )
         assert second.transfer_id == first.transfer_id
-        moves = await StockMove.list_for_transfer(env.company_id, first.transfer_id)
+        moves = await StockMove.list_for_transfer_by_created_at_asc(env.company_id, first.transfer_id)
         assert len(moves) == 1
         assert moves[0].product_uom_qty == Decimal("3")
 

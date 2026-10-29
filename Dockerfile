@@ -26,14 +26,15 @@ FROM base-with-core AS builder-all
 # Docs-builder отдельный, GIL-build cp314: статический HTML, free-threading не нужен,
 # а часть deps zensical тянет Rust-extension'ы без cp314t wheels.
 FROM python:3.14-slim AS docs-builder
-RUN pip install --no-cache-dir "zensical>=0.0.32"
+RUN pip install --no-cache-dir "zensical>=0.0.73"
 WORKDIR /app
 ENV PYTHONPATH=/app
 COPY zensical.ru.toml zensical.en.toml ./
 COPY docs ./docs
 COPY core/frontend/static/assets/service_logos/frontend_logo.svg ./core/frontend/static/assets/service_logos/frontend_logo.svg
-COPY scripts/__init__.py scripts/docs_prepare.py scripts/scenario_taxonomy.py scripts/extract_openapi.py scripts/openapi_to_markdown.py ./scripts/
-RUN python scripts/docs_prepare.py && \
+COPY scripts/__init__.py ./scripts/__init__.py
+COPY scripts/docs ./scripts/docs
+RUN python -m scripts.docs.prepare && \
     zensical build --clean --config-file zensical.ru.toml && \
     zensical build --clean --config-file zensical.en.toml && \
     mkdir -p documentation-dist/en && \
@@ -54,7 +55,7 @@ COPY tests/ui/design-system/components ./tests/ui/design-system/components
 
 # three + 3d-force-graph для CRM графа: apps/crm/main.py монтирует их из repo-root node_modules.
 # В образ без этой стадии vendor-URL отдавал index.html (SPA), что ломало загрузку модулей.
-FROM node:24-bookworm-slim AS js-vendor
+FROM node:26-bookworm-slim AS js-vendor
 WORKDIR /vendor
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
@@ -62,12 +63,12 @@ RUN npm ci --omit=dev
 # UI-бандлы: tsc (strict) и esbuild per-app → apps/<svc>/ui-dist/. В образ уходит
 # только скомпилированный вывод — браузер грузит index.js + hashed chunks,
 # mount отдаёт ui-dist (core/app/spa.py).
-FROM node:24-bookworm-slim AS ui-builder
+FROM node:26-bookworm-slim AS ui-builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.base.json ./
-COPY scripts/build_ui.mjs ./scripts/
+COPY scripts/build/ui.mjs ./scripts/build/ui.mjs
 COPY core/frontend/static ./core/frontend/static
 COPY tests/ui/design-system/components ./tests/ui/design-system/components
 COPY apps/ ./apps/
@@ -105,7 +106,7 @@ CMD ["granian", "--interface", "asgi", "apps.rag.main:app", "--host", "0.0.0.0",
 
 # Flows worker (TaskIQ — Granian не применим)
 FROM base-final AS worker
-CMD ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
+CMD ["taskiq", "worker", "apps.flows.worker:worker_app", "--workers", "4"]
 
 # Scheduler
 FROM base-final AS scheduler
@@ -113,7 +114,7 @@ CMD ["taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"]
 
 # RAG Worker
 FROM base-final AS rag-worker
-CMD ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
+CMD ["taskiq", "worker", "apps.rag.worker:worker_app", "--workers", "2"]
 
 # Sync
 FROM base-final AS sync
@@ -122,7 +123,7 @@ CMD ["granian", "--interface", "asgi", "apps.sync.main:app", "--host", "0.0.0.0"
 
 # Sync Worker
 FROM base-final AS sync-worker
-CMD ["taskiq", "worker", "apps.sync_worker.worker:worker_app", "--workers", "2"]
+CMD ["taskiq", "worker", "apps.sync.worker:worker_app", "--workers", "2"]
 
 # Capability Gateway
 FROM base-final AS capability-gateway
@@ -151,7 +152,7 @@ CMD ["granian", "--interface", "asgi", "apps.code_runner_csharp.main:app", "--ho
 
 # Migrations (init container)
 FROM base-final AS migrations
-CMD ["python", "-m", "scripts.db_migrate", "upgrade"]
+CMD ["python", "-m", "scripts.db.migrate", "upgrade"]
 
 # Full — production target для CI/CD (build-push-action target=full).
 # Один immutable образ для всех 15 application Deployment'ов + 5 TaskIQ workers

@@ -6,7 +6,7 @@ import pytest
 
 from apps.search.config import SearchCrawlConfig
 from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
-from apps.search_worker.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
+from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
 from core.crawl.models import CrawlDomain, CrawlDomainSeed, CrawlProfileCreateRequest
 from core.logging import clear_log_context, get_log_context
 from core.search.index_models import SearchIndexCreateRequest

@@ -128,7 +128,7 @@ async def _cleanup_summary_enqueue(
         DailySummaryCacheService._state_key(company_id, None, _SUMMARY_DATE)
     )
     _ = await CRMEntity.delete_returning(entity_id)
-    tasks = await CRMTask.namespace_tasks(
+    tasks = await CRMTask.query_namespace_tasks(
         company_id,
         SUMMARY_ALL_NAMESPACES_TASK_KEY,
         "daily_summary",
@@ -173,7 +173,7 @@ async def _cleanup_period_enqueue(
     _ = await redis.delete(
         DailySummaryCacheService._period_state_key(company_id, None, date_from, date_to)
     )
-    tasks = await CRMTask.namespace_tasks(
+    tasks = await CRMTask.query_namespace_tasks(
         company_id,
         SUMMARY_ALL_NAMESPACES_TASK_KEY,
         "period_summary",
@@ -361,7 +361,7 @@ async def test_enqueue_daily_summary_rebuild_deduplicates(
                 date_str=_SUMMARY_DATE,
                 namespace=None,
             )
-            tasks = await CRMTask.namespace_tasks(
+            tasks = await CRMTask.query_namespace_tasks(
                 company_id,
                 SUMMARY_ALL_NAMESPACES_TASK_KEY,
                 "daily_summary",
@@ -1033,7 +1033,7 @@ async def test_update_entity_note_date_triggers_both_dates(
             await _clear_summary_state(cache, company_id, "sales", "2026-03-27")
             await _clear_summary_state(cache, company_id, "support", "2026-03-28")
             _ = await CRMEntity.delete_returning(entity_id)
-            tasks = await CRMTask.namespace_tasks(
+            tasks = await CRMTask.query_namespace_tasks(
                 company_id,
                 "support",
                 "daily_summary",

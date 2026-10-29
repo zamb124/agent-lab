@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.rag_worker.tasks import maintenance_tasks
+from apps.rag.tasks import maintenance_tasks
 
 
 @pytest.mark.asyncio

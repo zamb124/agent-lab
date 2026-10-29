@@ -9,7 +9,7 @@ import json
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.billing.service import (
     company_resource_prices_storage_key,
@@ -483,7 +483,7 @@ async def test_platform_billing_balance_grant_creates_grant_transaction(
         co2 = await Company.get(cid)
         assert co2 is not None
         assert co2.balance == 12.5
-        txs = await frontend_di.payment_service.get_company_transactions(cid, limit=20)
+        txs = await frontend_di.payment_service.get_company_transactions_by_created_at_desc(cid, limit=20)
         by_id = [t for t in txs if t.transaction_id == data["transaction_id"]]
         assert len(by_id) == 1
         assert by_id[0].payment_provider == PaymentProviderType.GRANT

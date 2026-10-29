@@ -194,7 +194,7 @@ class FlowsLoader:
         self._preloaded_bundle_ids.add(bundle_id)
 
     async def _ensure_references_resolved(self, reference_ids: set[str]) -> None:
-        """Подгружает tool/node refs по явным ID через by_tool_ids (demand-driven)."""
+        """Подгружает tool/node refs по явным ID через found_unique_by_tool_ids (demand-driven)."""
         if not reference_ids:
             return
 
@@ -206,7 +206,7 @@ class FlowsLoader:
         if not missing_tool_lookup:
             return
 
-        resolved_tools = await ToolReference.by_tool_ids(missing_tool_lookup)
+        resolved_tools = await ToolReference.found_unique_by_tool_ids(missing_tool_lookup)
         for ref_id, tool_ref in resolved_tools.items():
             if tool_ref.tool_id.startswith("mcp:"):
                 continue

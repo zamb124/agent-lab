@@ -5,7 +5,7 @@ from __future__ import annotations
 import mimetypes
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 
 from core.files.writer.exceptions import FileWriteError
 
@@ -33,14 +33,14 @@ def fetch_url_bytes(
     """
     normalized = _normalize_image_url(url)
     try:
-        with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
-            response: httpx.Response = client.get(normalized)
+        with httpx2.Client(timeout=timeout_seconds, follow_redirects=True) as client:
+            response: httpx2.Response = client.get(normalized)
             _ = response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
+    except httpx2.HTTPStatusError as exc:
         raise FileWriteError(
             f"Failed to download image {normalized!r}: HTTP {exc.response.status_code}"
         ) from exc
-    except httpx.RequestError as exc:
+    except httpx2.RequestError as exc:
         raise FileWriteError(f"Network error while downloading image {normalized!r}: {exc}") from exc
 
     data = response.content

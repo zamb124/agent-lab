@@ -4,7 +4,7 @@
 sandbox внутри flows tools и т.д.) **обязан** получать клиента речи через
 функции этого модуля. Прямой импорт классов из `core.clients.stt_client`,
 `core.clients.tts_client`, `core.clients.vad_client` в `apps/**` запрещён
-CI (`scripts/check_voice_resolver_usage.py`).
+CI (`scripts/gates/voice/resolver_usage.py`).
 
 ## Tier-резолв (Zero-Guess)
 
@@ -406,7 +406,7 @@ async def _load_platform_pronunciation() -> CompiledPronunciation:
             return cached
 
     _require_pronunciation_database()
-    rows = await PronunciationRule.list_enabled_for_company_scope(company_id=None)
+    rows = await PronunciationRule.list_enabled_for_company_scope_by_created_at_asc(company_id=None)
     rule_set = PronunciationRuleSet(rules=rows, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(
         rule_set,
@@ -424,7 +424,7 @@ async def _load_company_pronunciation(company_id: str) -> CompiledPronunciation:
         return cached[1]
 
     _require_pronunciation_database()
-    rows = await PronunciationRule.list_enabled_for_company_scope(company_id=company_id)
+    rows = await PronunciationRule.list_enabled_for_company_scope_by_created_at_asc(company_id=company_id)
     rule_set = PronunciationRuleSet(rules=rows, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(rule_set)
     _pronunciation_company_cache[company_id] = (now, compiled)

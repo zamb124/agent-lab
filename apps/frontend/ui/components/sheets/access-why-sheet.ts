@@ -10,6 +10,7 @@ import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-button.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export class FrontendAccessWhySheet extends PlatformBottomSheet {
     static bottomSheetKind = 'frontend.access_why';
@@ -95,7 +96,12 @@ export class FrontendAccessWhySheet extends PlatformBottomSheet {
         if (!result) {
             return html`<div class="why-empty">${this.t('access_page.why_empty')}</div>`;
         }
-        const reasons = Array.isArray((result as Record<string, any>).reasons) ? (result as Record<string, any>).reasons : [];
+        if (!isPlainRecord(result)) {
+            return html`<div class="why-empty">${this.t('access_page.why_empty')}</div>`;
+        }
+        const reasonsValue = result.reasons;
+        const reasons = Array.isArray(reasonsValue) ? reasonsValue : [];
+        const allowed = result.allowed === true;
         return html`
             <div class="why-body">
                 <div class="why-meta">
@@ -111,8 +117,8 @@ export class FrontendAccessWhySheet extends PlatformBottomSheet {
                         @click=${() => this._copyId()}
                     >${this.t('access_page.why_copy_id')}</platform-button>
                 </div>
-                <div class=${(result as Record<string, any>).allowed ? 'why-item' : 'why-empty'}>
-                    ${(result as Record<string, any>).allowed
+                <div class=${allowed ? 'why-item' : 'why-empty'}>
+                    ${allowed
                         ? this.t('access_page.why_allowed')
                         : this.t('access_page.why_denied')}
                 </div>

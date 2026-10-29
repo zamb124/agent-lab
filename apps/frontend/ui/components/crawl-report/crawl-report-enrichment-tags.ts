@@ -1,6 +1,16 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+
+function stringList(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const items: string[] = [];
+    for (const item of value) {
+        if (typeof item === 'string' && item.length > 0) items.push(item);
+    }
+    return items;
+}
 
 export class CrawlReportEnrichmentTags extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -60,7 +70,7 @@ export class CrawlReportEnrichmentTags extends PlatformElement {
         this.compact = false;
     }
 
-    _contentTypeLabel(contentType: Record<string, any>) {
+    _contentTypeLabel(contentType: string) {
         const key = `crawl_report_page.content_type_${contentType}`;
         const translated = this.t(key);
         if (translated === key) return contentType;
@@ -78,8 +88,9 @@ export class CrawlReportEnrichmentTags extends PlatformElement {
         const signals = this.structuralSignals;
         if (!signals) return nothing;
         const tags: any[] = [];
-        if (signals.content_type_hint) {
-            tags.push(html`<span class="tag muted">${this._contentTypeLabel(signals.content_type_hint)}</span>`);
+        const hint = signals.content_type_hint;
+        if (typeof hint === 'string' && hint.length > 0) {
+            tags.push(html`<span class="tag muted">${this._contentTypeLabel(hint)}</span>`);
         }
         if (signals.title && !this.compact) {
             tags.push(html`<span class="tag muted">${signals.title}</span>`);
@@ -94,12 +105,21 @@ export class CrawlReportEnrichmentTags extends PlatformElement {
             return this._renderStructuralPreview();
         }
         const meta = snapshot.filter_metadata;
-        const topicTags = Array.isArray((meta as Record<string, any>).topic_tags) ? (meta as Record<string, any>).topic_tags : [];
-        const categoryPath = Array.isArray((meta as Record<string, any>).category_path) ? (meta as Record<string, any>).category_path : [];
+        if (!isPlainRecord(meta)) {
+            return this._renderStructuralPreview();
+        }
+        const topicTags = stringList(meta.topic_tags);
+        const categoryPath = stringList(meta.category_path);
+        const contentType = meta.content_type;
+        const primaryTopic = meta.primary_topic;
         return html`
             <div class="row">
-                <span class="tag">${this._contentTypeLabel((meta as Record<string, any>).content_type)}</span>
-                <span class="tag">${this._topicLabel((meta as Record<string, any>).primary_topic)}</span>
+                ${typeof contentType === 'string' && contentType.length > 0
+                    ? html`<span class="tag">${this._contentTypeLabel(contentType)}</span>`
+                    : nothing}
+                ${typeof primaryTopic === 'string' && primaryTopic.length > 0
+                    ? html`<span class="tag">${this._topicLabel(primaryTopic)}</span>`
+                    : nothing}
                 ${categoryPath.length > 0
                     ? html`<span class="tag muted">${categoryPath.map((segment: string) => this._topicLabel(segment)).join(' / ')}</span>`
                     : nothing}

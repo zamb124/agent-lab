@@ -58,8 +58,8 @@ class EvaluationMonitor(CompanyScopedModel):
     gate_policy_id: str | None = DbField(default=None)
 
     @classmethod
-    async def list_by_updated_at_and_monitor_id(cls, suite_id: str) -> list[Self]:
-        """Мониторы набора, ORDER BY updated_at DESC, monitor_id. Предела нет. Пустой suite_id — ValueError."""
+    async def list_by_updated_at_desc_and_monitor_id_asc(cls, suite_id: str) -> list[Self]:
+        """Мониторы набора, ORDER BY updated_at DESC, monitor_id ASC. Предела нет. Пустой suite_id — ValueError."""
         if suite_id == "":
             raise ValueError("suite_id is required")
         return await (
@@ -67,7 +67,8 @@ class EvaluationMonitor(CompanyScopedModel):
         )
 
     @classmethod
-    async def list_active(cls, limit: int) -> list[Self]:
+    async def list_active_by_updated_at_and_monitor_id_asc(cls, limit: int) -> list[Self]:
+        """Активные мониторы, ORDER BY updated_at, monitor_id ASC, не больше limit. limit < 1 — ValueError limit must be >= 1."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
         return await (

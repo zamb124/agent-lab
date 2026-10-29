@@ -74,9 +74,10 @@ class StockDecision(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def latest_for_transfer(
+    async def latest_for_transfer_by_created_at_desc(
         cls, company_id: str, transfer_id: str
     ) -> Self | None:
+        """Последнее решение накладной, ORDER BY created_at DESC. Несколько с одним created_at — какое именно, не задано. Нет строки — None."""
         return await cls.objects.filter(
             company_id=company_id, transfer_id=transfer_id
         ).order_by("-created_at").first()

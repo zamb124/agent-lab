@@ -66,7 +66,7 @@ class FlowUIShareGrant(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_owner(
+    async def list_for_owner_by_created_at_desc(
         cls,
         *,
         company_id: str,
@@ -74,6 +74,7 @@ class FlowUIShareGrant(PlatformModel):
         context_id: str,
         created_by_user_id: str,
     ) -> list[Self]:
+        """Гранты владельца, ORDER BY created_at DESC. Предела нет. Пустой scope — ValueError share list scope is required."""
         if company_id == "" or flow_id == "" or context_id == "" or created_by_user_id == "":
             raise ValueError("share list scope is required")
         return await (
@@ -88,7 +89,8 @@ class FlowUIShareGrant(PlatformModel):
         )
 
     @classmethod
-    async def list_unrevoked(cls, *, limit: int | None) -> list[Self]:
+    async def list_unrevoked_by_grant_id_asc(cls, *, limit: int | None) -> list[Self]:
+        """Неотозванные гранты, ORDER BY grant_id ASC. limit is None не ограничивает. limit < 1 — []."""
         if limit is not None and limit < 1:
             return []
         query = cls.objects.filter(revoked_at=None).order_by("grant_id")

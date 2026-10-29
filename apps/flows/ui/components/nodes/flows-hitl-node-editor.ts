@@ -36,7 +36,7 @@ const SLUG_PATTERN = /^[a-z][a-z0-9_-]{0,62}$/;
  * @param {string} raw
  * @returns {string}
  */
-function slugifyQueueInput(raw: any) {
+function slugifyQueueInput(raw: string) {
     const trimmed = raw.trim().toLowerCase();
     const dashed = trimmed
         .replace(/[\s.]+/g, '-')
@@ -52,7 +52,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -65,12 +65,12 @@ export class FlowsHitlNodeEditor extends PlatformElement {
     declare nodeId: string;
     declare flowId: string;
     declare branchId: string;
-    declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
-    declare flowVariables: Record<string, any> | null;
-    declare graphNodes: any[] | null;
-    declare previewExecutionState: Record<string, any> | null;
-    declare dataflowNode: Record<string, any> | null;
+    declare nodeConfig: Record<string, unknown> | null;
+    declare flowNodeType: string;
+    declare flowVariables: Record<string, unknown> | null;
+    declare graphNodes: unknown[] | null;
+    declare previewExecutionState: Record<string, unknown> | null;
+    declare dataflowNode: Record<string, unknown> | null;
     declare embedded: boolean;
     declare _showCreate: boolean;
     declare _createName: string;
@@ -125,7 +125,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'hitl_node';
+        this.flowNodeType = 'hitl_node';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
@@ -142,7 +142,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this._queues.load({});
     }
 
-    _emitPatch(patch: any) {
+    _emitPatch(patch: Record<string, unknown>) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
@@ -231,7 +231,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
             throw new Error('flows-hitl-node-editor: create name detail.value string');
         }
         this._createName = d.value;
-        if ((this._createSlug.trim() as any).length === 0) {
+        if (this._createSlug.trim().length === 0) {
             this._createSlug = slugifyQueueInput(d.value);
         }
     }
@@ -249,7 +249,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
      * @param {string} requestedId
      * @returns {Promise<object | null>}
      */
-    _waitForQueueCreated(controller: any, requestedId: any) {
+    _waitForQueueCreated(controller: ResourceController, requestedId: string): Promise<Record<string, unknown> | null> {
         const bus = controller.bus;
         const successType = controller.resource.events.CREATED;
         const failedType = controller.resource.events.CREATE_FAILED;
@@ -289,7 +289,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
     /**
      * @param {{ name: string, slug: string }} payload
      */
-    async _createQueueWith(payload: any) {
+    async _createQueueWith(payload: { name: string; slug: string }) {
         const name = payload.name.trim();
         const slug = payload.slug.trim();
         if (name.length === 0 || slug.length === 0) {
@@ -328,9 +328,13 @@ export class FlowsHitlNodeEditor extends PlatformElement {
 
     _variableContext() {
         const cfg = asObject(this.nodeConfig);
+        const localVariables = cfg.local_variables;
+        if (localVariables != null && !isPlainObject(localVariables)) {
+            throw new Error('flows-hitl-node-editor: local_variables must be an object');
+        }
         return buildPromptVariableContext({
             flowVariables: this.flowVariables,
-            nodeLocalVariables: (cfg as any).local_variables,
+            nodeLocalVariables: isPlainObject(localVariables) ? localVariables : null,
             dataflowNode: this.dataflowNode,
             previewExecutionState: this.previewExecutionState,
         });
@@ -384,10 +388,10 @@ export class FlowsHitlNodeEditor extends PlatformElement {
 
     override render(): TemplateResult {
         const cfg = asObject(this.nodeConfig);
-        const slug = typeof (cfg as any).work_queue_slug === 'string' ? (cfg as any).work_queue_slug : '';
-        const handoffMode = (cfg as any).handoff_mode === 'takeover' ? 'takeover' : 'single_reply';
-        const taskTitle = typeof (cfg as any).handoff_task_title === 'string' ? (cfg as any).handoff_task_title : '';
-        const userMessage = typeof (cfg as any).handoff_user_message === 'string' ? (cfg as any).handoff_user_message : '';
+        const slug = typeof cfg.work_queue_slug === 'string' ? cfg.work_queue_slug : '';
+        const handoffMode = cfg.handoff_mode === 'takeover' ? 'takeover' : 'single_reply';
+        const taskTitle = typeof cfg.handoff_task_title === 'string' ? cfg.handoff_task_title : '';
+        const userMessage = typeof cfg.handoff_user_message === 'string' ? cfg.handoff_user_message : '';
         const variableContext = this._variableContext();
         const statePreview = buildExecutionStatePreview(this.previewExecutionState);
         const statePaths = collectStatePathsFromDataflow(this.dataflowNode);
@@ -401,7 +405,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'hitl_node'}
+                .flowNodeType=${this.flowNodeType}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}

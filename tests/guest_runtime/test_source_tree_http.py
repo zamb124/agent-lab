@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from tests.fixtures.s3 import require_s3_configured
 from tests.guest_runtime.http_helpers import (

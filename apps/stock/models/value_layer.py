@@ -153,15 +153,16 @@ class StockValueLayer(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_for_product(
+    async def list_for_product_by_entry_no_asc(
         cls, company_id: str, product_id: str, *, limit: int, offset: int
     ) -> list[Self]:
+        """Слои товара, ORDER BY entry_no ASC. limit и offset в теле не проверяются."""
         return await cls.objects.filter(
             company_id=company_id, product_id=product_id
         ).order_by("entry_no").limit(limit).offset(offset).all()
 
     @classmethod
-    async def list_by_entry_no(
+    async def list_by_entry_no_asc(
         cls,
         company_id: str,
         *,
@@ -170,7 +171,7 @@ class StockValueLayer(PlatformModel):
         limit: int,
         offset: int,
     ) -> list[Self]:
-        """Окно слоёв компании, ORDER BY entry_no, limit и offset. product_id и warehouse_id равные None не фильтруют."""
+        """Окно слоёв компании, ORDER BY entry_no ASC, limit и offset. product_id и warehouse_id равные None не фильтруют."""
         query = cls.objects.filter(company_id=company_id)
         if product_id is not None:
             query = query.filter(product_id=product_id)
@@ -191,24 +192,19 @@ class StockValueLayer(PlatformModel):
         return await query.count()
 
     @classmethod
-    async def last_for_product(
+    async def last_for_product_by_entry_no_desc(
         cls, company_id: str, product_id: str
     ) -> Self | None:
+        """Последний слой товара, ORDER BY entry_no DESC. Несколько с одним entry_no — какое именно, не задано. Нет строки — None."""
         return await cls.objects.filter(
             company_id=company_id, product_id=product_id
         ).order_by("-entry_no").first()
 
     @classmethod
-    async def fifo_remaining(
+    async def list_remaining_by_entry_no_asc_locked(
         cls, company_id: str, product_id: str
     ) -> list[Self]:
-        """Открытые приходные партии товара для FIFO-списания.
-
-        «Открытые» = ещё не выбранные отгрузками (remaining_quantity > 0).
-        Порядок — по entry_no (порядок появления записей = порядок прихода
-        на склад), под ``FOR UPDATE`` — чтобы два расходных документа в
-        одной полосе не съели одну и ту же партию дважды.
-        """
+        """Открытые слои товара, remaining_quantity > 0, ORDER BY entry_no ASC, под SELECT FOR UPDATE. Два расходных документа в одной полосе не списывают одну партию дважды."""
         return await cls.objects.filter(
             company_id=company_id,
             product_id=product_id,
@@ -336,7 +332,7 @@ class StockValueLayer(PlatformModel):
                 count=len(kinds),
             )
         )[stock_ledger_cursor(company_id)]
-        last = await cls.last_for_product(company_id, product_id)
+        last = await cls.last_for_product_by_entry_no_desc(company_id, product_id)
         qty_balance = last.qty_after if last is not None else STOCK_ZERO
         value_balance = last.value_after if last is not None else STOCK_ZERO
 
@@ -375,7 +371,7 @@ class StockValueLayer(PlatformModel):
         fifo_value = STOCK_ZERO
         fifo_unit = STOCK_ZERO
         if method == ValuationMethod.FIFO and has_outgoing:
-            remaining_layers = await cls.fifo_remaining(company_id, product_id)
+            remaining_layers = await cls.list_remaining_by_entry_no_asc_locked(company_id, product_id)
             fifo_plan = fifo_allocate(
                 remaining_layers,
                 done_qty,
@@ -541,7 +537,7 @@ class StockValueLayer(PlatformModel):
                 using=STOCK_DB,
             )
         )[stock_ledger_cursor(company_id)]
-        last = await cls.last_for_product(company_id, product_id)
+        last = await cls.last_for_product_by_entry_no_desc(company_id, product_id)
         qty_balance = (last.qty_after if last is not None else STOCK_ZERO) + quantity_delta
         value_balance = (last.value_after if last is not None else STOCK_ZERO) + value_delta
         layer = cls(

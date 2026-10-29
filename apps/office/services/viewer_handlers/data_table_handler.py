@@ -14,7 +14,7 @@ from core.data_tables.models import DATA_TABLE_CONTENT_TYPE
 from core.data_tables.sqlite_format import (
     initialize_platform_schema,
     open_sqlite,
-    read_schema_snapshot,
+    read_schema_snapshot_by_table_name_asc,
 )
 from core.documents.viewer.models import (
     DataTableOpenPayload,
@@ -107,7 +107,7 @@ class DataTableViewerHandler:
                 flow_id=_meta_str(file_record, "flow_id"),
                 session_id=_meta_str(file_record, "session_id"),
             )
-            return read_schema_snapshot(connection)
+            return read_schema_snapshot_by_table_name_asc(connection)
         finally:
             connection.close()
             if path.exists():

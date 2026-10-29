@@ -2,7 +2,7 @@
 FcmPushService: успешная доставка, истекший токен, серверная ошибка.
 
 Внешние зависимости (oauth2 token endpoint и FCM HTTP v1 send) подменяются
-через httpx.MockTransport — ключ Google не нужен. JWT-подпись считает pyjwt
+через httpx2.MockTransport — ключ Google не нужен. JWT-подпись считает pyjwt
 с тестовым RSA-ключом, сгенерированным на лету.
 """
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-import httpx
+import httpx2
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -31,11 +31,11 @@ def rsa_pem() -> str:
     return pem.decode("utf-8")
 
 
-_ORIGINAL_ASYNC_CLIENT = httpx.AsyncClient
+_ORIGINAL_ASYNC_CLIENT = httpx2.AsyncClient
 
 
 def _make_async_client_factory(handler):
-    transport = httpx.MockTransport(handler)
+    transport = httpx2.MockTransport(handler)
 
     def factory(*args, **kwargs):
         kwargs.setdefault("transport", transport)
@@ -55,12 +55,12 @@ def _build_service(rsa_pem: str) -> FcmPushService:
 
 @pytest.mark.asyncio
 async def test_send_alert_delivers_via_fcm(rsa_pem):
-    calls: list[httpx.Request] = []
+    calls: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         calls.append(request)
         if "oauth2.googleapis.com" in str(request.url):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={"access_token": "ya29.fake", "expires_in": 3600, "token_type": "Bearer"},
             )
@@ -69,11 +69,11 @@ async def test_send_alert_delivers_via_fcm(rsa_pem):
             payload = json.loads(request.content)
             assert payload["message"]["token"] == "fake-token-aaaaaaaaaaaaaaaaaa"
             assert payload["message"]["notification"]["title"] == "Привет"
-            return httpx.Response(200, json={"name": "projects/humanitec-app/messages/123"})
+            return httpx2.Response(200, json={"name": "projects/humanitec-app/messages/123"})
         raise AssertionError(f"unexpected url {request.url}")
 
     service = _build_service(rsa_pem)
-    with patch("core.push.fcm_service.httpx.AsyncClient", _make_async_client_factory(handler)):
+    with patch("core.push.fcm_service.httpx2.AsyncClient", _make_async_client_factory(handler)):
         delivered, drop = await service.send_alert(
             registration_token="fake-token-aaaaaaaaaaaaaaaaaa",
             title="Привет",
@@ -89,13 +89,13 @@ async def test_send_alert_delivers_via_fcm(rsa_pem):
 
 @pytest.mark.asyncio
 async def test_send_alert_drops_unregistered_token(rsa_pem):
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if "oauth2.googleapis.com" in str(request.url):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={"access_token": "ya29.fake", "expires_in": 3600, "token_type": "Bearer"},
             )
-        return httpx.Response(
+        return httpx2.Response(
             404,
             json={
                 "error": {
@@ -112,7 +112,7 @@ async def test_send_alert_drops_unregistered_token(rsa_pem):
         )
 
     service = _build_service(rsa_pem)
-    with patch("core.push.fcm_service.httpx.AsyncClient", _make_async_client_factory(handler)):
+    with patch("core.push.fcm_service.httpx2.AsyncClient", _make_async_client_factory(handler)):
         delivered, drop = await service.send_alert(
             registration_token="dead-token-aaaaaaaaaaaaaaaaaa",
             title="t",
@@ -124,16 +124,16 @@ async def test_send_alert_drops_unregistered_token(rsa_pem):
 
 @pytest.mark.asyncio
 async def test_send_alert_keeps_subscription_on_server_error(rsa_pem):
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if "oauth2.googleapis.com" in str(request.url):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={"access_token": "ya29.fake", "expires_in": 3600, "token_type": "Bearer"},
             )
-        return httpx.Response(500, json={"error": {"code": 500, "status": "INTERNAL"}})
+        return httpx2.Response(500, json={"error": {"code": 500, "status": "INTERNAL"}})
 
     service = _build_service(rsa_pem)
-    with patch("core.push.fcm_service.httpx.AsyncClient", _make_async_client_factory(handler)):
+    with patch("core.push.fcm_service.httpx2.AsyncClient", _make_async_client_factory(handler)):
         delivered, drop = await service.send_alert(
             registration_token="another-token-aaaaaaaaaaaaaaaaaa",
             title="t",

@@ -75,7 +75,7 @@ async def test_task_lookups_return_task_or_none(unique_id: str) -> None:
         is None
     )
 
-    latest = await A2ATaskProjection.latest_task_for_context(
+    latest = await A2ATaskProjection.latest_task_for_context_by_updated_at_desc(
         company_id=company_id,
         owner_user_id=owner_user_id,
         flow_id=flow_id,

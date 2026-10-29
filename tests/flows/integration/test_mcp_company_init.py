@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.flows.src.tasks.company_init_tasks import init_company_resources
 from core.internal_context_headers import build_internal_context_headers

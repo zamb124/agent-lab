@@ -15,6 +15,7 @@
 import { CoreEvents } from '@platform/lib/events/index.js';
 import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const STORAGE_KEY = platformStorageKey('sync', 'call_prefs');
 
@@ -26,18 +27,26 @@ const PERSIST_EVENT_TYPES = new Set([
     'sync/call_prefs/device_id_set',
 ]);
 
-function _snapshot(state: Record<string, any> | null | undefined) {
-    const slice = state && state.syncCallPrefs;
-    if (!slice || typeof slice !== 'object') return null;
+function deviceId(devices: Record<string, unknown> | null, key: string): string {
+    if (!devices) return '';
+    const value = devices[key];
+    return typeof value === 'string' ? value : '';
+}
+
+function _snapshot(state: unknown) {
+    if (!isPlainRecord(state)) return null;
+    const slice = state.syncCallPrefs;
+    if (!isPlainRecord(slice)) return null;
+    const deviceIds = isPlainRecord(slice.deviceIds) ? slice.deviceIds : null;
     return {
-        cameraEnabled: !!slice.cameraEnabled,
-        noiseSuppression: !!slice.noiseSuppression,
-        echoCancellation: !!slice.echoCancellation,
-        autoGainControl: !!slice.autoGainControl,
+        cameraEnabled: slice.cameraEnabled === true,
+        noiseSuppression: slice.noiseSuppression === true,
+        echoCancellation: slice.echoCancellation === true,
+        autoGainControl: slice.autoGainControl === true,
         deviceIds: {
-            audioinput: typeof slice.deviceIds?.audioinput === 'string' ? slice.deviceIds.audioinput : '',
-            videoinput: typeof slice.deviceIds?.videoinput === 'string' ? slice.deviceIds.videoinput : '',
-            audiooutput: typeof slice.deviceIds?.audiooutput === 'string' ? slice.deviceIds.audiooutput : '',
+            audioinput: deviceId(deviceIds, 'audioinput'),
+            videoinput: deviceId(deviceIds, 'videoinput'),
+            audiooutput: deviceId(deviceIds, 'audiooutput'),
         },
     };
 }
@@ -58,16 +67,15 @@ export function createSyncCallPrefsEffect() {
         }
 
         if (event.type === CoreEvents.STORAGE_LOADED) {
-            const p = event.payload as Record<string, unknown> | null;
-            if (!p || p.key !== STORAGE_KEY) return;
-            if (p.value === null || p.value === undefined) return;
-            if (typeof p.value !== 'object') return;
+            const p = event.payload;
+            if (!isPlainRecord(p) || p.key !== STORAGE_KEY) return;
+            if (!isPlainRecord(p.value)) return;
             ctx.dispatch('sync/call_prefs/hydrated', p.value, { source: 'storage' });
             return;
         }
 
         if (PERSIST_EVENT_TYPES.has(event.type)) {
-            const snapshot = _snapshot(ctx.getState() as Record<string, any>);
+            const snapshot = _snapshot(ctx.getState());
             if (snapshot === null) return;
             ctx.dispatch(
                 CoreEvents.STORAGE_PERSIST_REQUESTED,

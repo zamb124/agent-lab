@@ -12,7 +12,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-picker-card.js';
-import { asObject } from '../_helpers/flows-resolvers.js';
+import { asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
 const ICON_ANY = html`
@@ -102,7 +102,7 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
     override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (!this._hydrated && this.nodeId) {
-            const node = (this._editor.state as Record<string, any>)?.branchData?.nodes?.[this.nodeId];
+            const node = this._branchNode();
             if (node) {
                 this._policy = node.incoming_policy === 'all' ? 'all' : 'any';
                 this._hydrated = true;
@@ -110,10 +110,20 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
         }
     }
 
+    _branchNode() {
+        const data = this._editor.state.branchData;
+        if (!isPlainObject(data)) return null;
+        const nodes = data.nodes;
+        if (!isPlainObject(nodes)) return null;
+        const node = nodes[this.nodeId];
+        return isPlainObject(node) ? node : null;
+    }
+
     _displayNodeName() {
-        const n = (this._editor.state as Record<string, any>)?.branchData?.nodes?.[this.nodeId];
-        if (n && typeof n.name === 'string' && n.name.length > 0) {
-            return n.name;
+        const node = this._branchNode();
+        const name = node === null ? undefined : node.name;
+        if (typeof name === 'string' && name.length > 0) {
+            return name;
         }
         return this.nodeId;
     }
@@ -161,12 +171,12 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
     }
 
     _pick(policy: any) {
-        const data = this._editor.state?.branchData;
-        if (!data || !this.nodeId) {
+        const data = this._editor.state.branchData;
+        if (!isPlainObject(data) || this.nodeId.length === 0) {
             this.close();
             return;
         }
-        const nodes = { ...asObject((data as Record<string, any>).nodes) };
+        const nodes = { ...asObject(data.nodes) };
         const node = nodes[this.nodeId];
         if (!node) {
             this.close();

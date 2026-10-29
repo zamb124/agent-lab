@@ -234,7 +234,7 @@ async def test_rescore_empty_records_does_not_write_redis(
         output_modalities=("text",),
     )
     _ = await AIModelRecord.set(groq_model)
-    existing = await AIModelRecord.list_by_provider_capability("groq", AICapability.LLM_CHAT)
+    existing = await AIModelRecord.list_unordered_by_provider_and_capability("groq", AICapability.LLM_CHAT)
     live = get_settings()
     settings = live.model_copy(
         update={

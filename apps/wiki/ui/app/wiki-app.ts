@@ -10,6 +10,7 @@ import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 
@@ -257,11 +258,21 @@ export class WikiApp extends PlatformApp {
                 group: this.t('palette.recent'),
             }));
         }
-        const result = await this._search.run({ query: trimmed, mode: 'auto', limit: 12 }) as { items?: unknown } | null;
-        if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
+        const result = await this._search.run({ query: trimmed, mode: 'auto', limit: 12 });
+        if (!isPlainRecord(result)) {
             throw new Error('wiki search: result.items required');
         }
-        const items = result.items as { wiki_page_id?: unknown; title?: unknown; snippet?: unknown }[];
+        const rawItems = result.items;
+        if (!Array.isArray(rawItems)) {
+            throw new Error('wiki search: result.items required');
+        }
+        const items: Record<string, unknown>[] = [];
+        for (const row of rawItems) {
+            if (!isPlainRecord(row)) {
+                throw new Error('wiki search: hit must be an object');
+            }
+            items.push(row);
+        }
         return items.map((item) => ({
             id: missingAsEmpty(item.wiki_page_id),
             label: item.title,

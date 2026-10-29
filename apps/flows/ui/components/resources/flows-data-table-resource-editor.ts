@@ -192,10 +192,12 @@ export class FlowsDataTableResourceEditor extends PlatformElement {
     }
 
     _cfg() {
-        if (!isPlainObject(this.resource) || !isPlainObject((this.resource as Record<string, any>).config)) {
+        const resource = this.resource;
+        if (resource === null) {
             return {};
         }
-        return (this.resource as Record<string, any>).config;
+        const config = resource.config;
+        return isPlainObject(config) ? config : {};
     }
 
     _fileId() {
@@ -241,11 +243,15 @@ export class FlowsDataTableResourceEditor extends PlatformElement {
         }
         this._formError = '';
         const created = await this._createOp.run(dataTableCreateRequest(flowId, stem));
-        if (!created || typeof (created as Record<string, any>).file_id !== 'string' || (created as Record<string, any>).file_id.length === 0) {
+        if (!isPlainObject(created)) {
             return;
         }
-        this._emitConfig({ file_id: (created as Record<string, any>).file_id });
-        this._snapshotOp.run({ file_id: (created as Record<string, any>).file_id });
+        const fileId = created.file_id;
+        if (typeof fileId !== 'string' || fileId.length === 0) {
+            return;
+        }
+        this._emitConfig({ file_id: fileId });
+        this._snapshotOp.run({ file_id: fileId });
     }
 
     _openFile() {
@@ -266,10 +272,14 @@ export class FlowsDataTableResourceEditor extends PlatformElement {
 
     _schemaTables() {
         const result = this._snapshotOp.lastResult;
-        if (!result || typeof result !== 'object' || !(result as Record<string, any>).schema_snapshot) {
+        if (!isPlainObject(result)) {
             return [];
         }
-        const tables = (result as Record<string, any>).schema_snapshot.tables;
+        const snapshot = result.schema_snapshot;
+        if (!isPlainObject(snapshot)) {
+            return [];
+        }
+        const tables = snapshot.tables;
         return Array.isArray(tables) ? tables : [];
     }
 

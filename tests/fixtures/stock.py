@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.stock.di import StockDi
 from apps.stock.models import StockLocationUsage

@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 
 @pytest.mark.asyncio

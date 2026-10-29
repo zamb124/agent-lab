@@ -1,8 +1,8 @@
 """
 Фикстуры HTTP-сервисов платформы: только readiness-проверки готового стека.
 
-Все granian-процессы стартует `make test-up` через `scripts/test_stack.py up`
-(декларативная таблица стека — в `scripts/test_stack.py`). pytest ничего не
+Все granian-процессы стартует `make test-up` через `scripts/testing/stack.py up`
+(декларативная таблица стека — в `scripts/testing/stack.py`). pytest ничего не
 запускает и не убивает: фикстура делает GET /health и падает с подсказкой
 выполнить `make test-up`, если сервис недоступен.
 

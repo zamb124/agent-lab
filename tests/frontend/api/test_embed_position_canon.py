@@ -7,7 +7,7 @@ launcher-кнопки. Проверяются API create/patch, сниппет �
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.types import JsonObject
 

@@ -163,20 +163,19 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this.size = 'lg';
         this._configs = this.useResource('frontend/embed_configs');
         this._catalog = this.useOp('flows/flows_list');
-        this._activeCompanySel = this.select((s: Record<string, any>) => s.companies.active);
+        this._activeCompanySel = this.select((s) => s.auth.activeCompanyId);
         this._loaded = false;
         this._populated = false;
     }
     private _configs: ResourceController;
     private _catalog: OpController;
-    private _activeCompanySel: SelectController<any>;
+    private _activeCompanySel: SelectController<string | null>;
     private _loaded: boolean;
     private _populated: boolean;
 
 
     _isSystemCompany() {
-        const c = this._activeCompanySel.value;
-        return c !== null && typeof c === 'object' && c.company_id === 'system';
+        return this._activeCompanySel.value === 'system';
     }
 
     _resetCreateFormFields() {
@@ -261,7 +260,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         }
     }
 
-    _flows() {
+    _flows(): Record<string, unknown>[] {
         const listed = this._catalog.lastResult;
         if (listed == null) {
             return [];
@@ -269,21 +268,28 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         if (!isPlainRecord(listed) || !Array.isArray(listed.items)) {
             throw new Error('create-embed-modal: flows/flows_list items[] required');
         }
-        return listed.items;
+        const items: Record<string, unknown>[] = [];
+        for (const item of listed.items) {
+            if (!isPlainRecord(item)) {
+                throw new Error('create-embed-modal: flow item must be an object');
+            }
+            items.push(item);
+        }
+        return items;
     }
 
-    _selectedFlow() {
-        const found = this._flows().find((f: Record<string, any>) => f.flow_id === this._flowId);
-        return found ? found : null;
+    _selectedFlow(): Record<string, unknown> | null {
+        const found = this._flows().find((flow) => flow.flow_id === this._flowId);
+        return found === undefined ? null : found;
     }
 
     /**
      * Ветки flow в API: `branches: { [branch_id]: { name, ... } }`.
      */
-    _branchEntriesFromFlow(flow: Record<string, any>) {
-        if (!flow) return [];
+    _branchEntriesFromFlow(flow: Record<string, unknown> | null) {
+        if (flow === null) return [];
         const branches = flow.branches;
-        if (branches && typeof branches === 'object' && !Array.isArray(branches)) {
+        if (isPlainRecord(branches)) {
             const raw = Object.entries(branches);
             if (raw.length > 0) {
                 const mapped = raw.map(([id, v]) => ({
@@ -308,7 +314,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         return this._branchEntriesFromFlow(this._selectedFlow());
     }
 
-    _initialBranchIdForFlow(flow: Record<string, any>) {
+    _initialBranchIdForFlow(flow: Record<string, unknown> | null) {
         const entries = this._branchEntriesFromFlow(flow);
         if (!entries || entries.length === 0) return 'default';
         const ids = entries.map((e) => e.id);
@@ -328,7 +334,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, any> = {};
+        const errors: Record<string, string> = {};
         if (!this._name.trim()) errors.name = this.t('embed_create_modal.err_name');
         if (!this._flowId) errors.flow_id = this.t('embed_create_modal.err_flow');
         if (this._isSystemCompany() && this._landingVisible && !this._landingCardImageUrl.trim()) {
@@ -347,7 +353,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             this._flowId
             && !this._catalog.busy
             && this._flows().length > 0
-            && !this._flows().some((f: Record<string, any>) => f.flow_id === this._flowId)
+            && !this._flows().some((flow) => flow.flow_id === this._flowId)
         ) {
             errors.flow_id = this.t('embed_create_modal.err_flow_stale');
         }
@@ -365,7 +371,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
      * Ожидает завершения create/update коллекции по causation_id (без закрытия модалки при ошибке).
      * @returns {Promise<{ ok: true } | { ok: false, message: string }>}
      */
-    _awaitEmbedWrite(isEdit: boolean, payload: Record<string, any>): Promise<{ ok: boolean; message?: string }> {
+    _awaitEmbedWrite(isEdit: boolean, payload: Record<string, unknown>): Promise<{ ok: boolean; message?: string }> {
         const ev = this._configs.resource.events;
         const bus = this.bus;
         if (isEdit) {
@@ -530,10 +536,14 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                   .config=${{
                                       values: [
                                           { value: '', label: this.t('embed_create_modal.flow_placeholder') },
-                                          ...flows.map((f: Record<string, any>) => ({
-                                              value: f.flow_id,
-                                              label: typeof f.name === 'string' && f.name !== '' ? f.name : f.flow_id,
-                                          })),
+                                          ...flows.map((flow) => {
+                                              const flowId = flow.flow_id;
+                                              if (typeof flowId !== 'string' || flowId === '') {
+                                                  throw new Error('create-embed-modal: flow_id must be a non-empty string');
+                                              }
+                                              const name = typeof flow.name === 'string' && flow.name !== '' ? flow.name : flowId;
+                                              return { value: flowId, label: name };
+                                          }),
                                       ],
                                   }}
                                   .hint=${this.t('embed_create_modal.flow_hint')}

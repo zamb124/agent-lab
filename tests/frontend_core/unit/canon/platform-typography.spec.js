@@ -37,14 +37,12 @@ const SPA_SHELLS = [
 
 const PLATFORM_HTML = [
     'core/frontend/pwa/offline.html',
-    'apps/agent/desktop/branding/humanitec-pairing.html',
 ];
 
 const SCAN_ROOTS = [
     path.join(ROOT, 'apps'),
     path.join(ROOT, 'core/frontend/static/lib'),
     path.join(ROOT, 'core/frontend/pwa'),
-    path.join(ROOT, 'apps/agent/desktop/branding'),
 ];
 
 const SKIP_DIRS = new Set(['vendor', 'node_modules', 'design', 'mermaid', '.lighthouseci']);

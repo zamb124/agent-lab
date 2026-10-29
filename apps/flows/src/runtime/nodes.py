@@ -2512,7 +2512,7 @@ class CodeAgentNode(BaseNode):
             )
             llm_url = (
                 f"{settings.server.get_service_url('flows').rstrip('/')}"
-                "/flows/api/v1/agent/llm/v1"
+                "/flows/api/v1/llm/v1"
             )
             gateway_url = settings.server.get_service_url("capability_gateway").rstrip("/")
             platform_env = self._platform_env(

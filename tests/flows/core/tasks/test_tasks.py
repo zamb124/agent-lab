@@ -8,14 +8,18 @@ from datetime import datetime, timezone
 
 import pytest
 
-import apps.idle_worker.tasks.calendar_sync_tasks as calendar_sync_tasks
+import apps.idle.tasks.calendar_sync_tasks as calendar_sync_tasks
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.tool_tasks import execute_tool
-from apps.flows_worker.broker import broker
 from core.context import set_context
 from core.integrations.models import IntegrationCredential, IntegrationProvider
+from core.tasks.registry import queue_broker
 from core.types import JsonObject
+
+broker = queue_broker("flows_worker")
+if broker is None:
+    raise RuntimeError("flows_worker broker is not registered")
 
 EXPRESSION_PARAMETERS_SCHEMA: JsonObject = {
     "type": "object",

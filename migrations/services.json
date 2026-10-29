@@ -2,7 +2,7 @@
   "services": [
     {
       "name": "shared",
-      "models_module": "core.db.models.base",
+      "models_module": "core.models.base",
       "database_url_key": "shared_url"
     },
     {

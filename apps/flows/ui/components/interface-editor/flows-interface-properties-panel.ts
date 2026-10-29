@@ -14,7 +14,18 @@ import '@platform/lib/components/platform-variable-input.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import { INPUT_BLOCK_TYPES } from '@platform/lib/flow-ui/protocol/constants.js';
-import { catalogEntry, isFrozenPath, walkPage } from './interface-editor-domain.js';
+import {
+    catalogEntry,
+    isFrozenPath,
+    walkPage,
+    type CatalogProperty,
+    type CatalogEntry,
+    type DocumentProblem,
+    type FlowUiBlock,
+    type FlowUiDocument,
+    type FlowUiPage,
+    type StatePathEntry,
+} from './interface-editor-domain.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
@@ -23,12 +34,31 @@ function missingAsEmpty(value: unknown): string {
     return String(value);
 }
 
-function documentPages(document: unknown): unknown[] {
-    if (!isPlainRecord(document)) return [];
-    const pages = document.pages;
-    if (pages === undefined || pages === null) return [];
-    if (!Array.isArray(pages)) throw new Error('interface editor: document.pages must be an array');
-    return pages;
+function documentPages(document: FlowUiDocument | null): FlowUiPage[] {
+    if (document === null) return [];
+    return document.pages;
+}
+
+function objectRows(value: unknown, label: string): Record<string, unknown>[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`flows-interface-properties-panel: ${label} must be a list`);
+    }
+    const rows: Record<string, unknown>[] = [];
+    for (const item of value) {
+        if (!isPlainRecord(item)) {
+            throw new Error(`flows-interface-properties-panel: ${label} item must be an object`);
+        }
+        rows.push(item);
+    }
+    return rows;
+}
+
+function rowListCount(row: Record<string, unknown>, field: string): number {
+    const items = row[field];
+    if (!Array.isArray(items)) {
+        throw new Error(`flows-interface-properties-panel: ${field} must be a list`);
+    }
+    return items.length;
 }
 
 function actionField(action: unknown, field: string): unknown {
@@ -43,6 +73,17 @@ function objectValue(value: unknown): Record<string, unknown> {
     return value;
 }
 
+function problemParams(params: Record<string, unknown>): Record<string, string | number> {
+    const result: Record<string, string | number> = {};
+    for (const [key, value] of Object.entries(params)) {
+        if (typeof value !== 'string' && typeof value !== 'number') {
+            throw new Error(`flows-interface-properties-panel: problem param ${key} must be a string or number`);
+        }
+        result[key] = value;
+    }
+    return result;
+}
+
 function conditionEqualsText(value: Record<string, unknown>): string {
     if (!('equals' in value)) return '';
     const equals = value.equals;
@@ -54,7 +95,7 @@ const HIDDEN_PROPERTIES = new Set(['type', 'blocks']);
 const CONVERSATION_DEF = 'FlowUIConversationSettings';
 
 /** Значение условия: JSON-литерал (число, bool, null, объект) или строка как есть. */
-function parseConditionValue(text: any) {
+function parseConditionValue(text: string) {
     const trimmed = text.trim();
     if (trimmed === '') return null;
     if (/^(-?\d+(\.\d+)?|true|false|null|\{.*\}|\[.*\])$/s.test(trimmed)) return JSON.parse(trimmed);
@@ -83,15 +124,15 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         sampleState: { attribute: false },
         problems: { attribute: false },
     }
-    declare block: any;
-    declare page: any;
-    declare document: any;
-    declare catalog: any;
-    declare schema: any;
-    declare frozen: any;
-    declare statePaths: any;
-    declare sampleState: any;
-    declare problems: any;
+    declare block: FlowUiBlock | null;
+    declare page: FlowUiPage | null;
+    declare document: FlowUiDocument | null;
+    declare catalog: readonly CatalogEntry[];
+    declare schema: unknown;
+    declare frozen: ReadonlySet<string>;
+    declare statePaths: readonly StatePathEntry[];
+    declare sampleState: Record<string, unknown>;
+    declare problems: readonly DocumentProblem[];
 ;
 
     static override styles: CSSResultGroup = [PlatformElement.styles, css`
@@ -191,17 +232,30 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         this.document = null;
         this.catalog = [];
         this.schema = null;
-        this.frozen = new Set();
+        this.frozen = new Set<string>();
         this.statePaths = [];
         this.sampleState = {};
         this.problems = [];
     }
 
-    _change(property: any, value: unknown, blockId = (this.block.block_id as any)) {
-        this.emit('property-change', { blockId, property, value });
+    _requireBlock(): FlowUiBlock {
+        const block = this.block;
+        if (block === null) throw new Error('flows-interface-properties-panel: block required');
+        return block;
     }
 
-    _pageChange(property: any, value: unknown) {
+    _requirePage(): FlowUiPage {
+        const page = this.page;
+        if (page === null) throw new Error('flows-interface-properties-panel: page required');
+        return page;
+    }
+
+    _change(property: string, value: unknown, blockId?: string) {
+        const id = blockId === undefined ? this._requireBlock().block_id : blockId;
+        this.emit('property-change', { blockId: id, property, value });
+    }
+
+    _pageChange(property: string, value: unknown) {
         this.emit('page-property-change', { property, value });
     }
 
@@ -210,16 +264,16 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
     }
 
     _pathSuggestions() {
-        return (this.statePaths.filter as any)((entry: any) => !entry.protected).map((entry: any) => entry.path);
+        return this.statePaths.filter((entry) => !entry.protected).map((entry) => entry.path);
     }
 
     _statePreview() {
         return this.sampleState;
     }
 
-    _problemsFor(property: any) {
-        return (this.problems.filter as any)((problem: any) => problem.property === property).map((problem: any) => html`<div class="problem" data-severity=${problem.severity}>
-            <platform-icon name=${problem.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>${this.t(`interface_editor.problem_${problem.code}`, problem.params)}
+    _problemsFor(property: string) {
+        return this.problems.filter((problem) => problem.property === property).map((problem) => html`<div class="problem" data-severity=${problem.severity}>
+            <platform-icon name=${problem.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>${this.t(`interface_editor.problem_${problem.code}`, problemParams(problem.params))}
         </div>`);
     }
 
@@ -237,14 +291,14 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
             @change=${(event: CustomEvent) => this._change(name, event.detail.value)}></platform-variable-input>`;
     }
 
-    _statePath(name: string, value: unknown, required: any, hint: any) {
+    _statePath(name: string, value: unknown, required: boolean, hint: boolean) {
         const text = typeof value === 'string' ? value : '';
         return html`<platform-field mode="edit" type="string" .label=${this._label(name)} .value=${text} .suggestions=${this._pathSuggestions()}
             .hint=${hint ? this.t('interface_editor.field_hint', { path: text !== '' && !isFrozenPath(text, this.frozen) ? text : 'email' }) : ''} .placeholder=${'email'}
             @change=${(event: CustomEvent) => this._change(name, event.detail.value === '' && !required ? null : event.detail.value)}></platform-field>`;
     }
 
-    _action(name: string, value: unknown, required: any) {
+    _action(name: string, value: unknown, required: boolean) {
         const enabled = value !== null && value !== undefined;
         const action = enabled ? objectValue(value) : null;
         return html`<div class="sub">
@@ -261,19 +315,25 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
     }
 
     _clickKind() {
-        if (typeof (this.block.page_id as any) === 'string' && (this.block.page_id as any) !== '') return 'page';
-        if (typeof (this.block.url as any) === 'string' && (this.block.url as any) !== '') return 'url';
+        const block = this._requireBlock();
+        const pageId = block.page_id;
+        if (typeof pageId === 'string' && pageId !== '') return 'page';
+        const url = block.url;
+        if (typeof url === 'string' && url !== '') return 'url';
         return 'action';
     }
 
     _pageOptions() {
-        const pages = documentPages(this.document);
-        const options = pages.map((page: any) => ({
-            value: page.page_id,
-            label: page.title !== '' ? page.title : page.page_id,
-        }));
-        const current = (this.block.page_id as any);
-        if (typeof current === 'string' && current !== '' && !options.some((item: any) => item.value === current)) {
+        const block = this._requireBlock();
+        const options = documentPages(this.document).map((page) => {
+            const title = page.title;
+            return {
+                value: page.page_id,
+                label: typeof title === 'string' && title !== '' ? title : page.page_id,
+            };
+        });
+        const current = block.page_id;
+        if (typeof current === 'string' && current !== '' && !options.some((item) => item.value === current)) {
             options.push({ value: current, label: current });
         }
         return options;
@@ -288,20 +348,31 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         return missingAsEmpty(current);
     }
 
+    _stringOr(value: unknown, fallback: string): string {
+        return typeof value === 'string' && value !== '' ? value : fallback;
+    }
+
     _setClickKind(kind: string) {
+        const block = this._requireBlock();
         if (kind === 'page') {
-            this._change('click_target', { action: null, page_id: (this.block.page_id as any) || this._defaultPageId(), url: '' });
+            this._change('click_target', { action: null, page_id: this._stringOr(block.page_id, this._defaultPageId()), url: '' });
             return;
         }
         if (kind === 'url') {
-            this._change('click_target', { action: null, page_id: null, url: (this.block.url as any) || 'https://' });
+            this._change('click_target', { action: null, page_id: null, url: this._stringOr(block.url, 'https://') });
             return;
         }
-        this._change('click_target', { action: (this.block.action as any) ?? { name: 'submit', payload: {} }, page_id: null, url: '' });
+        const action = block.action;
+        this._change('click_target', {
+            action: action === null || action === undefined ? { name: 'submit', payload: {} } : action,
+            page_id: null,
+            url: '',
+        });
     }
 
     _clickTarget() {
-        const isButton = (this.block.type as any) === 'button';
+        const block = this._requireBlock();
+        const isButton = block.type === 'button';
         const kind = this._clickKind();
         const kinds = (isButton ? ['action', 'page', 'url'] : ['page', 'url']).map((value) => ({
             value,
@@ -310,28 +381,32 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         const pages = this._pageOptions();
         return html`<div class="sub" data-click-target=${kind}>
             <platform-field mode="edit" type="enum" .label=${this.t('interface_editor.click_target')}
-                .value=${kinds.some((item: any) => item.value === kind) ? kind : clickKindValue(kinds)}
+                .value=${kinds.some((item) => item.value === kind) ? kind : clickKindValue(kinds)}
                 .config=${{ values: kinds }}
                 @change=${(event: CustomEvent) => this._setClickKind(event.detail.value)}></platform-field>
             ${kind === 'action' ? html`
-                <platform-field mode="edit" type="string" .label=${this.t('interface_editor.action_name')} .value=${missingAsEmpty(actionField(this.block.action, 'name'))} .placeholder=${'submit'} .hint=${this.t('interface_editor.action_name_hint')}
+                <platform-field mode="edit" type="string" .label=${this.t('interface_editor.action_name')} .value=${missingAsEmpty(actionField(block.action, 'name'))} .placeholder=${'submit'} .hint=${this.t('interface_editor.action_name_hint')}
                     @change=${(event: CustomEvent) => {
-                        const payload = actionField(this.block.action, 'payload');
+                        const payload = actionField(block.action, 'payload');
                         this._change('click_target', { action: { name: event.detail.value, payload: payload === undefined || payload === null ? {} : payload }, page_id: null, url: '' });
                     }}></platform-field>
                 <platform-field mode="edit" type="object" .label=${this.t('interface_editor.action_payload')} .value=${(() => {
-                    const payload = actionField(this.block.action, 'payload');
+                    const payload = actionField(block.action, 'payload');
                     return payload === undefined || payload === null ? {} : payload;
                 })()}
-                    @change=${(event: CustomEvent) => this._change('click_target', { action: { name: (this.block.action as any)?.name ?? 'submit', payload: event.detail.value }, page_id: null, url: '' })}></platform-field>
+                    @change=${(event: CustomEvent) => {
+                        const storedName = actionField(block.action, 'name');
+                        const actionName = storedName === undefined || storedName === null ? 'submit' : storedName;
+                        this._change('click_target', { action: { name: actionName, payload: event.detail.value }, page_id: null, url: '' });
+                    }}></platform-field>
             ` : nothing}
             ${kind === 'page' ? html`
-                <platform-field mode="edit" type="enum" .label=${this._label('page_id')} .value=${missingAsEmpty(this.block.page_id)}
+                <platform-field mode="edit" type="enum" .label=${this._label('page_id')} .value=${missingAsEmpty(block.page_id)}
                     .config=${{ values: pages }} .hint=${pages.length < 2 ? this.t('interface_editor.click_page_add') : this.t('interface_editor.click_page_hint')}
                     @change=${(event: CustomEvent) => this._change('click_target', { action: null, page_id: event.detail.value, url: '' })}></platform-field>
             ` : nothing}
             ${kind === 'url' ? html`
-                <platform-variable-input syntax="brace" .label=${this._label('url')} .value=${missingAsEmpty(this.block.url)}
+                <platform-variable-input syntax="brace" .label=${this._label('url')} .value=${missingAsEmpty(block.url)}
                     .statePreview=${this._statePreview()} .statePaths=${this._pathSuggestions()} .placeholder=${'https://'}
                     @change=${(event: CustomEvent) => this._change('click_target', { action: null, page_id: null, url: event.detail.value })}></platform-variable-input>
             ` : nothing}
@@ -366,7 +441,7 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         </div>`;
     }
 
-    _pairs(name: string, value: unknown, keys: any, labels: any) {
+    _pairs(name: string, value: unknown, keys: readonly [string, string], labels: readonly [string, string]) {
         const items = Array.isArray(value) ? value : [];
         return html`<div class="sub">
             <div class="sub-title"><span>${this._label(name)}</span>
@@ -381,45 +456,63 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
     }
 
     _columns(value: unknown) {
+        const columns = objectRows(value, 'columns');
         return html`<div class="sub">
             <div class="sub-title"><span>${this._label('columns')}</span>
-                <platform-button ghost density="compact" icon-only aria-label=${this.t('interface_editor.add_item')} ?disabled=${(value as any).length >= 4} @click=${() => this._change('columns', [...(value as any[]), { width: 1, blocks: [] }])}><platform-icon name="plus" size="14"></platform-icon></platform-button>
+                <platform-button ghost density="compact" icon-only aria-label=${this.t('interface_editor.add_item')} ?disabled=${columns.length >= 4} @click=${() => this._change('columns', [...columns, { width: 1, blocks: [] }])}><platform-icon name="plus" size="14"></platform-icon></platform-button>
             </div>
-            ${(value as any).map((column: any, index: number) => html`<div class="row">
+            ${columns.map((column, index) => html`<div class="row">
                 <platform-field mode="edit" type="integer" pill-embed .label=${this.t('interface_editor.column_width', { index: index + 1 })} .value=${column.width}
-                    @change=${(event: CustomEvent) => this._change('columns', (value as any).map((entry: any, position: any) => (position === index ? { ...entry, width: event.detail.value } : entry)))}></platform-field>
-                <span class="hint">${this.t('interface_editor.column_blocks', { count: column.blocks.length })}</span>
-                <platform-button ghost density="compact" icon-only aria-label=${this.t('interface_editor.remove_item')} ?disabled=${(value as any).length <= 1 || column.blocks.length > 0} @click=${() => this._change('columns', (value as any).filter((_entry: any, position: any) => position !== index))}><platform-icon name="close" size="14"></platform-icon></platform-button>
+                    @change=${(event: CustomEvent) => this._change('columns', columns.map((entry, position) => (position === index ? { ...entry, width: event.detail.value } : entry)))}></platform-field>
+                <span class="hint">${this.t('interface_editor.column_blocks', { count: rowListCount(column, 'blocks') })}</span>
+                <platform-button ghost density="compact" icon-only aria-label=${this.t('interface_editor.remove_item')} ?disabled=${columns.length <= 1 || rowListCount(column, 'blocks') > 0} @click=${() => this._change('columns', columns.filter((_entry, position) => position !== index))}><platform-icon name="close" size="14"></platform-icon></platform-button>
             </div>`)}
         </div>`;
     }
 
     _tabs(value: unknown) {
+        const tabs = objectRows(value, 'tabs');
         return html`<div class="sub">
             <div class="sub-title"><span>${this._label('tabs')}</span>
-                <platform-button ghost density="compact" icon-only aria-label=${this.t('interface_editor.add_item')} @click=${() => this._change('tabs', [...(value as any[]), { title: this.t('interface_editor.default_tab'), blocks: [] }])}><platform-icon name="plus" size="14"></platform-icon></platform-button>
+                <platform-button ghost density="compact" icon-only aria-label=${this.t('interface_editor.add_item')} @click=${() => this._change('tabs', [...tabs, { title: this.t('interface_editor.default_tab'), blocks: [] }])}><platform-icon name="plus" size="14"></platform-icon></platform-button>
             </div>
-            ${(value as any).map((tab: any, index: number) => html`<div class="row">
+            ${tabs.map((tab, index) => html`<div class="row">
                 <platform-variable-input syntax="brace" .label=${this.t('interface_editor.tab_title', { index: index + 1 })} .value=${tab.title} .statePreview=${this._statePreview()} .statePaths=${this._pathSuggestions()}
-                    @change=${(event: CustomEvent) => this._change('tabs', (value as any).map((entry: any, position: any) => (position === index ? { ...entry, title: event.detail.value } : entry)))}></platform-variable-input>
-                <span class="hint">${this.t('interface_editor.column_blocks', { count: tab.blocks.length })}</span>
-                <platform-button ghost density="compact" icon-only aria-label=${this.t('interface_editor.remove_item')} ?disabled=${(value as any).length <= 1 || tab.blocks.length > 0} @click=${() => this._change('tabs', (value as any).filter((_entry: any, position: any) => position !== index))}><platform-icon name="close" size="14"></platform-icon></platform-button>
+                    @change=${(event: CustomEvent) => this._change('tabs', tabs.map((entry, position) => (position === index ? { ...entry, title: event.detail.value } : entry)))}></platform-variable-input>
+                <span class="hint">${this.t('interface_editor.column_blocks', { count: rowListCount(tab, 'blocks') })}</span>
+                <platform-button ghost density="compact" icon-only aria-label=${this.t('interface_editor.remove_item')} ?disabled=${tabs.length <= 1 || rowListCount(tab, 'blocks') > 0} @click=${() => this._change('tabs', tabs.filter((_entry, position) => position !== index))}><platform-icon name="close" size="14"></platform-icon></platform-button>
             </div>`)}
         </div>`;
     }
 
+    _conversationProperties(): Record<string, unknown> {
+        const schema = this.schema;
+        if (!isPlainRecord(schema)) throw new Error('flows-interface-properties-panel: schema required');
+        const defs = schema.$defs;
+        if (!isPlainRecord(defs)) throw new Error('flows-interface-properties-panel: schema $defs required');
+        const definition = defs[CONVERSATION_DEF];
+        if (!isPlainRecord(definition) || !isPlainRecord(definition.properties)) {
+            throw new Error('flows-interface-properties-panel: conversation settings schema required');
+        }
+        return definition.properties;
+    }
+
     _conversationSettings(value: unknown) {
-        const definition = (this.schema.$defs as any)[CONVERSATION_DEF];
+        const properties = this._conversationProperties();
         const settings = objectValue(value);
         return html`<div class="sub">
             <div class="sub-title"><span>${this._label('settings')}</span></div>
-            ${Object.entries(definition.properties).map(([name, propertySchema]) => {
+            ${Object.entries(properties).map(([name, propertySchema]) => {
+                if (!isPlainRecord(propertySchema)) {
+                    throw new Error(`flows-interface-properties-panel: conversation property ${name} required`);
+                }
                 const label = this.t(`interface_editor.conversation_${name}`);
                 const current = settings[name];
-                const set = (next: any) => this._change('settings', { ...settings, [name]: next });
-                if ((propertySchema as any).type === 'boolean') return html`<platform-field mode="edit" type="boolean" pill-embed .label=${label} .value=${current} @change=${(event: CustomEvent) => set(event.detail.value)}></platform-field>`;
-                if (Array.isArray((propertySchema as any).enum)) return html`<platform-field mode="edit" type="enum" pill-embed .label=${label} .value=${current} .config=${{ values: (propertySchema as any).enum.map((option: any) => ({ value: option, label: this.t(`interface_editor.enum_${option}`) })) }} @change=${(event: CustomEvent) => set(event.detail.value)}></platform-field>`;
-                if ((propertySchema as any).type === 'array') return html`<platform-field mode="edit" type="array" pill-embed .label=${label} .value=${current} .config=${{ preserve_case: true }} @change=${(event: CustomEvent) => set(event.detail.value)}></platform-field>`;
+                const set = (next: unknown) => this._change('settings', { ...settings, [name]: next });
+                const options = propertySchema.enum;
+                if (propertySchema.type === 'boolean') return html`<platform-field mode="edit" type="boolean" pill-embed .label=${label} .value=${current} @change=${(event: CustomEvent) => set(event.detail.value)}></platform-field>`;
+                if (Array.isArray(options)) return html`<platform-field mode="edit" type="enum" pill-embed .label=${label} .value=${current} .config=${{ values: options.map((option) => ({ value: option, label: this.t(`interface_editor.enum_${String(option)}`) })) }} @change=${(event: CustomEvent) => set(event.detail.value)}></platform-field>`;
+                if (propertySchema.type === 'array') return html`<platform-field mode="edit" type="array" pill-embed .label=${label} .value=${current} .config=${{ preserve_case: true }} @change=${(event: CustomEvent) => set(event.detail.value)}></platform-field>`;
                 return html`<platform-variable-input syntax="brace" .label=${label} .value=${current} .statePreview=${this._statePreview()} .statePaths=${this._pathSuggestions()} @change=${(event: CustomEvent) => set(event.detail.value)}></platform-variable-input>`;
             })}
         </div>`;
@@ -449,7 +542,7 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
             this.toast('interface_editor.toast_image_type', { type: 'error' });
             return;
         }
-        this.emit('image-upload', { blockId: (this.block.block_id as any), property: name, file });
+        this.emit('image-upload', { blockId: this._requireBlock().block_id, property: name, file });
     }
 
     _imageUrl(name: string, value: unknown) {
@@ -502,9 +595,11 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         </div>`;
     }
 
-    _alignPicker(property: any) {
+    _alignPicker(property: CatalogProperty) {
+        const block = this._requireBlock();
         const axis = property.name;
-        const current = (this.block as any)[axis] === 'center' || (this.block as any)[axis] === 'end' ? (this.block as any)[axis] : 'start';
+        const stored = block[axis];
+        const current = stored === 'center' || stored === 'end' ? stored : 'start';
         const items = ['start', 'center', 'end'].map((value) => ({
             value,
             title: this.t(`interface_editor.${axis}_${value}`),
@@ -523,27 +618,32 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         </div>`;
     }
 
-    _editor(property: any) {
+    _editor(property: CatalogProperty) {
+        const block = this._requireBlock();
         const { name, kind } = property;
-        const value = (this.block as any)[name];
-        const isInput = INPUT_BLOCK_TYPES.has((this.block.type as any));
+        const value = block[name];
+        const isInput = INPUT_BLOCK_TYPES.has(block.type);
         if (name === 'align' || name === 'valign') return this._alignPicker(property);
-        if (((this.block.type as any) === 'button' && name === 'action') || ((this.block.type as any) === 'link' && name === 'page_id')) return this._clickTarget();
-        if (((this.block.type as any) === 'button' && (name === 'page_id' || name === 'url')) || ((this.block.type as any) === 'link' && name === 'url')) return '';
+        if ((block.type === 'button' && name === 'action') || (block.type === 'link' && name === 'page_id')) return this._clickTarget();
+        if ((block.type === 'button' && (name === 'page_id' || name === 'url')) || (block.type === 'link' && name === 'url')) return '';
         switch (kind) {
             case 'const': case 'blocks': return '';
             case 'template': return this._template(name, value);
             case 'image_url': return this._imageUrl(name, value);
-            case 'string': return (this.block.type as any) === 'html' && name === 'source' ? this._htmlSource(value)
+            case 'string': return block.type === 'html' && name === 'source' ? this._htmlSource(value)
                 : html`<platform-field mode="edit" type="string" .label=${this._label(name)} .value=${typeof value === 'string' ? value : ''} @change=${(event: CustomEvent) => this._change(name, event.detail.value)}></platform-field>`;
             case 'state_path': return this._statePath(name, value, property.required, isInput && name === 'field');
             case 'height': return this._height(name, value);
             case 'action': return this._action(name, value, property.required);
             case 'condition': return this._condition(value);
             case 'conversation_settings': return this._conversationSettings(value);
-            case 'enum': return html`<platform-field mode="edit" type="enum" .label=${this._label(name)} .value=${String(value)}
-                .config=${{ values: property.enum.map((option: any) => ({ value: String(option), label: this.t(`interface_editor.enum_${option}`) })) }}
-                @change=${(event: CustomEvent) => this._change(name, property.enum.find((option: any) => String(option) === event.detail.value))}></platform-field>`;
+            case 'enum': {
+                const options = property.enum;
+                if (options === null) throw new Error(`flows-interface-properties-panel: enum required for ${name}`);
+                return html`<platform-field mode="edit" type="enum" .label=${this._label(name)} .value=${String(value)}
+                .config=${{ values: options.map((option) => ({ value: String(option), label: this.t(`interface_editor.enum_${String(option)}`) })) }}
+                @change=${(event: CustomEvent) => this._change(name, options.find((option) => String(option) === event.detail.value))}></platform-field>`;
+            }
             case 'boolean': return html`<platform-field mode="edit" type="boolean" .label=${this._label(name)} .value=${value === true} @change=${(event: CustomEvent) => this._change(name, event.detail.value)}></platform-field>`;
             case 'integer': case 'number': return html`<platform-field mode="edit" type=${kind} .label=${this._label(name)} .value=${value} @change=${(event: CustomEvent) => this._change(name, event.detail.value)}></platform-field>`;
             case 'json': return html`<platform-field mode="edit" type="object" .label=${this._label(name)} .value=${value} @change=${(event: CustomEvent) => this._change(name, event.detail.value)}></platform-field>`;
@@ -552,17 +652,22 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
             case 'options': return this._pairs(name, value, ['value', 'label'], [this.t('interface_editor.option_value'), this.t('interface_editor.option_label')]);
             case 'table_columns': return this._pairs(name, value, ['key', 'label'], [this.t('interface_editor.column_key'), this.t('interface_editor.option_label')]);
             case 'state_path_list': case 'template_list': case 'string_list': return html`<platform-field mode="edit" type="array" .label=${this._label(name)} .value=${Array.isArray(value) ? value : []} .config=${{ preserve_case: true }} .placeholder=${kind === 'state_path_list' ? 'email' : ''} @change=${(event: CustomEvent) => this._change(name, event.detail.value)}></platform-field>`;
-            case 'select_default': return html`<platform-field mode="edit" type=${(this.block.multiple as any) === true ? 'array' : 'string'} .label=${this._label(name)} .value=${value ?? ((this.block.multiple as any) === true ? [] : '')} .config=${{ preserve_case: true }} @change=${(event: CustomEvent) => this._change(name, event.detail.value === '' ? null : event.detail.value)}></platform-field>`;
+            case 'select_default': {
+                const multiple = block.multiple === true;
+                const selectValue = value === undefined || value === null ? (multiple ? [] : '') : value;
+                return html`<platform-field mode="edit" type=${multiple ? 'array' : 'string'} .label=${this._label(name)} .value=${selectValue} .config=${{ preserve_case: true }} @change=${(event: CustomEvent) => this._change(name, event.detail.value === '' ? null : event.detail.value)}></platform-field>`;
+            }
             default: throw new Error(`interface editor: no editor for property kind ${kind}`);
         }
     }
 
     _renderPage() {
-        const shown = (this.page.show_title as any) !== false;
+        const page = this._requirePage();
+        const shown = page.show_title !== false;
         return html`
             <div class="head"><platform-icon name="layers" size="16"></platform-icon><span class="type">${this.t('interface_editor.page_properties')}</span></div>
             <div class="fields">
-                <platform-variable-input syntax="brace" .label=${this.t('interface_editor.page_title')} .value=${missingAsEmpty(this.page.title)}
+                <platform-variable-input syntax="brace" .label=${this.t('interface_editor.page_title')} .value=${missingAsEmpty(page.title)}
                     .statePreview=${this._statePreview()} .statePaths=${this._pathSuggestions()} .placeholder=${this.t('interface_editor.template_placeholder')}
                     @change=${(event: CustomEvent) => this._pageChange('title', event.detail.value)}></platform-variable-input>
                 <platform-field mode="edit" type="boolean" .label=${this.t('interface_editor.page_show_title')} .value=${shown}
@@ -573,8 +678,12 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
     }
 
     _renderContract() {
-        const inputs = walkPage(this.page).filter(({ block }) => INPUT_BLOCK_TYPES.has(block.type));
-        const actions = [...new Set(walkPage(this.page).flatMap(({ block }) => [block.action, block.row_action].filter((action) => action && typeof action.name === 'string').map((action) => action.name)))];
+        const page = this._requirePage();
+        const inputs = walkPage(page).filter(({ block }) => INPUT_BLOCK_TYPES.has(block.type));
+        const actions = [...new Set(walkPage(page).flatMap(({ block }) => [block.action, block.row_action].flatMap((action) => {
+            if (!isPlainRecord(action) || typeof action.name !== 'string') return [];
+            return [action.name];
+        })))];
         if (inputs.length === 0 && actions.length === 0) return '';
         return html`<div class="contract">
             <div class="title">${this.t('interface_editor.contract_title')}</div>
@@ -584,8 +693,8 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         </div>`;
     }
 
-    _blockAction(action: any) {
-        this.emit('block-action', { blockId: (this.block.block_id as any), action });
+    _blockAction(action: string) {
+        this.emit('block-action', { blockId: this._requireBlock().block_id, action });
     }
 
     _renderBlockActions() {
@@ -614,7 +723,7 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
             <div class="fields">
                 <platform-field mode="edit" type="string" .label=${this._label('block_id')} .value=${this.block.block_id} .hint=${this.t('interface_editor.block_id_hint')} @change=${(event: CustomEvent) => this._change('block_id', event.detail.value)}></platform-field>
                 ${this._problemsFor('block_id')}
-                ${entry.properties.filter((property: any) => !HIDDEN_PROPERTIES.has(property.name) && property.name !== 'block_id').map((property: any) => html`${this._editor(property)}${this._problemsFor(property.name)}`)}
+                ${entry.properties.filter((property) => !HIDDEN_PROPERTIES.has(property.name) && property.name !== 'block_id').map((property) => html`${this._editor(property)}${this._problemsFor(property.name)}`)}
             </div>
             ${this._renderBlockActions()}
             ${this._renderContract()}

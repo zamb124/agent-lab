@@ -10,7 +10,6 @@ import struct
 import wave
 
 import pytest
-from core.websocket import WsCommandError
 
 from apps.provider_litserve.stt.engines import (
     _decode_audio_to_floats,
@@ -18,6 +17,7 @@ from apps.provider_litserve.stt.engines import (
 )
 from apps.provider_litserve.tts.engines import _pcm_to_wav, parse_tts_body
 from apps.provider_litserve.vad.engines import parse_vad_body
+from core.websocket import WsCommandError
 
 pytestmark = pytest.mark.timeout(15)
 

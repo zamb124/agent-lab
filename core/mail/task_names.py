@@ -1,7 +1,7 @@
 """Declaration-модуль почтовых задач (очередь ``idle``).
 
 Лёгкий: только объявления. Импортируется producer'ами (core/mail/enqueue.py,
-service.py) и impl-модулями idle worker (apps/idle_worker/tasks/mail_*).
+service.py) и impl-модулями idle worker (apps/idle/tasks/mail_*).
 """
 
 from core.tasks import declare_task

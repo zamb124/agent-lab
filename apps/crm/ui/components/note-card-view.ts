@@ -210,9 +210,9 @@ export class CRMNoteCardView extends PlatformElement {
         _voiceSearchFilteredNoMatch: { state: true },
         _contextSearchFilteredNoMatch: { state: true },
     };
-    declare note: Record<string, any> | null;
-    declare card: Record<string, any> | null;
-    declare relationshipTypes: Record<string, any>[];
+    declare note: Record<string, unknown> | null;
+    declare card: Record<string, unknown> | null;
+    declare relationshipTypes: Record<string, unknown>[];
     declare mode: string;
     declare defaultNamespace: string;
     declare mobileHeaderPanel: string;
@@ -222,7 +222,7 @@ export class CRMNoteCardView extends PlatformElement {
     declare aiProgressStage: string;
     declare aiProgressStatus: string;
     declare markdownFormatting: boolean;
-    declare markdownFormatProgress: Record<string, any> | null;
+    declare markdownFormatProgress: Record<string, unknown> | null;
     declare mobileHeaderActionsHost: HTMLElement | null;
     declare mobileToolbarPorted: boolean;
     declare _editName: string;
@@ -233,7 +233,7 @@ export class CRMNoteCardView extends PlatformElement {
     declare _formError: string;
     declare _mentionOpen: boolean;
     declare _mentionQuery: string;
-    declare _mentionResults: Record<string, any>[];
+    declare _mentionResults: Record<string, unknown>[];
     declare _mentionLoading: boolean;
     declare _mentionHoverEntityId: string;
     declare _mentionHoverAnchorRect: { left: number; top: number; width: number; height: number } | null;
@@ -245,11 +245,11 @@ export class CRMNoteCardView extends PlatformElement {
     declare _editContextEntityId: string;
     declare _voiceSearchQuery: string;
     declare _voiceSearchOpen: boolean;
-    declare _voiceSearchResults: Record<string, any>[];
+    declare _voiceSearchResults: Record<string, unknown>[];
     declare _voiceSearchLoading: boolean;
     declare _contextSearchQuery: string;
     declare _contextSearchOpen: boolean;
-    declare _contextSearchResults: Record<string, any>[];
+    declare _contextSearchResults: Record<string, unknown>[];
     declare _contextSearchLoading: boolean;
     declare _voiceSearchFilteredNoMatch: boolean;
     declare _contextSearchFilteredNoMatch: boolean;
@@ -1515,12 +1515,12 @@ export class CRMNoteCardView extends PlatformElement {
         this._uploadTargetMode = 'edit';
 
         this._crmSidebarDefaultNsSel = this.select(selectCrmSidebarOrDefaultNamespace);
-        this._localeSel = this.select((s: Record<string, any>) => {
-            const loc = s.i18n && typeof s.i18n.locale === 'string' ? s.i18n.locale.trim() : '';
-            if (loc.length > 0) {
-                return loc;
+        this._localeSel = this.select((state) => {
+            const loc = state.i18n.locale.trim();
+            if (loc.length === 0) {
+                throw new Error('CRMNoteCardView: locale required');
             }
-            return 'en';
+            return loc;
         });
     }
 
@@ -1614,7 +1614,7 @@ export class CRMNoteCardView extends PlatformElement {
             if (purpose === 'mention') {
                 if (this._mentionRequestId === null || cid !== this._mentionRequestId) return;
                 this._mentionResults = rawItems.filter(
-                    (it: Record<string, any>) => this.note === null || it.entity_id !== this.note.entity_id,
+                    (it: Record<string, unknown>) => this.note === null || it.entity_id !== this.note.entity_id,
                 );
                 this._mentionLoading = false;
                 return;
@@ -1623,7 +1623,7 @@ export class CRMNoteCardView extends PlatformElement {
                 if (this._voiceSearchRequestId === null || cid !== this._voiceSearchRequestId) return;
                 const allow = this._voiceTargetTypeIdSet();
                 const filtered = rawItems.filter(
-                    (it: Record<string, any>) => typeof it.entity_type === 'string' && allow.has(it.entity_type),
+                    (it: Record<string, unknown>) => typeof it.entity_type === 'string' && allow.has(it.entity_type),
                 );
                 this._voiceSearchFilteredNoMatch = rawItems.length > 0 && filtered.length === 0;
                 this._voiceSearchResults = filtered;
@@ -1634,7 +1634,7 @@ export class CRMNoteCardView extends PlatformElement {
                 if (this._contextSearchRequestId === null || cid !== this._contextSearchRequestId) return;
                 const allow = this._contextAnchorTypeIdSet();
                 const filtered = rawItems.filter(
-                    (it: Record<string, any>) => typeof it.entity_type === 'string' && allow.has(it.entity_type),
+                    (it: Record<string, unknown>) => typeof it.entity_type === 'string' && allow.has(it.entity_type),
                 );
                 this._contextSearchFilteredNoMatch = rawItems.length > 0 && filtered.length === 0;
                 this._contextSearchResults = filtered;
@@ -1896,7 +1896,7 @@ export class CRMNoteCardView extends PlatformElement {
         if (item === null) {
             return fallbackEntityGlyph();
         }
-        const record: Record<string, any> = {
+        const record: Record<string, unknown> = {
             entity_type: item.entity_type,
             entity_subtype: item.entity_subtype,
             namespace: item.namespace,
@@ -1904,7 +1904,7 @@ export class CRMNoteCardView extends PlatformElement {
         return entityDisplayIconName(record, this._entityTypeItems());
     }
 
-    _pickerTypeLabelForItem(item: Record<string, any>): string {
+    _pickerTypeLabelForItem(item: Record<string, unknown>): string {
         if (!item || typeof item !== 'object') {
             return '';
         }
@@ -2014,9 +2014,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._draftEditHydrated = false;
         this._editName = typeof note.name === 'string' ? note.name : '';
         this._editDescription = typeof note.description === 'string' ? note.description : '';
-        const dateAttr = note.attributes && typeof note.attributes === 'object'
-            ? note.attributes.note_date
-            : null;
+        const dateAttr = isPlainRecord(note.attributes) ? note.attributes.note_date : null;
         const sourceDate = typeof note.note_date === 'string' && note.note_date.length > 0
             ? note.note_date
             : (typeof dateAttr === 'string' ? dateAttr : '');
@@ -2060,7 +2058,7 @@ export class CRMNoteCardView extends PlatformElement {
 
     _summaryText() {
         const attrs = this.note?.attributes;
-        if (!attrs || typeof attrs !== 'object') {
+        if (!isPlainRecord(attrs)) {
             return '';
         }
         const text = attrs.ai_summary;
@@ -2072,7 +2070,7 @@ export class CRMNoteCardView extends PlatformElement {
 
     _summaryGeneratedAt() {
         const attrs = this.note?.attributes;
-        if (!attrs || typeof attrs !== 'object') {
+        if (!isPlainRecord(attrs)) {
             return '';
         }
         const value = attrs.ai_summary_generated_at;
@@ -2084,7 +2082,7 @@ export class CRMNoteCardView extends PlatformElement {
 
     _summaryEntities() {
         const attrs = this.note?.attributes;
-        if (!attrs || typeof attrs !== 'object') {
+        if (!isPlainRecord(attrs)) {
             return [];
         }
         const items = attrs.ai_summary_entities;
@@ -2098,11 +2096,11 @@ export class CRMNoteCardView extends PlatformElement {
 
     _noteAnalysisErrorMessage() {
         const note = this.note;
-        if (!note || typeof note !== 'object') {
+        if (!isPlainRecord(note)) {
             return '';
         }
         const attrs = note.attributes;
-        if (!attrs || typeof attrs !== 'object') {
+        if (!isPlainRecord(attrs)) {
             return '';
         }
         const msg = attrs.ai_analysis_last_error;
@@ -2113,7 +2111,7 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _voiceContextChips() {
-        const relationships: Record<string, any>[] = Array.isArray(this.card?.relationships)
+        const relationships: Record<string, unknown>[] = Array.isArray(this.card?.relationships)
             ? this.card.relationships
             : [];
         const noteId = this.note ? this.note.entity_id : '';
@@ -2155,7 +2153,7 @@ export class CRMNoteCardView extends PlatformElement {
         if (!Array.isArray(this.relationshipTypes)) {
             return String(typeId);
         }
-        const found = this.relationshipTypes.find((rt: Record<string, any>) => rt && rt.type_id === typeId);
+        const found = this.relationshipTypes.find((rt: Record<string, unknown>) => rt && rt.type_id === typeId);
         if (!found) return String(typeId);
         return typeof found.name === 'string' && found.name.length > 0 ? found.name : String(typeId);
     }
@@ -2408,7 +2406,7 @@ export class CRMNoteCardView extends PlatformElement {
         return ev.id;
     }
 
-    _renderEntityPickerPopover(kind: string, loading: boolean, queryMinLen: number, emptyKey: string, rows: Record<string, any>[], onPick: (item: Record<string, any>) => void, noRowsKey: string): unknown {
+    _renderEntityPickerPopover(kind: string, loading: boolean, queryMinLen: number, emptyKey: string, rows: Record<string, unknown>[], onPick: (item: Record<string, unknown>) => void, noRowsKey: string): unknown {
         if (loading === true) {
             return html`
                 <div class="mention-popover mention-popover--entity-list">
@@ -2523,7 +2521,7 @@ export class CRMNoteCardView extends PlatformElement {
         }, 220);
     }
 
-    _onPickVoiceSearchItem(item: Record<string, any>): void {
+    _onPickVoiceSearchItem(item: Record<string, unknown>): void {
         if (!item || typeof item.entity_id !== 'string' || item.entity_id.length === 0) {
             return;
         }
@@ -2533,7 +2531,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._voiceSearchOpen = false;
     }
 
-    _onPickContextSearchItem(item: Record<string, any>): void {
+    _onPickContextSearchItem(item: Record<string, unknown>): void {
         if (!item || typeof item.entity_id !== 'string' || item.entity_id.length === 0) {
             return;
         }
@@ -2543,7 +2541,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._contextSearchOpen = false;
     }
 
-    _subtypeEnumConfig(subtypes: Record<string, any>[]): { values: { value: string; label: string }[] } {
+    _subtypeEnumConfig(subtypes: readonly string[]): { values: { value: string; label: string }[] } {
         if (!Array.isArray(subtypes)) {
             throw new Error('CRMNoteCardView._subtypeEnumConfig: subtypes must be an array');
         }
@@ -2809,7 +2807,7 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
-    _onMentionPick(item: Record<string, any>): void {
+    _onMentionPick(item: Record<string, unknown>): void {
         if (this._mentionTriggerIndex < 0) return;
         const from = this._mentionTriggerIndex;
         const to = typeof this._mentionToIndex === 'number' && this._mentionToIndex >= from
@@ -2817,11 +2815,16 @@ export class CRMNoteCardView extends PlatformElement {
             : from + 1 + this._mentionQuery.length;
         const before = this._editDescription.slice(0, from);
         const after = this._editDescription.slice(to);
-        const insert = `@[${item.name}](${item.entity_id}) `;
+        const name = item.name;
+        const entityId = item.entity_id;
+        if (typeof name !== 'string' || name.length === 0 || typeof entityId !== 'string' || entityId.length === 0) {
+            throw new Error('CRMNoteCardView: mention entity required');
+        }
+        const insert = `@[${name}](${entityId}) `;
         const next = `${before}${insert}${after}`;
         this._editDescription = next;
         this._mentionedEntityIds = new Set(this._mentionedEntityIds);
-        this._mentionedEntityIds.add(item.entity_id);
+        this._mentionedEntityIds.add(entityId);
         this._closeMention();
         const editor = this.renderRoot.querySelector('platform-markdown-editor.description-md-editor');
         if (!(editor instanceof PlatformMarkdownEditor)) {
@@ -2921,7 +2924,7 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _editAttachments() {
-        const viewMap = new Map<string, Record<string, any>>();
+        const viewMap = new Map<string, Record<string, unknown>>();
         for (const item of this._viewAttachments()) {
             if (item.id.length > 0) {
                 viewMap.set(item.id, item);
@@ -2958,7 +2961,7 @@ export class CRMNoteCardView extends PlatformElement {
         });
     }
 
-    _attachmentItemsForMode(mode: string): Record<string, any>[] {
+    _attachmentItemsForMode(mode: string): Record<string, unknown>[] {
         if (mode === 'edit') {
             return this._editAttachments();
         }
@@ -3002,7 +3005,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._closeAttachmentsPopover();
     }
 
-    _openAttachmentItem(item: Record<string, any>): void {
+    _openAttachmentItem(item: Record<string, unknown>): void {
         if (!item || typeof item !== 'object') return;
         if (typeof item.id === 'string' && item.id.length > 0) {
             this.openFile({
@@ -3019,7 +3022,7 @@ export class CRMNoteCardView extends PlatformElement {
         }
     }
 
-    _onAttachmentRowKeydown(event: KeyboardEvent, item: Record<string, any>): void {
+    _onAttachmentRowKeydown(event: KeyboardEvent, item: Record<string, unknown>): void {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         this._openAttachmentItem(item);
@@ -3080,15 +3083,21 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
-    _renderAttachmentRow(item: Record<string, any>, mode: string): unknown {
+    _renderAttachmentRow(item: Record<string, unknown>, mode: string): unknown {
         if (mode !== 'view' && mode !== 'edit') {
             throw new Error('CRMNoteCardView._renderAttachmentRow: mode must be "view" or "edit"');
+        }
+        const status = item.status;
+        const attachmentId = item.id;
+        const downloadUrl = item.downloadUrl;
+        if (typeof status !== 'string' || typeof attachmentId !== 'string' || typeof downloadUrl !== 'string') {
+            throw new Error('CRMNoteCardView: attachment row required');
         }
         const iconName = _resolveAttachmentIconName(item.filename, item.contentType);
         const metaParts = [];
         const bytes = formatBytes(item.sizeBytes);
         if (bytes.length > 0) metaParts.push(bytes);
-        if (item.status.length > 0) metaParts.push(item.status);
+        if (status.length > 0) metaParts.push(status);
         const metaText = metaParts.join(' · ');
         return html`
             <div
@@ -3104,7 +3113,7 @@ export class CRMNoteCardView extends PlatformElement {
                     <p class="attachments-popover-meta">${metaText}</p>
                 </div>
                 <div class="attachments-popover-actions">
-                    ${item.id.length > 0 || item.downloadUrl.length > 0 ? html`
+                    ${attachmentId.length > 0 || downloadUrl.length > 0 ? html`
                         <button
                             type="button"
                             class="attachment-action-btn"
@@ -3311,7 +3320,7 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
-    _renderMobileHeaderPanel(summaryText: string, summaryTime: string, summaryEntities: Record<string, any>[]): unknown {
+    _renderMobileHeaderPanel(summaryText: string, summaryTime: string, summaryEntities: readonly string[]): unknown {
         if (this.mobileHeaderPanel === 'summary') {
             return this._renderSummaryCard(summaryText, summaryTime, summaryEntities);
         }
@@ -3492,25 +3501,30 @@ export class CRMNoteCardView extends PlatformElement {
             return nothing;
         }
         const mfProg = this.markdownFormatProgress;
-        const mfHasNums = mfProg !== null && typeof mfProg === 'object'
+        const progress = isPlainRecord(mfProg)
             && typeof mfProg.done === 'number'
             && typeof mfProg.total === 'number'
-            && mfProg.total > 0;
-        const mfPct = mfHasNums ? Math.min(100, Math.round((mfProg.done / mfProg.total) * 100)) : 0;
+            && mfProg.total > 0
+            ? {
+                done: mfProg.done,
+                total: mfProg.total,
+                pct: Math.min(100, Math.round((mfProg.done / mfProg.total) * 100)),
+            }
+            : null;
         return html`
             <div class="note-markdown-format-banner" role="status" aria-live="polite">
                 <glass-spinner size="sm"></glass-spinner>
                 <div class="note-markdown-format-banner-main">
                     <div class="note-markdown-format-banner-head">
                         <span>${
-                            mfHasNums
-                                ? this.t('note_view.markdown_format_progress', { done: mfProg.done, total: mfProg.total })
+                            progress !== null
+                                ? this.t('note_view.markdown_format_progress', { done: progress.done, total: progress.total })
                                 : this.t('note_view.markdown_formatting')
                         }</span>
-                        ${mfHasNums ? html`<span class="note-markdown-format-banner-pct">${mfPct}%</span>` : ''}
+                        ${progress !== null ? html`<span class="note-markdown-format-banner-pct">${progress.pct}%</span>` : ''}
                     </div>
-                    ${mfHasNums
-                        ? html`<div class="note-markdown-format-banner-line"><span style="width:${mfPct}%;"></span></div>`
+                    ${progress !== null
+                        ? html`<div class="note-markdown-format-banner-line"><span style="width:${progress.pct}%;"></span></div>`
                         : html`<div class="note-markdown-format-banner-line indeterminate"><span></span></div>`}
                 </div>
             </div>
@@ -3642,7 +3656,7 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
-    _renderSummaryCard(summaryText: string, summaryTime: string, summaryEntities: Record<string, any>[]): unknown {
+    _renderSummaryCard(summaryText: string, summaryTime: string, summaryEntities: readonly string[]): unknown {
         const stage = typeof this.aiProgressStage === 'string' ? this.aiProgressStage : '';
         const status = typeof this.aiProgressStatus === 'string' ? this.aiProgressStatus : '';
         const progressPctRaw = typeof this.aiProgressPct === 'number' ? this.aiProgressPct : 0;
@@ -3748,7 +3762,7 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
-    _renderTasksCard(tasks: Record<string, any>[]): unknown {
+    _renderTasksCard(tasks: Record<string, unknown>[]): unknown {
         return html`
             <section class="card tasks-card">
                 <h3 class="card-title">${this.t('note_view.tasks_title')}</h3>
@@ -3756,7 +3770,12 @@ export class CRMNoteCardView extends PlatformElement {
                     ${tasks.length === 0
                         ? html`<p class="related-empty">${this.t('note_view.no_tasks')}</p>`
                         : tasks.map((task) => {
-                            const text = task.name && task.name.length > 0 ? task.name : task.entity_id;
+                            const entityId = task.entity_id;
+                            if (typeof entityId !== 'string' || entityId.length === 0) {
+                                throw new Error('CRMNoteCardView: task entity_id required');
+                            }
+                            const name = task.name;
+                            const text = typeof name === 'string' && name.length > 0 ? name : entityId;
                             const workItemId = typeof task.work_item_id === 'string' ? task.work_item_id : '';
                             return html`
                                 <div class="task-row">
@@ -3764,7 +3783,7 @@ export class CRMNoteCardView extends PlatformElement {
                                         type="button"
                                         class="task-text"
                                         style="background: transparent; border: none; padding: 0; text-align: left; cursor: pointer; font: inherit;"
-                                        @click=${() => this._emitEntityOpen(task.entity_id)}
+                                        @click=${() => this._emitEntityOpen(entityId)}
                                     >${text}</button>
                                     ${workItemId.length > 0
                                         ? html`<platform-work-item-badge
@@ -3779,7 +3798,7 @@ export class CRMNoteCardView extends PlatformElement {
                                         type="button"
                                         class="task-remove"
                                         title=${this.t('note_view.task_remove')}
-                                        @click=${() => this._onTaskRemove(task.entity_id)}
+                                        @click=${() => this._onTaskRemove(entityId)}
                                     >
                                         <platform-icon name="close" size="14"></platform-icon>
                                     </button>

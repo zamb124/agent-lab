@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from taskiq import Context as TaskiqContext
 from taskiq.message import TaskiqMessage
 
@@ -66,7 +66,6 @@ from apps.flows.src.models.evaluation_lab import (
     EvaluationInputNode,
     EvaluationMonitor,
     EvaluationMonitorCycleResult,
-    EvaluationMonitorFilter,
     EvaluationMonitorObservation,
     EvaluationMonitorObservationCurationResult,
     EvaluationMonitorObservationState,
@@ -84,7 +83,6 @@ from apps.flows.src.models.evaluation_lab import (
     EvaluationRunCreateRequest,
     EvaluationRunEvent,
     EvaluationRunEventsPage,
-    EvaluationRunJob,
     EvaluationRunJobState,
     EvaluationRunState,
     EvaluationRunSuiteScope,
@@ -92,24 +90,22 @@ from apps.flows.src.models.evaluation_lab import (
     EvaluationRunWithCases,
     EvaluationStateOperator,
     EvaluationSuite,
-    EvaluationSuiteVersion,
     EvaluationTargetFlow,
     EvaluationTaskiqExecutionContext,
     EvaluationTraceAssertion,
 )
 from apps.flows.src.models.node_config import NodeConfig
+from apps.flows.src.tasks.evaluation_tasks import (
+    enqueue_pending_evaluation_runs,
+    execute_evaluation_run,
+    run_evaluation_gate_policy,
+    run_evaluation_monitor_cycle,
+)
 from apps.flows.src.tasks.task_names import (
     TASK_ENQUEUE_PENDING_EVALUATION_RUNS,
     TASK_EXECUTE_EVALUATION_RUN,
     TASK_RUN_EVALUATION_GATE_POLICY,
     TASK_RUN_EVALUATION_MONITOR_CYCLE,
-)
-from apps.flows_worker.broker import broker as flows_worker_broker
-from apps.flows_worker.evaluation_tasks import (
-    enqueue_pending_evaluation_runs,
-    execute_evaluation_run,
-    run_evaluation_gate_policy,
-    run_evaluation_monitor_cycle,
 )
 from core.clients.llm.mock import MockLLM, MockLLMQueuedResponse
 from core.context import clear_context, get_context, set_context
@@ -119,10 +115,15 @@ from core.models.context_models import Context
 from core.models.identity_models import User
 from core.pagination import ListResponse
 from core.state import ExecutionState
+from core.tasks.registry import queue_broker
 from core.tracing.models import Span
 from core.types import JsonObject
 from core.websocket import WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
+
+flows_worker_broker = queue_broker("flows_worker")
+if flows_worker_broker is None:
+    raise RuntimeError("flows_worker broker is not registered")
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.real_taskiq]
 

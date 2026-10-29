@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from oxyde import Field as DbField
 from oxyde import Index
@@ -47,3 +47,26 @@ class WorkflowEvent(PlatformModel):
     prev_state_hash: str | None = DbField(default=None)
     causation_id: str | None = DbField(default=None)
     correlation_id: str | None = DbField(default=None)
+
+    @classmethod
+    async def list_after_through_sequence_asc(
+        cls,
+        *,
+        company_id: str,
+        session_id: str,
+        execution_branch_id: str,
+        after_sequence: int,
+        through_sequence: int,
+    ) -> list[Self]:
+        """События ветки с sequence в (after_sequence, through_sequence], ORDER BY sequence ASC. Предела нет."""
+        return await (
+            cls.objects.filter(
+                company_id=company_id,
+                session_id=session_id,
+                execution_branch_id=execution_branch_id,
+                sequence__gt=after_sequence,
+                sequence__lte=through_sequence,
+            )
+            .order_by("sequence")
+            .all()
+        )

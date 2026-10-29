@@ -56,7 +56,7 @@ class CatalogService:
     # --- UoM ---
 
     async def list_uoms(self, *, company_id: str) -> list[UnitOfMeasure]:
-        return await UnitOfMeasure.list_by_category_and_name(company_id)
+        return await UnitOfMeasure.list_by_category_and_name_asc(company_id)
 
     # --- Products ---
 
@@ -230,7 +230,7 @@ class CatalogService:
     async def list_products(
         self, *, company_id: str, limit: int, offset: int
     ) -> OffsetPage[StockProduct]:
-        rows = await StockProduct.list_by_sku(
+        rows = await StockProduct.list_by_sku_asc(
             company_id, limit=limit, offset=offset
         )
         total = await StockProduct.count_for_company(company_id)
@@ -303,7 +303,7 @@ class CatalogService:
     async def list_lots(
         self, *, company_id: str, product_id: str | None
     ) -> list[StockLot]:
-        return await StockLot.list_all_by_name(company_id, product_id=product_id)
+        return await StockLot.list_by_name_asc(company_id, product_id=product_id)
 
     # --- Упаковки товаров (AUoM) ---
 
@@ -340,7 +340,7 @@ class CatalogService:
     async def list_packagings(
         self, *, company_id: str, product_id: str | None
     ) -> list[StockPackagingView]:
-        uoms = await UnitOfMeasure.list_packagings(company_id, product_id)
+        uoms = await UnitOfMeasure.list_packagings_by_product_id_and_factor_asc(company_id, product_id)
         if not uoms:
             return []
         products = await StockProduct.get_many(

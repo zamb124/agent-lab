@@ -30,7 +30,7 @@ class FilePurgeService:
 
         batch_limit = settings.files.retention.purge_batch_size
         now = datetime.now(UTC)
-        expired = await FileRecord.list_expired(before=now, limit=batch_limit)
+        expired = await FileRecord.list_unordered_expired(before=now, limit=batch_limit)
         failed: list[str] = []
         purged = 0
         for record in expired:

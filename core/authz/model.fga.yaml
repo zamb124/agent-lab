@@ -190,12 +190,6 @@ tuples:
     object: flow_ui_share:share1
   - user: company:acme
     relation: company
-    object: agent_device:dev1
-  - user: user:anne
-    relation: owner
-    object: agent_device:dev1
-  - user: company:acme
-    relation: company
     object: platform_namespace:acme/default
   - user: company:acme#member
     relation: viewer
@@ -417,19 +411,6 @@ tests:
         assertions:
           can_view: true
           can_edit: true
-
-  - name: agent-device-owner-and-company-admin
-    check:
-      - user: user:anne
-        object: agent_device:dev1
-        assertions:
-          can_view: true
-          can_admin: true
-      - user: user:bob
-        object: agent_device:dev1
-        assertions:
-          can_view: false
-          can_admin: false
 
   - name: stock-warehouse-viewer-editor
     check:

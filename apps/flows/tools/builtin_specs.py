@@ -133,8 +133,6 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.flows.flow_ui_tools", "ui_navigate"),
     ("apps.flows.tools.flows.flow_ui_tools", "state_set"),
     ("apps.flows.tools.misc.agent_session_tools", "ask_user"),
-    ("apps.flows.tools.device.device_tools", "device_tools_list"),
-    ("apps.flows.tools.device.device_tools", "device_tools_call"),
     ("apps.flows.tools.text.summarize_text", "summarize_text"),
     ("apps.flows.tools.misc.agent_session_tools", "hitl_operator_task"),
     ("apps.flows.tools.flows.agent_skill_tools", "load_agent_skill"),

@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 from a2a.helpers.proto_helpers import get_message_text
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.di import FlowsDi
 from core.clients.llm.mock import MockLLMQueuedResponse

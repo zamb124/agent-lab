@@ -64,8 +64,8 @@ async def test_repository_company_isolation(unique_id: str) -> None:
     assert masked is not None
     assert masked.payload.base.value is None
 
-    list_a = await SecretVariable.masked_page_by_variable_key(company_a)
-    list_b = await SecretVariable.masked_page_by_variable_key(company_b)
+    list_a = await SecretVariable.list_masked_by_variable_key_asc(company_a)
+    list_b = await SecretVariable.list_masked_by_variable_key_asc(company_b)
     masked_a = next(item for item in list_a if item.variable_key == variable_key)
     masked_b = next(item for item in list_b if item.variable_key == variable_key)
     assert masked_a.payload.base.value is None

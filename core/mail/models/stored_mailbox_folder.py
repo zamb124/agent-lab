@@ -57,7 +57,8 @@ class StoredMailboxFolder(PlatformModel):
 
 
     @classmethod
-    async def list_for_binding(cls, mailbox_binding_id: str) -> list[Self]:
+    async def list_for_binding_by_sort_index_and_folder_name_asc(cls, mailbox_binding_id: str) -> list[Self]:
+        """Папки привязки, ORDER BY sort_index, folder_name ASC. Предела нет. Пустой mailbox_binding_id — ValueError mailbox_binding_id cannot be empty."""
         return await cls.objects.filter(
             mailbox_binding_id=mail_required(mailbox_binding_id, "mailbox_binding_id"),
         ).order_by("sort_index", "folder_name").all()
@@ -85,7 +86,7 @@ class StoredMailboxFolder(PlatformModel):
             _ = await cls.objects.filter(mailbox_binding_id=binding_id).delete()
             for row in rows:
                 _ = await cls.objects.create(instance=row)
-        return await cls.list_for_binding(binding_id)
+        return await cls.list_for_binding_by_sort_index_and_folder_name_asc(binding_id)
 
     @classmethod
     async def replace_sort_indices(
@@ -98,7 +99,7 @@ class StoredMailboxFolder(PlatformModel):
         binding_id = mail_required(mailbox_binding_id, "mailbox_binding_id")
         if len(folder_name_to_index) == 0:
             raise ValueError("folder_name_to_index is required")
-        existing = await cls.list_for_binding(binding_id)
+        existing = await cls.list_for_binding_by_sort_index_and_folder_name_asc(binding_id)
         known = {folder.folder_name for folder in existing}
         payload_names = set(folder_name_to_index.keys())
         if known != payload_names:
@@ -111,7 +112,7 @@ class StoredMailboxFolder(PlatformModel):
             for folder in existing:
                 folder.sort_index = folder_name_to_index[folder.folder_name]
                 _ = await folder.save()
-        return await cls.list_for_binding(binding_id)
+        return await cls.list_for_binding_by_sort_index_and_folder_name_asc(binding_id)
 
 
 

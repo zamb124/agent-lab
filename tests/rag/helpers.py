@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source

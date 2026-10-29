@@ -78,14 +78,14 @@ alwaysApply: false
 ## Гейты
 ```
 
-«Модель» — только если у темы есть свои сущности; «Канон» — до 15 нумерованных норм. Сквозные правила: `database`, `configuration`, `events`, `authorization`, `logging`, `tracing`, `billing`, `taskiq`, `integrations`, `infrastructure`, `testing`, `code_search`.
+«Модель» — только если у темы есть свои сущности; «Канон» — до 15 нумерованных норм. Сквозные правила: `database`, `configuration`, `events`, `authorization`, `logging`, `tracing`, `billing`, `taskiq`, `integrations`, `infrastructure`, `testing`, `code_search`, `scripts`.
 
 ## Формат раздела «Гейты»
 
 ```markdown
 ## Гейты
 
-- `scripts/check_x.py` (`make lint`) — <что держит>.
+- `scripts/gates/<область>/<имя>.py` (`make lint`) — <что держит>.
 - `tests/<path>/test_x.py` — <какой инвариант проверяет>.
 ```
 

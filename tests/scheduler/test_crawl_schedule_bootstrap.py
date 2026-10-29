@@ -12,7 +12,7 @@ from apps.scheduler.crawl_schedule_bootstrap import (
     CRAWL_ORCHESTRATOR_DEFAULT_PROFILE_ID,
     ensure_search_crawl_schedules,
 )
-from apps.search_worker.tasks.task_names import CRAWL_ORCHESTRATOR_TICK
+from apps.search.tasks.task_names import CRAWL_ORCHESTRATOR_TICK
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,

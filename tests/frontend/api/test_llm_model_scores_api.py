@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.ai.models import AIModelRecord, LLMModelScore
 from core.ai.provider_error import AIProviderErrorClass
@@ -91,7 +91,7 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     assert "score_dimensions" not in body["item"]
     assert "cache_rescore" in body
 
-    row = await LLMModelScore.overlay_row(
+    row = await LLMModelScore.by_provider_model_id_and_capability(
         provider=provider,
         model_id=model_id,
         capability="llm_chat",
@@ -127,7 +127,7 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     )
     assert delete_response.status_code == 200
     assert delete_response.json()["deleted"] is True
-    assert await LLMModelScore.overlay_row(
+    assert await LLMModelScore.by_provider_model_id_and_capability(
         provider=provider,
         model_id=model_id,
         capability="llm_chat",
@@ -181,7 +181,7 @@ async def test_llm_model_score_overlay_upsert_updates_existing_row(
     provider = "github"
     model_id = f"unit/overlay-{unique_id}"
 
-    created = await LLMModelScore.upsert_overlay(
+    created = await LLMModelScore.upsert_result_by_provider_model_id_and_capability(
         provider=provider,
         model_id=model_id,
         capability="llm_chat",
@@ -193,7 +193,7 @@ async def test_llm_model_score_overlay_upsert_updates_existing_row(
     assert created.row.editorial_prior == 1.0
     assert created.row.note == "initial"
 
-    updated = await LLMModelScore.upsert_overlay(
+    updated = await LLMModelScore.upsert_result_by_provider_model_id_and_capability(
         provider=provider,
         model_id=model_id,
         capability="llm_chat",
@@ -201,14 +201,14 @@ async def test_llm_model_score_overlay_upsert_updates_existing_row(
         editorial_prior=-1.0,
         note="forced",
     )
-    row = await LLMModelScore.overlay_row(provider=provider, model_id=model_id, capability="llm_chat")
+    row = await LLMModelScore.by_provider_model_id_and_capability(provider=provider, model_id=model_id, capability="llm_chat")
     assert updated.created is False
     assert row is not None
     assert row.editorial_prior == -1.0
     assert row.enabled is False
     assert row.note == "forced"
 
-    _ = await LLMModelScore.delete_overlay(provider=provider, model_id=model_id, capability="llm_chat")
+    _ = await LLMModelScore.delete_by_provider_model_id_and_capability(provider=provider, model_id=model_id, capability="llm_chat")
 
 
 @pytest.mark.asyncio
@@ -254,9 +254,9 @@ async def test_llm_model_scores_list_reads_redis_cooldown(
     )
     if not configs:
         pytest.fail("openrouter must be configured for free-pool in test settings")
-    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
-    response = httpx.Response(429, text="rate limited by provider", request=request)
-    http_error = httpx.HTTPStatusError("429", request=request, response=response)
+    request = httpx2.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    response = httpx2.Response(429, text="rate limited by provider", request=request)
+    http_error = httpx2.HTTPStatusError("429", request=request, response=response)
     for candidate in configs:
         await set_candidate_cooldown(candidate, 40, error=http_error)
     redis = RedisClient(settings.database.redis_url)
@@ -282,7 +282,7 @@ async def test_llm_model_scores_list_reads_redis_cooldown(
         assert provider_chip["availability"] in {"available", "cooldown"}
     finally:
         _ = await redis.delete(*(cooldown_redis_key(candidate) for candidate in configs))
-        _ = await LLMModelScore.delete_overlay(
+        _ = await LLMModelScore.delete_by_provider_model_id_and_capability(
             provider=provider,
             model_id=model_id,
             capability="llm_chat",

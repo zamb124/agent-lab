@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.rag.realtime.command_router import RAG_OPERATIONS
 from core.types import JsonObject, JsonValue, require_json_object

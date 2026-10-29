@@ -40,6 +40,16 @@ function _pickString(...candidates: unknown[]) {
     return null;
 }
 
+function _optionString(options: Record<string, unknown>, keys: readonly string[], fallback: string): string {
+    for (const key of keys) {
+        const value = options[key];
+        if (typeof value === 'string' && value.length > 0) {
+            return value;
+        }
+    }
+    return fallback;
+}
+
 function _normalizeEditorBranchId(rawBranchId: any) {
     if (typeof rawBranchId !== 'string' || rawBranchId.length === 0) {
         return 'base';
@@ -56,23 +66,22 @@ function _normalizeApiBranchId(rawBranchId: any) {
  * Standing Lara metadata for Flows editor: IDs and scalars only.
  * Full node/flow bodies are fetched via tools (flows_get_node / flows_list_nodes).
  */
-export function buildLaraFlowsContext(editorStateRaw: any, routerParamsRaw = {}, options = {}) {
+export function buildLaraFlowsContext(editorStateRaw: unknown, routerParamsRaw: unknown = {}, optionsRaw: unknown = {}) {
     const editorState = isPlainObject(editorStateRaw) ? editorStateRaw : {};
     const params = isPlainObject(routerParamsRaw) ? routerParamsRaw : {};
-    const flowId = _pickString(editorState.flowId, (params as Record<string, any>).flowId, (options as Record<string, any>).flow_id);
+    const options = isPlainObject(optionsRaw) ? optionsRaw : {};
+    const flowId = _pickString(editorState.flowId, params.flowId, options.flow_id);
     const branchId = _normalizeEditorBranchId(
-        _pickString(editorState.currentBranchId, (params as Record<string, any>).branchId, (options as Record<string, any>).branch_id, 'base'),
+        _pickString(editorState.currentBranchId, params.branchId, options.branch_id, 'base'),
     );
-    const nodeId = _pickString((options as Record<string, any>).node_id, editorState.selectedNodeId);
+    const nodeId = _pickString(options.node_id, editorState.selectedNodeId);
     const branchData = isPlainObject(editorState.branchData) ? editorState.branchData : { nodes: {} };
     const nodes = isPlainObject(branchData.nodes) ? branchData.nodes : {};
     const edges = Array.isArray(branchData.edges) ? branchData.edges : [];
     const node = nodeId && isPlainObject(nodes[nodeId]) ? nodes[nodeId] : null;
     const nodeType = node && typeof node.type === 'string' ? node.type : null;
-    const requestKind = asString((options as Record<string, any>).request_kind || (options as Record<string, any>).requestKind || 'chat');
-    const assistantBranchId = asString(
-        (options as Record<string, any>).assistant_branch_id || (options as Record<string, any>).assistantBranchId || LARA_FLOWS_BRANCH_ID,
-    );
+    const requestKind = _optionString(options, ['request_kind', 'requestKind'], 'chat');
+    const assistantBranchId = _optionString(options, ['assistant_branch_id', 'assistantBranchId'], LARA_FLOWS_BRANCH_ID);
     const editorDirty = Boolean(editorState.isDirty);
     return {
         app_surface: 'flows',
@@ -83,13 +92,13 @@ export function buildLaraFlowsContext(editorStateRaw: any, routerParamsRaw = {},
         api_branch_id: _normalizeApiBranchId(branchId),
         assistant_branch_id: assistantBranchId,
         lara_request_kind: requestKind,
-        selection_source: asString((options as Record<string, any>).selection_source || (options as Record<string, any>).selectionSource),
+        selection_source: _optionString(options, ['selection_source', 'selectionSource'], ''),
         node_id: nodeId,
         node_type: nodeType,
         branch_node_count: Object.keys(nodes).length,
         branch_edge_count: edges.length,
         editor_dirty: editorDirty,
-        screen: asString((options as Record<string, any>).screen) || (nodeId ? 'flow_editor_node' : (flowId ? 'flow_editor' : 'flow_list')),
+        screen: _optionString(options, ['screen'], '') || (nodeId ? 'flow_editor_node' : (flowId ? 'flow_editor' : 'flow_list')),
     };
 }
 

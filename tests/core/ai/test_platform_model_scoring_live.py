@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import httpx
+import httpx2
 import pytest
 
 from core.ai.free_pool import (
@@ -199,8 +199,8 @@ async def test_live_free_pool_top_n_chat_smoke(provider: str) -> None:
         pytest.skip(f"{provider}: scored pool пуст")
 
     prompt = live_chat_smoke_prompt(EXPECTED_CHAT_MARKER)
-    last_rate_limit: httpx.HTTPStatusError | None = None
-    last_unavailable: httpx.HTTPStatusError | None = None
+    last_rate_limit: httpx2.HTTPStatusError | None = None
+    last_unavailable: httpx2.HTTPStatusError | None = None
 
     for record in candidates:
         with disable_testing_mode():
@@ -214,7 +214,7 @@ async def test_live_free_pool_top_n_chat_smoke(provider: str) -> None:
         await egress_prefer_proxy_delete(normalized_http_origin(llm.base_url))
         try:
             result = await llm.invoke([smoke_message(prompt)], max_tokens=SMOKE_MAX_TOKENS)
-        except httpx.HTTPStatusError as status_error:
+        except httpx2.HTTPStatusError as status_error:
             error_class = classify_http_status_error(provider, status_error)
             if error_class == AIProviderErrorClass.RATE_LIMITED:
                 last_rate_limit = status_error

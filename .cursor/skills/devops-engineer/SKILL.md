@@ -1,6 +1,6 @@
 ---
 name: devops-engineer
-description: DevOps инженер Платформы. Знает SSH-доступ root@31.192.111.33 (единственная нода master+GPU), полностью владеет MicroK8s + Helm-чартом deploy/helm/agent-lab/, observability стеком (Loki/Tempo/Grafana/Alloy), NVIDIA/litserve на master, CI-сборкой LinnexAgent desktop (6 платформ). Использовать при операциях на проде, диагностике подов, помощи с инцидентами, изменении инфраструктуры, добавлении ингресса/деплоймента/PVC, бэкапе/restore Postgres, продлении TLS, сборке/релизе LinnexAgent, или когда пользователь упоминает SSH/microk8s/kubectl/helm/cert-manager/postgres/redis/loki/tempo/grafana/ingress/litserve/GPU/прод/деплой/humanitec-agent-build.
+description: DevOps инженер Платформы. Знает SSH-доступ root@31.192.111.33 (единственная нода master+GPU), полностью владеет MicroK8s + Helm-чартом deploy/helm/agent-lab/, observability стеком (Loki/Tempo/Grafana/Alloy), NVIDIA/litserve на master. Использовать при операциях на проде, диагностике подов, помощи с инцидентами, изменении инфраструктуры, добавлении ингресса/деплоймента/PVC, бэкапе/restore Postgres, продлении TLS, или когда пользователь упоминает SSH/microk8s/kubectl/helm/cert-manager/postgres/redis/loki/tempo/grafana/ingress/litserve/GPU/прод/деплой.
 ---
 
 # DevOps Engineer — Платформа
@@ -74,7 +74,7 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 
 | Компонент | Тип | Дефолтная нода | nodeName path в values | PVC | Назначение |
 |---|---|---|---|---|---|
-| postgres | StatefulSet | master | `postgres.nodeName` | 50Gi | 7 сервисных БД (pgvector/pg17) |
+| postgres | StatefulSet | master | `postgres.nodeName` | 50Gi | 7 сервисных БД (pgvector/pgvector:0.8.7-pg18) |
 | redis | StatefulSet | master | `redis.nodeName` | 10Gi | TaskIQ broker, sessions, кэш, pub/sub UI events |
 | seaweedfs | StatefulSet | master | `seaweedfs.nodeName` | 50Gi | платформенное объектное хранилище, ClusterIP `seaweedfs:8333` |
 | loki | StatefulSet | master | `observability.loki.nodeName` | 100Gi | Логи 14 дней |
@@ -173,54 +173,6 @@ helm rollback agent-lab <REV> -n platform
 | `backup-postgres.sh` / `restore-postgres.sh` | pg_dumpall через kubectl exec | локально / master |
 
 При добавлении новой инфра-операции — **новый скрипт по тому же шаблону**, не разовая команда в чате/PR.
-
-## LinnexAgent desktop (CI build)
-
-**Не K8s** — отдельный GitHub Actions workflow → GitHub Release с 6 инсталляторами. Workflow files остаются `humanitec-agent-build*.yml` (технический идентификатор, не user-facing); release tags — `linnex-agent-{short_sha}`, release name/asset-имена — `LinnexAgent` (через `bundle_name` из `distro/humanitec.json`).
-
-| Что | Путь |
-|---|---|
-| Workflow release | `.github/workflows/humanitec-agent-build.yml` |
-| Workflow PR smoke | `.github/workflows/humanitec-agent-build-pr.yml` (`placeholder`) |
-| Сборка / брендинг | `apps/agent/desktop/scripts/{build,apply_branding}.sh` |
-| Verify | `apps/agent/desktop/artifact_verify.py` → `scripts/verify_agent_artifact.py` |
-| Контракт брендинга | `apps/agent/desktop/distro/humanitec.json` |
-| Upstream UI | submodule `apps/agent/desktop/vendor/goose` (Goose Electron) |
-| Make-таргеты | `mk/agent.mk`: `agent-ci-build`, `agent-build`, `agent-verify-local` |
-
-**Matrix:** `windows` · `macos-arm64` · `macos-x64` · `linux-deb` · `linux-rpm` · `linux-appimage` (timeout job 180m; Windows — самый долгий).
-
-```bash
-gh workflow run humanitec-agent-build.yml -f artifact_mode=release -f force_rebuild=true
-gh run list --workflow=humanitec-agent-build.yml --limit 3
-make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT_VERSION_SHA=$(git rev-parse HEAD)
-```
-
-**Release:** tag `linnex-agent-{short_sha}` (или input `release_tag`); matrix skip если release уже есть — `force_rebuild=true` для пересборки. Артефакты → `apps/agent/desktop/dist/*` → GitHub Release (≥6 assets).
-
-**GitHub Secrets (подпись):** `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID`, `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`; Windows: `WINDOWS_CERTIFICATE_FILE`, `WINDOWS_CERTIFICATE_PASSWORD`. Без macOS-секретов — unsigned `.dmg` (job не падает). **`AUTH_APPLE_PRIVATE_KEY`** (.p8) — Sign in with Apple OAuth (mobile/web), **не** codesign desktop. Developer ID — отдельный сертификат; чеклист: `apps/agent/desktop/docs/MACOS_SIGNING.md`.
-
-**DMG UX:** staging `.app` + symlink `Applications` перед `hdiutil create` (`build.sh`).
-
-**macOS signing pipeline:** CI Phase 1 — pre-sign goosed → forge sign → DMG + `notarytool submit` (`AGENT_MACOS_NOTARIZE=submit-only`, без poll). Phase 2 — workflow [`humanitec-agent-macos-notarize.yml`](../../.github/workflows/humanitec-agent-macos-notarize.yml): poll до 48 ч → stapler → replace DMG в release. Локальный полный sync: **`make agent-build-macos-local`**. Followup: **`make agent-notarize-followup`**. Чеклист: `apps/agent/desktop/docs/MACOS_SIGNING.md`.
-
-**Windows self-contained MSI:** `apps/agent/desktop/scripts/bundle_windows_runtime_dlls.ps1` копирует MSVC CRT + UCRT в `src/bin` рядом с `goosed.exe`; gate `dumpbin /dependents` до forge. Пользователю **не** нужен VC++ Redistributable. Child exit `3221225781` (`0xC0000135`) = missing DLL.
-
-**Prod download API:** репозиторий **private** → frontend обязан ходить в GitHub Releases API с PAT (`AGENT__RELEASES__GITHUB_TOKEN` в GitHub Secrets → `platform-secrets` → pod env). Без токена API отдаёт **404** (не 403); артефакты на Release при этом **не пропадают**. Деплой платформы билды не трогает.
-
-**Нюансы (обязательно не ломать):**
-
-| Тема | Канон |
-|---|---|
-| Node | **24** (`engines.node: ^24.10.0` в `vendor/goose/ui/desktop/package.json`); `build.sh::verify_node_engine` падает с понятной ошибкой до старта electron-forge, если версия не совпадает |
-| pnpm | `pnpm install --frozen-lockfile` из **`vendor/goose/ui`** (monorepo root), не из `ui/desktop` |
-| macOS packager | `ELECTRON_PACKAGER_TMPDIR=$REPO_ROOT/.electron-packager-tmp` — staging на том же томе, что `out/` |
-| macos-x64 | раннер **`macos-14`** (не `macos-13`); кросс: `x86_64-apple-darwin` + forge `--arch x64`; notarize вне forge |
-| Verify rpm | `%{VENDOR}` часто `(none)` у maker-rpm — ок; брендинг по `%{NAME}` + `.desktop` |
-| Verify AppImage | не `strings` по squashfs — `--appimage-extract`, проверка `.desktop` |
-| Windows MSI | `bundle_windows_runtime_dlls.ps1` → CRT+UCRT в `resources/bin` (glob `Microsoft.VC*.CRT`, не только VC143); verify через `msiexec /a` |
-
-Цепочка release: `cargo build goosed` → (macOS: pre-sign goosed; Windows: `bundle_windows_runtime_dlls`) → `apply_branding.sh` → `pnpm` → `electron-forge make` → (macOS: notarytool + staple) → DMG/MSI → verify → upload → `publish-release`.
 
 ## Чек-листы типовых операций
 

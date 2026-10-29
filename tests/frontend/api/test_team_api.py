@@ -6,7 +6,7 @@ Integration тесты для API управления командой.
 """
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.models.identity_models import Company
 

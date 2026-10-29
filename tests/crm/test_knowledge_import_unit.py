@@ -5,8 +5,8 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
-import fitz
 import openpyxl
+import pymupdf
 import pytest
 from docx import Document
 
@@ -105,12 +105,12 @@ async def test_file_reader_docx_bytes() -> None:
 
 @pytest.mark.asyncio
 async def test_file_reader_pdf_bytes(tmp_path: Path) -> None:
-    doc = fitz.open()  # pyright: ignore[reportCallIssue, reportUnknownVariableType]
-    page = doc.new_page()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-    page.insert_text((72, 72), "KN_UNIT_PDF_MARKER")  # pyright: ignore[reportUnknownMemberType]
+    doc = pymupdf.open()
+    page = doc.new_page()
+    _ = page.insert_text((72, 72), "KN_UNIT_PDF_MARKER")
     out = tmp_path / "u.pdf"
-    doc.save(out)  # pyright: ignore[reportUnknownMemberType]
-    doc.close()  # pyright: ignore[reportUnknownMemberType]
+    doc.save(out)
+    doc.close()
     raw = out.read_bytes()
 
     reader = FileReader()

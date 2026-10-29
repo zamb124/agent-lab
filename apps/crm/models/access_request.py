@@ -53,13 +53,18 @@ class AccessRequest(PlatformModel):
         return rows
 
     @classmethod
-    async def delete_duplicate_pending_for_entity(cls, entity_id: str) -> None:
-        """Удаляет повторные pending-заявки на сущность. Для пары (requester_id, resource_id) оставляет самую раннюю по created_at. Если удаление задело не одну строку — ValueError."""
-        pending = await cls.objects.filter(
+    async def list_pending_for_entity_by_created_at_asc(cls, entity_id: str) -> list[Self]:
+        """Pending-заявки на сущность, ORDER BY created_at ASC. Предела нет."""
+        return await cls.objects.filter(
             resource_type="entity",
             resource_id=entity_id,
             status="pending",
         ).order_by("created_at").all()
+
+    @classmethod
+    async def delete_duplicate_pending_for_entity(cls, entity_id: str) -> None:
+        """Удаляет повторные pending-заявки на сущность. Для пары (requester_id, resource_id) оставляет самую раннюю по created_at. Если удаление задело не одну строку — ValueError."""
+        pending = await cls.list_pending_for_entity_by_created_at_asc(entity_id)
         seen: set[tuple[str, str]] = set()
         to_delete: list[str] = []
         for request in pending:

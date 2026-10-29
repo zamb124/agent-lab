@@ -61,9 +61,9 @@ import type {
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
 
-function anyRecord(value: unknown): Record<string, any> | null {
+function anyRecord(value: unknown): Record<string, unknown> | null {
     if (!isPlainRecord(value)) return null;
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) row[key] = field;
     return row;
 }
@@ -85,6 +85,10 @@ const DEFAULT_TYPE_DRAFT = Object.freeze({
     is_voice_target: false,
     weight_coefficient: '1.0',
 });
+
+function folderIcon(value: unknown): string {
+    return typeof value === 'string' && value.length > 0 ? value : 'folder';
+}
 
 function displayText(value: unknown): string {
     if (value === undefined || value === null || value === false || value === 0 || value === '') return '';
@@ -197,7 +201,7 @@ export class CRMTemplatesPage extends PlatformPage {
     declare _editingTypeId: string;
     declare _typeFormOpen: boolean;
     declare _metaDraft: CrmTemplateMetaDraft | null;
-    declare _schemaOptions: Record<string, any> | null;
+    declare _schemaOptions: Record<string, unknown> | null;
 
     static override styles: CSSResultGroup = [
         PlatformPage.styles,
@@ -756,7 +760,7 @@ export class CRMTemplatesPage extends PlatformPage {
             this._selectedTemplateId = '';
             return;
         }
-        if (!this._selectedTemplateId || !list.some((t: Record<string, any>) => t.template_id === this._selectedTemplateId)) {
+        if (!this._selectedTemplateId || !list.some((t: Record<string, unknown>) => t.template_id === this._selectedTemplateId)) {
             const first = list[0];
             if (!isPlainRecord(first) || typeof first.template_id !== 'string') {
                 throw new Error('CRMTemplatesPage: template_id required');
@@ -775,17 +779,12 @@ export class CRMTemplatesPage extends PlatformPage {
         this._editingTypeId = '';
         const cached = anyRecord(this._templates.byId[templateId]);
         if (cached && Array.isArray(cached.types)) {
-            const cs =
-                cached.crm_settings !== undefined
-                && cached.crm_settings !== null
-                && typeof cached.crm_settings === 'object'
-                    ? cached.crm_settings
-                    : null;
+            const cs = isPlainRecord(cached.crm_settings) ? cached.crm_settings : null;
             const p = parseNoteVoiceDefaultsFromCrmSettings(cs);
             this._metaDraft = {
                 name: displayText(cached.name),
                 description: displayText(cached.description),
-                icon: cached.icon || 'folder',
+                icon: folderIcon(cached.icon),
                 default_note_voice: p.defaultNoteVoiceMode,
                 show_note_voice_ui: p.showNoteVoiceUi,
             };
@@ -969,21 +968,16 @@ export class CRMTemplatesPage extends PlatformPage {
         this._toggleTypeNamespace(detail.namespaceName, detail.enabled === true);
     }
 
-    _hydrateMetaDraft(item: Record<string, any> | null): void {
+    _hydrateMetaDraft(item: Record<string, unknown> | null): void {
         if (!item || item.template_id !== this._selectedTemplateId) {
             return;
         }
-        const cs =
-            item.crm_settings !== undefined
-            && item.crm_settings !== null
-            && typeof item.crm_settings === 'object'
-                ? item.crm_settings
-                : null;
+        const cs = isPlainRecord(item.crm_settings) ? item.crm_settings : null;
         const p = parseNoteVoiceDefaultsFromCrmSettings(cs);
         this._metaDraft = {
             name: displayText(item.name),
             description: displayText(item.description),
-            icon: item.icon || 'folder',
+            icon: folderIcon(item.icon),
             default_note_voice: p.defaultNoteVoiceMode,
             show_note_voice_ui: p.showNoteVoiceUi,
         };
@@ -998,7 +992,7 @@ export class CRMTemplatesPage extends PlatformPage {
     _templateDetailTypeCatalogRows(): { type_id: string; parent_type_id: string }[] {
         const detail = this._templates.byId[this._selectedTemplateId];
         const types = detail && Array.isArray(detail.types) ? detail.types : [];
-        return types.map((row: Record<string, any>) => ({
+        return types.map((row: Record<string, unknown>) => ({
             type_id: typeof row.type_id === 'string' ? row.type_id : '',
             parent_type_id:
                 typeof row.parent_type_id === 'string' && row.parent_type_id.length > 0
@@ -1007,7 +1001,7 @@ export class CRMTemplatesPage extends PlatformPage {
         }));
     }
 
-    _editType(item: Record<string, any>): void {
+    _editType(item: Record<string, unknown>): void {
         if (!item || typeof item.type_id !== 'string') {
             throw new Error('CRMTemplatesPage._editType: item.type_id required');
         }
@@ -1048,7 +1042,7 @@ export class CRMTemplatesPage extends PlatformPage {
         const detail = this._templates.byId[this._selectedTemplateId];
         const fromTemplate = detail && Array.isArray(detail.types)
             ? detail.types
-                .map((item: Record<string, any>) => item.type_id)
+                .map((item: Record<string, unknown>) => item.type_id)
                 .filter((item: unknown): item is string => typeof item === 'string' && item.length > 0)
             : [];
         return [...new Set(['note', 'task', ...fromTemplate])];
@@ -1163,7 +1157,7 @@ export class CRMTemplatesPage extends PlatformPage {
         `;
     }
 
-    _renderLeftPanel(templates: readonly Record<string, any>[]): TemplateResult {
+    _renderLeftPanel(templates: readonly Record<string, unknown>[]): TemplateResult {
         return html`
             <div class="panel">
                 <div class="panel-header">
@@ -1264,7 +1258,7 @@ export class CRMTemplatesPage extends PlatformPage {
         `;
     }
 
-    _renderTemplateCard(tpl: Record<string, any>): TemplateResult {
+    _renderTemplateCard(tpl: Record<string, unknown>): TemplateResult {
         const active = tpl.template_id === this._selectedTemplateId;
         const typesCount = Array.isArray(tpl.entity_type_ids)
             ? tpl.entity_type_ids.length
@@ -1290,7 +1284,7 @@ export class CRMTemplatesPage extends PlatformPage {
         `;
     }
 
-    _renderRightPanel(detail: Record<string, any> | null | undefined, types: readonly Record<string, any>[]): TemplateResult {
+    _renderRightPanel(detail: Record<string, unknown> | null | undefined, types: readonly Record<string, unknown>[]): TemplateResult {
         if (!this._selectedTemplateId) {
             return html`
                 <div class="right-column">
@@ -1319,7 +1313,7 @@ export class CRMTemplatesPage extends PlatformPage {
         `;
     }
 
-    _renderMetaPanel(detail: Record<string, any>): TemplateResult {
+    _renderMetaPanel(detail: Record<string, unknown>): TemplateResult {
         const meta = this._metaDraft;
         if (!meta) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
@@ -1407,7 +1401,7 @@ export class CRMTemplatesPage extends PlatformPage {
         `;
     }
 
-    _renderTypesListPanel(types: readonly Record<string, any>[]): TemplateResult {
+    _renderTypesListPanel(types: readonly Record<string, unknown>[]): TemplateResult {
         return html`
             <div class="panel">
                 <div class="panel-header">
@@ -1435,7 +1429,7 @@ export class CRMTemplatesPage extends PlatformPage {
         `;
     }
 
-    _renderTypeCard(item: Record<string, any>): TemplateResult {
+    _renderTypeCard(item: Record<string, unknown>): TemplateResult {
         const namespaceIds = Array.isArray(item.namespace_ids) ? item.namespace_ids : [];
         return html`
             <div class="type-card">
@@ -1463,7 +1457,12 @@ export class CRMTemplatesPage extends PlatformPage {
                     <button
                         class="btn btn-danger"
                         type="button"
-                        @click=${() => this._onDeleteType(item.type_id)}
+                        @click=${() => {
+                            if (typeof item.type_id !== 'string' || item.type_id.length === 0) {
+                                throw new Error('CRMTemplatesPage: type_id required');
+                            }
+                            void this._onDeleteType(item.type_id);
+                        }}
                     >
                         ${this.t('templates_page.delete_type')}
                     </button>

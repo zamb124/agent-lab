@@ -1,7 +1,7 @@
 """Изолированные тесты TTS-клиентов.
 
 Без mocks/monkeypatching: реальный `aiohttp` сервер на свободном порту,
-TTS-клиенты ходят туда через настоящий `httpx.AsyncClient`. Stubs
+TTS-клиенты ходят туда через настоящий `httpx2.AsyncClient`. Stubs
 (`YandexTTSClient`, `SberTTSClient`) проверяются на `NotImplementedError`,
 `MockTTSClient` — что отдаёт WAV-заглушку.
 """

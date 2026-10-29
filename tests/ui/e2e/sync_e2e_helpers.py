@@ -6,7 +6,7 @@ import asyncio
 import json
 import re
 
-import httpx
+import httpx2
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page, expect
 
@@ -333,10 +333,10 @@ async def sync_e2e_create_topic_channel_in_current_space(page: Page, unique_id: 
     return channel_name
 
 
-def _sync_client(origin: str, auth_token: str) -> httpx.AsyncClient:
+def _sync_client(origin: str, auth_token: str) -> httpx2.AsyncClient:
     from tests.ui.e2e_worker import ui_e2e_scope_headers
 
-    return httpx.AsyncClient(
+    return httpx2.AsyncClient(
         base_url=origin,
         cookies={"auth_token": auth_token},
         headers=ui_e2e_scope_headers(),

@@ -10,6 +10,7 @@ import type { ResourceItem } from '@platform/lib/events/factories/resource-colle
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
@@ -129,8 +130,10 @@ export class WikiHomePage extends PlatformPage {
     }
 
     private async _createRootPage(): Promise<void> {
-        const created = await this._createPage.run({ title: '' }) as { page?: { wiki_page_id?: string } } | null;
-        const pageId = created && created.page && created.page.wiki_page_id;
+        const created = await this._createPage.run({ title: '' });
+        const page = isPlainRecord(created) ? created.page : null;
+        const pageRecord = isPlainRecord(page) ? page : null;
+        const pageId = pageRecord === null ? undefined : pageRecord.wiki_page_id;
         if (typeof pageId !== 'string' || pageId === '') {
             return;
         }

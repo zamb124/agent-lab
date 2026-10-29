@@ -30,17 +30,13 @@ interface WikiPageRecord {
     [key: string]: unknown;
 }
 
-interface WikiLinkResult {
-    url?: unknown;
-    [key: string]: unknown;
-}
-
 interface TeamSlice {
     members?: { user_id?: unknown; name?: unknown; [key: string]: unknown }[];
     loading?: boolean;
 }
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { TEAM_EVENTS } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
@@ -51,6 +47,26 @@ import '@platform/lib/components/platform-user-chip.js';
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
     return String(value);
+}
+
+function accessState(value: unknown): WikiAccessState | null {
+    if (!isPlainRecord(value)) return null;
+    const row: WikiAccessState = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
+
+function pageRecord(value: unknown): WikiPageRecord | null {
+    if (!isPlainRecord(value)) return null;
+    const row: WikiPageRecord = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
+
+function issuedLinkUrl(value: unknown): string {
+    if (!isPlainRecord(value)) return '';
+    const url = value.url;
+    return typeof url === 'string' ? url : '';
 }
 
 
@@ -193,8 +209,8 @@ export class WikiPageAccessModal extends PlatformModal {
         this._publicLink = this.useOp('wiki/public_link');
         this._properties = this.useOp('wiki/page_properties');
         this._pages = this.useResource('wiki/pages');
-        this._teamMembersSel = this.select((s) => (s.team as TeamSlice).members);
-        this._teamLoadingSel = this.select((s) => (s.team as TeamSlice).loading);
+        this._teamMembersSel = this.select((s) => s.team.members);
+        this._teamLoadingSel = this.select((s) => s.team.loading);
     }
 
     override connectedCallback() {
@@ -209,7 +225,7 @@ export class WikiPageAccessModal extends PlatformModal {
     }
 
     private _accessState(): WikiAccessState | null {
-        return this._access.lastResult as WikiAccessState | null;
+        return accessState(this._access.lastResult);
     }
 
     private _members(): NonNullable<WikiAccessState['members']> {
@@ -232,7 +248,7 @@ export class WikiPageAccessModal extends PlatformModal {
     }
 
     private _isPublished() {
-        const page = this._page.lastResult as WikiPageRecord | null;
+        const page = pageRecord(this._page.lastResult);
         return page !== null && page.is_published === true;
     }
 
@@ -301,7 +317,7 @@ export class WikiPageAccessModal extends PlatformModal {
             permission: this._linkPermission(),
             origin: location.origin,
         });
-        this._issuedLinkUrl = result && typeof (result as WikiLinkResult | null)?.url === 'string' ? (result as WikiLinkResult).url as string : '';
+        this._issuedLinkUrl = issuedLinkUrl(result);
         await this._reload();
     }
 
@@ -312,8 +328,7 @@ export class WikiPageAccessModal extends PlatformModal {
             permission: event.detail.value,
             origin: location.origin,
         });
-        const linkResult = result as WikiLinkResult | null;
-        this._issuedLinkUrl = linkResult && typeof linkResult.url === 'string' ? linkResult.url : '';
+        this._issuedLinkUrl = issuedLinkUrl(result);
         await this._reload();
     }
 
@@ -330,7 +345,7 @@ export class WikiPageAccessModal extends PlatformModal {
             permission: this._linkPermission(),
             origin: location.origin,
         });
-        this._issuedLinkUrl = result && typeof (result as WikiLinkResult | null)?.url === 'string' ? (result as WikiLinkResult).url as string : '';
+        this._issuedLinkUrl = issuedLinkUrl(result);
         await this._reload();
     }
 
@@ -378,7 +393,7 @@ export class WikiPageAccessModal extends PlatformModal {
         if (!Array.isArray(team)) {
             throw new Error('wiki page access: state.team.members must be array');
         }
-        const values = (team as NonNullable<TeamSlice['members']>)
+        const values = team
             .filter((member) => member && typeof member.user_id === 'string' && !granted.has(member.user_id))
             .map((member) => ({
                 value: member.user_id as string,

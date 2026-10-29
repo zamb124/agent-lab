@@ -905,7 +905,7 @@ async def work_item_list_comments(
 ) -> JsonObject:
     _ = state
     args = WorkItemCommentsListArgs(work_item_id=work_item_id)
-    comments = await WorkItemComment.list_for_work_item(
+    comments = await WorkItemComment.list_for_work_item_by_created_at_asc(
         require_active_company().company_id,
         args.work_item_id,
     )

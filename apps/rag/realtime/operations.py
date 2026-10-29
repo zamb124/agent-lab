@@ -26,7 +26,7 @@ from apps.rag.namespace_access import (
     validate_ingest_text_body,
     validate_rag_user_metadata,
 )
-from apps.rag_worker.tasks.task_names import RAG_INDEX_DOCUMENT_S3
+from apps.rag.tasks.task_names import RAG_INDEX_DOCUMENT_S3
 from core.ai.rerank_client import AIRerankerClientError
 from core.authz.models import AuthzObject
 from core.context import require_active_company, require_context
@@ -49,8 +49,8 @@ from core.rag.models import (
     RAGSearchOptions,
 )
 from core.rag.post_retrieval_rerank import (
-    apply_rerank_after_retrieve,
-    apply_rerank_after_retrieve_grouped,
+    apply_rerank_after_retrieve_by_score_desc,
+    apply_rerank_after_retrieve_grouped_by_score_desc,
 )
 from core.rag.rag_http_namespace_search import filter_search_request_options
 from core.rag.search_options_resolver import resolve_platform_search_options
@@ -202,7 +202,7 @@ async def op_documents_list(
     await _namespace(di, payload.namespace_id)
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     completed_docs = await rag_provider.list_documents(payload.namespace_id, limit=payload.limit)
-    processing_statuses = await DocumentProcessingStatus.list_by_namespace_and_status(
+    processing_statuses = await DocumentProcessingStatus.list_for_namespace_by_updated_at_desc(
         payload.namespace_id, status=["pending", "processing", "failed"], limit=payload.limit
     )
     all_documents = list(completed_docs)
@@ -513,7 +513,7 @@ async def op_search_namespace(
                 filters=payload.filters,
                 search_options=resolved_search_options,
             )
-            results = await apply_rerank_after_retrieve(
+            results = await apply_rerank_after_retrieve_by_score_desc(
                 results=results,
                 query=payload.query,
                 provider_name=provider_name,
@@ -565,7 +565,7 @@ async def op_search_global(
             filters=payload.filters,
             search_options=resolved_search_options,
         )
-        results = await apply_rerank_after_retrieve_grouped(
+        results = await apply_rerank_after_retrieve_grouped_by_score_desc(
             results_by_namespace=results,
             namespace_order=payload.namespace_ids,
             query=payload.query,

@@ -22,9 +22,9 @@ import wave
 from collections.abc import AsyncIterator
 from typing import override
 
-import httpx
+import httpx2
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.clients.speech_override import SpeechOverride
 from core.clients.tts_client import TTSLitserveHttpError
@@ -245,7 +245,7 @@ async def test_synthesize_upstream_connect_error_returns_503(
                 if piece == "\0":
                     yield b""
                     return
-                raise httpx.ConnectError("All connection attempts failed")
+                raise httpx2.ConnectError("All connection attempts failed")
 
     async def _fake_create_voice_tts_streamer(
         *, company_id: str, override: SpeechOverride | None = None

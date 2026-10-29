@@ -13,6 +13,7 @@ import {
     createResourceCollection,
     createAsyncOp,
 } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const embedConfigsResource = createResourceCollection({
     name: 'frontend/embed_configs',
@@ -68,6 +69,17 @@ export const embedConfigsResource = createResourceCollection({
     },
 });
 
+function stringMap(value: unknown): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        return {};
+    }
+    const row: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(value)) {
+        row[key] = field;
+    }
+    return row;
+}
+
 export const embedCodeLoadOp = createAsyncOp({
     name: 'frontend/embed_code',
     silent: true,
@@ -78,34 +90,47 @@ export const embedCodeLoadOp = createAsyncOp({
     extraInitial: { codeByEmbedId: {}, codeLoadingById: {} },
     extraReducer: (state, event, events) => {
         if (event.type === events.REQUESTED) {
-            const id = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).embed_id;
+            if (!isPlainRecord(event.payload)) {
+                throw new Error('embedCodeLoadOp: payload.embed_id required');
+            }
+            const id = event.payload.embed_id;
             if (typeof id !== 'string' || id === '') {
                 throw new Error('embedCodeLoadOp: payload.embed_id required');
             }
-            return { ...state, codeLoadingById: { ...(state.codeLoadingById as Record<string, unknown>), [id]: true } };
+            const loading: Record<string, unknown> = { ...stringMap(state.codeLoadingById), [id]: true };
+            return { ...state, codeLoadingById: loading };
         }
         if (event.type === events.SUCCEEDED) {
-            const r = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).result;
-            if (!r || typeof r.embed_id !== 'string' || !Array.isArray(r.allowed_origins)) {
+            if (!isPlainRecord(event.payload)) {
                 throw new Error('embedCodeLoadOp: result.embed_id and allowed_origins required');
             }
-            const nextLoading = { ...(state.codeLoadingById as Record<string, unknown>) };
-            delete nextLoading[r.embed_id];
+            const result = event.payload.result;
+            if (!isPlainRecord(result)) {
+                throw new Error('embedCodeLoadOp: result.embed_id and allowed_origins required');
+            }
+            const embedId = result.embed_id;
+            const allowedOrigins = result.allowed_origins;
+            if (typeof embedId !== 'string' || !Array.isArray(allowedOrigins)) {
+                throw new Error('embedCodeLoadOp: result.embed_id and allowed_origins required');
+            }
+            const nextLoading = stringMap(state.codeLoadingById);
+            delete nextLoading[embedId];
+            const codeByEmbedId: Record<string, unknown> = {
+                ...stringMap(state.codeByEmbedId),
+                [embedId]: {
+                    html_code: result.html_code,
+                    script_url: result.script_url,
+                    presentation: result.presentation,
+                    page_url: result.page_url,
+                    token_endpoint: result.token_endpoint,
+                    backend_proxy_code: result.backend_proxy_code,
+                    browser_to_host_backend_code: result.browser_to_host_backend_code,
+                    allowed_origins: allowedOrigins,
+                },
+            };
             return {
                 ...state,
-                codeByEmbedId: {
-                    ...(state.codeByEmbedId as Record<string, unknown>),
-                    [r.embed_id]: {
-                        html_code: r.html_code,
-                        script_url: r.script_url,
-                        presentation: r.presentation,
-                        page_url: r.page_url,
-                        token_endpoint: r.token_endpoint,
-                        backend_proxy_code: r.backend_proxy_code,
-                        browser_to_host_backend_code: r.browser_to_host_backend_code,
-                        allowed_origins: r.allowed_origins,
-                    },
-                },
+                codeByEmbedId,
                 codeLoadingById: nextLoading,
             };
         }

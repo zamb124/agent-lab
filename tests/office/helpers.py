@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.documents.placement import DocumentPlacement
 from core.files.create_spec import (

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from apps.search.config import SearchCrawlConfig
-from apps.search_worker.tasks.task_names import (
+from apps.search.tasks.task_names import (
     CRAWL_IMPORT_SEED_DOMAINS,
     CRAWL_ORCHESTRATOR_TICK,
 )

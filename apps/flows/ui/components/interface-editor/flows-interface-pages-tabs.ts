@@ -12,6 +12,18 @@ import '@platform/lib/components/platform-popover.js';
 import '@platform/lib/components/platform-menu.js';
 import '@platform/lib/components/platform-button.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import type { FlowUiDocument, FlowUiPage } from './interface-editor-domain.js';
+
+function tabInput(root: ParentNode): HTMLInputElement | null {
+    const field = root.querySelector('.tab input');
+    if (field === null) {
+        return null;
+    }
+    if (!(field instanceof HTMLInputElement)) {
+        throw new Error('flows-interface-pages-tabs: rename field must be an input');
+    }
+    return field;
+}
 
 export class FlowsInterfacePagesTabs extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -22,7 +34,7 @@ export class FlowsInterfacePagesTabs extends PlatformElement {
         _menuPageId: { state: true },
         _renamePageId: { state: true },
     }
-    declare document: any;
+    declare document: FlowUiDocument | null;
     declare pageId: string;
     declare _menuPageId: string;
     declare _renamePageId: string;
@@ -47,25 +59,40 @@ export class FlowsInterfacePagesTabs extends PlatformElement {
         this._renamePageId = '';
     }
 
-    _command(command: any, pageId: any, property: any = null, value: any = null) {
+    _requireDocument(): FlowUiDocument {
+        if (this.document === null) {
+            throw new Error('flows-interface-pages-tabs: document required');
+        }
+        return this.document;
+    }
+
+    _command(command: string, pageId: string | null, property: string | null = null, value: unknown = null) {
         this._menuPageId = '';
         this.emit('page-command', { command, pageId, property, value });
     }
 
-    _menuItems(page: any) {
+    _menuItems(page: FlowUiPage) {
+        const document = this._requireDocument();
         return [
             { id: 'rename', label: this.t('interface_editor.page_rename'), icon: 'edit' },
             { id: 'show_title', label: this.t(page.show_title === false ? 'interface_editor.page_show_title' : 'interface_editor.page_hide_title'), icon: 'eye' },
-            { id: 'start', label: this.t('interface_editor.page_make_start'), icon: 'star', disabled: (this.document.start_page_id as any) === page.page_id },
-            { id: 'remove', label: this.t('interface_editor.page_remove'), icon: 'trash', danger: true, disabled: (this.document.pages.length as any) === 1 },
+            { id: 'start', label: this.t('interface_editor.page_make_start'), icon: 'star', disabled: document.start_page_id === page.page_id },
+            { id: 'remove', label: this.t('interface_editor.page_remove'), icon: 'trash', danger: true, disabled: document.pages.length === 1 },
         ];
     }
 
-    _onMenuSelect(page: any, id: string) {
+    _onMenuSelect(page: FlowUiPage, id: string) {
         if (id === 'rename') {
             this._menuPageId = '';
             this._renamePageId = page.page_id;
-            this.updateComplete.then(() => { const field = this.renderRoot.querySelector('.tab input'); if (field) { (field as Record<string, any>).focus(); (field as Record<string, any>).select(); } });
+            this.updateComplete.then(() => {
+                const field = tabInput(this.renderRoot);
+                if (field === null) {
+                    return;
+                }
+                field.focus();
+                field.select();
+            });
             return;
         }
         if (id === 'show_title') {
@@ -75,26 +102,45 @@ export class FlowsInterfacePagesTabs extends PlatformElement {
         this._command(id, page.page_id);
     }
 
-    _finishRename(page: any, commit: any) {
-        const field = this.renderRoot.querySelector('.tab input');
-        const value = field === null ? page.title : (field as Record<string, any>).value.trim();
+    _finishRename(page: FlowUiPage, commit: boolean) {
+        const field = tabInput(this.renderRoot);
+        const title = typeof page.title === 'string' ? page.title : '';
+        const value = field === null ? title : field.value.trim();
         this._renamePageId = '';
-        if (commit && value !== page.title) this._command('set', page.page_id, 'title', value);
+        if (commit && value !== title) this._command('set', page.page_id, 'title', value);
     }
 
-    _renderTab(page: any) {
+    _renderTab(page: FlowUiPage) {
+        const document = this._requireDocument();
         const selected = page.page_id === this.pageId;
         const renaming = page.page_id === this._renamePageId;
+        const title = typeof page.title === 'string' ? page.title : '';
         return html`<div class="tab" role="tab" aria-selected=${selected ? 'true' : 'false'} tabindex="0"
             @click=${() => { if (!selected) this.emit('page-select', { pageId: page.page_id }); }}
             @dblclick=${() => this._onMenuSelect(page, 'rename')}
-            @keydown=${(event: CustomEvent) => { if (!renaming && ((event as Record<string, any>).key === 'Enter' || (event as Record<string, any>).key === ' ')) { event.preventDefault(); this.emit('page-select', { pageId: page.page_id }); } }}>
-            ${(this.document.start_page_id as any) === page.page_id ? html`<platform-icon class="start" name="star" size="11" title=${this.t('interface_editor.page_start')}></platform-icon>` : nothing}
+            @keydown=${(event: Event) => {
+                if (!(event instanceof KeyboardEvent) || renaming) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    this.emit('page-select', { pageId: page.page_id });
+                }
+            }}>
+            ${document.start_page_id === page.page_id ? html`<platform-icon class="start" name="star" size="11" title=${this.t('interface_editor.page_start')}></platform-icon>` : nothing}
             ${renaming
-                ? html`<input type="text" data-canon="inline-edit" .value=${page.title} aria-label=${this.t('interface_editor.page_title')}
+                ? html`<input type="text" data-canon="inline-edit" .value=${title} aria-label=${this.t('interface_editor.page_title')}
                     @blur=${() => this._finishRename(page, true)}
-                    @keydown=${(event: CustomEvent) => { if ((event as Record<string, any>).key === 'Enter') { event.preventDefault(); this._finishRename(page, true); } if ((event as Record<string, any>).key === 'Escape') { event.preventDefault(); this._finishRename(page, false); } }} />`
-                : html`<span>${page.title === '' ? page.page_id : page.title}</span>`}
+                    @keydown=${(event: Event) => {
+                        if (!(event instanceof KeyboardEvent)) return;
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            this._finishRename(page, true);
+                        }
+                        if (event.key === 'Escape') {
+                            event.preventDefault();
+                            this._finishRename(page, false);
+                        }
+                    }} />`
+                : html`<span>${title === '' ? page.page_id : title}</span>`}
             <platform-button ghost density="dense" icon-only class="kebab" data-page-id=${page.page_id} aria-label=${this.t('interface_editor.page_menu')}
                 @click=${(event: CustomEvent) => { event.stopPropagation(); this._menuPageId = this._menuPageId === page.page_id ? '' : page.page_id; }}>
                 <platform-icon name="more-vert" size="12"></platform-icon>
@@ -108,8 +154,9 @@ export class FlowsInterfacePagesTabs extends PlatformElement {
 
     override render(): TemplateResult | typeof nothing {
         if (this.document === null) return nothing;
+        const document = this.document;
         return html`
-            <div role="tablist" style="display: contents">${(this.document as Record<string, any>).pages.map((page: any) => this._renderTab(page))}</div>
+            <div role="tablist" style="display: contents">${document.pages.map((page) => this._renderTab(page))}</div>
             <platform-button ghost density="dense" icon-only class="add" aria-label=${this.t('interface_editor.page_add')} @click=${() => this._command('add', null)}>
                 <platform-icon name="plus" size="14"></platform-icon>
             </platform-button>

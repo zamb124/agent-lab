@@ -45,7 +45,6 @@ async def test_platform_brand_lvh_me_dev_host(frontend_client) -> None:
     payload = response.json()
     assert payload["base_domain"] == "lvh.me"
     assert payload["platform_name"] == "Linnex"
-    assert payload["agent_product_name"] == "LinnexAgent"
     assert payload["apex_origin"] == "http://system.lvh.me:9004/"
 
 
@@ -58,7 +57,6 @@ async def test_platform_brand_localhost_dev_host(frontend_client) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["base_domain"] == "localhost"
-    assert payload["agent_product_name"] == "LinnexAgent"
     assert payload["apex_origin"] == "http://localhost:9004/"
 
 
@@ -159,7 +157,6 @@ async def test_pwa_manifest_host_aware(
         (
             "humanitec.ru",
             {
-                "agent_product_name": "HumanitecAgent",
                 "models_product_name": "Humanitec Models",
                 "voice_product_name": "Humanitec Voice",
                 "llms_display_label": "Humanitec LLMs",
@@ -169,7 +166,6 @@ async def test_pwa_manifest_host_aware(
         (
             "linnex.io",
             {
-                "agent_product_name": "LinnexAgent",
                 "models_product_name": "Linnex Models",
                 "voice_product_name": "Linnex Voice",
                 "llms_display_label": "Linnex LLMs",
@@ -195,10 +191,10 @@ async def test_platform_brand_product_names(
 
 
 @pytest.mark.parametrize(
-    "host,platform_name,agent_product_name",
+    "host,platform_name",
     [
-        ("humanitec.ru", "Humanitec", "HumanitecAgent"),
-        ("linnex.io", "Linnex", "LinnexAgent"),
+        ("humanitec.ru", "Humanitec"),
+        ("linnex.io", "Linnex"),
     ],
 )
 @pytest.mark.asyncio
@@ -206,7 +202,6 @@ async def test_llms_txt_host_aware(
     frontend_client,
     host: str,
     platform_name: str,
-    agent_product_name: str,
 ) -> None:
     response = await frontend_client.get(
         "/llms.txt",
@@ -215,7 +210,7 @@ async def test_llms_txt_host_aware(
     assert response.status_code == 200
     body = response.text
     assert body.startswith(f"# {platform_name}\n")
-    assert f"{agent_product_name} Download:" in body
+    assert "Product Agents:" in body
 
 
 @pytest.mark.parametrize(

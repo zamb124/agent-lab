@@ -403,9 +403,9 @@ services:
     label_ru: Frontend
     label_en: Frontend
     intro_ru: >-
-      Платформенная оболочка, настройки LinnexAgent и ссылки на desktop-клиент.
+      Платформенная оболочка и публичные страницы.
     intro_en: >-
-      Platform shell, LinnexAgent settings, and desktop client download links.
+      Platform shell and public pages.
     featured_slug: frontend-shell
     tags:
       general:
@@ -416,14 +416,6 @@ services:
         label_ru: Пространства
         label_en: Namespaces
         order: 2
-      settings-agent:
-        label_ru: LinnexAgent в настройках
-        label_en: LinnexAgent settings
-        order: 3
-      agent-download:
-        label_ru: Скачивание LinnexAgent
-        label_en: LinnexAgent download
-        order: 4
 
   office:
     label_ru: Office

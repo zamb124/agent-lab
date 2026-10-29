@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from core.ai.company_settings import decrypt_secret
 from core.company_search import COMPANY_SEARCH_METADATA_KEY, CompanySearchProviders

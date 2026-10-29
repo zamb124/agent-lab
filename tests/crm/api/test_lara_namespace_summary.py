@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
 from apps.crm.models.task import CRMTask

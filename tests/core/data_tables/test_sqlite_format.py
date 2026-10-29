@@ -16,8 +16,8 @@ from core.data_tables.sqlite_format import (
     initialize_platform_schema,
     insert_rows,
     open_sqlite,
-    page_rows,
-    read_schema_snapshot,
+    page_rows_by_sort_then_row_id,
+    read_schema_snapshot_by_table_name_asc,
     schema_summary_text,
     update_row,
 )
@@ -79,11 +79,11 @@ def test_sqlite_format_create_page_and_update(tmp_path: Path) -> None:
             rows=[{"name": "Ada", "score": 10}, {"name": "Bob", "score": 3}],
         )
         assert len(row_ids) == 2
-        page = page_rows(connection, table_name="leads", limit=1)
+        page = page_rows_by_sort_then_row_id(connection, table_name="leads", limit=1)
         assert page.has_more is True
         assert len(page.items) == 1
         assert page.items[0].values["name"] == "Ada"
-        second = page_rows(
+        second = page_rows_by_sort_then_row_id(
             connection,
             table_name="leads",
             limit=1,
@@ -102,7 +102,7 @@ def test_sqlite_format_create_page_and_update(tmp_path: Path) -> None:
             table_name="leads",
             spec=DataTableColumnSpec(name="note", column_type="text"),
         )
-        snapshot = read_schema_snapshot(connection)
+        snapshot = read_schema_snapshot_by_table_name_asc(connection)
         assert snapshot.scope == "office_document"
         assert snapshot.tables[0].name == "leads"
         assert snapshot.tables[0].row_count == 2
@@ -111,12 +111,12 @@ def test_sqlite_format_create_page_and_update(tmp_path: Path) -> None:
         summary = schema_summary_text(connection)
         assert "table leads" in summary
         assert "name:text" in summary
-        matched = page_rows(connection, table_name="leads", limit=10, q="Ada")
+        matched = page_rows_by_sort_then_row_id(connection, table_name="leads", limit=10, q="Ada")
         assert len(matched.items) == 1
         assert matched.items[0].values["name"] == "Ada"
-        escaped = page_rows(connection, table_name="leads", limit=10, q="%")
+        escaped = page_rows_by_sort_then_row_id(connection, table_name="leads", limit=10, q="%")
         assert escaped.items == []
-        by_name = page_rows(
+        by_name = page_rows_by_sort_then_row_id(
             connection,
             table_name="leads",
             limit=10,
@@ -124,7 +124,7 @@ def test_sqlite_format_create_page_and_update(tmp_path: Path) -> None:
         )
         assert len(by_name.items) == 1
         assert by_name.items[0].values["name"] == "Ada"
-        by_score = page_rows(
+        by_score = page_rows_by_sort_then_row_id(
             connection,
             table_name="leads",
             limit=10,
@@ -132,7 +132,7 @@ def test_sqlite_format_create_page_and_update(tmp_path: Path) -> None:
         )
         assert len(by_score.items) == 1
         assert by_score.items[0].values["name"] == "Ada"
-        and_miss = page_rows(
+        and_miss = page_rows_by_sort_then_row_id(
             connection,
             table_name="leads",
             limit=10,
@@ -140,9 +140,9 @@ def test_sqlite_format_create_page_and_update(tmp_path: Path) -> None:
         )
         assert and_miss.items == []
         with pytest.raises(ValueError, match="column_q must be column:query"):
-            page_rows(connection, table_name="leads", limit=10, column_q=["Ada"])
+            page_rows_by_sort_then_row_id(connection, table_name="leads", limit=10, column_q=["Ada"])
         with pytest.raises(ValueError, match="unknown column_q column"):
-            page_rows(connection, table_name="leads", limit=10, column_q=["missing:x"])
+            page_rows_by_sort_then_row_id(connection, table_name="leads", limit=10, column_q=["missing:x"])
     finally:
         connection.close()
 
@@ -168,7 +168,7 @@ def test_import_csv_creates_user_table(tmp_path: Path) -> None:
             rows=rows,
         )
         assert inserted == 2
-        snapshot = read_schema_snapshot(connection)
+        snapshot = read_schema_snapshot_by_table_name_asc(connection)
         assert snapshot.tables[0].name == "imported"
         names = [column.name for column in snapshot.tables[0].columns]
         assert names == ["name", "score"]

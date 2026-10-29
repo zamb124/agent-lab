@@ -1,13 +1,7 @@
 """
 Фабрика для создания TaskIQ brokers с общими настройками.
 
-Конкретные brokers создаются в:
-- apps/flows_worker/broker.py - для задач сервиса flows
-- apps/idle_worker/broker.py - для общеплатформенных idle-задач
-- apps/rag_worker/broker.py - для RAG задач
-- apps/sync/realtime/broker.py - для sync realtime задач
-- apps/crm_worker/broker.py - для CRM задач
-- apps/crm_worker/summary_broker.py - для CRM daily/period summary
+Брокеры очередей создаёт ``apps/worker_manifest.py`` (``create_broker`` на очередь).
 """
 
 from collections.abc import Awaitable, Callable

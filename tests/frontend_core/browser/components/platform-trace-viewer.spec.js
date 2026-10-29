@@ -35,6 +35,6 @@ describe('platform-trace-viewer', () => {
         const p = oneEvent(el, 'trace-span-select');
         title.click();
         const ev = await p;
-        expect(ev.detail.span).to.equal(roots[0]);
+        expect(ev.detail.span).to.deep.equal(roots[0]);
     });
 });

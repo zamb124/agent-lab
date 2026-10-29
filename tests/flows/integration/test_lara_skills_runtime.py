@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from pydantic import TypeAdapter
 
 from apps.flows.di import FlowsDi

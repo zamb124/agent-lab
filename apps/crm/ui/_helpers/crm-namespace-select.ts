@@ -7,22 +7,41 @@
  */
 
 import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function selectionByCompany(value: unknown): Record<string, string> | null {
+    if (value == null || !isPlainRecord(value)) return null;
+    const map: Record<string, string> = {};
+    for (const [key, field] of Object.entries(value)) {
+        if (typeof field !== 'string') {
+            throw new Error('crm-namespace-select: selection must be a string');
+        }
+        map[key] = field;
+    }
+    return map;
+}
 
 /**
  * @param {unknown} state
  * @returns {string | null}
  */
 export function selectCrmApiNamespace(state: unknown): string | null {
-    if (!state || typeof state !== 'object') {
+    if (!isPlainRecord(state)) {
         return null;
     }
-    const s = state as { auth?: { user?: { company_id?: unknown } | null }; ui?: { namespace?: { selectionByCompany?: unknown } } };
-    const user = s.auth && s.auth.user;
-    if (!user || typeof user.company_id !== 'string') {
+    const auth = state.auth;
+    const user = isPlainRecord(auth) ? auth.user : null;
+    if (!isPlainRecord(user)) {
         return null;
     }
-    const map = s.ui && s.ui.namespace && s.ui.namespace.selectionByCompany;
-    return getEffectiveCrmNamespaceApiFilter(user.company_id as string, map as Record<string, string> | null | undefined);
+    const companyId = user.company_id;
+    if (typeof companyId !== 'string') {
+        return null;
+    }
+    const ui = state.ui;
+    const namespace = isPlainRecord(ui) ? ui.namespace : null;
+    const rawMap = isPlainRecord(namespace) ? namespace.selectionByCompany : null;
+    return getEffectiveCrmNamespaceApiFilter(companyId, selectionByCompany(rawMap));
 }
 
 /**

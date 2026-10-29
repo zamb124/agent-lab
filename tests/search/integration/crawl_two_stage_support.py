@@ -24,7 +24,7 @@ from tests.search.integration.snippet_support import strip_snippet_highlight
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
 if TYPE_CHECKING:
-    from httpx import AsyncClient
+    from httpx2 import AsyncClient
 
 
 REAL_CRAWL_DOMAIN = "example.com"
@@ -83,7 +83,7 @@ async def setup_example_com_crawl(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.list_due(
+        await CrawlDomain.list_due_by_next_crawl_after_asc(
             crawl_profile_id,
             now=datetime.now(UTC),
             limit=1,
@@ -107,14 +107,14 @@ async def run_layer1_fetch(
         "manual",
         schedule_task_id=None,
     )
-    from apps.search_worker.tasks.crawl_tasks import crawl_fetch_url
+    from apps.search.tasks.crawl_tasks import crawl_fetch_url
 
     _ = await crawl_fetch_url(
         crawl_domain_id, job.crawl_job_id, crawl_profile_id, 1, di=search_di
     )
     job_after = await CrawlJob.get(job.crawl_job_id)
     assert job_after.urls_indexed >= 1
-    url_page = await CrawlUrl.list_page_for_profile(
+    url_page = await CrawlUrl.page_for_profile_by_updated_at_desc(
         crawl_profile_id=crawl_profile_id,
         crawl_status="indexed",
         domain=REAL_CRAWL_DOMAIN,

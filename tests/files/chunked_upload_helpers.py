@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Mapping
 
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source

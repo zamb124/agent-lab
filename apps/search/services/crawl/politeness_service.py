@@ -6,7 +6,7 @@ import asyncio
 from urllib.parse import urlsplit
 from urllib.robotparser import RobotFileParser
 
-import httpx
+import httpx2
 
 from apps.search.config import SearchCrawlConfig
 from core.clients.redis_client import RedisClient
@@ -138,7 +138,7 @@ class CrawlPolitenessService:
                 follow_redirects=True,
             ) as client:
                 response = await client.get(robots_url)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             logger.warning(
                 "crawl.robots_fetch_failed",
                 crawl_domain=host,

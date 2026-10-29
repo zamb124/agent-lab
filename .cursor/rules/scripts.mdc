@@ -1,0 +1,35 @@
+---
+description: "Скрипты репозитория: пакеты scripts/, нейминг, реестр гейтов и запуск через python -m. Читать при добавлении или переносе скрипта"
+globs:
+  - "scripts/**"
+alwaysApply: false
+---
+
+# Скрипты
+
+Точки входа вне `apps/` и `core/`: гейты, локальный запуск, миграции, тестовый стек, сборка, документация, генераторы. Операции кластера — `deploy/scripts/`.
+
+## Канон
+
+1. Корень `scripts/` содержит только пакеты и `scripts/__init__.py`. Каталог — область: `gates`, `dev`, `db`, `testing`, `build`, `docs`, `generate`, `tools`. `stress/` — сценарии k6.
+2. Имя модуля — предмет, без префикса `check_`, `test_`, `generate_`. Гейт лежит в `scripts/gates/<область>/`.
+3. Python запускается `uv run python -m scripts.<пакет>.<модуль>`. Оболочка — `bash scripts/...`. Сборка UI — `node scripts/build/...`.
+4. Гейт падает на нарушении. Корень репозитория и отчёт — `scripts/gates/kit.py` (`REPO_ROOT`, `report`). Команда и сьют — строка `scripts/gates/registry.py`. `python -m scripts.gates --suite <name>` прогоняет все гейты сьюта и печатает сводку.
+5. Сьюты `lint` и `lint_ts` входят в `make lint`. Сьют `static` входит в `make test-static`. Сьют `network` и гейт без сьюта запускаются отдельной целью Makefile.
+6. Новый гейт в том же изменении получает строку в `registry.py` и пункт в разделе «Гейты» правила-владельца.
+
+## Запреты
+
+1. Файл в корне `scripts/` кроме `__init__.py`.
+2. Второй раннер гейтов и перечень гейтов в `mk/lint.mk` мимо `scripts/gates/registry.py`. `[без гейта]`
+3. Свой расчёт корня репозитория в гейте. Корень берётся из `scripts/gates/kit.py`. `[без гейта]`
+
+## Исключения
+
+- Исключение: `scripts/stress/**` не Python-пакет: у каталога нет `__init__.py`, запуск — `scripts/stress/run.sh`. Гейт `scripts/gates/repo/scripts_layout.py` этот каталог не требует.
+- Исключение: shell-гейты и `scripts/build/**/*.mjs` запускаются файлом, не `python -m`. `[без гейта]`
+
+## Гейты
+
+- `scripts/gates/repo/scripts_layout.py` (`make lint`) — корень `scripts/` без лишних файлов, у пакетов есть `__init__.py`, нет модулей с префиксом `check_`/`test_`/`generate_`.
+- `python -m scripts.gates --list` — состав сьютов. Отчёт всех шагов `make lint` — `.cursor/skills/refactor-engineer/scripts/gates_report.py`.

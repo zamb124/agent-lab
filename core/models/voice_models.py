@@ -126,8 +126,8 @@ class CompanyVoiceProvider(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_by_kind_for_company(cls, *, company_id: str) -> list[Self]:
-        """Все провайдеры компании, ORDER BY kind. Предела нет. Пустой company_id — ValueError."""
+    async def list_by_kind_for_company_asc(cls, *, company_id: str) -> list[Self]:
+        """Все провайдеры компании, ORDER BY kind ASC. Предела нет. Пустой company_id — ValueError."""
         return await cls.objects.filter(
             company_id=_voice_required_company(company_id),
         ).order_by("kind").all()

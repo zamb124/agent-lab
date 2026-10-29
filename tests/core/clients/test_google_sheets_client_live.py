@@ -1,5 +1,5 @@
 """
-Live Google Sheets API — реальный HTTP, без monkeypatch/httpx fake.
+Live Google Sheets API — реальный HTTP, без monkeypatch/httpx2 fake.
 
 Auth (один из путей):
   - OAuth: google_workspace.live_test.access_token или GOOGLE_ACCESS_TOKEN

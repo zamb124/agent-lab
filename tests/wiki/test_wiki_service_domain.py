@@ -126,7 +126,7 @@ async def test_subtree_listing_includes_all_descendants(
     right = await page_factory(f"Правый {unique_id}", parent_page_id=root.wiki_page_id)
     deep = await page_factory(f"Глубокий {unique_id}", parent_page_id=left.wiki_page_id)
 
-    subtree = await WikiPage.list_subtree(COMPANY, wiki_namespace, root.wiki_page_id)
+    subtree = await WikiPage.list_unordered_subtree(COMPANY, wiki_namespace, root.wiki_page_id)
 
     assert {item.wiki_page_id for item in subtree} == {
         root.wiki_page_id,

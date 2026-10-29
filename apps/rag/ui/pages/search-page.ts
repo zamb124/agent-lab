@@ -5,6 +5,16 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import {
+    buildAdvancedRetrievalPayloadFromPanel,
+    defaultRetrievalPanelValue,
+} from '@platform/lib/rag/pack_search_request_options.js';
+import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/rag/platform-rag-retrieval-panel.js';
 
 interface RagSearchResultItem {
     document_name?: unknown;
@@ -18,15 +28,16 @@ interface RagSearchResult {
     results?: RagSearchResultItem[];
     [key: string]: unknown;
 }
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import {
-    buildAdvancedRetrievalPayloadFromPanel,
-    defaultRetrievalPanelValue,
-} from '@platform/lib/rag/pack_search_request_options.js';
-import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/platform-breadcrumbs.js';
-import '@platform/lib/components/rag/platform-rag-retrieval-panel.js';
+
+function isRagSearchResult(value: unknown): value is RagSearchResult {
+    return isPlainRecord(value);
+}
+
+function searchItems(value: unknown): RagSearchResultItem[] {
+    if (!isRagSearchResult(value)) return [];
+    const items = value.results;
+    return Array.isArray(items) ? items : [];
+}
 
 const LIMIT_OPTIONS = [3, 5, 10, 20];
 
@@ -119,10 +130,10 @@ export class SearchPage extends PlatformPage {
 
     private _platformDefaults(): Record<string, unknown> | null {
         const result = this._searchDefaults.lastResult;
-        if (!result || typeof result !== 'object' || Array.isArray(result)) {
+        if (!isPlainRecord(result)) {
             return null;
         }
-        return result as Record<string, unknown>;
+        return result;
     }
 
     private _runSearch(e: Event) {
@@ -147,10 +158,10 @@ export class SearchPage extends PlatformPage {
 
     private _onRetrievalPanelChange(e: CustomEvent<{ value?: unknown }>) {
         const value = e.detail && e.detail.value;
-        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        if (!isPlainRecord(value)) {
             throw new Error('SearchPage: invalid retrieval panel value');
         }
-        this._retrievalPanel = value as Record<string, unknown>;
+        this._retrievalPanel = value;
     }
 
     private _onNamespaceChange(e: CustomEvent<{ value?: unknown }>) {
@@ -193,8 +204,7 @@ export class SearchPage extends PlatformPage {
     }
 
     private _renderResults() {
-        const result = this._search.lastResult as RagSearchResult | null;
-        const items = result && Array.isArray(result.results) ? result.results : [];
+        const items = searchItems(this._search.lastResult);
         if (items.length === 0) return null;
         return html`
             <div class="results">
@@ -225,8 +235,7 @@ export class SearchPage extends PlatformPage {
     override render() {
         const namespaces = this._namespaces.items;
         const loading = this._search.busy;
-        const result = this._search.lastResult as RagSearchResult | null;
-        const hasResults = result && Array.isArray(result.results) && result.results.length > 0;
+        const hasResults = searchItems(this._search.lastResult).length > 0;
 
         return html`
             <div class="breadcrumbs-wrap">

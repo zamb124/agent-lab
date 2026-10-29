@@ -1,10 +1,10 @@
 # Исходники пользовательской документации
 
-Сборка: **`make doc`** — `scripts/check_scenario_docs_quality.py` → `scripts/docs_prepare.py` (деревья **`build/documentation-ru/`** и **`build/documentation-en/`**) → два прохода **`uv run --group docs zensical build`**. Артефакт: **`documentation-dist/`** (RU) и **`documentation-dist/en/`** (EN), раздача **`/documentation/`** и **`/documentation/en/`**.
+Сборка: **`make doc`** — `scripts/gates/repo/scenario_docs_quality.py` → `scripts/docs/prepare.py` (деревья **`build/documentation-ru/`** и **`build/documentation-en/`**) → два прохода **`uv run --group docs zensical build`**. Артефакт: **`documentation-dist/`** (RU) и **`documentation-dist/en/`** (EN), раздача **`/documentation/`** и **`/documentation/en/`**.
 
 Логотип документации — тот же файл, что у SPA: `core/frontend/static/assets/service_logos/frontend_logo.svg`. `docs_prepare` копирует его в `docs/assets/logo.svg` при каждой сборке (zensical `logo` / `favicon`).
 
-**Ask AI:** грузит `/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js` и session API `/frontend/api/public/docs-assistant/session`. Работает только там, где есть mount платформы (`/documentation/` на frontend или `make doc-serve` → `scripts/docs_dev_server.py`). Голый `zensical serve` (`make doc-serve-zensical`) отдаёт HTML на `/static/core/*` → MIME error у module script.
+**Ask AI:** грузит `/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js` и session API `/frontend/api/public/docs-assistant/session`. Работает только там, где есть mount платформы (`/documentation/` на frontend или `make doc-serve` → `scripts/docs/dev_server.py`). Голый `zensical serve` (`make doc-serve-zensical`) отдаёт HTML на `/static/core/*` → MIME error у module script.
 
 ## Разделы сайта
 
@@ -13,12 +13,12 @@
 | Home | `docs/index.md`, `docs/en/index.md` |
 | **Начни отсюда** | генерируется из `docs/scenarios/taxonomy.yaml` → `start-here.md` |
 | Быстрый старт | `docs/quickstart.md` |
-| API | OpenAPI → `scripts/openapi_to_markdown.py` |
+| API | OpenAPI → `scripts/docs/openapi_to_markdown.py` |
 | Инструкции | `docs/scenarios/` + hub-страницы из taxonomy; **sidebar** — основной путь навигации |
 
 ## Навигация инструкций
 
-- **Sidebar (primary):** `scripts/docs_prepare.py` публикует инструкции как плоские `scenarios/<service>/<slug>.md` (не `slug/index.md`) и пишет `.pages` с titled leaves (`"Title": slug.md`). Так Zensical не делает из каждой папки отдельное меню. UI Kit — секция тега с hub `ui-kit/index.md` (`navigation.indexes`) и плоским списком компонентов.
+- **Sidebar (primary):** `scripts/docs/prepare.py` публикует инструкции как плоские `scenarios/<service>/<slug>.md` (не `slug/index.md`) и пишет `.pages` с titled leaves (`"Title": slug.md`). Так Zensical не делает из каждой папки отдельное меню. UI Kit — секция тега с hub `ui-kit/index.md` (`navigation.indexes`) и плоским списком компонентов.
 - **Hub-страницы (secondary):** `scenarios/index.md`, `scenarios/<service>/index.md` — обзорные карточки; прямые ссылки на инструкции, без единственного tag-hub-only маршрута.
 - Zensical: `navigation.indexes` — кликабельный заголовок секции на hub; **без** `navigation.expand` (секции свёрнуты, кроме активной ветки).
 
@@ -47,7 +47,7 @@
 - У каждого шага обязательны понятный `details` и короткий `screenshot_name`, описывающий состояние на снимке.
 - Без непонятного жаргона.
 - **EN обязателен:** у `@pytest.mark.scenario` — `title_en` и `description_en`; у каждого `scenario.step` — `label_en`; если есть `details=` — также `details_en`.
-- После правок EN-метаданных без E2E: `uv run python scripts/regenerate_scenario_readme_en.py`.
+- После правок EN-метаданных без E2E: `uv run python -m scripts.docs.regenerate_scenario_readme_en`.
 
 ## Taxonomy
 

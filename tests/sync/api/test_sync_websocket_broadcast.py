@@ -6,7 +6,7 @@ import asyncio
 import uuid
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from tests.realtime.centrifugo_ws import connect_centrifugo, wait_platform_event
 from tests.sync.conftest import require_sync_di

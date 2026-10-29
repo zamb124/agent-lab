@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-import httpx
+import httpx2
 
 from apps.search.config import SearchTavilyConfig
 from apps.search.providers.common import display_url, provider_status, string_field
@@ -60,7 +60,7 @@ class TavilySearchProvider:
                     error=f"tavily returned HTTP {response.status_code}: {response.text[:300]}",
                 )
             payload = parse_json_object(response.content, "tavily response")
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx2.HTTPError, ValueError) as exc:
             return [], provider_status(started, ok=False, error=str(exc))
 
         results = parse_tavily_results(payload, limit=request.limit)

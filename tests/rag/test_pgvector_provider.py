@@ -102,7 +102,7 @@ async def test_list_namespaces(rag_provider_pgvector, ns_name, rag_company_id):
     }
     assert matching[0]["document_count"] == 1
 
-    rows = await VectorDocument.list_by_namespace_and_document_id(ns_name, doc.document_id)
+    rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, doc.document_id)
     assert len(rows) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == ns_name for r in rows)
     assert all(r.company_id == rag_company_id for r in rows)
@@ -125,7 +125,7 @@ async def test_delete_namespace(rag_provider_pgvector, ns_name, rag_company_id):
         metadata=_upload_metadata(company_id),
     )
     assert await _vector_chunk_count(namespace_id, company_id) == doc.metadata["total_chunks"]
-    chunks_in_db = await VectorDocument.list_by_namespace_and_document_id(namespace_id, doc.document_id)
+    chunks_in_db = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(namespace_id, doc.document_id)
     assert len(chunks_in_db) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in chunks_in_db)
     assert all(r.document_name == "temp.txt" for r in chunks_in_db)
@@ -137,7 +137,7 @@ async def test_delete_namespace(rag_provider_pgvector, ns_name, rag_company_id):
     ns = await rag_provider_pgvector.get_namespace(namespace_id)
     assert ns is None
     assert await _vector_chunk_count(namespace_id, company_id) == 0
-    assert await VectorDocument.list_by_namespace_and_document_id(namespace_id, doc.document_id) == []
+    assert await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(namespace_id, doc.document_id) == []
 
 
 @pytest.mark.asyncio
@@ -172,7 +172,7 @@ async def test_upload_and_get_document(rag_provider_pgvector, ns_name, rag_compa
     }
     assert doc.metadata["lang"] == "en"
 
-    rows = await VectorDocument.list_by_namespace_and_document_id(ns_name, doc.document_id)
+    rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, doc.document_id)
     assert len(rows) == doc.metadata["total_chunks"]
     assert all(r.metadata.get("lang") == "en" for r in rows)
     assert all(r.company_id == rag_company_id for r in rows)
@@ -211,7 +211,7 @@ async def test_get_document_nonexistent(rag_provider_pgvector, ns_name, rag_comp
     """get_document для несуществующего документа возвращает None."""
     result = await rag_provider_pgvector.get_document(ns_name, "no_such_doc")
     assert result is None
-    assert await VectorDocument.list_by_namespace_and_document_id(ns_name, "no_such_doc") == []
+    assert await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, "no_such_doc") == []
 
 
 @pytest.mark.asyncio
@@ -241,8 +241,8 @@ async def test_list_documents(rag_provider_pgvector, ns_name, rag_company_id):
         {"name": "second.txt", "namespace": ns_name, "status": "completed", "content": None},
     ]
 
-    r1 = await VectorDocument.list_by_namespace_and_document_id(ns_name, first.document_id)
-    r2 = await VectorDocument.list_by_namespace_and_document_id(ns_name, second.document_id)
+    r1 = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, first.document_id)
+    r2 = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, second.document_id)
     assert len(r1) == first.metadata["total_chunks"]
     assert len(r2) == second.metadata["total_chunks"]
     assert await _vector_chunk_count(ns_name, rag_company_id) == (
@@ -265,7 +265,7 @@ async def test_delete_document(rag_provider_pgvector, ns_name, rag_company_id):
         document_name="bye.txt",
         metadata=_upload_metadata(company_id),
     )
-    chunks_before_delete = await VectorDocument.list_by_namespace_and_document_id(
+    chunks_before_delete = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(
         namespace_id, doc.document_id)
     assert len(chunks_before_delete) == doc.metadata["total_chunks"]
     assert await _vector_chunk_count(namespace_id, company_id) == doc.metadata["total_chunks"]
@@ -276,16 +276,16 @@ async def test_delete_document(rag_provider_pgvector, ns_name, rag_company_id):
 
     fetched = await rag_provider_pgvector.get_document(namespace_id, doc.document_id)
     assert fetched is None
-    assert await VectorDocument.list_by_namespace_and_document_id(namespace_id, doc.document_id) == []
+    assert await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(namespace_id, doc.document_id) == []
 
 
 @pytest.mark.asyncio
 async def test_delete_document_nonexistent(rag_provider_pgvector, ns_name, rag_company_id):
     """delete_document для несуществующего документа возвращает False."""
-    assert await VectorDocument.list_by_namespace_and_document_id(ns_name, "no_doc_here") == []
+    assert await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, "no_doc_here") == []
     deleted = await rag_provider_pgvector.delete_document(ns_name, "no_doc_here")
     assert deleted is False
-    assert await VectorDocument.list_by_namespace_and_document_id(ns_name, "no_doc_here") == []
+    assert await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, "no_doc_here") == []
 
 
 # -- Upload + Search --
@@ -303,7 +303,7 @@ async def test_upload_text_and_search(rag_provider_pgvector, ns_name, rag_compan
 
     namespace_id = ns_name
     company_id = rag_company_id
-    rows = await VectorDocument.list_by_namespace_and_document_id(namespace_id, doc.document_id)
+    rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(namespace_id, doc.document_id)
     assert len(rows) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in rows)
     blob = " ".join(r.content.lower() for r in rows)
@@ -361,7 +361,7 @@ async def test_chunking(rag_provider_pgvector, ns_name, rag_company_id):
         {"document_id": doc.document_id} for _ in results
     ]
 
-    rows = await VectorDocument.list_by_namespace_and_document_id(ns_name, doc.document_id)
+    rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, doc.document_id)
     assert len(rows) == total_chunks
     assert [r.chunk_index for r in rows] == list(range(len(rows)))
     assert all(r.total_chunks == len(rows) for r in rows)
@@ -387,8 +387,8 @@ async def test_search_with_filters(rag_provider_pgvector, ns_name, rag_company_i
         metadata=_upload_metadata(rag_company_id, {"category": "ml"}),
     )
 
-    web_rows = await VectorDocument.list_by_namespace_and_document_id(ns_name, web_doc.document_id)
-    ml_rows = await VectorDocument.list_by_namespace_and_document_id(ns_name, ml_doc.document_id)
+    web_rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, web_doc.document_id)
+    ml_rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, ml_doc.document_id)
     assert len(web_rows) == web_doc.metadata["total_chunks"]
     assert len(ml_rows) == ml_doc.metadata["total_chunks"]
     assert await _vector_chunk_count(ns_name, rag_company_id) == (
@@ -424,8 +424,8 @@ async def test_list_documents_with_filters(rag_provider_pgvector, ns_name, rag_c
         metadata=_upload_metadata(rag_company_id, {"priority": "low"}),
     )
 
-    alpha_rows = await VectorDocument.list_by_namespace_and_document_id(ns_name, alpha.document_id)
-    beta_rows = await VectorDocument.list_by_namespace_and_document_id(ns_name, beta.document_id)
+    alpha_rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, alpha.document_id)
+    beta_rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, beta.document_id)
     assert len(alpha_rows) == alpha.metadata["total_chunks"]
     assert len(beta_rows) == beta.metadata["total_chunks"]
     assert await _vector_chunk_count(ns_name, rag_company_id) == (
@@ -655,10 +655,10 @@ async def test_namespace_isolation(rag_provider_pgvector, ns_name, ns_name_2, ra
         metadata=_upload_metadata(company_id),
     )
 
-    for row in await VectorDocument.list_by_namespace_and_document_id(ns_name, d1.document_id):
+    for row in await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, d1.document_id):
         assert row.namespace_id == ns_name
         assert row.company_id == company_id
-    for row in await VectorDocument.list_by_namespace_and_document_id(ns_name_2, d2.document_id):
+    for row in await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name_2, d2.document_id):
         assert row.namespace_id == ns_name_2
         assert row.company_id == company_id
     assert await _vector_chunk_count(ns_name, company_id) == d1.metadata["total_chunks"]
@@ -710,7 +710,7 @@ async def test_document_overwrite(rag_provider_pgvector, ns_name, rag_company_id
     results_check = await rag_provider_pgvector.search(namespace_id, "Old content", limit=20)
     assert [("Old content" in r.content) for r in results_check] == [False] * len(results_check)
 
-    rows = await VectorDocument.list_by_namespace_and_document_id(namespace_id, doc_id)
+    rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(namespace_id, doc_id)
     assert len(rows) == doc_new.metadata["total_chunks"]
     assert await _vector_chunk_count(namespace_id, company_id) == doc_new.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in rows)
@@ -730,7 +730,7 @@ async def test_search_hybrid_rrf_returns_provenance(rag_provider_pgvector, ns_na
     )
     namespace_id = ns_name
     company_id = rag_company_id
-    rows = await VectorDocument.list_by_namespace_and_document_id(namespace_id, doc.document_id)
+    rows = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(namespace_id, doc.document_id)
     assert len(rows) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in rows)
     assert "unique_hybrid_token_zeta" in "".join(r.content for r in rows)
@@ -767,13 +767,13 @@ async def test_search_multiple_namespaces_hybrid_rrf_per_namespace(
         document_name="b.txt",
         metadata=_upload_metadata(company_id),
     )
-    rows_a = await VectorDocument.list_by_namespace_and_document_id(ns_name, da.document_id)
-    rows_b = await VectorDocument.list_by_namespace_and_document_id(ns_name_2, db.document_id)
+    rows_a = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, da.document_id)
+    rows_b = await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name_2, db.document_id)
     assert len(rows_a) == da.metadata["total_chunks"]
     assert len(rows_b) == db.metadata["total_chunks"]
-    for r in await VectorDocument.list_by_namespace_and_document_id(ns_name, da.document_id):
+    for r in await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name, da.document_id):
         assert r.namespace_id == ns_name and r.company_id == company_id
-    for r in await VectorDocument.list_by_namespace_and_document_id(ns_name_2, db.document_id):
+    for r in await VectorDocument.list_for_namespace_and_document_by_chunk_index_asc(ns_name_2, db.document_id):
         assert r.namespace_id == ns_name_2 and r.company_id == company_id
 
     out = await rag_provider_pgvector.search_multiple_namespaces(

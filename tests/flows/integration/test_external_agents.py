@@ -7,7 +7,7 @@
 import os
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
 from tests.flows.fixtures.external_agent.main import external_agent_app

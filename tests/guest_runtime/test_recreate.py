@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.guest_runtime.services.farm_service import GuestFarmService
 from apps.guest_runtime.services.identity import guest_identity_scope

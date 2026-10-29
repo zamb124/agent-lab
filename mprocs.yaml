@@ -1,75 +1,75 @@
 # Локальный стек платформы: раздельные логи по сервису (TUI).
-# Источник команд — scripts/run.py (один сервис = uv run python scripts/run.py <name>).
+# Источник команд — scripts/dev/run.py (один сервис = uv run python -m scripts.dev.run <name>).
 # Запуск: make app   |   mprocs   |   Zed task «app: mprocs»
 #
 # В TUI: j/k — выбрать процесс, Ctrl-a — фокус список/терминал, r — restart, x — stop, q — выход.
 
 procs:
   ui_watch:
-    shell: "uv run python scripts/run.py ui_watch"
+    shell: "uv run python -m scripts.dev.run ui_watch"
   flows:
-    shell: "uv run python scripts/run.py flows"
+    shell: "uv run python -m scripts.dev.run flows"
   frontend:
-    shell: "uv run python scripts/run.py frontend"
+    shell: "uv run python -m scripts.dev.run frontend"
   crm:
-    shell: "uv run python scripts/run.py crm"
+    shell: "uv run python -m scripts.dev.run crm"
   rag:
-    shell: "uv run python scripts/run.py rag"
+    shell: "uv run python -m scripts.dev.run rag"
   sync:
-    shell: "uv run python scripts/run.py sync"
+    shell: "uv run python -m scripts.dev.run sync"
   office:
-    shell: "uv run python scripts/run.py office"
+    shell: "uv run python -m scripts.dev.run office"
   worktracker:
-    shell: "uv run python scripts/run.py worktracker"
+    shell: "uv run python -m scripts.dev.run worktracker"
   "scheduler-api":
-    shell: "uv run python scripts/run.py scheduler-api"
+    shell: "uv run python -m scripts.dev.run scheduler-api"
   secrets:
-    shell: "uv run python scripts/run.py secrets"
+    shell: "uv run python -m scripts.dev.run secrets"
   wiki:
-    shell: "uv run python scripts/run.py wiki"
+    shell: "uv run python -m scripts.dev.run wiki"
   stock:
-    shell: "uv run python scripts/run.py stock"
+    shell: "uv run python -m scripts.dev.run stock"
   guest_runtime:
-    shell: "uv run python scripts/run.py guest_runtime"
+    shell: "uv run python -m scripts.dev.run guest_runtime"
   realtime:
-    shell: "uv run python scripts/run.py realtime"
+    shell: "uv run python -m scripts.dev.run realtime"
   redis-realtime:
-    shell: "uv run python scripts/run.py redis-realtime"
+    shell: "uv run python -m scripts.dev.run redis-realtime"
   centrifugo:
-    shell: "uv run python scripts/run.py centrifugo"
+    shell: "uv run python -m scripts.dev.run centrifugo"
   browser:
-    shell: "uv run python scripts/run.py browser"
+    shell: "uv run python -m scripts.dev.run browser"
   search:
-    shell: "uv run python scripts/run.py search"
+    shell: "uv run python -m scripts.dev.run search"
   provider_litserve:
-    shell: "uv run python scripts/run.py provider_litserve"
+    shell: "uv run python -m scripts.dev.run provider_litserve"
   voice:
-    shell: "uv run python scripts/run.py voice"
+    shell: "uv run python -m scripts.dev.run voice"
   capability_gateway:
-    shell: "uv run python scripts/run.py capability_gateway"
+    shell: "uv run python -m scripts.dev.run capability_gateway"
   code_runner_python:
-    shell: "uv run python scripts/run.py code_runner_python"
+    shell: "uv run python -m scripts.dev.run code_runner_python"
   code_runner_node:
-    shell: "uv run python scripts/run.py code_runner_node"
+    shell: "uv run python -m scripts.dev.run code_runner_node"
   code_runner_go:
-    shell: "uv run python scripts/run.py code_runner_go"
+    shell: "uv run python -m scripts.dev.run code_runner_go"
   code_runner_csharp:
-    shell: "uv run python scripts/run.py code_runner_csharp"
+    shell: "uv run python -m scripts.dev.run code_runner_csharp"
   flows_worker:
-    shell: "uv run python scripts/run.py flows_worker"
+    shell: "uv run python -m scripts.dev.run flows_worker"
   rag_worker:
-    shell: "uv run python scripts/run.py rag_worker"
+    shell: "uv run python -m scripts.dev.run rag_worker"
   search_worker:
-    shell: "uv run python scripts/run.py search_worker"
+    shell: "uv run python -m scripts.dev.run search_worker"
   sync_worker:
-    shell: "uv run python scripts/run.py sync_worker"
+    shell: "uv run python -m scripts.dev.run sync_worker"
   stock_worker:
-    shell: "uv run python scripts/run.py stock_worker"
+    shell: "uv run python -m scripts.dev.run stock_worker"
   crm_worker:
-    shell: "uv run python scripts/run.py crm_worker"
+    shell: "uv run python -m scripts.dev.run crm_worker"
   crm_summary_worker:
-    shell: "uv run python scripts/run.py crm_summary_worker"
+    shell: "uv run python -m scripts.dev.run crm_summary_worker"
   idle_worker:
-    shell: "uv run python scripts/run.py idle_worker"
+    shell: "uv run python -m scripts.dev.run idle_worker"
   scheduler:
-    shell: "uv run python scripts/run.py scheduler"
+    shell: "uv run python -m scripts.dev.run scheduler"

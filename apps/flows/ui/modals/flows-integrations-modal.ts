@@ -6,6 +6,7 @@
  * List/disconnect: flows/integrations_list / flows/integrations_remove.
  */
 
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { html, css, nothing } from 'lit';
@@ -116,7 +117,7 @@ export class FlowsIntegrationsModal extends PlatformModal {
     private _companyGetOp: OpController;
     private _companyPutOp: OpController;
     private _companyDeleteOp: OpController;
-    private _authSelect: SelectController<any>;
+    private _authSelect: SelectController<{ activeCompanyId: string | null; user: AuthUser | null }>;
 
     constructor() {
         super();
@@ -152,7 +153,7 @@ export class FlowsIntegrationsModal extends PlatformModal {
         }
     }
 
-    _listItems() {
+    _listItems(): unknown[] {
         const result = this._listOp.lastResult;
         if (isPlainObject(result) && Array.isArray(result.items)) {
             return result.items;
@@ -164,31 +165,27 @@ export class FlowsIntegrationsModal extends PlatformModal {
     }
 
     _userWorkspaceConnected() {
-        return this._listItems().some(
-            (item: any) =>
-                item
-                && item.provider === 'google'
-                && typeof item.service === 'string'
-                && WORKSPACE_SERVICES.has(item.service),
-        );
+        return this._listItems().some((item) => this._isWorkspaceItem(item, null));
     }
 
-    _userWorkspaceCredential() {
+    _userWorkspaceCredential(): Record<string, unknown> | null {
         const items = this._listItems();
-        const canonical = items.find(
-            (item: any) => item && item.provider === 'google' && item.service === 'workspace',
-        );
-        if (canonical) {
+        const canonical = items.find((item) => this._isWorkspaceItem(item, 'workspace'));
+        if (isPlainObject(canonical)) {
             return canonical;
         }
-        const found = items.find(
-            (item: any) =>
-                item
-                && item.provider === 'google'
-                && typeof item.service === 'string'
-                && WORKSPACE_SERVICES.has(item.service),
-        );
-        return found === undefined ? null : found;
+        const found = items.find((item) => this._isWorkspaceItem(item, null));
+        return isPlainObject(found) ? found : null;
+    }
+
+    _isWorkspaceItem(item: unknown, service: string | null): boolean {
+        if (!isPlainObject(item) || item.provider !== 'google' || typeof item.service !== 'string') {
+            return false;
+        }
+        if (service !== null) {
+            return item.service === service;
+        }
+        return WORKSPACE_SERVICES.has(item.service);
     }
 
     async _connectWorkspace() {
@@ -213,14 +210,14 @@ export class FlowsIntegrationsModal extends PlatformModal {
     }
 
     async _saveCompanySa() {
-        const json = (this._saJsonDraft.trim() as any);
+        const json = this._saJsonDraft.trim();
         if (json.length === 0) {
             this.toast('integrations_modal.workspace_company_json_required', { type: 'error' });
             return;
         }
         await this._companyPutOp.run({
             service_account_json: json,
-            impersonate_email: (this._impersonateDraft.trim() as any),
+            impersonate_email: this._impersonateDraft.trim(),
         });
         this._saJsonDraft = '';
         await this._companyGetOp.run({});
@@ -248,9 +245,14 @@ export class FlowsIntegrationsModal extends PlatformModal {
         await this._companyGetOp.run({});
     }
 
-    async _delete(item: any) {
+    async _delete(item: Record<string, unknown>) {
+        const provider = item.provider;
+        const service = item.service;
+        if (typeof provider !== 'string' || provider.length === 0 || typeof service !== 'string' || service.length === 0) {
+            throw new Error('flows-integrations-modal: provider and service required');
+        }
         const ok = await platformConfirm(
-            this.t('integrations_modal.delete_message', { provider: item.provider, service: item.service }),
+            this.t('integrations_modal.delete_message', { provider, service }),
             {
                 title: this.t('integrations_modal.delete_title'),
                 variant: 'danger',
@@ -262,7 +264,7 @@ export class FlowsIntegrationsModal extends PlatformModal {
         if (!ok) {
             return;
         }
-        await this._removeOp.run({ provider: item.provider, service: item.service });
+        await this._removeOp.run({ provider, service });
         await this._listOp.run({});
     }
 
@@ -274,21 +276,24 @@ export class FlowsIntegrationsModal extends PlatformModal {
         this._query = rawValue;
     }
 
-    _filteredItems() {
-        const items = this._listItems();
-        const query = (this._query.trim() as any).toLocaleLowerCase();
-        if (query.length === 0) {
-            return items;
-        }
-        return items.filter((item: any) => {
-            if (!item || typeof item !== 'object') {
-                return false;
+    _filteredItems(): Record<string, unknown>[] {
+        const query = this._query.trim().toLocaleLowerCase();
+        const records: Record<string, unknown>[] = [];
+        for (const item of this._listItems()) {
+            if (!isPlainObject(item)) {
+                throw new Error('flows-integrations-modal: integration must be an object');
+            }
+            if (query.length === 0) {
+                records.push(item);
+                continue;
             }
             const provider = typeof item.provider === 'string' ? item.provider : '';
             const service = typeof item.service === 'string' ? item.service : '';
-            const haystack = `${provider} ${service}`.toLocaleLowerCase();
-            return haystack.includes(query);
-        });
+            if (`${provider} ${service}`.toLocaleLowerCase().includes(query)) {
+                records.push(item);
+            }
+        }
+        return records;
     }
 
     _renderWorkspaceUserSection() {
@@ -398,23 +403,27 @@ export class FlowsIntegrationsModal extends PlatformModal {
 
     _renderRows() {
         const items = this._filteredItems();
-        if (this._listOp.busy && items.length === 0 && (this._query.trim() as any).length === 0) {
+        if (this._listOp.busy && items.length === 0 && this._query.trim().length === 0) {
             return html`<tr><td colspan="3"><glass-spinner></glass-spinner></td></tr>`;
         }
         if (items.length === 0) {
             return html`<tr><td colspan="3" class="int-empty">${this.t('integrations_modal.empty')}</td></tr>`;
         }
-        return items.map((it: any) => html`
+        return items.map((item) => {
+            const provider = typeof item.provider === 'string' ? item.provider : '';
+            const service = typeof item.service === 'string' ? item.service : '';
+            return html`
             <tr>
-                <td>${it.provider}</td>
-                <td>${it.service}</td>
+                <td>${provider}</td>
+                <td>${service}</td>
                 <td>
-                    <platform-button danger @click=${() => void this._delete(it)}>
+                    <platform-button danger @click=${() => void this._delete(item)}>
                         ${this.t('integrations_modal.action_disconnect')}
                     </platform-button>
                 </td>
             </tr>
-        `);
+        `;
+        });
     }
 
     override renderHeader() {

@@ -197,7 +197,7 @@ class TelegramDevPolling:
         """Собирает все Telegram триггеры из агентов всех компаний."""
         triggers: list[TelegramPollingTrigger] = []
 
-        subdomains = await FlowConfig.list_company_identifiers()
+        subdomains = await FlowConfig.list_distinct_current_company_ids_by_company_id_asc()
         logger.info("flows.dev_polling.scan_started", subdomains=subdomains)
 
         for subdomain in subdomains:
@@ -217,7 +217,7 @@ class TelegramDevPolling:
             )
             _ = set_context(context)
             try:
-                all_flows = await FlowConfig.list_current(limit=10_000)
+                all_flows = await FlowConfig.list_current_by_created_at_desc(limit=10_000)
                 logger.info("flows.dev_polling.flows_found", subdomain=subdomain, count=len(all_flows))
 
                 for flow_cfg in all_flows:

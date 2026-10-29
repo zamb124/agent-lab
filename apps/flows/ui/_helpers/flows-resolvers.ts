@@ -18,11 +18,18 @@ export function asString(value: unknown) {
     return typeof value === 'string' ? value : '';
 }
 
-export function asArray(value: unknown): any[] {
-    return Array.isArray(value) ? value : [];
+export function asArray(value: unknown): unknown[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const items: unknown[] = [];
+    for (const item of value) {
+        items.push(item);
+    }
+    return items;
 }
 
-export function asObject(value: unknown): Record<string, any> {
+export function asObject(value: unknown): Record<string, unknown> {
     return isPlainObject(value) ? value : {};
 }
 
@@ -39,7 +46,7 @@ export function asBoolean(value: unknown) {
  * Активная компания для клиентских вызовов (voice, и т.д.) из `state.auth`.
  * Слайс `companies` хранит только список (`list`); объекта `companies.active` в сторе нет.
  */
-export function authActiveCompanyId(state: any) {
+export function authActiveCompanyId(state: unknown) {
     if (!isPlainObject(state)) {
         return '';
     }
@@ -60,7 +67,7 @@ export function authActiveCompanyId(state: any) {
 /**
  * Возвращает строку value, если она непустая; иначе fallback (обязателен).
  */
-export function stringOr(value: unknown, fallback: any) {
+export function stringOr(value: unknown, fallback: unknown) {
     if (typeof fallback !== 'string') {
         throw new Error('stringOr: fallback string required');
     }
@@ -70,7 +77,7 @@ export function stringOr(value: unknown, fallback: any) {
 /**
  * Цвет/токен с обязательным дефолтом — для опциональных кастомных цветов нод/sticky.
  */
-export function colorOrDefault(value: unknown, defaultColor: any) {
+export function colorOrDefault(value: unknown, defaultColor: unknown) {
     if (typeof defaultColor !== 'string' || defaultColor.length === 0) {
         throw new Error('colorOrDefault: defaultColor required');
     }
@@ -81,7 +88,7 @@ export function colorOrDefault(value: unknown, defaultColor: any) {
  * Безопасное чтение branchData из editor slice. Slice гарантирует форму через
  * extraInitial, но защита от undefined нужна на момент монтирования.
  */
-export function getBranchData(state: any): Record<string, any> {
+export function getBranchData(state: unknown): Record<string, unknown> {
     if (!isPlainObject(state)) {
         return { nodes: {}, edges: [], entry: null, variables: {}, resources: {} };
     }
@@ -92,12 +99,12 @@ export function getBranchData(state: any): Record<string, any> {
     return branchDraft;
 }
 
-export function getBranchNodes(state: any): Record<string, any> {
+export function getBranchNodes(state: unknown): Record<string, unknown> {
     const data = getBranchData(state);
     return isPlainObject(data.nodes) ? data.nodes : {};
 }
 
-export function getBranchEdges(state: any): any[] {
+export function getBranchEdges(state: unknown): unknown[] {
     const data = getBranchData(state);
     return Array.isArray(data.edges) ? data.edges : [];
 }
@@ -105,7 +112,7 @@ export function getBranchEdges(state: any): any[] {
 /**
  * Возвращает ноду по id или null. Не бросает — рендер должен уметь скипать.
  */
-export function getNodeByIdOrNull(branchData: any, nodeId: string): Record<string, any> | null {
+export function getNodeByIdOrNull(branchData: unknown, nodeId: string): Record<string, unknown> | null {
     if (!isPlainObject(branchData)) return null;
     const nodes = branchData.nodes;
     if (!isPlainObject(nodes)) return null;
@@ -114,7 +121,7 @@ export function getNodeByIdOrNull(branchData: any, nodeId: string): Record<strin
     return isPlainObject(node) ? node : null;
 }
 
-export function getEdgeEndpoints(edge: any): { from_node: string; to_node: string } {
+export function getEdgeEndpoints(edge: unknown): { from_node: string; to_node: string } {
     if (!isPlainObject(edge)) return { from_node: '', to_node: '' };
     return {
         from_node: isNonEmptyString(edge.from_node) ? edge.from_node : '',
@@ -125,7 +132,7 @@ export function getEdgeEndpoints(edge: any): { from_node: string; to_node: strin
 /**
  * Координаты ноды (pos_x/pos_y). Дефолт 0 — позиция всегда определена.
  */
-export function getNodePos(node: any): { x: number; y: number } {
+export function getNodePos(node: unknown): { x: number; y: number } {
     if (!isPlainObject(node)) return { x: 0, y: 0 };
     return { x: asNumber(node.pos_x), y: asNumber(node.pos_y) };
 }
@@ -133,7 +140,7 @@ export function getNodePos(node: any): { x: number; y: number } {
 /**
  * Видимое имя ноды (name → fallback на id, который обязателен).
  */
-export function getNodeDisplayName(node: any, nodeId: string) {
+export function getNodeDisplayName(node: unknown, nodeId: string) {
     if (typeof nodeId !== 'string' || nodeId.length === 0) {
         throw new Error('getNodeDisplayName: nodeId required');
     }
@@ -144,7 +151,7 @@ export function getNodeDisplayName(node: any, nodeId: string) {
 /**
  * Тип ноды (строка). Если нет — пустая (для UI отображения).
  */
-export function getNodeType(node: any) {
+export function getNodeType(node: unknown) {
     if (!isPlainObject(node)) return '';
     return asString(node.type);
 }
@@ -152,7 +159,7 @@ export function getNodeType(node: any) {
 /**
  * Размер стикера с дефолтом из аргументов.
  */
-export function getStickyNoteSize(note: any, defaultW: any, defaultH: any): { w: number; h: number } {
+export function getStickyNoteSize(note: unknown, defaultW: unknown, defaultH: unknown): { w: number; h: number } {
     if (typeof defaultW !== 'number' || typeof defaultH !== 'number') {
         throw new Error('getStickyNoteSize: defaults required');
     }
@@ -168,7 +175,7 @@ export function getStickyNoteSize(note: any, defaultW: any, defaultH: any): { w:
 /**
  * Получение flow_id из state редактора.
  */
-export function resolveFlowId(state: any) {
+export function resolveFlowId(state: unknown) {
     if (!isPlainObject(state)) return null;
     return isNonEmptyString(state.flowId) ? state.flowId : null;
 }
@@ -176,12 +183,12 @@ export function resolveFlowId(state: any) {
 /**
  * Resolve активного branch id (или null).
  */
-export function resolveBranchId(state: any) {
+export function resolveBranchId(state: unknown) {
     if (!isPlainObject(state)) return null;
     return isNonEmptyString(state.currentBranchId) ? state.currentBranchId : null;
 }
 
-function _deepEqual(a: any, b: any) {
+function _deepEqual(a: unknown, b: unknown) {
     if (a === b) return true;
     if (Array.isArray(a) && Array.isArray(b)) {
         if (a.length !== b.length) return false;
@@ -206,7 +213,7 @@ function _deepEqual(a: any, b: any) {
  * Фрагмент ноды для `branches[branchId].nodes` при merge: отличия effective от base.
  * Бэкенд делает deep_merge(base_node, branch_fragment) — см. FlowFactory._merge_nodes.
  */
-export function buildBranchNodeOverride(baseNode: any, effectiveNode: any) {
+export function buildBranchNodeOverride(baseNode: unknown, effectiveNode: unknown) {
     if (!isPlainObject(effectiveNode)) {
         throw new Error('buildBranchNodeOverride: effectiveNode object required');
     }
@@ -216,27 +223,27 @@ export function buildBranchNodeOverride(baseNode: any, effectiveNode: any) {
     return _diffForBranchOverride(baseNode, effectiveNode);
 }
 
-function _diffForBranchOverride(base: any, effective: any) {
-    const out = {};
+function _diffForBranchOverride(base: Record<string, unknown>, effective: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
     for (const key of Object.keys(effective)) {
         const ev = effective[key];
         if (ev === undefined) continue;
         if (!(key in base)) {
-            (out as any)[key] = ev;
+            out[key] = ev;
             continue;
         }
         const bv = base[key];
-        if (isPlainObject(ev) && !Array.isArray(ev) && isPlainObject(bv) && !Array.isArray(bv)) {
+        if (isPlainObject(ev) && isPlainObject(bv)) {
             const sub = _diffForBranchOverride(bv, ev);
-            if (isPlainObject(sub) && Object.keys(sub).length > 0) {
-                (out as any)[key] = sub;
+            if (Object.keys(sub).length > 0) {
+                out[key] = sub;
             }
         } else if (Array.isArray(ev)) {
             if (!_deepEqual(ev, Array.isArray(bv) ? bv : null)) {
-                (out as any)[key] = ev;
+                out[key] = ev;
             }
         } else if (!_deepEqual(ev, bv)) {
-            (out as any)[key] = ev;
+            out[key] = ev;
         }
     }
     return out;
@@ -248,14 +255,14 @@ function _diffForBranchOverride(base: any, effective: any) {
  * @param {unknown} state
  * @returns {Record<string, unknown> | null}
  */
-export function buildFlowPublishBody(state: any) {
+export function buildFlowPublishBody(state: unknown): Record<string, unknown> | null {
     if (!isPlainObject(state) || !isPlainObject(state.flowConfig)) {
         return null;
     }
     const data = isPlainObject(state.branchData) ? state.branchData : {};
     const branchId = asString(state.currentBranchId);
     const isBase = !branchId || branchId === 'base';
-    const body: any = { ...state.flowConfig };
+    const body: Record<string, unknown> = { ...state.flowConfig };
     if (isBase) {
         body.nodes = data.nodes;
         body.edges = data.edges;
@@ -268,15 +275,15 @@ export function buildFlowPublishBody(state: any) {
         const inheritedNodeIds = asArray(state.inheritedNodeIds);
         const inheritedEdgeKeys = asArray(state.inheritedEdgeKeys);
         const baseNodes = isPlainObject(state.flowConfig?.nodes) ? state.flowConfig.nodes : {};
-        const ownNodes = {};
+        const ownNodes: Record<string, unknown> = {};
         for (const [id, node] of Object.entries(isPlainObject(data.nodes) ? data.nodes : {})) {
             if (!inheritedNodeIds.includes(id)) {
-                (ownNodes as any)[id] = node;
+                ownNodes[id] = node;
             } else {
-                const baseN = (baseNodes as Record<string, any>)[id];
+                const baseN = baseNodes[id];
                 const fragment = buildBranchNodeOverride(baseN, node);
-                if (isPlainObject(fragment) && Object.keys(fragment).length > 0) {
-                    (ownNodes as any)[id] = fragment;
+                if (Object.keys(fragment).length > 0) {
+                    ownNodes[id] = fragment;
                 }
             }
         }
@@ -306,7 +313,7 @@ export function buildFlowPublishBody(state: any) {
  * @param {{ runInFlight: boolean, taskId: string | null, activeAssistant: unknown, runTrace: unknown }} params
  * @returns {'idle'|'running'|'passed'|'failed'}
  */
-export function deriveRunPanelStatus(params: any) {
+export function deriveRunPanelStatus(params: unknown) {
     if (!isPlainObject(params)) {
         throw new Error('deriveRunPanelStatus: params object required');
     }
@@ -362,7 +369,7 @@ export function deriveRunPanelStatus(params: any) {
  *
  * @param {string} text
  */
-export function humanReadableErrorSummary(text: any) {
+export function humanReadableErrorSummary(text: unknown) {
     if (typeof text !== 'string') {
         throw new Error('humanReadableErrorSummary: string required');
     }

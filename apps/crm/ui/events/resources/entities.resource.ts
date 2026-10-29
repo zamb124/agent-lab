@@ -28,10 +28,24 @@ import {
     createForm,
     rerunLastRequest,
 } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const ENTITY_NAME_MAX = 256;
 const ENTITY_DESCRIPTION_MAX = 4096;
 const NAMESPACE_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
+
+function payloadRecord(payload: unknown): Record<string, unknown> | null {
+    return isPlainRecord(payload) ? payload : null;
+}
+
+function resultRecord(payload: unknown): Record<string, unknown> | null {
+    const record = payloadRecord(payload);
+    if (record === null) {
+        return null;
+    }
+    const result = record.result;
+    return isPlainRecord(result) ? result : null;
+}
 
 export const entitiesResource = createResourceCollection({
     name: 'crm/entities',
@@ -50,8 +64,8 @@ export const entitiesResource = createResourceCollection({
         if (event.type !== 'crm/note/updated') {
             return state;
         }
-        const payload = (event.payload as Record<string, any>);
-        if (!payload || typeof payload !== 'object') {
+        const payload = payloadRecord(event.payload);
+        if (payload === null) {
             return state;
         }
         const noteId = payload.note_id;
@@ -70,7 +84,7 @@ export const entitiesResource = createResourceCollection({
             return { ...state, byId, items };
         }
         const note = payload.note;
-        if (!note || typeof note !== 'object' || typeof note.entity_id !== 'string') {
+        if (!isPlainRecord(note) || typeof note.entity_id !== 'string') {
             return state;
         }
         if (!state.byId || !(noteId in state.byId)) {
@@ -120,8 +134,12 @@ export const entityUpdateOp = createAsyncOp({
     restMirror: { method: 'PUT', path: '/crm/api/v1/entities/:entity_id' },
     onSuccess: (ctx, result) => {
         rerunLastRequest(ctx, entityCardOp, {
-            when: (request) => Boolean(request)
-                && (request as Record<string, unknown>).entity_id === (result as Record<string, unknown>).entity_id,
+            when: (request) => {
+                if (!isPlainRecord(request) || !isPlainRecord(result)) {
+                    return false;
+                }
+                return request.entity_id === result.entity_id;
+            },
         });
     },
 });
@@ -185,9 +203,12 @@ export const entitiesListResource = createCursorList({
     errorToastKey: 'crm:toast.entities_list.failed',
     extraReducer: (state, event) => {
         if (event.type === 'crm/entity_bulk_delete/succeeded') {
-            const result = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).result ? (event.payload as Record<string, any>).result : null;
-            const deleted = result && Array.isArray(result.deleted) ? result.deleted : null;
-            if (!deleted || deleted.length === 0) {
+            const result = resultRecord(event.payload);
+            if (result === null) {
+                return state;
+            }
+            const deleted = result.deleted;
+            if (!Array.isArray(deleted) || deleted.length === 0) {
                 return state;
             }
             const removed = new Set(deleted);
@@ -197,9 +218,12 @@ export const entitiesListResource = createCursorList({
             return { ...state, items };
         }
         if (event.type === 'crm/entity_bulk_update/succeeded') {
-            const result = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).result ? (event.payload as Record<string, any>).result : null;
-            const updated = result && Array.isArray(result.updated) ? result.updated : null;
-            if (!updated || updated.length === 0) {
+            const result = resultRecord(event.payload);
+            if (result === null) {
+                return state;
+            }
+            const updated = result.updated;
+            if (!Array.isArray(updated) || updated.length === 0) {
                 return state;
             }
             const byId = new Map();
@@ -221,13 +245,17 @@ export const entitiesListResource = createCursorList({
             return { ...state, items };
         }
         if (event.type === 'crm/entity_merge/succeeded') {
-            const result = (event.payload as Record<string, any>) && (event.payload as Record<string, any>).result ? (event.payload as Record<string, any>).result : null;
-            if (!result || typeof result !== 'object') {
+            const result = resultRecord(event.payload);
+            if (result === null) {
                 return state;
             }
             const survivor = result.entity;
             const mergedFrom = result.merged_from_entity_id;
-            if (!survivor || typeof survivor.entity_id !== 'string') {
+            if (!isPlainRecord(survivor)) {
+                return state;
+            }
+            const survivorId = survivor.entity_id;
+            if (typeof survivorId !== 'string') {
                 return state;
             }
             if (typeof mergedFrom !== 'string' || mergedFrom.length === 0) {
@@ -245,7 +273,7 @@ export const entitiesListResource = createCursorList({
                 if (item.entity_id === mergedFrom) {
                     continue;
                 }
-                if (item.entity_id === survivor.entity_id) {
+                if (item.entity_id === survivorId) {
                     items.push(survivor);
                     survivorSeen = true;
                     continue;

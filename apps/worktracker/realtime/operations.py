@@ -364,7 +364,7 @@ async def op_work_items_comments_list(
     di: Di,
 ) -> WorkItemCommentsList:
     _ = user, di
-    items = await WorkItemComment.list_for_work_item(_company_id(), payload.work_item_id)
+    items = await WorkItemComment.list_for_work_item_by_created_at_asc(_company_id(), payload.work_item_id)
     return WorkItemCommentsList(items=items)
 
 

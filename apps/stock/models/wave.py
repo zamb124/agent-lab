@@ -139,7 +139,7 @@ class StockWave(PlatformModel):
         async def body(_scope: LaneScope) -> LaneOutcome[StockWave]:
             line_ids = list(move_line_ids)
             if move_ids:
-                extra = await StockMoveLine.list_open_for_moves(
+                extra = await StockMoveLine.list_open_for_moves_by_created_at_asc(
                     company_id, move_ids
                 )
                 line_ids += [x.move_line_id for x in extra]
@@ -149,7 +149,7 @@ class StockWave(PlatformModel):
                     "Wave has no lines to group",
                     error_code="wave_empty",
                 )
-            lines = await StockMoveLine.by_ids_locked(company_id, line_ids)
+            lines = await StockMoveLine.list_unordered_locked_by_ids(company_id, line_ids)
             found = {x.move_line_id for x in lines}
             if len(found) != len(line_ids):
                 raise PlatformNotFoundError(

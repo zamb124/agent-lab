@@ -10,6 +10,7 @@ import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-regist
 import '@platform/lib/components/platform-icon.js';
 import type { CSSResultGroup, TemplateResult } from 'lit';
 import type { ResourceController, ControllerFor } from '@platform/lib/base/use-resource.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const CATALOGS_NAME = 'office/catalogs';
 const DOCUMENTS_OP = 'office/documents';
@@ -70,9 +71,13 @@ export class OfficeCatalogPickerSheet extends PlatformBottomSheet {
     }
 
     private _activeCatalogId() {
-        const state = this._documents.state as { activeCatalogId?: unknown };
-        if (typeof state.activeCatalogId === 'string' && state.activeCatalogId.length > 0) {
-            return state.activeCatalogId;
+        const state = this._documents.state;
+        if (!isPlainRecord(state)) {
+            return '';
+        }
+        const activeCatalogId = state.activeCatalogId;
+        if (typeof activeCatalogId === 'string' && activeCatalogId.length > 0) {
+            return activeCatalogId;
         }
         return '';
     }

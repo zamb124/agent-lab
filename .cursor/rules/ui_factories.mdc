@@ -51,7 +51,7 @@ alwaysApply: false
 
 ### Имена
 
-- `name` — `<svc>/<entity>`: ровно два сегмента snake_case, `<svc>` — каталог сервиса или публичный домен из `PUBLIC_FACTORY_DOMAIN_BY_SERVICE` (`scripts/check_ui_factories.py`); у core-фабрики — префикс владельца. Повтор `name` в процессе — `throw`.
+- `name` — `<svc>/<entity>`: ровно два сегмента snake_case, `<svc>` — каталог сервиса или публичный домен из `PUBLIC_FACTORY_DOMAIN_BY_SERVICE` (`scripts/gates/frontend/ui_factories.py`); у core-фабрики — префикс владельца. Повтор `name` в процессе — `throw`.
 - `sliceKey` выводится из `name` (`scope_entity` → `scopeEntity`); явный `sliceKey` в опциях запрещён. `[без гейта]`
 - Событие фабрики — `<name>/<verb>` по § Контракт события; в коде — `factory.events.X` или метод контроллера, не литерал.
 
@@ -142,11 +142,11 @@ alwaysApply: false
 
 ## Гейты
 
-- `npx tsc -p tsconfig.json` (`make ui-typecheck`) — имя `use*` зарегистрировано в `PlatformFactoryRegistry` и совпадает по виду; `scripts/check_ui_kit_canon.py` (`make lint-ts`) — ratchet `ts_controller_cast` (каст результата `use*`).
-- `scripts/check_ui_factories.py` (`make check-ui-factories`) — уникальность и формат `name`, `baseUrl` под префиксом сервиса, toast-ключи с namespace в ru и en, `idField` у `get`/`update`/`remove`, запреты `createSlice`, фабрика из `use*` зарегистрирована в `static factories`.
-- `scripts/check_command_rest_mirror.py` (`make check-command-rest-mirror`) — `restMirror` операций `createAsyncOp`, `createResourceCollection`, `createCursorList` указывает на FastAPI route владельца; `transport: 'ws'` у `COMMAND_WS_SERVICES` вне `COMMAND_WS_HTTP_ALLOWLIST`.
-- `scripts/check_core_frontend_canon.py` (`make check-core-frontend-canon`) — фолбеки в `events/reducers/` и `events/factories/`, имена `CoreEvents`, `fetch` и `WebSocket` только в `events/http.ts` и `events/effects/`.
-- `scripts/check_ui_canon.sh` (`make check-ui-canon`) — п.12 литерал в `this.dispatch(...)` по форме `<scope>/<entity>/<verb>`; п.13 импорт фабрик и контроллеров, `new <X>Controller`, каталог `events/effects/`; п.14 `await (this.dispatch(...))`; п.15 `||`/`??`-фолбеки в `*.resource.ts`.
-- `scripts/check_platform_events_canon.py` — `_check_push_reload`: reload по push и исходу мутации в pages, modals, components; `_check_bare_push_literals_outside_types`: литерал push-типа вне `events/types.js` и `events/resources/`.
+- `npx tsc -p tsconfig.json` (`make ui-typecheck`) — имя `use*` зарегистрировано в `PlatformFactoryRegistry` и совпадает по виду; `scripts/gates/frontend/ui_kit_canon.py` (`make lint-ts`) — ratchet `ts_controller_cast` (каст результата `use*`).
+- `scripts/gates/frontend/ui_factories.py` (`make check-ui-factories`) — уникальность и формат `name`, `baseUrl` под префиксом сервиса, toast-ключи с namespace в ru и en, `idField` у `get`/`update`/`remove`, запреты `createSlice`, фабрика из `use*` зарегистрирована в `static factories`.
+- `scripts/gates/backend/command_rest_mirror.py` (`make check-command-rest-mirror`) — `restMirror` операций `createAsyncOp`, `createResourceCollection`, `createCursorList` указывает на FastAPI route владельца; `transport: 'ws'` у `COMMAND_WS_SERVICES` вне `COMMAND_WS_HTTP_ALLOWLIST`.
+- `scripts/gates/frontend/core_frontend_canon.py` (`make check-core-frontend-canon`) — фолбеки в `events/reducers/` и `events/factories/`, имена `CoreEvents`, `fetch` и `WebSocket` только в `events/http.ts` и `events/effects/`.
+- `scripts/gates/frontend/ui_canon.sh` (`make check-ui-canon`) — п.12 литерал в `this.dispatch(...)` по форме `<scope>/<entity>/<verb>`; п.13 импорт фабрик и контроллеров, `new <X>Controller`, каталог `events/effects/`; п.14 `await (this.dispatch(...))`; п.15 `||`/`??`-фолбеки в `*.resource.ts`.
+- `scripts/gates/backend/platform_events.py` — `_check_push_reload`: reload по push и исходу мутации в pages, modals, components; `_check_bare_push_literals_outside_types`: литерал push-типа вне `events/types.js` и `events/resources/`.
 - Фабрики бросают на старте: `assertResourceName`, `requireI18nKey` (`core/frontend/static/lib/events/factories/_internal.ts`), `normalizeTransport`, `normalizeRestMirror*` (`core/frontend/static/lib/events/factories/_transport.ts`).
 - `tests/frontend_core/unit/factories/*.spec.js` — контракты фабрик. Все гейты входят в `make check-events-canon` и `make lint-ts`.

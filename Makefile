@@ -1,4 +1,4 @@
-.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-seaweedfs-restart dev-bootstrap-postgres openfga-backfill stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-seaweedfs-restart dev-bootstrap-postgres openfga-backfill stress lint lint-ts lint-file mcp-branding-seed ui ui-doc sync-example-docs
 .PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-realtime-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon check-dependency-injection-canon check-a2a-fixtures check-a2a-fixtures-remote build-i18n
 .PHONY: clean-i18n-unused base
@@ -35,7 +35,7 @@ export RUSTUP_HOME := $(PLATFORM_RUNTIME_DIR)/rustup
 endif
 
 runtime-bootstrap:
-	@uv run python scripts/bootstrap_runtimes.py
+	@uv run python -m scripts.dev.bootstrap_runtimes
 
 # ============================================================================
 # Локальная разработка (без Docker для приложения)
@@ -48,7 +48,7 @@ dev-up: runtime-bootstrap
 	@echo "Запуск Development окружения (БД/Redis/SeaweedFS/OpenFGA в Docker)..."
 	docker-compose -f docker-compose-dev.yaml up -d
 	@echo "Bootstrap OpenFGA store + model → reports/openfga-dev.env..."
-	@uv run python scripts/openfga_env_bootstrap.py --api-url http://127.0.0.1:9090 --env-path reports/openfga-dev.env
+	@uv run python -m scripts.dev.openfga_env_bootstrap --api-url http://127.0.0.1:9090 --env-path reports/openfga-dev.env
 	@$(MAKE) openfga-backfill
 	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, SeaweedFS: 19001/19011, OpenFGA: 9090, Chromium CDP: 9222)"
 
@@ -67,8 +67,7 @@ openfga-backfill:
 	uv run python -m apps.sync.authz && \
 	uv run python -m apps.worktracker.authz && \
 	uv run python -m core.mail.authz && \
-	uv run python -m core.datasources.authz.backfill && \
-	uv run python -m apps.agent.authz
+	uv run python -m core.datasources.authz.backfill
 
 dev-down:
 	@echo "Остановка Development окружения..."
@@ -88,8 +87,8 @@ dev-seaweedfs-restart:
 
 # Недостающие БД на старом томе Postgres + накат 0001_initial.
 dev-bootstrap-postgres:
-	uv run python -m scripts.db_migrate upgrade
-	@echo "Postgres dev: ensure databases + миграции через scripts.db_migrate"
+	uv run python -m scripts.db.migrate upgrade
+	@echo "Postgres dev: ensure databases + миграции через scripts.db.migrate"
 
 stress:
 	@SERVICE="$(SERVICE)" PROFILE="$(PROFILE)" URL="$(URL)" TOKEN="$(TOKEN)" RPS="$(or $(RPS),$(STRESS_GOAL_RPS))" RATE="$(RATE)" DURATION="$(DURATION)" PRE_ALLOCATED_VUS="$(PRE_ALLOCATED_VUS)" MAX_VUS="$(MAX_VUS)" STRESS_USE_MOCK="$(STRESS_USE_MOCK)" DRY_RUN="$(DRY_RUN)" ./scripts/stress/run.sh
@@ -132,117 +131,117 @@ test-crawl-strict-e2e:
 # ============================================================================
 
 check-ui-canon:
-	@./scripts/check_ui_canon.sh
-	@uv run python scripts/check_flow_ui_hard_cut.py
+	@./scripts/gates/frontend/ui_canon.sh
+	@uv run python -m scripts.gates.flows.flow_ui_hard_cut
 
 check-flow-ui-hard-cut:
-	@uv run python scripts/check_flow_ui_hard_cut.py
+	@uv run python -m scripts.gates.flows.flow_ui_hard_cut
 
 # Field canon: запрет сырых <input>/<textarea>/<select> в apps/<svc>/ui/{pages,modals,components}/**
-# кроме whitelist type= и data-canon (см. scripts/check_field_canon.sh). Не входит в check-events-canon.
+# кроме whitelist type= и data-canon (см. scripts/gates/frontend/field_canon.sh). Не входит в check-events-canon.
 check-field-canon:
-	@./scripts/check_field_canon.sh
+	@./scripts/gates/frontend/field_canon.sh
 
 check-logging:
-	@./scripts/check_logging_canon.sh
+	@./scripts/gates/backend/logging_canon.sh
 
 check-taskiq-canon:
-	@uv run python scripts/check_taskiq_canon.py
+	@uv run python -m scripts.gates.backend.taskiq
 
 check-dependency-injection-canon:
-	@uv run python scripts/check_dependency_injection_canon.py
+	@uv run python -m scripts.gates.backend.dependency_injection
 
 check-no-uvicorn:
-	@./scripts/check_no_uvicorn.sh
+	@./scripts/gates/backend/no_uvicorn.sh
 
 check-a2a-fixtures:
-	@uv run python scripts/pin_a2a_official_fixtures.py --check
+	@uv run python -m scripts.generate.a2a_fixtures --check
 
 check-a2a-fixtures-remote:
-	@uv run python scripts/pin_a2a_official_fixtures.py --check-remote
+	@uv run python -m scripts.generate.a2a_fixtures --check-remote
 
 check-ft-wheels:
-	@./scripts/check_ft_wheels.sh
+	@./scripts/gates/repo/ft_wheels.sh
 
 check-gpu-dockerfile-llm-model:
-	@./scripts/check_gpu_dockerfile_llm_model.sh
+	@./scripts/gates/repo/gpu_dockerfile_llm_model.sh
 
 check-ui-factories:
-	@uv run python scripts/check_ui_factories.py
+	@uv run python -m scripts.gates.frontend.ui_factories
 
 check-command-rest-mirror:
-	@uv run python scripts/check_command_rest_mirror.py
+	@uv run python -m scripts.gates.backend.command_rest_mirror
 
 check-platform-events-canon:
-	@uv run python scripts/check_platform_events_canon.py
+	@uv run python -m scripts.gates.backend.platform_events
 
 check-realtime-canon:
-	@uv run python scripts/check_realtime_canon.py
+	@uv run python -m scripts.gates.backend.realtime
 
 check-core-frontend-canon:
-	@uv run python scripts/check_core_frontend_canon.py
-	@uv run python scripts/check_embed_esm_closure.py
+	@uv run python -m scripts.gates.frontend.core_frontend_canon
+	@uv run python -m scripts.gates.frontend.embed_esm_closure
 
 check-embed-esm:
-	@uv run python scripts/check_embed_esm_closure.py
+	@uv run python -m scripts.gates.frontend.embed_esm_closure
 
 check-voice-resolver:
-	@uv run python scripts/check_voice_resolver_usage.py
+	@uv run python -m scripts.gates.voice.resolver_usage
 
 check-speakable-parity:
-	@uv run python scripts/check_speakable_parity.py
+	@uv run python -m scripts.gates.voice.speakable_parity
 
 check-tts-pipeline:
-	@uv run python scripts/check_tts_pipeline_single_apply.py
+	@uv run python -m scripts.gates.voice.tts_pipeline_single_apply
 
 check-company-ai:
-	uv run python scripts/check_company_ai_canon.py
+	uv run python -m scripts.gates.ai.company_ai_canon
 
 check-rag-post-retrieval-rerank:
-	@uv run python scripts/check_rag_post_retrieval_rerank_single.py
+	@uv run python -m scripts.gates.ai.rag_post_retrieval_rerank_single
 
 check-file-reader-canon:
-	@uv run python scripts/check_file_reader_canon.py
+	@uv run python -m scripts.gates.files.file_reader
 
 check-corpus-manifest:
-	@uv run python scripts/check_corpus_manifest_complete.py
+	@uv run python -m scripts.gates.files.corpus_manifest
 
 sync-example-docs:
-	@uv run python scripts/download_example_docs.py
+	@uv run python -m scripts.generate.example_docs
 
 check-voice-canon: check-voice-resolver check-speakable-parity check-tts-pipeline
 
 check-files-canon:
-	@uv run python scripts/check_files_canon.py
-	@uv run python scripts/check_object_store_canon.py
-	@bash scripts/check_files_ui_canon.sh
+	@uv run python -m scripts.gates.files.files_canon
+	@uv run python -m scripts.gates.files.object_store
+	@bash scripts/gates/files/files_ui_canon.sh
 
 check-tool-tags:
-	@uv run python scripts/check_tool_tags.py
+	@uv run python -m scripts.gates.flows.tool_tags
 
 check-mcp-branding-bundle:
-	@uv run python scripts/check_mcp_branding_bundle.py
+	@uv run python -m scripts.gates.flows.mcp_branding_bundle
 
 mcp-branding-seed:
-	@uv run python scripts/mcp_branding_seed.py
+	@uv run python -m scripts.tools.mcp_branding_seed
 
-check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-platform-events-canon check-realtime-canon check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-file-reader-canon check-corpus-manifest check-company-ai check-files-canon check-mcp-branding-bundle check-i18n check-i18n-keys check-no-uvicorn
-	@echo "check-events-canon: OK"
+check-events-canon:
+	uv run python -m scripts.gates --suite events
 
 check-i18n:
-	@./scripts/check_i18n.sh
+	@./scripts/gates/frontend/i18n.sh
 
 check-i18n-keys:
-	@uv run python scripts/check_i18n_keys.py --mode missing --strict
+	@uv run python -m scripts.gates.frontend.i18n_keys --mode missing --strict
 
 check-inline-docs:
 	@uv run pytest tests/core/test_inline_docs_inventory.py -q
 
 clean-i18n-unused:
-	@uv run python scripts/clean_i18n_unused.py --apply
+	@uv run python -m scripts.tools.clean_i18n_unused --apply
 
 build-i18n:
-	uv run python -m scripts.build_i18n
+	uv run python -m scripts.build.i18n
 
 # ============================================================================
 # Базовый образ (используется при изменении core зависимостей в Dockerfile.base)
@@ -469,14 +468,6 @@ help:
 	@echo "  make test-down       - Остановить test-стек"
 	@echo ""
 	@echo "============================================================================"
-	@echo "LinnexAgent (desktop, GitHub Releases):"
-	@echo "============================================================================"
-	@echo "  make agent           - Собрать все платформы + опубликовать GitHub Release"
-	@echo "  make agent-ensure    - Собрать артефакт текущей ОС, если ещё нет (для test)"
-	@echo "  make agent-build AGENT_PLATFORM=macos-arm64 - Одна платформа"
-	@echo "  make agent-ci-build AGENT_PLATFORM=linux-deb - То же для CI matrix"
-	@echo ""
-	@echo "============================================================================"
 	@echo "Канон UI / i18n / логирование:"
 	@echo "============================================================================"
 	@echo "  make check-events-canon - core lib + apps + ui-factories + REST-зеркало + i18n"
@@ -530,7 +521,6 @@ help:
 
 include mk/lint.mk
 include mk/app.mk
-include mk/agent.mk
 include mk/test.mk
 include mk/migrate.mk
 
@@ -540,17 +530,17 @@ include mk/migrate.mk
 doc: ui-build
 	@echo "Локальная сборка документации (Zensical RU + EN)..."
 	rm -rf documentation-dist build/documentation-ru build/documentation-en build/zensical-en-out
-	uv run python scripts/extract_openapi.py
-	uv run python scripts/generate_ui_kit_docs.py
-	uv run python scripts/check_scenario_docs_quality.py --warnings-ok
-	uv run python scripts/docs_prepare.py
-	uv run python scripts/check_docs_locale_parity.py
+	uv run python -m scripts.docs.extract_openapi
+	uv run python -m scripts.docs.ui_kit_docs
+	uv run python -m scripts.gates.repo.scenario_docs_quality --warnings-ok
+	uv run python -m scripts.docs.prepare
+	uv run python -m scripts.gates.repo.docs_locale_parity
 	uv run --group docs zensical build --clean --config-file zensical.ru.toml
 	uv run --group docs zensical build --clean --config-file zensical.en.toml
 	mkdir -p documentation-dist/en
 	cp -a build/zensical-en-out/. documentation-dist/en/
-	uv run python scripts/docs_postprocess.py
-	uv run python scripts/check_docs_locale_parity.py --site documentation-dist
+	uv run python -m scripts.docs.postprocess
+	uv run python -m scripts.gates.repo.docs_locale_parity --site documentation-dist
 	@echo "Документация: documentation-dist/ и documentation-dist/en/ (монтирование /documentation/)"
 
 doc-serve:
@@ -558,16 +548,16 @@ doc-serve:
 	@echo "Нужны: make doc (артефакт documentation-dist/) и make app (frontend + flows)."
 	@echo "Откройте http://127.0.0.1:8000/documentation/"
 	@test -d documentation-dist || (echo "Сначала выполните: make doc" && exit 1)
-	uv run python scripts/docs_dev_server.py --host 127.0.0.1 --port 8000
+	uv run python -m scripts.docs.dev_server --host 127.0.0.1 --port 8000
 
 doc-serve-zensical:
 	@echo "Только вёрстка Zensical (без /static/core — Ask AI не работает)."
-	uv run python scripts/generate_ui_kit_docs.py
-	uv run python scripts/docs_prepare.py
+	uv run python -m scripts.docs.ui_kit_docs
+	uv run python -m scripts.docs.prepare
 	uv run --group docs zensical serve --config-file zensical.ru.toml
 
 doc-ui-kit:
-	uv run python scripts/generate_ui_kit_docs.py
+	uv run python -m scripts.docs.ui_kit_docs
 
 doc-docker:
 	docker build --target docs-builder -t agent-lab-docs .

@@ -47,7 +47,7 @@ async def op_variables_list(
 ) -> OffsetPage[PlatformVariable]:
     _ = user
     scope = await require_company_viewer(di.authz_service)
-    items = await SecretVariable.masked_page_by_variable_key(
+    items = await SecretVariable.list_masked_by_variable_key_asc(
         scope.company_id, limit=payload.limit, offset=payload.offset
     )
     total = await SecretVariable.count_for_company(scope.company_id)

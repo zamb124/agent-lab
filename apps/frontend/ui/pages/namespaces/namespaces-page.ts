@@ -138,7 +138,8 @@ export class FrontendNamespacesPage extends PlatformPage {
     }
 
     _items() {
-        const items = Array.isArray(this._namespaces.items) ? (this._namespaces.items as Array<Record<string, any>>) : [];
+        const rawItems = this._namespaces.items;
+        const items = Array.isArray(rawItems) ? rawItems : [];
         if (this._kindFilter === 'all') return items;
         return items.filter((item) => item.kind === this._kindFilter);
     }

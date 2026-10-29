@@ -20,6 +20,7 @@ import {
     createAsyncOp,
     upsertItem,
 } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const TEMPLATE_UPDATE_SUCCEEDED = 'crm/template_update/succeeded';
 
@@ -39,8 +40,11 @@ export const templatesResource = createResourceCollection({
         if (event.type !== TEMPLATE_UPDATE_SUCCEEDED) {
             return state;
         }
-        const template = (event.payload as Record<string, any>).result;
-        if (!template || typeof template.template_id !== 'string') {
+        if (!isPlainRecord(event.payload)) {
+            throw new Error('crm/templates: update payload must be an object');
+        }
+        const template = event.payload.result;
+        if (!isPlainRecord(template) || typeof template.template_id !== 'string') {
             return state;
         }
         return upsertItem(state, template, 'template_id');

@@ -10,6 +10,7 @@
 import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
 import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function _normalizeModel(raw: ResourceItem): ResourceItem {
     if (!raw || typeof raw !== 'object') {
@@ -50,7 +51,10 @@ export const humanitecModelRetryOp = createAsyncOp({
     errorToastKey: 'litserve:toast.model_retry_error',
     restMirror: { method: 'POST', path: '/litserve/api/models/:model_id/retry' },
     request: async ({ payload }) => {
-        const modelId = (payload as Record<string, unknown> | null)?.model_id;
+        if (!isPlainRecord(payload)) {
+            throw new Error('humanitec_models/model_retry: payload.model_id required');
+        }
+        const modelId = payload.model_id;
         if (typeof modelId !== 'string' || modelId.length === 0) {
             throw new Error('humanitec_models/model_retry: payload.model_id required');
         }

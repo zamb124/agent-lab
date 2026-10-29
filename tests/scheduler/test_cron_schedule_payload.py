@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from apps.idle_worker.tasks.task_names import TASK_CALENDAR_SYNC_TICK
+from apps.idle.tasks.task_names import TASK_CALENDAR_SYNC_TICK
 from apps.scheduler.main import (
     SYSTEM_SCHEDULER_COMPANY_ID,
     _ensure_calendar_schedule,

@@ -77,7 +77,7 @@ async def list_calendar_events(payload: CalendarListRequest, di: Di) -> Calendar
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        events = await di.calendar_service.list_events(
+        events = await di.calendar_service.list_events_by_start_at_asc(
             company_id=ctx.active_company.company_id,
             user_id=ctx.user.user_id,
             start_at=payload.start_at,

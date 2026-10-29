@@ -71,7 +71,7 @@ async def test_bindings_isolated_by_company(
                 updated_at=now,
             )
         )
-    _ = await MailboxBinding.upsert_by_email(
+    _ = await MailboxBinding.upsert_by_company_and_email(
         MailboxBinding(
             mailbox_binding_id=f"mailbind_a_{unique_id}",
             company_id=company_a,
@@ -86,9 +86,9 @@ async def test_bindings_isolated_by_company(
             updated_at=now,
         )
     )
-    listed_b = await MailboxBinding.list_by_email_address_for_company(company_b)
+    listed_b = await MailboxBinding.list_for_company_by_email_address_asc(company_b)
     assert listed_b == []
-    listed_a = await MailboxBinding.list_by_email_address_for_company(company_a)
+    listed_a = await MailboxBinding.list_for_company_by_email_address_asc(company_a)
     assert len(listed_a) == 1
     assert listed_a[0].mailbox_binding_id == f"mailbind_a_{unique_id}"
 
@@ -219,14 +219,14 @@ async def test_ensure_system_user_bindings_creates_flow_employee_mailbox(
     try:
         _ = await service.ensure_system_mail_connection()
         _ = await service.ensure_system_user_bindings()
-        employee_binding = await MailboxBinding.preferred_for_user(
+        employee_binding = await MailboxBinding.find_default_or_first_by_email_for_user(
             SYSTEM_COMPANY_ID, employee_user_id
         )
         assert employee_binding is not None
         assert employee_binding.kind == MailboxBindingKind.USER
         assert employee_binding.user_id == employee_user_id
     finally:
-        leftover = await MailboxBinding.preferred_for_user(
+        leftover = await MailboxBinding.find_default_or_first_by_email_for_user(
             SYSTEM_COMPANY_ID, employee_user_id
         )
         if leftover is not None:
@@ -292,12 +292,12 @@ async def test_ensure_system_user_bindings_unbinds_leftover_without_membership(
         )
         assert leftover_binding.user_id == leftover_user_id
         _ = await service.ensure_system_user_bindings()
-        unbound = await MailboxBinding.preferred_for_user(
+        unbound = await MailboxBinding.find_default_or_first_by_email_for_user(
             SYSTEM_COMPANY_ID, leftover_user_id
         )
         assert unbound is None
     finally:
-        still_bound = await MailboxBinding.preferred_for_user(
+        still_bound = await MailboxBinding.find_default_or_first_by_email_for_user(
             SYSTEM_COMPANY_ID, leftover_user_id
         )
         if still_bound is not None:
@@ -357,14 +357,14 @@ async def test_ensure_system_user_bindings_local_dev_missing_password_does_not_b
         _ = await service.ensure_system_mail_connection()
         result = await service.ensure_system_user_bindings()
         assert email_address in result.missing_password
-        assert await MailboxBinding.preferred_for_user(
+        assert await MailboxBinding.find_default_or_first_by_email_for_user(
             SYSTEM_COMPANY_ID, member_user_id
         ) is None
         assert recording_mail_port.set_password_calls == []
         assert recording_mail_port.ensure_calls == []
         assert recording_mail_port.mailbox_passwords[email_address] == "isp-password-must-stay"
     finally:
-        leftover = await MailboxBinding.preferred_for_user(
+        leftover = await MailboxBinding.find_default_or_first_by_email_for_user(
             SYSTEM_COMPANY_ID, member_user_id
         )
         if leftover is not None:
@@ -435,7 +435,7 @@ async def test_ensure_system_user_bindings_local_dev_binds_from_mailbox_password
         result = await service.ensure_system_user_bindings()
         assert email_address in result.ensured
         assert email_address not in result.missing_password
-        binding = await MailboxBinding.preferred_for_user(
+        binding = await MailboxBinding.find_default_or_first_by_email_for_user(
             SYSTEM_COMPANY_ID, member_user_id
         )
         assert binding is not None
@@ -444,7 +444,7 @@ async def test_ensure_system_user_bindings_local_dev_binds_from_mailbox_password
         assert recording_mail_port.ensure_calls == []
         assert recording_mail_port.mailbox_passwords[email_address] == "isp-password-must-stay"
     finally:
-        leftover = await MailboxBinding.preferred_for_user(
+        leftover = await MailboxBinding.find_default_or_first_by_email_for_user(
             SYSTEM_COMPANY_ID, member_user_id
         )
         if leftover is not None:

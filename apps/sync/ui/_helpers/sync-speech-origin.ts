@@ -1,3 +1,5 @@
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
 export function isSpeechOriginText(content: { type?: unknown; data?: Record<string, unknown> } | null | undefined) {
     if (!content || typeof content !== 'object') {
         throw new Error('content обязателен');
@@ -17,13 +19,18 @@ export function messageHasSpeechOriginText(contents: unknown) {
         throw new Error('contents должен быть массивом');
     }
     for (const content of contents) {
-        if (!isSpeechOriginText(content)) {
+        if (!isSpeechOriginText(content) || !isPlainRecord(content)) {
             continue;
         }
-        if (typeof (content.data as Record<string, unknown>).body !== 'string') {
+        const data = content.data;
+        if (!isPlainRecord(data)) {
+            throw new Error('text/plain: data обязателен');
+        }
+        const body = data.body;
+        if (typeof body !== 'string') {
             throw new Error('text/plain origin=speech: body обязателен');
         }
-        if (((content.data as Record<string, unknown>).body as string).trim() !== '') {
+        if (body.trim() !== '') {
             return true;
         }
     }

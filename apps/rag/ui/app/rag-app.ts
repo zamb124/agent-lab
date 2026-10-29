@@ -31,7 +31,6 @@ import { documentStatusResource } from '@platform/lib/events/resources/rag-docum
 import { searchOp, searchDefaultsOp } from '@platform/lib/events/resources/rag-search.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
-import type { CompaniesState } from '@platform/lib/events/reducers/companies.js';
 import type { CompanyListEntry } from '@platform/lib/utils/company-host-guard.js';
 import { buildRagAssistantContext } from '../_helpers/platform-assistant-context.js';
 
@@ -87,8 +86,8 @@ export class RagApp extends PlatformApp {
 
     constructor() {
         super();
-        this._companiesListSel = this.select((s) => companyListEntries((s.companies as CompaniesState).list));
-        this._companiesLoadingSel = this.select((s) => Boolean((s.companies as CompaniesState).loading));
+        this._companiesListSel = this.select((s) => companyListEntries(s.companies.list));
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
     }
 
     static factories = [

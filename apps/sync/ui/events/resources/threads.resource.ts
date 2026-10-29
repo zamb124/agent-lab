@@ -11,7 +11,7 @@
  */
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
-import type { ResourceCollectionSlice } from '@platform/lib/events/factories/resource-collection.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { SyncThreadsSlice } from '../sync.types.js';
 
 
@@ -40,7 +40,6 @@ export const threadsResource = createResourceCollection({
         closeThread: 'drawer_closed',
     },
     extraReducer: (state: SyncThreadsSlice, event, events) => {
-        const s = state as SyncThreadsSlice;
         switch (event.type) {
             case 'sync/context/company_cleared': {
                 return {
@@ -57,36 +56,41 @@ export const threadsResource = createResourceCollection({
             }
             case events.CREATED:
             case 'sync/thread/created': {
-                const payload = event.payload as Record<string, any> | null;
-                const item = event.type === events.CREATED
-                    ? (payload && payload.item)
+                const payload = event.payload;
+                const rawItem = event.type === events.CREATED
+                    ? (isPlainRecord(payload) ? payload.item : null)
                     : payload;
-                if (!item || typeof item.thread_id !== 'string') return state;
-                const hasItem = s.items.some((x) => x.thread_id === item.thread_id);
+                if (!isPlainRecord(rawItem) || typeof rawItem.thread_id !== 'string') return state;
+                const threadId = rawItem.thread_id;
+                const hasItem = state.items.some((row) => row.thread_id === threadId);
                 const next: SyncThreadsSlice = {
-                    ...s,
-                    items: hasItem ? s.items : Object.freeze([...s.items, item]),
-                    selectedThreadId: item.thread_id,
-                    byChannelId: s.byChannelId,
+                    ...state,
+                    items: hasItem ? state.items : Object.freeze([...state.items, rawItem]),
+                    selectedThreadId: threadId,
+                    byChannelId: state.byChannelId,
                 };
-                if (typeof item.channel_id === 'string') {
-                    const existing = s.byChannelId[item.channel_id];
+                const channelId = rawItem.channel_id;
+                if (typeof channelId === 'string') {
+                    const existing = state.byChannelId[channelId];
+                    if (existing !== undefined && !Array.isArray(existing)) {
+                        throw new Error('sync/threads: channel threads must be an array');
+                    }
                     const cur = Array.isArray(existing) ? existing : [];
-                    const hasInChannel = cur.some((x) => x.thread_id === item.thread_id);
+                    const hasInChannel = cur.some((row) => row.thread_id === threadId);
                     next.byChannelId = Object.freeze({
-                        ...s.byChannelId,
-                        [item.channel_id]: hasInChannel ? cur : Object.freeze([...cur, item]),
+                        ...state.byChannelId,
+                        [channelId]: hasInChannel ? cur : Object.freeze([...cur, rawItem]),
                     });
                 }
                 return next;
             }
             case 'sync/threads/open_requested': {
-                const p = event.payload as Record<string, unknown> | null;
-                if (!p || typeof p.threadId !== 'string') return state;
-                return { ...s, selectedThreadId: p.threadId };
+                const p = event.payload;
+                if (!isPlainRecord(p) || typeof p.threadId !== 'string') return state;
+                return { ...state, selectedThreadId: p.threadId };
             }
             case 'sync/threads/drawer_closed':
-                return { ...s, selectedThreadId: null };
+                return { ...state, selectedThreadId: null };
             default:
                 return state;
         }

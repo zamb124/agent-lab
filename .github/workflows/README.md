@@ -75,7 +75,7 @@ MicroK8s
 - **Не ставит cert-manager / ingress-nginx.** Аддоны MicroK8s, включаются вручную при настройке кластера.
 - **Не управляет DNS.** A-записи у регистратора, DNS-01 webhook для wildcard — отдельные шаги.
 - **Не делает SSH/SCP** — всё через `kubectl` и `helm` поверх `KUBECONFIG_B64`.
-- **Не запускает миграции напрямую** — Helm hook Job `migrations` (post-install/post-upgrade) делает `python -m scripts.db_migrate upgrade` сам.
+- **Не запускает миграции напрямую** — Helm hook Job `migrations` (post-install/post-upgrade) делает `python -m scripts.db.migrate upgrade` сам.
 
 ## Откат
 

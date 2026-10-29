@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-from apps.crm_worker.tasks.task_names import (
+from apps.crm.tasks.task_names import (
     CRM_RECONCILE_DAILY_SUMMARY,
     CRM_REEMBED_STALE_DOCUMENTS,
 )
-from apps.idle_worker.tasks.task_names import (
+from apps.idle.tasks.task_names import (
     TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
     TASK_CALENDAR_SYNC_TICK,
     TASK_FILE_RETENTION_PURGE_TICK,
     TASK_SPAN_BILLING_SETTLEMENT_TICK,
 )
-from apps.rag_worker.tasks.task_names import (
+from apps.rag.tasks.task_names import (
     RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK,
     RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK,
     RAG_REEMBED_STALE_DOCUMENTS_TICK,

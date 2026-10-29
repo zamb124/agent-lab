@@ -14,7 +14,6 @@ from apps.flows.realtime.operations import (
     require_view_tool_or_flow,
 )
 from apps.flows.src.models import FlowConfig, ToolReference, flow_tool_parameters_schema
-from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.models.enums import CodeMode, ReactToolRole
 from apps.flows.src.models.flow_config import FlowToolPickerItem
 from apps.flows.src.models.tool_contracts import ToolDefinition
@@ -60,7 +59,7 @@ def _raise_if_platform_builtin(tool_id: str, *, action: str) -> None:
         raise_conflict(ValueError(f"platform builtin {tool_id!r} cannot be {action}"))
 
 
-def _tool_response_from_reference(t: ToolReference, *, agent_toolkit_ids: list[str]) -> ToolResponse:
+def _tool_response_from_reference(t: ToolReference) -> ToolResponse:
     return ToolResponse(
         tool_id=t.tool_id,
         title=t.title,
@@ -79,7 +78,6 @@ def _tool_response_from_reference(t: ToolReference, *, agent_toolkit_ids: list[s
         mcp_schema_hash=t.mcp_schema_hash,
         mcp_schema_version=t.mcp_schema_version,
         mcp_output_schema=t.mcp_output_schema,
-        agent_toolkit_ids=agent_toolkit_ids,
     )
 
 
@@ -195,7 +193,7 @@ async def _company_tool_picker_index(
     *,
     mcp: ToolIndexMcpFilter,
 ) -> list[ToolListIndexItem]:
-    return await ToolReference.list_tool_index(
+    return await ToolReference.list_tool_index_items_by_tool_id_asc(
         mcp=mcp,
         exclude_tool_ids=builtin_tool_ids(),
     )
@@ -206,7 +204,7 @@ async def _flow_picker_refs(
     needle: str | None,
 ) -> list[_PickerRef]:
     refs: list[_PickerRef] = []
-    for row in await FlowConfig.list_picker_index():
+    for row in await FlowConfig.list_tool_picker_index_by_created_at_desc():
         if not _picker_text_match(
             tool_id=row.flow_id,
             title=row.name,
@@ -314,9 +312,9 @@ async def _hydrate_picker_page(
     tool_ids = [ref.object_id for ref in page_refs if ref.item_type == "tool"]
     platform_ids = builtin_tool_ids()
     company_tool_ids = [tid for tid in tool_ids if tid not in platform_ids]
-    flows_by_id = await FlowConfig.latest_by_flow_ids(flow_ids) if flow_ids else {}
+    flows_by_id = await FlowConfig.found_current_by_flow_ids(flow_ids) if flow_ids else {}
     tools_by_id = (
-        await ToolReference.by_tool_ids(company_tool_ids) if company_tool_ids else {}
+        await ToolReference.found_unique_by_tool_ids(company_tool_ids) if company_tool_ids else {}
     )
     items: list[ToolResponse] = []
     for ref in page_refs:
@@ -344,7 +342,7 @@ async def _hydrate_picker_page(
         items.append(
             _enrich_tool_response_from_registry(
                 di,
-                _tool_response_from_reference(tool_row, agent_toolkit_ids=[]),
+                _tool_response_from_reference(tool_row),
             )
         )
     return items
@@ -467,7 +465,7 @@ async def op_flows_tools_list(
     _ = user
     scope = await require_company_member(di)
     tools, total = await asyncio.gather(
-        ToolReference.list_in_tool_id_order(limit=payload.limit, offset=payload.offset),
+        ToolReference.list_by_tool_id_asc(limit=payload.limit, offset=payload.offset),
         ToolReference.count_all(),
     )
     allowed_ids = set(
@@ -480,11 +478,10 @@ async def op_flows_tools_list(
     tools = [tool_row for tool_row in tools if tool_row.tool_id in allowed_ids]
     response_items: list[ToolResponse] = []
     for tool_row in tools:
-        toolkit_ids = await AgentToolkit.toolkit_ids_for_tool(tool_row.tool_id)
         response_items.append(
             _enrich_tool_response_from_registry(
                 di,
-                _tool_response_from_reference(tool_row, agent_toolkit_ids=toolkit_ids),
+                _tool_response_from_reference(tool_row),
             )
         )
     return OffsetPage[ToolResponse](
@@ -522,7 +519,7 @@ async def op_flows_tools_tag_groups(
 ) -> OffsetPage[ToolTagGroup]:
     _ = user
     _ = await require_company_member(di)
-    groups = await ToolTagGroup.list_groups(
+    groups = await ToolTagGroup.list_by_tag_asc(
         limit=payload.limit, offset=payload.offset
     )
     items = list(groups)
@@ -574,10 +571,9 @@ async def op_flows_tools_item(
     _ = await require_view_tool_or_flow(di, payload.tool_id)
     tool = await ToolReference.get(ToolReference.row_id_for_active_company(payload.tool_id))
     if tool is not None:
-        toolkit_ids = await AgentToolkit.toolkit_ids_for_tool(tool.tool_id)
         return _enrich_tool_response_from_registry(
             di,
-            _tool_response_from_reference(tool, agent_toolkit_ids=toolkit_ids),
+            _tool_response_from_reference(tool),
         )
     registry_tool = _resolve_registry_tool(di, payload.tool_id)
     if registry_tool is not None:
@@ -585,9 +581,7 @@ async def op_flows_tools_item(
     flow_cfg = await FlowConfig.current_for_flow(payload.tool_id)
     if flow_cfg is None:
         raise_not_found(LookupError("Tool not found"))
-    flow_toolkit_ids = await AgentToolkit.toolkit_ids_for_flow(flow_cfg.flow_id)
-    flow_item = _flow_response(flow_cfg)
-    return flow_item.model_copy(update={"agent_toolkit_ids": flow_toolkit_ids})
+    return _flow_response(flow_cfg)
 
 
 async def op_flows_tools_create(
@@ -631,16 +625,9 @@ async def op_flows_tools_create(
         company_id=scope.company_id,
         permission=ref.permission,
     )
-    await AgentToolkit.replace_tool_toolkit_membership(
-        tool_id=ref.tool_id,
-        toolkit_ids=list(payload.agent_toolkit_ids),
-    )
     return _enrich_tool_response_from_registry(
         di,
-        _tool_response_from_reference(
-            ref,
-            agent_toolkit_ids=list(payload.agent_toolkit_ids),
-        ),
+        _tool_response_from_reference(ref),
     )
 
 

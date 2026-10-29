@@ -1,7 +1,7 @@
 /**
  * Канон-тест «no leaks»: дополнительная проверка для DX.
  *
- * Дублирует часть scripts/check_core_frontend_canon.py:
+ * Дублирует часть scripts/gates/frontend/core_frontend_canon.py:
  *   - в core/frontend/static/lib/events/** нет ServiceRegistry/BaseStore/AppEvents/Zustand;
  *   - reducers и factories не используют `|| []`, `|| {}`, `?? '...'` фолбеки на чтение;
  *   - в core/frontend/static/lib/events/** нет `extends LitElement`.

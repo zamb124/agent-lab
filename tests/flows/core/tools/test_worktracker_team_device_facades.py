@@ -1,13 +1,10 @@
-"""Unit tests for WorktrackerClient and Team/Device clients."""
+"""Unit tests for WorktrackerClient and TeamClient."""
 
 from __future__ import annotations
-
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from apps.flows.di import FlowsDi
-from apps.flows.src.services.device_client import DeviceClient
 from apps.flows.tools.scheduling.scheduling import list_scheduled_tasks, schedule_cron_task
 from apps.flows.tools.wiki.wiki_tools import (
     wiki_create_page,
@@ -107,26 +104,6 @@ async def test_team_client_resolve_requires_query() -> None:
     client = TeamClient()
     with pytest.raises(ValueError, match="query is required"):
         await client.resolve_user("   ", limit=5)
-
-
-@pytest.mark.asyncio
-async def test_device_client_tools_list_delegates() -> None:
-    redis_client = MagicMock()
-    client = DeviceClient(redis_client)
-    send = AsyncMock(return_value={"tools": []})
-    with patch(
-        "apps.flows.src.services.device_client.send_mcp_request_to_device",
-        send,
-    ):
-        result = await client.tools_list("dev_1", timeout_seconds=10.0)
-    assert result == {"tools": []}
-    send.assert_awaited_once_with(
-        redis_client,
-        "dev_1",
-        method="tools/list",
-        params={},
-        timeout_seconds=10.0,
-    )
 
 
 def test_wiki_and_scheduling_tool_effects_metadata() -> None:

@@ -18,7 +18,6 @@ const BRAND = {
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
     apexOrigin: 'https://linnex.io/',
     supportedDomains: ['linnex.io', 'humanitec.ru'],
-    agentProductName: 'LinnexAgent',
     modelsProductName: 'Linnex Models',
     voiceProductName: 'Linnex Voice',
     llmsDisplayLabel: 'Linnex LLMs',
@@ -40,7 +39,6 @@ describe('platform-i18n-vars', () => {
         expect(getPlatformI18nVars()).toEqual({
             platformName: 'Linnex',
             supportEmail: 'support@linnex.io',
-            agentProductName: 'LinnexAgent',
             modelsProductName: 'Linnex Models',
             voiceProductName: 'Linnex Voice',
             llmsDisplayLabel: 'Linnex LLMs',
@@ -52,7 +50,6 @@ describe('platform-i18n-vars', () => {
         expect(mergePlatformI18nVars({ year: 2026 })).toEqual({
             platformName: 'Linnex',
             supportEmail: 'support@linnex.io',
-            agentProductName: 'LinnexAgent',
             modelsProductName: 'Linnex Models',
             voiceProductName: 'Linnex Voice',
             llmsDisplayLabel: 'Linnex LLMs',

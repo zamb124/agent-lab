@@ -7,7 +7,7 @@ User Story: AI создает обобщенный отчет за день.
 from typing import cast
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_str
 from tests.fixtures.crm_test_setup import wait_daily_summary_rebuild_done

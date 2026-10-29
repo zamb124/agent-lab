@@ -20,8 +20,14 @@ import {
 } from '../_helpers/flows-code-languages.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-function _lower(s: any) {
+interface DocsTocItem {
+    level: number;
+    text: string;
+}
+
+function _lower(s: unknown) {
     if (typeof s === 'string' && s.length > 0) {
         return s.toLowerCase();
     }
@@ -34,11 +40,11 @@ function _lower(s: any) {
  * @param {string} md
  * @returns {Array<{ level: number, text: string }>}
  */
-function buildTocFromMarkdown(md: any) {
+function buildTocFromMarkdown(md: unknown): DocsTocItem[] {
     if (typeof md !== 'string' || md.length === 0) {
         return [];
     }
-    const items = [];
+    const items: DocsTocItem[] = [];
     let inFence = false;
     const mdH = /^(#{2,3})(?!#)\s+(.+)$/;
     for (const line of md.split('\n')) {
@@ -66,8 +72,8 @@ function buildTocFromMarkdown(md: any) {
  * @param {unknown} result
  * @returns {string}
  */
-function getDocsMarkdown(result: any) {
-    if (!result || typeof result !== 'object' || typeof result.markdown !== 'string') {
+function getDocsMarkdown(result: unknown) {
+    if (!isPlainRecord(result) || typeof result.markdown !== 'string') {
         throw new Error('flows.code_docs: markdown required');
     }
     return result.markdown;
@@ -274,7 +280,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
         this._search = typeof e.detail?.value === 'string' ? e.detail.value : '';
     }
 
-    _scrollToTarget(item: any) {
+    _scrollToTarget(item: DocsTocItem) {
         const main = this.renderRoot?.querySelector('.docs-main .docs-md');
         if (!main) {
             return;
@@ -292,16 +298,16 @@ export class FlowsCodeDocsModal extends PlatformModal {
         }
     }
 
-    _filteredToc(toc: any) {
+    _filteredToc(toc: readonly DocsTocItem[]): DocsTocItem[] {
         const q = _lower(this._search);
         if (q.length === 0) {
-            return toc;
+            return [...toc];
         }
-        return toc.filter((it: any) => _lower(it.text).indexOf(q) >= 0);
+        return toc.filter((it) => _lower(it.text).indexOf(q) >= 0);
     }
 
-    _setLanguage(language: any) {
-        this.language = normalizeFlowCodeLanguage(language) as string;
+    _setLanguage(language: unknown) {
+        this.language = normalizeFlowCodeLanguage(language);
     }
 
     _renderLanguageSegment() {
@@ -345,7 +351,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
                         ${shown.length === 0
                             ? html`<div class="docs-toc-empty">${this.t('code_docs_modal.toc_empty')}</div>`
                             : shown.map(
-                                (it: any) => html`
+                                (it) => html`
                                 <platform-button
                                     variant="ghost"
                                     density=${it.level >= 3 ? 'dense' : 'compact'}

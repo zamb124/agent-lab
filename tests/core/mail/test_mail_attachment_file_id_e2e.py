@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.frontend.di import FrontendDi
 from core.di import require_di

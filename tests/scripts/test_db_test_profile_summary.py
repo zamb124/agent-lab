@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.db_test_profile import (
+from scripts.testing.db_profile import (
     DatabaseSnapshot,
     StatementRow,
     _build_delta_vs_previous,

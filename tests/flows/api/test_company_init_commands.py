@@ -6,7 +6,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.flows.di import FlowsDi
 from apps.flows.realtime.company_operations import (

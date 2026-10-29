@@ -210,7 +210,7 @@ class AccessRequestService:
         """Поверхностное копирование — entity и metadata relationships"""
 
         # Получаем relationships оригинала
-        relationships = await Relationship.touching_in_company(
+        relationships = await Relationship.query_touching_in_company(
             original.entity_id,
             original.company_id,
         ).all()
@@ -315,7 +315,7 @@ class AccessRequestService:
         _copied_map[original.entity_id] = copy.entity_id
 
         # Получаем relationships
-        relationships = await Relationship.touching_in_company(
+        relationships = await Relationship.query_touching_in_company(
             original.entity_id,
             original.company_id,
         ).all()
@@ -410,13 +410,14 @@ class AccessRequestService:
 
         return access_request
 
-    async def list_access_requests(
+    async def list_access_requests_by_created_at_desc(
         self,
         company_id: str,
         status: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[AccessRequest]:
+        """Заявки компании, ORDER BY created_at DESC, окно limit и offset. status None не фильтрует."""
         return await (
             AccessRequest.query_by_status_in_company(company_id, status)
             .order_by("-created_at")

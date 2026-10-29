@@ -10,7 +10,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
-import { asArray, asString } from '../_helpers/flows-resolvers.js';
+import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { mapAgentSkillItem } from '../_helpers/agent-skill-map.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
@@ -171,7 +171,7 @@ export class FlowsAgentSkillImportModal extends PlatformFormModal {
     override renderBody() {
         if (this._step === 'preview' && this._preview) {
             const p = this._preview;
-            const toolIds = asArray(p.tool_refs).map((ref) => asString(ref.tool_id)).filter((id) => id.length > 0);
+            const toolIds = asArray(p.tool_refs).map((ref) => isPlainObject(ref) ? asString(ref.tool_id) : '').filter((id) => id.length > 0);
             return html`
                 <div class="stack">
                     <p class="hint">${this.t('agent_skill_import_modal.preview_hint')}</p>

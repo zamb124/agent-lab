@@ -27,17 +27,44 @@ import type { FlowEditorSlice } from '../editor.types.js';
 const HISTORY_LIMIT = 50;
 const DEFAULT_VIEWBOX = Object.freeze({ x: 0, y: 0, w: 1600, h: 1000 });
 
-function _withoutId(list: Record<string, any>[], id: string) {
-    return list.filter((existing: any) => existing !== id);
+interface EditorRunSession {
+    contextId: string | null;
+    taskId: string | null;
+    taskPrimed: boolean;
+    [key: string]: unknown;
 }
 
-function _withId(list: string[], id: string) {
-    if (list.includes(id)) return list;
+interface StickyNote {
+    id: string;
+    [key: string]: unknown;
+}
+
+function requireStickyNotes(state: FlowEditorSlice): StickyNote[] {
+    const notes = state.stickyNotes;
+    if (!Array.isArray(notes)) throw new Error('flows/editor: stickyNotes required');
+    const rows: StickyNote[] = [];
+    for (const note of notes) {
+        if (!_isPlainObject(note) || typeof note.id !== 'string') {
+            throw new Error('flows/editor: sticky note id required');
+        }
+        rows.push({ ...note, id: note.id });
+    }
+    return rows;
+}
+
+function _withoutId(list: readonly string[] | undefined, id: string): string[] {
+    if (list === undefined) throw new Error('flows/editor: id list required');
+    return list.filter((existing) => existing !== id);
+}
+
+function _withId(list: readonly string[] | undefined, id: string): string[] {
+    if (list === undefined) throw new Error('flows/editor: id list required');
+    if (list.includes(id)) return [...list];
     return [...list, id];
 }
 
-function _normalizeDiffItem(entry: any) {
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+function _normalizeDiffItem(entry: unknown) {
+    if (!_isPlainObject(entry)) {
         throw new Error('flows/editor: diff entry must be an object');
     }
     const path = entry.path;
@@ -62,7 +89,7 @@ function _normalizeDiffItem(entry: any) {
     });
 }
 
-function _normalizeDiffList(raw: any) {
+function _normalizeDiffList(raw: unknown) {
     if (!Array.isArray(raw)) {
         throw new Error('flows/editor: diff must be an array');
     }
@@ -73,19 +100,29 @@ function _normalizeDiffList(raw: any) {
     return Object.freeze(out);
 }
 
-function _appendNodeRunResult(nodeRunResults: any, nodeId: string, result: any) {
+function _appendNodeRunResult(
+    nodeRunResults: unknown,
+    nodeId: string,
+    result: unknown,
+): Record<string, readonly unknown[]> {
     const base = _isPlainObject(nodeRunResults) ? nodeRunResults : {};
-    const existing = base[nodeId];
-    const nextList = Array.isArray(existing) ? [...existing] : [];
-    nextList.push(Object.freeze(result));
-    return Object.freeze({ ...base, [nodeId]: Object.freeze(nextList) });
+    const next: Record<string, readonly unknown[]> = {};
+    for (const [key, value] of Object.entries(base)) {
+        if (!Array.isArray(value)) throw new Error('flows/editor: node run list required');
+        next[key] = value;
+    }
+    const existing = next[nodeId];
+    const nextList = existing === undefined ? [] : [...existing];
+    nextList.push(result);
+    next[nodeId] = nextList;
+    return next;
 }
 
-function _nodeRunResultKey(nodeId: string, runIndex: any) {
+function _nodeRunResultKey(nodeId: string, runIndex: unknown) {
     return `${nodeId}:${String(runIndex)}`;
 }
 
-function _toggleExpandedNodeRunKey(expandedKeys: any, nodeId: string, runIndex: any) {
+function _toggleExpandedNodeRunKey(expandedKeys: unknown, nodeId: string, runIndex: unknown) {
     const key = _nodeRunResultKey(nodeId, runIndex);
     const base = Array.isArray(expandedKeys) ? expandedKeys : [];
     if (base.includes(key)) {
@@ -96,22 +133,27 @@ function _toggleExpandedNodeRunKey(expandedKeys: any, nodeId: string, runIndex: 
 
 const _DEEP_MERGE_EXCLUDE = new Set(['node_id', 'tool_id', 'flow_id']);
 
-function _isPlainObject(value: unknown) {
+function _isPlainObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function _deepClone(value: unknown): any {
+function _deepClone(value: unknown): unknown {
     if (value === null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return value.map(_deepClone);
-    const out: Record<string, any> = {};
+    if (!_isPlainObject(value)) return value;
+    const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) out[k] = _deepClone(v);
     return out;
 }
 
-function _deepMerge(base: any, override: any) {
+function _deepMerge(base: unknown, override: unknown): unknown {
     if (!_isPlainObject(base)) return _deepClone(override);
     if (!_isPlainObject(override)) return _deepClone(base);
-    const result = _deepClone(base);
+    const cloned = _deepClone(base);
+    if (!_isPlainObject(cloned)) {
+        throw new Error('flows/editor: merged object required');
+    }
+    const result: Record<string, unknown> = cloned;
     for (const [key, value] of Object.entries(override)) {
         if (_DEEP_MERGE_EXCLUDE.has(key)) continue;
         if (value === null || value === undefined) continue;
@@ -124,38 +166,34 @@ function _deepMerge(base: any, override: any) {
     return result;
 }
 
-function _resolveFlowMetadata(flow: any) {
-    if (flow.config && typeof flow.config === 'object'
-            && flow.config.metadata && typeof flow.config.metadata === 'object') {
-        return flow.config.metadata;
-    }
-    if (flow.metadata && typeof flow.metadata === 'object') {
-        return flow.metadata;
-    }
+function _resolveFlowMetadata(flow: Record<string, unknown>) {
+    const config = flow.config;
+    if (_isPlainObject(config) && _isPlainObject(config.metadata)) return config.metadata;
+    if (_isPlainObject(flow.metadata)) return flow.metadata;
     return {};
 }
 
-function _edgeNodeId(edge: any, primary: any, alt: any) {
+function _edgeNodeId(edge: Record<string, unknown>, primary: string, alt: string) {
     if (typeof edge[primary] === 'string' && edge[primary].length > 0) return edge[primary];
     if (typeof edge[alt] === 'string' && edge[alt].length > 0) return edge[alt];
     return '';
 }
 
-function _edgeKey(edge: any) {
-    if (!edge || typeof edge !== 'object') return '';
+function _edgeKey(edge: unknown) {
+    if (!_isPlainObject(edge)) return '';
     const from = _edgeNodeId(edge, 'from_node', 'from');
     const to = _edgeNodeId(edge, 'to_node', 'to');
     return `${from}->${to}`;
 }
 
-function _modeOf(branchCfgSlice: any, field: any, defaultMode: any) {
-    if (!branchCfgSlice || typeof branchCfgSlice !== 'object') return defaultMode;
+function _modeOf(branchCfgSlice: unknown, field: string, defaultMode: 'merge' | 'replace') {
+    if (!_isPlainObject(branchCfgSlice)) return defaultMode;
     const raw = branchCfgSlice[field];
     if (raw === 'merge' || raw === 'replace') return raw;
     return defaultMode;
 }
 
-function _buildEffectiveBranchData(flow: any, branchId: any) {
+function _buildEffectiveBranchData(flow: Record<string, unknown>, branchId: string | null) {
     const baseNodes = _isPlainObject(flow.nodes) ? flow.nodes : {};
     const baseEdges = Array.isArray(flow.edges) ? flow.edges : [];
     const baseVars = _isPlainObject(flow.variables) ? flow.variables : {};
@@ -190,10 +228,12 @@ function _buildEffectiveBranchData(flow: any, branchId: any) {
     const cfgEdges = Array.isArray(branchCfg.edges) ? branchCfg.edges : null;
     const cfgVars = _isPlainObject(branchCfg.variables) ? branchCfg.variables : null;
 
-    let effectiveNodes: Record<string, any>;
+    let effectiveNodes: Record<string, unknown>;
     let inheritedNodeIds: string[];
     if (cfgNodes === null) {
-        effectiveNodes = _deepClone(baseNodes);
+        const clonedNodes = _deepClone(baseNodes);
+        if (!_isPlainObject(clonedNodes)) throw new Error('flows/editor: nodes clone required');
+        effectiveNodes = clonedNodes;
         inheritedNodeIds = Object.keys(baseNodes);
     } else if (nodesMode === 'merge') {
         effectiveNodes = {};
@@ -207,18 +247,20 @@ function _buildEffectiveBranchData(flow: any, branchId: any) {
         }
         inheritedNodeIds = Object.keys(baseNodes).filter((id) => !(id in cfgNodes));
     } else {
-        effectiveNodes = _deepClone(cfgNodes);
+        const replacedNodes = _deepClone(cfgNodes);
+        if (!_isPlainObject(replacedNodes)) throw new Error('flows/editor: nodes clone required');
+        effectiveNodes = replacedNodes;
         inheritedNodeIds = [];
     }
 
-    let effectiveEdges;
-    let inheritedEdgeKeys;
+    let effectiveEdges: unknown[];
+    let inheritedEdgeKeys: string[];
     if (cfgEdges === null) {
         effectiveEdges = baseEdges.map(_deepClone);
         inheritedEdgeKeys = baseEdges.map(_edgeKey);
     } else if (edgesMode === 'merge') {
         const cfgEdgePairs = new Set(cfgEdges.map(_edgeKey));
-        const inheritedBase = baseEdges.filter((e: Event) => !cfgEdgePairs.has(_edgeKey(e)));
+        const inheritedBase = baseEdges.filter((edge) => !cfgEdgePairs.has(_edgeKey(edge)));
         effectiveEdges = [...inheritedBase.map(_deepClone), ...cfgEdges.map(_deepClone)];
         inheritedEdgeKeys = inheritedBase.map(_edgeKey);
     } else {
@@ -230,7 +272,12 @@ function _buildEffectiveBranchData(flow: any, branchId: any) {
     if (cfgVars === null) {
         effectiveVars = _deepClone(baseVars);
     } else if (variablesMode === 'merge') {
-        effectiveVars = { ..._deepClone(baseVars), ..._deepClone(cfgVars) };
+        const clonedBaseVars = _deepClone(baseVars);
+        const clonedCfgVars = _deepClone(cfgVars);
+        if (!_isPlainObject(clonedBaseVars) || !_isPlainObject(clonedCfgVars)) {
+            throw new Error('flows/editor: variables clone required');
+        }
+        effectiveVars = { ...clonedBaseVars, ...clonedCfgVars };
     } else {
         effectiveVars = _deepClone(cfgVars);
     }
@@ -254,17 +301,17 @@ function _buildEffectiveBranchData(flow: any, branchId: any) {
 }
 
 function _stableStringify(value: unknown): string {
-    if (value === null || typeof value !== 'object') return JSON.stringify(value);
     if (Array.isArray(value)) return `[${value.map(_stableStringify).join(',')}]`;
+    if (!_isPlainObject(value)) return JSON.stringify(value);
     const keys = Object.keys(value).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${_stableStringify((value as Record<string, unknown>)[k])}`).join(',')}}`;
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${_stableStringify(value[k])}`).join(',')}}`;
 }
 
 const _INHERIT_NODE_COMPARE_OMIT = new Set(['pos_x', 'pos_y']);
 
-function _nodeSnapshotForInheritCompare(node: any) {
+function _nodeSnapshotForInheritCompare(node: unknown) {
     if (!_isPlainObject(node)) return node;
-    const out: Record<string, any> = {};
+    const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(node)) {
         if (_INHERIT_NODE_COMPARE_OMIT.has(k)) continue;
         out[k] = v;
@@ -272,7 +319,7 @@ function _nodeSnapshotForInheritCompare(node: any) {
     return out;
 }
 
-function _incomingEdgeIndicesToNode(edges: any, nodeId: string) {
+function _incomingEdgeIndicesToNode(edges: unknown, nodeId: string) {
     if (!Array.isArray(edges) || typeof nodeId !== 'string' || nodeId.length === 0) return [];
     const out = [];
     for (let i = 0; i < edges.length; i += 1) {
@@ -305,7 +352,7 @@ function _optionalRunId(value: unknown) {
     return value;
 }
 
-function _graphEntryId(state: any) {
+function _graphEntryId(state: FlowEditorSlice) {
     if (typeof state.entryNodeId === 'string' && state.entryNodeId.length > 0) {
         return state.entryNodeId;
     }
@@ -315,7 +362,7 @@ function _graphEntryId(state: any) {
     return entry.length > 0 ? entry : null;
 }
 
-function _isSinkNode(state: any, nodeId: string) {
+function _isSinkNode(state: FlowEditorSlice, nodeId: string) {
     const edges = state.branchData && Array.isArray(state.branchData.edges)
         ? state.branchData.edges
         : [];
@@ -332,7 +379,7 @@ function _isSinkNode(state: any, nodeId: string) {
     return true;
 }
 
-function _applyTerminalWires(state: any, nodeId: string, phase: any) {
+function _applyTerminalWires(state: FlowEditorSlice, nodeId: string, phase: unknown) {
     if (typeof nodeId !== 'string' || nodeId.length === 0) {
         throw new Error('flows/editor: terminal wire node_id required');
     }
@@ -367,7 +414,10 @@ function _applyTerminalWires(state: any, nodeId: string, phase: any) {
     };
 }
 
-function _clearedRunVisualization(state: any, extras: any) {
+function _clearedRunVisualization(
+    state: FlowEditorSlice,
+    extras: { runSession: EditorRunSession; agentExecutionRunning: boolean },
+): FlowEditorSlice {
     return {
         ...state,
         runningNodeIds: [],
@@ -387,7 +437,8 @@ function _clearedRunVisualization(state: any, extras: any) {
     };
 }
 
-function _applyFlowStarted(state: any, payload: any) {
+function _applyFlowStarted(state: FlowEditorSlice, payload: unknown) {
+    if (!_isPlainObject(payload)) throw new Error('flows/editor: payload must be an object');
     const contextId = _optionalRunId(payload.context_id);
     const taskId = _optionalRunId(payload.task_id);
     return _clearedRunVisualization(state, {
@@ -400,18 +451,19 @@ function _applyFlowStarted(state: any, payload: any) {
     });
 }
 
-function _applyFlowDone(state: any) {
+function _applyFlowDone(state: FlowEditorSlice) {
     return { ...state, agentExecutionRunning: false };
 }
 
-function _applySessionCleared(state: any) {
+function _applySessionCleared(state: FlowEditorSlice) {
     return _clearedRunVisualization(state, {
         agentExecutionRunning: false,
         runSession: IDLE_RUN_SESSION,
     });
 }
 
-function _applyEdgeExecuted(state: any, payload: any) {
+function _applyEdgeExecuted(state: FlowEditorSlice, payload: unknown) {
+    if (!_isPlainObject(payload)) throw new Error('flows/editor: payload must be an object');
     const idx = typeof payload.edge_index === 'number' && Number.isFinite(payload.edge_index)
         ? Math.floor(payload.edge_index)
         : -1;
@@ -423,7 +475,8 @@ function _applyEdgeExecuted(state: any, payload: any) {
     return { ...state, runningEdgeIndices: Array.from(runningSet) };
 }
 
-function _applyEdgeError(state: any, payload: any) {
+function _applyEdgeError(state: FlowEditorSlice, payload: unknown) {
+    if (!_isPlainObject(payload)) throw new Error('flows/editor: payload must be an object');
     const idx = typeof payload.edge_index === 'number' && Number.isFinite(payload.edge_index)
         ? Math.floor(payload.edge_index)
         : -1;
@@ -442,7 +495,8 @@ function _applyEdgeError(state: any, payload: any) {
     };
 }
 
-function _applyNodeStarted(state: any, payload: any) {
+function _applyNodeStarted(state: FlowEditorSlice, payload: unknown) {
+    if (!_isPlainObject(payload)) throw new Error('flows/editor: payload must be an object');
     const nodeId = payload.node_id;
     if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
     const erroredCopy = { ...state.erroredNodes };
@@ -455,6 +509,7 @@ function _applyNodeStarted(state: any, payload: any) {
     const compSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
     for (let i = 0; i < incomingIdx.length; i += 1) {
         const ei = incomingIdx[i];
+        if (ei === undefined) throw new Error('flows/editor: edge index required');
         if (runSet.has(ei)) {
             runSet.delete(ei);
             compSet.add(ei);
@@ -470,7 +525,8 @@ function _applyNodeStarted(state: any, payload: any) {
     }, nodeId, 'started');
 }
 
-function _applyNodeCompleted(state: any, payload: any) {
+function _applyNodeCompleted(state: FlowEditorSlice, payload: unknown) {
+    if (!_isPlainObject(payload)) throw new Error('flows/editor: payload must be an object');
     const nodeId = payload.node_id;
     if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
     const existing = state.nodeRunResults && typeof state.nodeRunResults === 'object'
@@ -505,7 +561,8 @@ function _applyNodeCompleted(state: any, payload: any) {
     }, nodeId, 'completed');
 }
 
-function _applyNodeFailed(state: any, payload: any) {
+function _applyNodeFailed(state: FlowEditorSlice, payload: unknown) {
+    if (!_isPlainObject(payload)) throw new Error('flows/editor: payload must be an object');
     const nodeId = payload.node_id;
     if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
     const existing = state.nodeRunResults && typeof state.nodeRunResults === 'object'
@@ -538,6 +595,7 @@ function _applyNodeFailed(state: any, payload: any) {
     const failSet = new Set(Array.isArray(state.failedEdgeIndices) ? state.failedEdgeIndices : []);
     for (let i = 0; i < incomingIdx.length; i += 1) {
         const ei = incomingIdx[i];
+        if (ei === undefined) throw new Error('flows/editor: edge index required');
         if (runSet.has(ei)) runSet.delete(ei);
         failSet.add(ei);
     }
@@ -551,7 +609,8 @@ function _applyNodeFailed(state: any, payload: any) {
     }, nodeId, 'failed');
 }
 
-function _applyRunEvent(state: any, type: string, payload: any) {
+function _applyRunEvent(state: FlowEditorSlice, type: string, payload: unknown) {
+    if (!_isPlainObject(payload)) throw new Error('flows/editor: payload must be an object');
     if (type === 'flows/run/node_started') {
         return _applyNodeStarted(state, payload);
     }
@@ -570,7 +629,8 @@ function _applyRunEvent(state: any, type: string, payload: any) {
     throw new Error(`flows/editor: unsupported mapped run event ${type}`);
 }
 
-function _applyA2aMapped(state: any, payload: any) {
+function _applyA2aMapped(state: FlowEditorSlice, payload: unknown) {
+    if (!_isPlainObject(payload)) throw new Error('flows/editor: payload must be an object');
     const contextId = payload.context_id;
     if (typeof contextId !== 'string' || contextId.length === 0) {
         throw new Error('flows/editor: a2a_mapped context_id required');
@@ -592,7 +652,7 @@ function _applyA2aMapped(state: any, payload: any) {
     let hasNodeStarted = false;
     for (let i = 0; i < payload.runEvents.length; i += 1) {
         const runEvent = payload.runEvents[i];
-        if (!runEvent || typeof runEvent.type !== 'string' || runEvent.type.length === 0) {
+        if (!_isPlainObject(runEvent) || typeof runEvent.type !== 'string' || runEvent.type.length === 0) {
             throw new Error('flows/editor: a2a_mapped run event type required');
         }
         if (runEvent.type === 'flows/run/node_started') {
@@ -604,6 +664,9 @@ function _applyA2aMapped(state: any, payload: any) {
     }
     for (let i = 0; i < payload.runEvents.length; i += 1) {
         const runEvent = payload.runEvents[i];
+        if (!_isPlainObject(runEvent) || typeof runEvent.type !== 'string') {
+            throw new Error('flows/editor: a2a_mapped run event type required');
+        }
         const eventPayload = runEvent.payload;
         if (!_isPlainObject(eventPayload)) {
             throw new Error('flows/editor: a2a_mapped run event payload object required');
@@ -789,12 +852,15 @@ export const editorResource = createAsyncOp({
     },
     extraReducer: (state: FlowEditorSlice, event) => {
         const t = event.type;
-        const p = (event.payload && typeof event.payload === 'object' ? event.payload : {}) as Record<string, any>;
-        const s: Record<string, any> = state;
+        const p: Record<string, unknown> = {};
+        if (_isPlainObject(event.payload)) {
+            for (const [key, field] of Object.entries(event.payload)) p[key] = field;
+        }
+        const s = state;
 
         if (t === 'flows/editor/flow_loaded') {
             const flow = p.flow;
-            if (!flow || typeof flow !== 'object') return state;
+            if (!_isPlainObject(flow)) return state;
             const requestedBranchId = typeof p.branchId === 'string' ? p.branchId : null;
             const effective = _buildEffectiveBranchData(flow, requestedBranchId);
             const meta = _resolveFlowMetadata(flow);
@@ -808,7 +874,11 @@ export const editorResource = createAsyncOp({
                     loadLayoutDirty = true;
                 }
             }
-            const nextFlowId = typeof flow.flow_id === 'string' ? flow.flow_id : s.flowId;
+            const loadedFlowId = typeof flow.flow_id === 'string' ? flow.flow_id : s.flowId;
+            if (typeof loadedFlowId !== 'string' || loadedFlowId.length === 0) {
+                throw new Error('flows/editor: flow_id required');
+            }
+            const nextFlowId = loadedFlowId;
             const resolvedLayout = resolveEditorLayout(nextBranchData, nextFlowId, null);
             const loaded = {
                 ...state,
@@ -860,8 +930,8 @@ export const editorResource = createAsyncOp({
 
         if (t === 'flows/editor/branch_data_updated') {
             const data = p.data;
-            if (!data || typeof data !== 'object') return state;
-            const prev = s.branchData && typeof s.branchData === 'object' ? s.branchData : { nodes: {}, edges: [] };
+            if (!_isPlainObject(data)) return state;
+            const prev = _isPlainObject(s.branchData) ? s.branchData : { nodes: {}, edges: [] };
             const prevNodes = _isPlainObject(prev.nodes) ? prev.nodes : {};
             const nextNodes = _isPlainObject(data.nodes) ? data.nodes : {};
             const inheritedNodeIds = (Array.isArray(s.inheritedNodeIds) ? s.inheritedNodeIds : []).filter((id) => {
@@ -872,8 +942,8 @@ export const editorResource = createAsyncOp({
             });
             const prevEdges = Array.isArray(prev.edges) ? prev.edges : [];
             const nextEdges = Array.isArray(data.edges) ? data.edges : [];
-            const prevEdgeByKey = new Map(prevEdges.map((e: Event) => [_edgeKey(e), e]));
-            const nextEdgeByKey = new Map(nextEdges.map((e: Event) => [_edgeKey(e), e]));
+            const prevEdgeByKey = new Map(prevEdges.map((edge) => [_edgeKey(edge), edge]));
+            const nextEdgeByKey = new Map(nextEdges.map((edge) => [_edgeKey(edge), edge]));
             const inheritedEdgeKeys = (Array.isArray(s.inheritedEdgeKeys) ? s.inheritedEdgeKeys : []).filter((key) => {
                 if (!nextEdgeByKey.has(key)) return false;
                 return _stableStringify(prevEdgeByKey.get(key)) === _stableStringify(nextEdgeByKey.get(key));
@@ -1086,7 +1156,7 @@ export const editorResource = createAsyncOp({
             return {
                 ...state,
                 dataflowObservations: {
-                    ...(s.dataflowObservations && typeof s.dataflowObservations === 'object' ? s.dataflowObservations : {}),
+                    ...(_isPlainObject(s.dataflowObservations) ? s.dataflowObservations : {}),
                     [nodeId]: observation,
                 },
             };
@@ -1095,7 +1165,12 @@ export const editorResource = createAsyncOp({
         if (t === 'flows/editor/history_pushed') {
             const snapshot = p.snapshot;
             if (!snapshot) return state;
-            const stack = (state as any).historyStack.slice(0, (state as any).historyPosition + 1);
+            const historyStack = state.historyStack;
+            const historyPosition = state.historyPosition;
+            if (!Array.isArray(historyStack) || typeof historyPosition !== 'number') {
+                throw new Error('flows/editor: history required');
+            }
+            const stack = historyStack.slice(0, historyPosition + 1);
             stack.push(snapshot);
             while (stack.length > HISTORY_LIMIT) stack.shift();
             return {
@@ -1108,8 +1183,10 @@ export const editorResource = createAsyncOp({
         }
 
         if (t === 'flows/editor/history_undone') {
-            if ((state as any).historyPosition < 0) return state;
-            const newPos = (state as any).historyPosition - 1;
+            const historyPosition = state.historyPosition;
+            if (typeof historyPosition !== 'number') throw new Error('flows/editor: historyPosition required');
+            if (historyPosition < 0) return state;
+            const newPos = historyPosition - 1;
             return {
                 ...state,
                 historyPosition: newPos,
@@ -1119,9 +1196,14 @@ export const editorResource = createAsyncOp({
         }
 
         if (t === 'flows/editor/history_redone') {
-            const max = (state as any).historyStack.length - 1;
-            if ((state as any).historyPosition >= max) return state;
-            const newPos = (state as any).historyPosition + 1;
+            const historyStack = state.historyStack;
+            const historyPosition = state.historyPosition;
+            if (!Array.isArray(historyStack) || typeof historyPosition !== 'number') {
+                throw new Error('flows/editor: history required');
+            }
+            const max = historyStack.length - 1;
+            if (historyPosition >= max) return state;
+            const newPos = historyPosition + 1;
             return {
                 ...state,
                 historyPosition: newPos,
@@ -1142,7 +1224,7 @@ export const editorResource = createAsyncOp({
 
         if (t === 'flows/editor/viewbox_changed') {
             const v = p.viewBox;
-            if (!v || typeof v !== 'object') return state;
+            if (!_isPlainObject(v)) return state;
             return { ...state, viewBox: { x: v.x, y: v.y, w: v.w, h: v.h } };
         }
 
@@ -1175,7 +1257,7 @@ export const editorResource = createAsyncOp({
 
         if (t === 'flows/editor/context_menu_opened') {
             const menu = p.menu;
-            if (!menu || typeof menu !== 'object') return state;
+            if (!_isPlainObject(menu)) return state;
             return { ...state, contextMenu: { x: menu.x, y: menu.y, target: menu.target, targetId: typeof menu.targetId === 'string' ? menu.targetId : null } };
         }
 
@@ -1186,7 +1268,8 @@ export const editorResource = createAsyncOp({
         if (t === 'flows/editor/breakpoint_toggled') {
             const nodeId = p.nodeId;
             if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
-            const exists = (state as any).breakpointNodeIds.includes(nodeId);
+            if (state.breakpointNodeIds === undefined) throw new Error('flows/editor: breakpointNodeIds required');
+            const exists = state.breakpointNodeIds.includes(nodeId);
             return {
                 ...state,
                 breakpointNodeIds: exists ? _withoutId(s.breakpointNodeIds, nodeId) : _withId(s.breakpointNodeIds, nodeId),
@@ -1195,23 +1278,23 @@ export const editorResource = createAsyncOp({
 
         if (t === 'flows/editor/sticky_note_added') {
             const note = p.note;
-            if (!note || typeof note !== 'object' || typeof note.id !== 'string') return state;
-            return { ...state, stickyNotes: [...s.stickyNotes, note] };
+            if (!_isPlainObject(note) || typeof note.id !== 'string') return state;
+            return { ...state, stickyNotes: [...requireStickyNotes(s), note] };
         }
 
         if (t === 'flows/editor/sticky_note_updated') {
             const note = p.note;
-            if (!note || typeof note !== 'object' || typeof note.id !== 'string') return state;
+            if (!_isPlainObject(note) || typeof note.id !== 'string') return state;
             return {
                 ...state,
-                stickyNotes: (s.stickyNotes as any[]).map((n: any) => (n.id === note.id ? { ...n, ...note } : n)),
+                stickyNotes: requireStickyNotes(s).map((n) => (n.id === note.id ? { ...n, ...note } : n)),
             };
         }
 
         if (t === 'flows/editor/sticky_note_removed') {
             const id = p.id;
             if (typeof id !== 'string') return state;
-            return { ...state, stickyNotes: (s.stickyNotes as any[]).filter((n: any) => n.id !== id) };
+            return { ...state, stickyNotes: requireStickyNotes(s).filter((n) => n.id !== id) };
         }
 
         if (t === 'flows/run/flow_started') {
@@ -1287,12 +1370,12 @@ export const editorResource = createAsyncOp({
             if (!data || typeof data !== 'object') return state;
             const nodes = data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
             if (!(nodeId in nodes)) return state;
-            const nextNodes: Record<string, any> = {};
+            const nextNodes: Record<string, unknown> = {};
             for (const [id, node] of Object.entries(nodes)) {
                 if (id !== nodeId) nextNodes[id] = node;
             }
             const edges = Array.isArray(data.edges) ? data.edges : [];
-            const nextEdges = edges.filter((edge: any) => edge && edge.from_node !== nodeId && edge.to_node !== nodeId);
+            const nextEdges = edges.filter((edge) => _isPlainObject(edge) && edge.from_node !== nodeId && edge.to_node !== nodeId);
             const erroredCopy = { ...s.erroredNodes };
             delete erroredCopy[nodeId];
             return {
@@ -1311,7 +1394,7 @@ export const editorResource = createAsyncOp({
                 panelOpen: (Array.isArray(s.openNodePanelIds) ? s.openNodePanelIds : [])
                     .filter((id) => id !== nodeId).length > 0
                     || (s.selectedNodeId !== null && s.selectedNodeId !== nodeId),
-                multiSelection: (state as any).multiSelection.filter((id: string) => id !== nodeId),
+                multiSelection: _withoutId(state.multiSelection, nodeId),
                 breakpointNodeIds: _withoutId(s.breakpointNodeIds, nodeId),
                 runningNodeIds: _withoutId(s.runningNodeIds, nodeId),
                 completedNodeIds: _withoutId(s.completedNodeIds, nodeId),

@@ -264,7 +264,7 @@ async def _load_message_read(*, message_id: str, company_id: str) -> MessageRead
     message_entity = await SyncMessage.by_message_id(company_id, message_id)
     if message_entity is None:
         raise ValueError(f"Message {message_id} not found.")
-    contents = await SyncMessageContent.list_for_message(message_id)
+    contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(message_id)
     sender = await sender_brief_for_message(message_entity.sender_user_id, resolve_user=True)
     return message_read_from_entity(m=message_entity, contents=contents, sender=sender)
 
@@ -707,7 +707,7 @@ async def transcribe_audio_message_core(
     if source_message.deleted_at is not None:
         raise ValueError("Cannot transcribe a deleted message.")
 
-    source_contents = await SyncMessageContent.list_for_message(message_id)
+    source_contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(message_id)
     audio_info = _extract_audio_info(source_contents)
     if audio_info.file_id == "":
         raise ValueError("file/audio.file_id is required.")
@@ -860,7 +860,7 @@ async def transcribe_video_message_core(
     if source_message.deleted_at is not None:
         raise ValueError("Cannot transcribe a deleted message.")
 
-    source_contents = await SyncMessageContent.list_for_message(message_id)
+    source_contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(message_id)
     video_info = _extract_video_info(source_contents)
     if video_info.file_id == "":
         raise ValueError("file/video.file_id is required.")
@@ -1009,14 +1009,14 @@ async def sync_aggregate_call_transcript_task(
             trace_attributes.ATTR_CALL_ID: call_id,
         },
     ) as aggregate_span:
-        rows = await SyncMessage.list_root_lane_by_call(
+        rows = await SyncMessage.list_root_lane_by_call_sent_at_and_message_id_asc(
             channel_id=channel_id,
             call_id=call_id,
             company_id=company_id,
         )
         aggregate_span.set_attribute("platform.sync.call_aggregate_lane_count", len(rows))
         for m in rows:
-            contents = await SyncMessageContent.list_for_message(m.message_id)
+            contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(m.message_id)
             has_audio = any(c.type == MessageContentType.FILE_AUDIO for c in contents)
             has_video = any(c.type == MessageContentType.FILE_VIDEO for c in contents)
             if has_audio:
@@ -1031,7 +1031,7 @@ async def sync_aggregate_call_transcript_task(
                     )
             if has_video:
                 video = _extract_video_info(
-                    await SyncMessageContent.list_for_message(m.message_id)
+                    await SyncMessageContent.content_models_by_order_index_and_content_id_asc(m.message_id)
                 )
                 if video.transcription_status != AudioTranscriptionStatus.DONE:
                     await transcribe_video_message_core(
@@ -1043,13 +1043,13 @@ async def sync_aggregate_call_transcript_task(
                     )
 
         transcript_entries: list[CallTranscriptEntry] = []
-        fresh_rows = await SyncMessage.list_root_lane_by_call(
+        fresh_rows = await SyncMessage.list_root_lane_by_call_sent_at_and_message_id_asc(
             channel_id=channel_id,
             call_id=call_id,
             company_id=company_id,
         )
         for m in fresh_rows:
-            contents = await SyncMessageContent.list_for_message(m.message_id)
+            contents = await SyncMessageContent.content_models_by_order_index_and_content_id_asc(m.message_id)
             only_boundary = (
                 len(contents) == 1
                 and contents[0].type == MessageContentType.CALL_BOUNDARY

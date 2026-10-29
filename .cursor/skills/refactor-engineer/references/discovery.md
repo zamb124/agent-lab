@@ -13,14 +13,14 @@ rg -n "\[без гейта\]" .cursor/rules
 ```
 
 - `gates_report.py` — шаги `_lint-py` и `lint-ts` из `mk/lint.mk` по отдельности (5–10 минут из-за basedpyright); сводка — `summary.txt`, лог шага — `NN_<step>.log`.
-- `ratchet_list.py <metric>` — все `файл:строка` метрики; без аргумента — «текущее / baseline» и топ файлов. Текущее ниже baseline — лимит не подтянут: `uv run python scripts/check_ratchet_counts.py --update`.
+- `ratchet_list.py <metric>` — все `файл:строка` метрики; без аргумента — «текущее / baseline» и топ файлов. Текущее ниже baseline — лимит не подтянут: `uv run python -m scripts.gates.backend.ratchet_counts --update`.
 - `rules_drift.py` — мёртвые пути в правилах и скилах, ссылки на несуществующие `.mdc` в коде и доках, ссылки `§ <Раздел>` без заголовка, разделы `##` вне шаблона или не по порядку, запрещённые слова, frontmatter, globs без совпадений, бюджеты размера.
 - `analyze_imports.py` печатает `Total local imports: N`; нарушение — `N > 0` независимо от кода выхода.
 
 ## Граница запуска
 
 - Домен — `.cursor/rules/<домен>.mdc`: globs правила задают файлы домена, раздел «Модель» — канонические имена.
-- Сервис — `apps/<svc>/`, воркер `apps/<svc>_worker/`, модели и сервисы домена в `core/<domain>/`, тесты `tests/<svc>/`.
+- Сервис — `apps/<svc>/`, воркер — `apps/<svc>/worker.py` (второй — `worker_<name>.py`; idle — `apps/idle/`), модели и сервисы домена в `core/<domain>/`, тесты `tests/<svc>/`.
 - Класс нарушения — детектор из `references/violation-catalog.md` по всему `apps/` и `core/`.
 
 ## Граф codebase-memory-mcp

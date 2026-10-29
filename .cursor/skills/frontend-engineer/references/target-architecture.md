@@ -9,12 +9,12 @@
 | Язык | TypeScript strict для всего UI-кода и UI-тестов (`tsconfig.base.json`); исключение — файл, который рантайм обязан грузить отдельным URL (AudioWorklet), и он собирается отдельной точкой входа esbuild из `.ts` |
 | Строгость | `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax`, `useDefineForClassFields`; целевой набор дополняют `exactOptionalPropertyTypes`, `noImplicitReturns`, `noPropertyAccessFromIndexSignature`, `noUnusedLocals`, `noUnusedParameters` — каждый флаг включает срез, который доводит `tsc` до 0 |
 | Импорт | относительный `./x.js` для файла `x.ts` (TS ESM); core — `@platform/lib/...`; npm — голый спецификатор (`lit`, `lit/directives/*`, `marked`, `centrifuge`); резолв `.js → .ts` задают tsconfig, esbuild и vite, сторонних резолверов нет |
-| Сборка | `scripts/build_ui.mjs`: esbuild на сервис → `apps/<svc>/ui-dist/` (entry `index.js` + hashed chunks), embed-автолоады → самодостаточные `core/frontend/embed-dist/`; модули страниц, которые строит backend (flow-ui host и `import` UIKDS-манифестов), — `buildPageModules` в тот же `embed-dist` с общими chunk-ами; точка входа одна — `index.ts`; переписывания путей при сборке нет |
+| Сборка | `scripts/build/ui.mjs`: esbuild на сервис → `apps/<svc>/ui-dist/` (entry `index.js` + hashed chunks), embed-автолоады → самодостаточные `core/frontend/embed-dist/`; модули страниц, которые строит backend (flow-ui host и `import` UIKDS-манифестов), — `buildPageModules` в тот же `embed-dist` с общими chunk-ами; точка входа одна — `index.ts`; переписывания путей при сборке нет |
 | Раздача | сервис отдаёт только `ui-dist`, `/static/core/lib` — только `embed-dist`; нет бандла — процесс падает при старте с подсказкой `make ui-build`; import map в `index.html` нет |
 | Dev | `make app` поднимает esbuild watch вместе с сервисами; правка `.ts` видна после перезагрузки страницы |
 | Test | `make test-up` собирает UI до старта стека; Vitest и WTR исполняют `.ts` на том же npm `lit`, что прод, без резолв-мостов |
 | CI и образ | Docker `ui-builder` выполняет `tsc` и сборку; `make lint-ts` включает `tsc` |
-| Гейты | каждый UI-гейт сканирует `.ts` и падает, если набор сканируемых файлов пуст; долг типов — ratchet-правила `scripts/ui_canon_rules.py`, baseline только вниз |
+| Гейты | каждый UI-гейт сканирует `.ts` и падает, если набор сканируемых файлов пуст; долг типов — ratchet-правила `scripts/gates/frontend/ui_canon_rules.py`, baseline только вниз |
 
 ## Слои — зависимости сверху вниз
 
@@ -74,7 +74,7 @@ wire-типы (*.gen.ts)                     генерируются из Pydan
 
 ## Контракт слоя apps
 
-`apps/<svc>/ui/` — только композиция: `index.html`, `index.ts`, `app/<svc>-app.ts`, `pages/`, `modals/`, `components/`, `events/resources/*.resource.ts`, `events/types.ts`, `events/wire.gen.ts`, `_helpers/`, `styles/`. Запреты — `frontend.mdc` § Структура, `ui_components.mdc`, `ui_fields.mdc` и `anti-patterns.md`; машинные сигнатуры — `scripts/ui_canon_rules.py`.
+`apps/<svc>/ui/` — только композиция: `index.html`, `index.ts`, `app/<svc>-app.ts`, `pages/`, `modals/`, `components/`, `events/resources/*.resource.ts`, `events/types.ts`, `events/wire.gen.ts`, `_helpers/`, `styles/`. Запреты — `frontend.mdc` § Структура, `ui_components.mdc`, `ui_fields.mdc` и `anti-patterns.md`; машинные сигнатуры — `scripts/gates/frontend/ui_canon_rules.py`.
 
 ## Контракт kit
 

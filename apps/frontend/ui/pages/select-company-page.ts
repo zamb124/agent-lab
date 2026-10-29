@@ -4,16 +4,34 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+import { COMPANIES_EVENTS, type CompanyRecord } from '@platform/lib/events/reducers/companies.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
-function _userIsOwnerOfCompany(companyRecord: Record<string, any>) {
-    if (!companyRecord || !Array.isArray(companyRecord.role)) {
-        return false;
+function companyId(company: CompanyRecord): string {
+    const id = company.company_id;
+    if (typeof id !== 'string' || id === '') {
+        throw new Error('select-company-page: company_id required');
     }
-    return companyRecord.role.includes('owner');
+    return id;
+}
+
+function companyName(company: CompanyRecord): string {
+    const name = company.name;
+    if (typeof name !== 'string') {
+        throw new Error('select-company-page: name must be a string');
+    }
+    return name;
+}
+
+function _userIsOwnerOfCompany(companyRecord: CompanyRecord | undefined) {
+    if (companyRecord === undefined) return false;
+    const role = companyRecord.role;
+    if (!Array.isArray(role)) return false;
+    return role.includes('owner');
 }
 
 export class SelectCompanyPage extends PlatformPage {
@@ -154,12 +172,12 @@ export class SelectCompanyPage extends PlatformPage {
 
     constructor() {
         super();
-        this._companiesSel = this.select((s: Record<string, any>) => s.companies.list);
-        this._authSel = this.select((s: Record<string, any>) => s.auth.user);
+        this._companiesSel = this.select((s) => s.companies.list);
+        this._authSel = this.select((s) => s.auth.user);
         this._loaded = false;
     }
-    private _companiesSel: SelectController<any>;
-    private _authSel: SelectController<any>;
+    private _companiesSel: SelectController<readonly CompanyRecord[]>;
+    private _authSel: SelectController<AuthUser | null>;
     private _loaded: boolean;
 
 
@@ -178,17 +196,14 @@ export class SelectCompanyPage extends PlatformPage {
         this.openModal('platform.company_create', null);
     }
 
-    _resolveCurrentCompanyId(user: Record<string, any>) {
-        if (!user) return '';
+    _resolveCurrentCompanyId(user: AuthUser | null) {
+        if (user === null) return '';
         if (typeof user.company_id === 'string' && user.company_id.length > 0) {
             return user.company_id;
         }
-        if (
-            user.raw &&
-            typeof user.raw.company_id === 'string' &&
-            user.raw.company_id.length > 0
-        ) {
-            return user.raw.company_id;
+        const raw = user.raw;
+        if (isPlainRecord(raw) && typeof raw.company_id === 'string' && raw.company_id.length > 0) {
+            return raw.company_id;
         }
         return '';
     }
@@ -197,26 +212,28 @@ export class SelectCompanyPage extends PlatformPage {
         const companies = this._companiesSel.value;
         const user = this._authSel.value;
         const currentId = this._resolveCurrentCompanyId(user);
-        const activeRecord = currentId ? companies.find((c: Record<string, any>) => c.company_id === currentId) : undefined;
+        const activeRecord = currentId !== '' ? companies.find((company) => company.company_id === currentId) : undefined;
         const canCreateAnother = companies.length > 0 && _userIsOwnerOfCompany(activeRecord);
 
         const cardsBlock = html`
                     <div class="grid-main">
                         <div class="grid" role="list">
-                            ${companies.map((c: Record<string, any>) => html`
+                            ${companies.map((company) => {
+                                const id = companyId(company);
+                                return html`
                                     <button
                                         type="button"
-                                        class="company-card ${c.company_id === currentId ? 'active' : ''}"
+                                        class="company-card ${id === currentId ? 'active' : ''}"
                                         role="listitem"
-                                        @click=${() => this._select(c.company_id)}
+                                        @click=${() => this._select(id)}
                                     >
                                         <span class="company-card-icon-wrap" aria-hidden="true">
                                             <platform-icon name="building-one" size="40"></platform-icon>
                                         </span>
-                                        <span class="company-card-name">${c.name}</span>
+                                        <span class="company-card-name">${companyName(company)}</span>
                                     </button>
-                                `,
-                            )}
+                                `;
+                            })}
                         </div>
                         ${canCreateAnother
                             ? html`

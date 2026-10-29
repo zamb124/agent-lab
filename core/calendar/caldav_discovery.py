@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-import httpx
+import httpx2
 
 from core.config import get_settings
 from core.http import get_httpx_client
@@ -124,7 +124,7 @@ def caldav_base_url_from_probe(probe_url: str, final_url: str) -> str:
     base_url для клиента: origin конечного адреса после редиректов. Путь
     /.well-known/caldav отбрасывается, дальше работает RFC 4791 discovery.
     """
-    parsed = httpx.URL(final_url if final_url else probe_url)
+    parsed = httpx2.URL(final_url if final_url else probe_url)
     if not parsed.scheme or not parsed.host:
         raise ValueError(f"CalDAV probe returned unusable URL: {final_url!r}")
     port = f":{parsed.port}" if parsed.port is not None else ""

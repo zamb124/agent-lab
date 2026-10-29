@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.crm_worker.di import CrmWorkerDi
-from apps.crm_worker.tasks.crm_context import build_auth_token_for_company
+from apps.crm.tasks.crm_context import build_auth_token_for_company
 from core.models.identity_models import Company, User
 from core.utils.tokens import TokenType, get_token_service
 
@@ -14,7 +13,7 @@ pytestmark = pytest.mark.no_crm_http
 
 @pytest.mark.asyncio
 async def test_build_auth_token_ignores_crm_worker_placeholder(
-    crm_worker_di: CrmWorkerDi,
+    crm_worker_di,
     unique_id: str,
 ) -> None:
     company_id = f"comp_{unique_id}"

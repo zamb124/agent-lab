@@ -88,7 +88,7 @@ class SyncChannelAccessService:
         if deletes:
             await self._authz.delete(deletes)
 
-    async def list_member_rows(self, channel_id: str) -> list[tuple[str, ChannelMemberRole]]:
+    async def list_member_rows_by_user_id_asc(self, channel_id: str) -> list[tuple[str, ChannelMemberRole]]:
         items: list[tuple[str, ChannelMemberRole]] = []
         for relation in _CHANNEL_MEMBER_RELATIONS:
             tuples = await self._authz.list_tuples(self._obj(channel_id), relation=relation)

@@ -7,7 +7,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Protocol
 
-import pillow_heif  # pyright: ignore[reportMissingTypeStubs]
+import pillow_heif
 from PIL import Image
 
 from core.files.reader.exceptions import FileReadError

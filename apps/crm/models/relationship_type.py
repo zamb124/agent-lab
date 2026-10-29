@@ -11,6 +11,7 @@ from oxyde.queries.select import Query
 from pydantic import model_validator
 
 from core.models.platform_model import PlatformModel
+from core.pagination import OffsetPage
 
 
 def _utcnow() -> datetime:
@@ -79,7 +80,31 @@ class RelationshipType(PlatformModel):
         return rows
 
     @classmethod
-    async def list_with_prompt(cls, company_id: str) -> list[Self]:
+    async def list_by_type_id_asc(cls, company_id: str, *, include_system: bool) -> list[Self]:
+        """Типы связи компании, ORDER BY type_id ASC. Предела нет. include_system=False оставляет только несистемные."""
+        return await (
+            cls.query_by_system_in_company(company_id, include_system=include_system)
+            .order_by("type_id")
+            .all()
+        )
+
+    @classmethod
+    async def page_by_type_id_asc(
+        cls,
+        company_id: str,
+        *,
+        include_system: bool,
+        limit: int,
+        offset: int,
+    ) -> OffsetPage[Self]:
+        """Страница типов связи компании, ORDER BY type_id ASC. include_system=False оставляет только несистемные. limit и offset в теле не проверяются."""
+        rows = cls.query_by_system_in_company(company_id, include_system=include_system)
+        total = await rows.count()
+        types = await rows.order_by("type_id").limit(limit).offset(offset).all()
+        return OffsetPage[Self](items=types, total=total, limit=limit, offset=offset)
+
+    @classmethod
+    async def list_unordered_with_prompt(cls, company_id: str) -> list[Self]:
         """Типы связей компании, у которых prompt не NULL. Пустая строка входит. Порядка и limit нет."""
         return await cls.objects.filter(
             company_id=company_id,

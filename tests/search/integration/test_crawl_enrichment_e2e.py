@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.search_worker.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
+from apps.search.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainSeed,
@@ -82,7 +82,7 @@ async def test_crawl_enrichment_indexes_example_com_with_page_summary(
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await CrawlDomain.list_due(
+        await CrawlDomain.list_due_by_next_crawl_after_asc(
             crawl_profile_id,
             now=datetime.now(UTC),
             limit=1,

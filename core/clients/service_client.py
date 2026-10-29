@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from typing import Unpack
 from typing import cast as type_cast
 
-import httpx
+import httpx2
 
 from core.config import get_settings
 from core.context import get_context
@@ -164,7 +164,7 @@ class ServiceClient:
             method: HTTP метод (GET, POST, PUT, DELETE)
             path: Путь запроса (без базового URL)
             timeout: Таймаут запроса
-            **kwargs: Дополнительные параметры для httpx
+            **kwargs: Дополнительные параметры для httpx2
 
         Возвращает:
             Ответ сервиса (JSON)
@@ -177,7 +177,7 @@ class ServiceClient:
         url = f"{base_url}{path}"
 
         # Не устанавливаем Content-Type: application/json, если передаются files
-        # (httpx сам установит multipart/form-data)
+        # (httpx2 сам установит multipart/form-data)
         include_content_type = (
             "files" not in kwargs and "content" not in kwargs and "data" not in kwargs
         )
@@ -226,7 +226,7 @@ class ServiceClient:
                     )
                 return None
 
-        except httpx.HTTPStatusError as e:
+        except httpx2.HTTPStatusError as e:
             raise ServiceClientError(
                 f"HTTP {e.response.status_code} while requesting {service}: {e.response.text}",
                 status_code=e.response.status_code,

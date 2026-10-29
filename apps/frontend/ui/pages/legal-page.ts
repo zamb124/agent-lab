@@ -11,6 +11,7 @@ import '../components/landing/landing-footer.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const PARAGRAPH_KEYS = ['p1', 'p2', 'p3'];
 const LEGAL_KINDS = Object.freeze({
@@ -19,6 +20,10 @@ const LEGAL_KINDS = Object.freeze({
     cookies: Object.freeze({ ns: 'cookies', path: '/cookies', sections: 8 }),
     cookie_consent: Object.freeze({ ns: 'cookie_consent', path: '/consent/cookies', sections: 8 }),
 });
+
+function isLegalKind(kind: string): kind is keyof typeof LEGAL_KINDS {
+    return Object.prototype.hasOwnProperty.call(LEGAL_KINDS, kind);
+}
 const LEGAL_I18N_STRING_KEYS = [
     'company_name_ru',
     'company_name_en',
@@ -78,11 +83,10 @@ export class LegalPage extends PlatformPage {
     }
 
     _spec() {
-        const spec = (LEGAL_KINDS as Record<string, { ns: string; path: string; sections: number }>)[this.kind];
-        if (!spec) {
+        if (!isLegalKind(this.kind)) {
             throw new Error(`legal-page: unknown kind ${this.kind}`);
         }
-        return spec;
+        return LEGAL_KINDS[this.kind];
     }
 
     _syncDocumentMeta() {
@@ -99,11 +103,11 @@ export class LegalPage extends PlatformPage {
 
     _legalRecord() {
         const bundleRes = this._siteBundle.lastResult;
-        if (!bundleRes || typeof bundleRes !== 'object') {
+        if (!isPlainRecord(bundleRes)) {
             return null;
         }
-        const legal = (bundleRes as Record<string, any>).legal;
-        if (!legal || typeof legal !== 'object') {
+        const legal = bundleRes.legal;
+        if (!isPlainRecord(legal)) {
             return null;
         }
         return legal;

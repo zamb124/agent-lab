@@ -25,7 +25,7 @@ alwaysApply: false
 1. Entrypoint — `entrypoint` конфига или первая объявленная функция; сигнатура `(args, state)`; `args` — dict входов ноды (playground `POST /flows/api/v1/code/execute` принимает `args`, иначе `{}`).
 2. `state` в Python — `ExecutionStateView(dict)`: атрибутный стиль первичен, dict-протокол работает на том же объекте, чтение отсутствующего поля — `AttributeError`; frozen-поля возвращённого state не переносятся (`FIELDS_COPY_FROM_USER_RETURNED_STATE`) → `flows_runtime.mdc` § Состояние.
 3. Библиотеки sandbox — allowlist `core/capabilities/sandbox_libraries.py` (Python stdlib ETL + `pandas`, `numpy`, `dateutil`, `yaml`, `openpyxl`, `bs4`, `defusedxml`; JS `lodash`, `uuid`, `date-fns`; C# `System.Text.Json` и др.; Go `GO_ALLOWED_STDLIB_MODULES`); импорт вне allowlist — `PermissionError`; LSP видит те же пакеты.
-4. Файлы — только `files.*`, HTTP — только `http.get`, таблицы — `tables.*`, живые БД — `db.*`; `open()`, `sqlite3`, `requests`/`httpx`/`fetch`/`net/http`/`HttpClient`, `System.IO`, `Process`, `getattr`/`hasattr` недоступны.
+4. Файлы — только `files.*`, HTTP — только `http.get`, таблицы — `tables.*`, живые БД — `db.*`; `open()`, `sqlite3`, `requests`/`httpx`/`httpx2`/`fetch`/`net/http`/`HttpClient`, `System.IO`, `Process`, `getattr`/`hasattr` недоступны.
 5. Импорт `apps.*`/`core.*` в коде пользователя удаляет source sanitizer (`core/capabilities/source_sanitize.py`) до сохранения и исполнения; `raise FlowInterrupt(question=...)` — builtin sandbox.
 6. Python и Node держат пул воркеров с кэшем скомпилированного артефакта (`code_runner.python_workers`, `code_runner.node_workers`); Go и C# кэшируют сборку по hash(source + entrypoint + manifest), параллельные сборки ограничены semaphore (`code_runner.go_workers`, `code_runner.csharp_workers`, минимум 2). Пустое поле — от 2 до 8 по CPU (`code_runner_pool_size`). Каталоги: `code_runner.lsp_cache`, `code_runner.python_sandbox_site`, `code_runner.node_sandbox_modules`; пусто — `<repo>/.cache` и подкаталоги sandbox.
 7. Flow UI из кода — `await ui.render(...)`/`await ui.navigate(...)`: gateway валидирует блоки грамматикой, подписывает `PlatformEffectEnvelope` (origin: hash `execution_token`, `capability_call_id`, ids исполнения), flows применяет `apply_capability_platform_effects` (проверка origin, manifest, slot/page) → `flow_ui.mdc`.
@@ -34,7 +34,7 @@ alwaysApply: false
 
 ### LSP редактора
 
-1. Редактор `flows-code-editor` — vendored CodeMirror + `@codemirror/lsp-client` (`scripts/build_codemirror_bundle.mjs`); intelligence — language-native stubs из `CapabilityManifest` + allowlist → language servers в `code-runner-*` (basedpyright, tsserver, gopls, csharp-ls) на изолированной vfs (`core/capabilities/lsp_workspace.py`).
+1. Редактор `flows-code-editor` — vendored CodeMirror + `@codemirror/lsp-client` (`scripts/build/bundles/codemirror.mjs`); intelligence — language-native stubs из `CapabilityManifest` + allowlist → language servers в `code-runner-*` (basedpyright, tsserver, gopls, csharp-ls) на изолированной vfs (`core/capabilities/lsp_workspace.py`).
 2. Bootstrap — `POST /flows/api/v1/code/lsp/session` (фабрика `flows/code_lsp_session`); кадры — `WS /flows/api/v1/code/lsp/ws/{language}/{session_id}`: flows проверяет `GET {runner}/lsp/session/{id}` и проксирует через `core/clients/service_websocket.py`; нет сессии или cookie — close `1008`.
 3. Language server живёт в bridge-процессе `core.capabilities.lsp_bridge` (сессии — `core/capabilities/lsp_session.py`), не в памяти granian worker; аргументы процесса — `session_id`, корень vfs и JSON команды (`bridge_invocation`); REST-зеркало кадров не требуется.
 4. `GET /flows/api/v1/code/documentation` — markdown для человека, редактор его не читает.
@@ -54,5 +54,5 @@ alwaysApply: false
 
 ## Гейты
 
-- `scripts/check_strict_agent_architecture.py` (`make lint`) — удалённые in-process eval символы.
+- `scripts/gates/backend/strict_agent_architecture.py` (`make lint`) — удалённые in-process eval символы.
 - `tests/` runners и gateway — исполнение через каждый язык на реальном стеке `[без гейта]` для allowlist библиотек.

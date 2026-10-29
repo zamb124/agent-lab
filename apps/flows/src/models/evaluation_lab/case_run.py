@@ -68,8 +68,8 @@ class EvaluationCaseRun(CompanyScopedModel):
     finished_at: datetime | None = DbField(default=None)
 
     @classmethod
-    async def list_by_case_id_trial_index_and_created_at(cls, run_id: str) -> list[Self]:
-        """Прогоны кейсов запуска, ORDER BY case_id, trial_index, created_at. Предела нет. Пустой run_id — ValueError."""
+    async def list_by_case_id_trial_index_and_created_at_asc(cls, run_id: str) -> list[Self]:
+        """Прогоны кейсов запуска, ORDER BY case_id, trial_index, created_at ASC. Предела нет. Пустой run_id — ValueError."""
         if run_id == "":
             raise ValueError("run_id is required")
         return await (

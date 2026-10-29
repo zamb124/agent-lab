@@ -15,7 +15,24 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-resource-editor.js';
 import '@platform/lib/components/platform-variable-input.js';
+import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+
+function configRecord(resource: Record<string, any> | null): Record<string, any> {
+    if (resource === null || !isPlainObject(resource.config)) {
+        return {};
+    }
+    const row: Record<string, any> = {};
+    for (const [key, field] of Object.entries(resource.config)) {
+        row[key] = field;
+    }
+    return row;
+}
+
+function stringField(record: Record<string, any>, key: string, fallback: string): string {
+    const value = record[key];
+    return typeof value === 'string' ? value : fallback;
+}
 
 export class FlowsFilesResourceEditor extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -90,13 +107,13 @@ export class FlowsFilesResourceEditor extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
-        const bucket = typeof (cfg as Record<string, any>).bucket === 'string' ? (cfg as Record<string, any>).bucket : '';
-        const prefix = typeof (cfg as Record<string, any>).prefix === 'string' ? (cfg as Record<string, any>).prefix : '';
-        const endpoint = typeof (cfg as Record<string, any>).endpoint_url === 'string' ? (cfg as Record<string, any>).endpoint_url : '';
-        const accessKey = typeof (cfg as Record<string, any>).access_key_id === 'string' ? (cfg as Record<string, any>).access_key_id : '';
-        const secretKey = typeof (cfg as Record<string, any>).secret_access_key === 'string' ? (cfg as Record<string, any>).secret_access_key : '';
-        const region = typeof (cfg as Record<string, any>).region === 'string' ? (cfg as Record<string, any>).region : 'us-east-1';
+        const cfg = configRecord(this.resource);
+        const bucket = stringField(cfg, 'bucket', '');
+        const prefix = stringField(cfg, 'prefix', '');
+        const endpoint = stringField(cfg, 'endpoint_url', '');
+        const accessKey = stringField(cfg, 'access_key_id', '');
+        const secretKey = stringField(cfg, 'secret_access_key', '');
+        const region = stringField(cfg, 'region', 'us-east-1');
         return html`
             <flows-base-resource-editor
                 .resourceId=${this.resourceId}

@@ -43,16 +43,14 @@ export function isSchemaFieldRow(value: unknown): value is SchemaFieldRow {
     return true;
 }
 
-function optionRecords(value: unknown): Record<string, any>[] {
+function optionRecords(value: unknown): Record<string, unknown>[] {
     if (!Array.isArray(value)) return [];
-    const rows: Record<string, any>[] = [];
+    const rows: Record<string, unknown>[] = [];
     for (const item of value) {
         if (!isPlainRecord(item)) {
             throw new Error('schema-field-builder: option must be an object');
         }
-        const row: Record<string, any> = {};
-        for (const [key, field] of Object.entries(item)) row[key] = field;
-        rows.push(row);
+        rows.push(item);
     }
     return rows;
 }
@@ -110,7 +108,7 @@ export function normalizeSchemaRows(schemaValue: unknown): SchemaFieldRow[] {
     });
 }
 
-export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaOptions: Record<string, any> | null | undefined, t: (key: string, vars?: Record<string, string>) => string): Record<string, unknown> {
+export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaOptions: Record<string, unknown> | null | undefined, t: (key: string, vars?: Record<string, string>) => string): Record<string, unknown> {
     if (!Array.isArray(rows)) {
         throw new Error(`${sectionLabel} rows must be array`);
     }
@@ -121,12 +119,23 @@ export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaO
     const seenKeys = new Set();
     const optsFieldTypes = optionRecords(schemaOptions == null ? undefined : schemaOptions.field_types);
     const optsEnumSets = optionRecords(schemaOptions == null ? undefined : schemaOptions.enum_sets);
-    const fieldTypes = new Set(optsFieldTypes.map((item: Record<string, any>) => item.type_id));
-    const enumSetsMap = new Map<unknown, unknown>(
-        optsEnumSets.map((item: Record<string, any>) => [item.enum_set_id, item.values]),
-    );
-    const limits = schemaOptions && schemaOptions.validation_limits;
-    const maxFieldsPerSection = limits && typeof limits.max_fields_per_section === 'number'
+    const fieldTypeIds = new Set<string>();
+    for (const item of optsFieldTypes) {
+        if (typeof item.type_id !== 'string' || item.type_id.length === 0) {
+            throw new Error('schema-field-builder: field type id required');
+        }
+        fieldTypeIds.add(item.type_id);
+    }
+    const enumSetsMap = new Map<string, unknown>();
+    for (const item of optsEnumSets) {
+        if (typeof item.enum_set_id !== 'string' || item.enum_set_id.length === 0) {
+            throw new Error('schema-field-builder: enum_set_id required');
+        }
+        enumSetsMap.set(item.enum_set_id, item.values);
+    }
+    const limitsValue = schemaOptions == null ? undefined : schemaOptions.validation_limits;
+    const limits = isPlainRecord(limitsValue) ? limitsValue : null;
+    const maxFieldsPerSection = limits !== null && typeof limits.max_fields_per_section === 'number'
         ? limits.max_fields_per_section
         : 0;
     if (maxFieldsPerSection > 0 && rows.length > maxFieldsPerSection) {
@@ -148,7 +157,7 @@ export function buildSchemaFromRows(rows: unknown, sectionLabel: string, schemaO
         }
         seenKeys.add(key);
         const typeId = row.type.trim();
-        if (fieldTypes.size > 0 && !fieldTypes.has(typeId)) {
+        if (fieldTypeIds.size > 0 && !fieldTypeIds.has(typeId)) {
             throw new Error(t('errors.unknown_type', { section: sectionLabel, type: typeId, key }));
         }
         const descriptor: Record<string, unknown> = {
@@ -199,7 +208,7 @@ export class SchemaFieldBuilder extends PlatformElement {
         disabled: { type: Boolean },
     };
     declare rows: SchemaFieldRow[];
-    declare schemaOptions: Record<string, any> | null;
+    declare schemaOptions: Record<string, unknown> | null;
     declare required: boolean;
     declare disabled: boolean;
 
@@ -337,8 +346,8 @@ export class SchemaFieldBuilder extends PlatformElement {
         this._emitRows(next);
     }
 
-    _fieldTypeEnumConfig(fieldTypes: Record<string, any>[]): { values: { value: string; label: string }[] } {
-        const values = fieldTypes.map((ti: Record<string, any>) => {
+    _fieldTypeEnumConfig(fieldTypes: Record<string, unknown>[]): { values: { value: string; label: string }[] } {
+        const values = fieldTypes.map((ti) => {
             const id = typeof ti.type_id === 'string' ? ti.type_id : '';
             const lb = typeof ti.label === 'string' && ti.label.length > 0 ? ti.label : id;
             return { value: id, label: lb };
@@ -346,9 +355,9 @@ export class SchemaFieldBuilder extends PlatformElement {
         return { values };
     }
 
-    _enumSetEnumConfig(enumSets: Record<string, any>[]): { values: { value: string; label: string }[] } {
+    _enumSetEnumConfig(enumSets: Record<string, unknown>[]): { values: { value: string; label: string }[] } {
         const local = { value: '', label: this.t('schema_builder.enum_local') };
-        const rest = enumSets.map((si: Record<string, any>) => {
+        const rest = enumSets.map((si) => {
             const id = typeof si.enum_set_id === 'string' ? si.enum_set_id : '';
             const lb = typeof si.label === 'string' && si.label.length > 0 ? si.label : id;
             return { value: id, label: lb };

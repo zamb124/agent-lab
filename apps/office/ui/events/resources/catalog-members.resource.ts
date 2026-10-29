@@ -7,8 +7,18 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-type EventPayload = Record<string, unknown>;
+function catalogIdOf(payload: unknown, message: string): string {
+    if (!isPlainRecord(payload)) {
+        throw new Error(message);
+    }
+    const catalogId = payload.catalog_id;
+    if (typeof catalogId !== 'string' || catalogId.length === 0) {
+        throw new Error(message);
+    }
+    return catalogId;
+}
 
 export const catalogMembersOp = createAsyncOp({
     name: 'office/catalog_members',
@@ -20,19 +30,25 @@ export const catalogMembersOp = createAsyncOp({
     extraInitial: { items: [], loadedCatalogId: null },
     extraReducer: (state, event, events) => {
         if (event.type === events.REQUESTED) {
-            const payload = event.payload as EventPayload | null;
-            const catalogId = payload && payload.catalog_id;
-            if (typeof catalogId !== 'string' || catalogId.length === 0) {
-                throw new Error('office/catalog_members: REQUESTED.payload.catalog_id required');
-            }
+            const catalogId = catalogIdOf(
+                event.payload,
+                'office/catalog_members: REQUESTED.payload.catalog_id required',
+            );
             return { ...state, items: [], loadedCatalogId: catalogId };
         }
         if (event.type === events.SUCCEEDED) {
-            const result = (event.payload as EventPayload | null)?.result as { members?: unknown } | null;
-            if (!result || !Array.isArray(result.members)) {
+            if (!isPlainRecord(event.payload)) {
                 throw new Error('office/catalog_members: SUCCEEDED.result.members required (array)');
             }
-            return { ...state, items: result.members };
+            const result = event.payload.result;
+            if (!isPlainRecord(result)) {
+                throw new Error('office/catalog_members: SUCCEEDED.result.members required (array)');
+            }
+            const members = result.members;
+            if (!Array.isArray(members)) {
+                throw new Error('office/catalog_members: SUCCEEDED.result.members required (array)');
+            }
+            return { ...state, items: members };
         }
         return state;
     },
@@ -47,10 +63,10 @@ export const catalogMemberAddOp = createAsyncOp({
     commandType: 'office/catalogs/member_add_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/catalogs/:catalog_id/members' },
     onSuccess: (ctx, _result, event: PlatformEvent) => {
-        const payload = event.payload as EventPayload | null;
+        const catalogId = catalogIdOf(event.payload, 'office/catalog_member_add: payload.catalog_id required');
         ctx.dispatch(
             catalogMembersOp.events.REQUESTED,
-            { catalog_id: payload && payload.catalog_id },
+            { catalog_id: catalogId },
             { causation_id: event.id, source: 'local' },
         );
     },
@@ -65,10 +81,10 @@ export const catalogMemberRemoveOp = createAsyncOp({
     commandType: 'office/catalogs/member_remove_requested',
     restMirror: { method: 'DELETE', path: '/documents/api/v1/catalogs/:catalog_id/members/:member_user_id' },
     onSuccess: (ctx, _result, event: PlatformEvent) => {
-        const payload = event.payload as EventPayload | null;
+        const catalogId = catalogIdOf(event.payload, 'office/catalog_member_remove: payload.catalog_id required');
         ctx.dispatch(
             catalogMembersOp.events.REQUESTED,
-            { catalog_id: payload && payload.catalog_id },
+            { catalog_id: catalogId },
             { causation_id: event.id, source: 'local' },
         );
     },

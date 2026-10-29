@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 from typing import Literal, NotRequired, Required, TypedDict
 
-import httpx
+import httpx2
 import jwt
 from jwt import PyJWTError
 
@@ -65,12 +65,12 @@ class ApnsPushService:
         # HTTP/2 клиент на жизнь сервиса: APNs построен на HTTP/2 с
         # мультиплексированием запросов в одно подключение — один TLS handshake
         # на пакет устройств критичен для пропускной способности push.
-        self._http_client: httpx.AsyncClient | None = None
+        self._http_client: httpx2.AsyncClient | None = None
 
-    def _get_http_client(self) -> httpx.AsyncClient:
+    def _get_http_client(self) -> httpx2.AsyncClient:
         client = self._http_client
         if client is None:
-            client = httpx.AsyncClient(http2=True, timeout=30.0)
+            client = httpx2.AsyncClient(http2=True, timeout=30.0)
             self._http_client = client
         return client
 

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, NotRequired, TypedDict
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.config import get_settings, set_settings
 from apps.flows.src.models.mcp_catalog import (

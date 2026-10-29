@@ -256,7 +256,7 @@ class OfficeCatalogRagIndexService:
         queue = [catalog.catalog_id]
         while queue:
             current_id = queue.pop(0)
-            children = await DocumentCatalog.children_page(
+            children = await DocumentCatalog.list_children_by_title_key_asc(
                 company_id=company_id,
                 namespace=workspace_namespace,
                 parent_catalog_id=current_id,
@@ -282,7 +282,7 @@ class OfficeCatalogRagIndexService:
 
         Возвращает task_id последнего поставленного документа и число поставленных.
         """
-        bindings = await FileRecord.alive_in_catalog(
+        bindings = await FileRecord.list_alive_in_catalog_by_updated_at_desc(
             company_id=company_id,
             catalog_id=catalog.catalog_id,
         )
@@ -415,7 +415,7 @@ class OfficeCatalogRagIndexService:
         indexable_file_ids: list[str] = []
         non_indexable_count = 0
         for searchable_catalog_id in searchable_catalog_ids:
-            bindings = await FileRecord.alive_in_catalog(
+            bindings = await FileRecord.list_alive_in_catalog_by_updated_at_desc(
                 company_id=company_id,
                 catalog_id=searchable_catalog_id,
             )
@@ -614,7 +614,7 @@ class OfficeCatalogRagIndexService:
         bindings: list[FileRecord] = []
         for searchable_catalog_id in searchable_catalog_ids:
             bindings.extend(
-                await FileRecord.alive_in_catalog(
+                await FileRecord.list_alive_in_catalog_by_updated_at_desc(
                     company_id=company_id,
                     catalog_id=searchable_catalog_id,
                 )

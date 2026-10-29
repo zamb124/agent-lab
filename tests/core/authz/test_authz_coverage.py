@@ -125,7 +125,6 @@ def test_authz_object_factories_and_subject_kinds() -> None:
     assert parse_flow_branch_key("c/flow1/main") == ("c", "flow1", "main")
     assert AuthzObject.tool("tool1", company_id="c").fga_id == "tool:c/tool1"
     assert AuthzObject.flow_ui_share("share1").fga_id == "flow_ui_share:share1"
-    assert AuthzObject.agent_device("dev1").fga_id == "agent_device:dev1"
     assert AuthzObject.from_fga_id("crm_entity:e1").object_key == "e1"
 
     assert AuthzSubject(AuthzSubjectKind.API_KEY, "k1").fga_user == "api_key:k1"

@@ -7,6 +7,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations} from 'lit';
 
 function asString(value: unknown) {
@@ -91,7 +92,7 @@ export class FlowsBrowserPreviewModal extends PlatformModal {
             }
         `,
     ];
-    private _themeSel: SelectController<any>;
+    private _themeSel: SelectController<'light' | 'dark'>;
     private _onPreviewMessage: any;
 
     constructor() {
@@ -101,14 +102,13 @@ export class FlowsBrowserPreviewModal extends PlatformModal {
         this.sessionId = '';
         this.currentUrl = '';
         this.status = '';
-        this._themeSel = this.select((s) => (s.theme && (s.theme as Record<string, any>).mode === 'light' ? 'light' : 'dark'));
-        this._onPreviewMessage = (event: Event) => {
-            if ((event as Record<string, any>).origin !== window.location.origin) return;
-            const payload = (event as Record<string, any>).data;
-            if (!payload || typeof payload !== 'object') return;
-            if (payload.type !== 'flows.browser_preview.finished') return;
-            const finishedSessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
-            if (finishedSessionId !== '' && this.sessionId !== '' && finishedSessionId !== this.sessionId) {
+        this._themeSel = this.select((s) => (s.theme.mode === 'light' ? 'light' : 'dark'));
+        this._onPreviewMessage = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+            const payload = event.data;
+            if (!isPlainRecord(payload) || payload.type !== 'flows.browser_preview.finished') return;
+            const finishedSessionId = payload.sessionId;
+            if (typeof finishedSessionId === 'string' && finishedSessionId !== '' && this.sessionId !== '' && finishedSessionId !== this.sessionId) {
                 return;
             }
             this.close();

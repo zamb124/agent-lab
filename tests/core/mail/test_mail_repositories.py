@@ -94,7 +94,7 @@ async def test_by_email_returns_own_row_and_hides_other_company(unique_id: str) 
             updated_at=now,
         )
     )
-    _ = await MailboxBinding.upsert_by_email(
+    _ = await MailboxBinding.upsert_by_company_and_email(
         MailboxBinding(
             mailbox_binding_id=f"mailbind_{unique_id}",
             company_id=company_id,
@@ -110,15 +110,15 @@ async def test_by_email_returns_own_row_and_hides_other_company(unique_id: str) 
         )
     )
 
-    found = await MailboxBinding.by_email(company_id, email_address)
+    found = await MailboxBinding.by_company_and_email(company_id, email_address)
     assert found is not None
     assert found.mailbox_binding_id == f"mailbind_{unique_id}"
-    assert await MailboxBinding.by_email(other_company_id, email_address) is None
-    assert await MailboxBinding.by_email(company_id, f"missing.{unique_id}@example.com") is None
+    assert await MailboxBinding.by_company_and_email(other_company_id, email_address) is None
+    assert await MailboxBinding.by_company_and_email(company_id, f"missing.{unique_id}@example.com") is None
     with pytest.raises(ValueError, match="email_address cannot be empty"):
-        _ = await MailboxBinding.by_email(company_id, "")
+        _ = await MailboxBinding.by_company_and_email(company_id, "")
     with pytest.raises(ValueError, match="company_id cannot be empty"):
-        _ = await MailboxBinding.by_email("", email_address)
+        _ = await MailboxBinding.by_company_and_email("", email_address)
 
     binding_id = f"mailbind_{unique_id}"
     stored_cursor = await MailboxSyncCursor.upsert_by_binding_folder(
@@ -223,18 +223,18 @@ async def test_mailbox_binding_upsert_list_delete(
         created_at=now,
         updated_at=now,
     )
-    stored = await MailboxBinding.upsert_by_email(binding)
+    stored = await MailboxBinding.upsert_by_company_and_email(binding)
     assert stored.email_address == email_address
 
-    listed = await MailboxBinding.list_by_email_address_for_company(company_id)
+    listed = await MailboxBinding.list_for_company_by_email_address_asc(company_id)
     assert len(listed) == 1
     assert listed[0].mailbox_binding_id == f"mailbind_{unique_id}"
 
-    by_user = await MailboxBinding.preferred_for_user(company_id, f"user_{unique_id}")
+    by_user = await MailboxBinding.find_default_or_first_by_email_for_user(company_id, f"user_{unique_id}")
     assert by_user is not None
     assert by_user.email_address == email_address
 
-    deleted = await MailboxBinding.delete_in_company(company_id, f"mailbind_{unique_id}")
+    deleted = await MailboxBinding.delete_by_company_and_binding(company_id, f"mailbind_{unique_id}")
     assert deleted is True
     assert await MailboxBinding.by_mailbox_binding_id(company_id, f"mailbind_{unique_id}") is None
 
@@ -244,7 +244,7 @@ async def test_upsert_by_email_updates_fields_and_can_replace_id(unique_id: str)
     company_id = f"mailup_{unique_id}"
     now = datetime.now(timezone.utc)
     email_address = f"up.{unique_id}@example.com"
-    created = await MailboxBinding.upsert_by_email(
+    created = await MailboxBinding.upsert_by_company_and_email(
         MailboxBinding(
             mailbox_binding_id=f"old_{unique_id}",
             company_id=company_id,
@@ -259,18 +259,18 @@ async def test_upsert_by_email_updates_fields_and_can_replace_id(unique_id: str)
             updated_at=now,
         )
     )
-    updated = await MailboxBinding.upsert_by_email(
+    updated = await MailboxBinding.upsert_by_company_and_email(
         created.model_copy(update={"sync_enabled": False, "password_encrypted": "enc-next"})
     )
     assert updated.mailbox_binding_id == created.mailbox_binding_id
     assert updated.created_at == created.created_at
     assert updated.sync_enabled is False
-    replaced = await MailboxBinding.upsert_by_email(
+    replaced = await MailboxBinding.upsert_by_company_and_email(
         updated.model_copy(update={"mailbox_binding_id": f"new_{unique_id}"})
     )
     assert replaced.mailbox_binding_id == f"new_{unique_id}"
     assert replaced.created_at == created.created_at
-    assert await MailboxBinding.by_email(company_id, email_address) is not None
+    assert await MailboxBinding.by_company_and_email(company_id, email_address) is not None
     assert await MailboxBinding.by_mailbox_binding_id(company_id, f"old_{unique_id}") is None
 
 
@@ -340,11 +340,11 @@ async def test_list_query_page_matches_text_and_keeps_extra_row(unique_id: str) 
         )
     )
 
-    inbox = await StoredMailMessage.list_query_page(binding_id, q=token, folder="INBOX", limit=10)
+    inbox = await StoredMailMessage.list_query_matches_by_date_at_and_uid_desc_over_limit(binding_id, q=token, folder="INBOX", limit=10)
     assert [row.mail_message_id for row in inbox] == [inbox_new.mail_message_id, inbox_old.mail_message_id]
-    window = await StoredMailMessage.list_query_page(binding_id, q=token, limit=1)
+    window = await StoredMailMessage.list_query_matches_by_date_at_and_uid_desc_over_limit(binding_id, q=token, limit=1)
     assert [row.mail_message_id for row in window] == [sent.mail_message_id, inbox_new.mail_message_id]
-    older_only = await StoredMailMessage.list_query_page(
+    older_only = await StoredMailMessage.list_query_matches_by_date_at_and_uid_desc_over_limit(
         binding_id,
         q=token,
         folder="INBOX",
@@ -354,10 +354,10 @@ async def test_list_query_page_matches_text_and_keeps_extra_row(unique_id: str) 
     )
     assert [row.mail_message_id for row in older_only] == [inbox_old.mail_message_id]
     with pytest.raises(ValueError, match="q is required"):
-        _ = await StoredMailMessage.list_query_page(binding_id, q="  ", folder="INBOX", limit=10)
+        _ = await StoredMailMessage.list_query_matches_by_date_at_and_uid_desc_over_limit(binding_id, q="  ", folder="INBOX", limit=10)
     with pytest.raises(ValueError, match="limit must be >= 1"):
-        _ = await StoredMailMessage.list_query_page(binding_id, q=token, folder="INBOX", limit=0)
+        _ = await StoredMailMessage.list_query_matches_by_date_at_and_uid_desc_over_limit(binding_id, q=token, folder="INBOX", limit=0)
     with pytest.raises(ValueError, match="before_date and before_uid must be provided together"):
-        _ = await StoredMailMessage.list_query_page(
+        _ = await StoredMailMessage.list_query_matches_by_date_at_and_uid_desc_over_limit(
             binding_id, q=token, folder="INBOX", limit=10, before_date=newer
         )

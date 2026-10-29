@@ -10,7 +10,7 @@
  * text part действует то же правило, что и у `speakable.py` (как `response`).
  *
  * Парность (`speakable.py` ↔ `speakable.js`) проверяется CI
- * (`scripts/check_speakable_parity.py`).
+ * (`scripts/gates/voice/speakable_parity.py`).
  */
 
 import { isPlainRecord } from '../events/payload.js';

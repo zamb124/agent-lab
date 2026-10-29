@@ -2,7 +2,7 @@
 Async HTTP-клиент Google Docs API v1 и Google Drive API v3.
 
 Авторизация через Service Account (google-auth).
-HTTP — httpx через SmartProxyClient платформы (прокси, retry).
+HTTP — httpx2 через SmartProxyClient платформы (прокси, retry).
 
 Docs API: create, get, batchUpdate.
 Drive API: upload DOCX с конвертацией, share.

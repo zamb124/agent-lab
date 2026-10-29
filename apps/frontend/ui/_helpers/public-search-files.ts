@@ -48,7 +48,7 @@ export function setPendingPublicSearchFiles(files: unknown) {
     if (!Array.isArray(files)) {
         throw new Error('setPendingPublicSearchFiles: files must be array');
     }
-    pendingPublicSearchFiles = (files as unknown[]).map((file) => validatePublicSearchFile(file));
+    pendingPublicSearchFiles = files.map((file) => validatePublicSearchFile(file));
 }
 
 export function takePendingPublicSearchFiles() {
@@ -65,7 +65,7 @@ export function setPendingPublicSearchRunFiles(files: unknown) {
     if (!Array.isArray(files)) {
         throw new Error('setPendingPublicSearchRunFiles: files must be array');
     }
-    pendingPublicSearchRunFiles = (files as unknown[]).map((file) => validatePublicSearchFile(file));
+    pendingPublicSearchRunFiles = files.map((file) => validatePublicSearchFile(file));
 }
 
 export function takePendingPublicSearchRunFiles() {
@@ -102,7 +102,7 @@ export async function uploadPublicSearchFilesForA2a(files: unknown, auth: { toke
     };
     const fetchImpl = typeof auth.fetchImpl === 'function' ? auth.fetchImpl : fetch;
     const fileRefs: Record<string, unknown>[] = [];
-    for (const file of files as unknown[]) {
+    for (const file of files) {
         const item = validatePublicSearchFile(file);
         const uploaded = await uploadPlatformFile({
             file: item,
@@ -116,7 +116,7 @@ export async function uploadPublicSearchFilesForA2a(files: unknown, auth: { toke
             maxUploadBytes: PUBLIC_SEARCH_MAX_FILE_SIZE,
         });
         for (const key of ['url', 'original_name', 'content_type']) {
-            const uploadedValue = (uploaded as Record<string, unknown>)[key];
+            const uploadedValue = uploaded[key];
             if (typeof uploadedValue !== 'string' || uploadedValue.trim() === '') {
                 throw new Error(`uploadPublicSearchFilesForA2a: uploaded.${key} required`);
             }

@@ -299,7 +299,11 @@ export class OfficeExplorerTree extends PlatformElement {
     private _openContextMenuFromButton(e: MouseEvent, catalog: CatalogRecord, hasChildCatalogs: boolean) {
         e.preventDefault();
         e.stopPropagation();
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const target = e.currentTarget;
+        if (!(target instanceof HTMLElement)) {
+            throw new Error('office-explorer-tree: context menu target required');
+        }
+        const rect = target.getBoundingClientRect();
         this._showContextMenu(rect.right, rect.bottom, catalog, hasChildCatalogs);
     }
 

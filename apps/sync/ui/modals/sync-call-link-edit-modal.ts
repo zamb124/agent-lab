@@ -5,6 +5,18 @@
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function linkRows(value: unknown[]): Record<string, unknown>[] {
+    const rows: Record<string, unknown>[] = [];
+    for (const row of value) {
+        if (!isPlainRecord(row)) {
+            throw new Error('sync-call-link-edit-modal: link must be an object');
+        }
+        rows.push(row);
+    }
+    return rows;
+}
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
@@ -58,15 +70,18 @@ export class SyncCallLinkEditModal extends PlatformFormModal {
 
     _resolveItems() {
         const result = this._linksOp.lastResult;
-        if (Array.isArray(result)) return result as Record<string, any>[];
-        if (result && Array.isArray((result as { items?: unknown }).items)) return (result as { items: Record<string, any>[] }).items;
+        if (Array.isArray(result)) return linkRows(result);
+        if (isPlainRecord(result)) {
+            const items = result.items;
+            if (Array.isArray(items)) return linkRows(items);
+        }
         return [];
     }
 
     override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (!this._hydrated && this.linkToken) {
-            const item = this._resolveItems().find((x: Record<string, any>) => x && x.link_token === this.linkToken);
+            const item = this._resolveItems().find((row) => row.link_token === this.linkToken);
             if (item) {
                 this._title = typeof item.title === 'string' ? item.title : '';
                 const raw = typeof item.scheduled_start_at === 'string'

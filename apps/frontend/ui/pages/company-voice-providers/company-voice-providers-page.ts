@@ -18,16 +18,52 @@ import type { SelectController } from '@platform/lib/events/select-controller.js
 import type { AuthState } from '@platform/lib/events/reducers/auth.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
+interface SecretsDraft {
+    api_key: string;
+    folder_id: string;
+    client_id: string;
+    client_secret: string;
+    scope: string;
+}
+
+interface ProviderDraft {
+    provider: string;
+    model: string;
+    voice: string;
+    language: string;
+    sample_rate: string;
+    threshold: string;
+    response_format: string;
+    secrets: SecretsDraft;
+}
+
+interface RuleDraft {
+    kind: string;
+    pattern: string;
+    replacement: string;
+    language: string;
+    case_sensitive: boolean;
+    word_boundary: boolean;
+    enabled: boolean;
+    note: string;
+}
+
+interface PronunciationTestResult {
+    original: string;
+    transformed: string;
+    changed: boolean;
+}
+
 // ─── Voice providers constants ────────────────────────────────────────────────
 const KINDS = ['stt', 'tts'];
 const STT_TTS_UI = ['litserve', 'cloud_ru', 'yandex', 'sber'];
 const RESPONSE_FORMATS = ['', 'wav', 'mp3', 'ogg', 'pcm', 'lpcm'];
 
-function _emptySecretsDraft() {
+function _emptySecretsDraft(): SecretsDraft {
     return { api_key: '', folder_id: '', client_id: '', client_secret: '', scope: '' };
 }
 
-function _emptyProviderDraft() {
+function _emptyProviderDraft(): ProviderDraft {
     return {
         provider: '', model: '', voice: '', language: '',
         sample_rate: '', threshold: '', response_format: '',
@@ -49,11 +85,11 @@ function _needsCredentials(provider: string) {
     return provider === 'cloud_ru' || provider === 'yandex' || provider === 'sber';
 }
 
-function _itemToDraft(item: Record<string, any>) {
-    if (!item || typeof item !== 'object') return _emptyProviderDraft();
+function _itemToDraft(item: unknown): ProviderDraft {
+    if (!isPlainRecord(item)) return _emptyProviderDraft();
     const secrets = _emptySecretsDraft();
     const sm = item.secrets_meta;
-    if (sm && typeof sm === 'object') {
+    if (isPlainRecord(sm)) {
         if (typeof sm.folder_id === 'string') secrets.folder_id = sm.folder_id;
         if (typeof sm.client_id === 'string') secrets.client_id = sm.client_id;
         if (typeof sm.scope === 'string') secrets.scope = sm.scope;
@@ -120,7 +156,20 @@ function kindIcon(kind: unknown): string {
     }
 }
 
-function _emptyRuleDraft() {
+function pronunciationTestResult(value: unknown): PronunciationTestResult {
+    if (!isPlainRecord(value)
+        || typeof value.original !== 'string'
+        || typeof value.transformed !== 'string'
+        || typeof value.changed !== 'boolean') {
+        throw new Error('company-voice-providers: test result required');
+    }
+    return {
+        original: value.original,
+        transformed: value.transformed,
+        changed: value.changed,
+    };
+}
+function _emptyRuleDraft(): RuleDraft {
     return {
         kind: 'alias', pattern: '', replacement: '',
         language: 'ru', case_sensitive: false,
@@ -377,13 +426,13 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         _testResult: { state: true },
     }
     declare _activeTab: string;
-    declare _drafts: Record<string, any>;
-    declare _credEditedByKind: Record<string, any>;
-    declare _ruleDraft: Record<string, any>;
-    declare _ruleEditId: any;
+    declare _drafts: Record<string, ProviderDraft>;
+    declare _credEditedByKind: Record<string, boolean>;
+    declare _ruleDraft: RuleDraft;
+    declare _ruleEditId: string | null;
     declare _testText: string;
     declare _testProvider: string;
-    declare _testResult: any;
+    declare _testResult: PronunciationTestResult | null;
     private _catalog!: OpController;
     private _load!: OpController;
     private _upsert!: OpController;
@@ -462,30 +511,87 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
 
     // ── Voice providers helpers ──────────────────────────────────────────────
 
-    _secretsMetaForKind(kind: string) {
+    _secretsMetaForKind(kind: string): Record<string, unknown> | null {
         const loaded = this._load.lastResult;
         if (!isPlainRecord(loaded) || !Array.isArray(loaded.items)) return null;
         for (const it of loaded.items) {
-            if (it && it.kind === kind && it.secrets_meta) return it.secrets_meta;
+            if (!isPlainRecord(it) || it.kind !== kind || !isPlainRecord(it.secrets_meta)) {
+                continue;
+            }
+            return it.secrets_meta;
         }
         return null;
     }
 
+    _requireDraft(kind: string): ProviderDraft {
+        const draft = this._drafts[kind];
+        if (draft === undefined) {
+            throw new Error(`company-voice-providers: draft ${kind} required`);
+        }
+        return draft;
+    }
+
     _setField(kind: string, field: string, value: unknown) {
-        const base = this._drafts[kind];
-        let nextDraft;
-        if (field === 'provider') {
-            nextDraft = { ...base, provider: value, secrets: _emptySecretsDraft() };
-            this._credEditedByKind = { ...this._credEditedByKind, [kind]: false };
-        } else {
-            nextDraft = { ...base, [field]: value };
+        if (typeof value !== 'string') {
+            throw new Error('company-voice-providers: field value must be a string');
+        }
+        const nextDraft = { ...this._requireDraft(kind) };
+        switch (field) {
+            case 'provider':
+                nextDraft.provider = value;
+                nextDraft.secrets = _emptySecretsDraft();
+                this._credEditedByKind = { ...this._credEditedByKind, [kind]: false };
+                break;
+            case 'model':
+                nextDraft.model = value;
+                break;
+            case 'voice':
+                nextDraft.voice = value;
+                break;
+            case 'language':
+                nextDraft.language = value;
+                break;
+            case 'sample_rate':
+                nextDraft.sample_rate = value;
+                break;
+            case 'threshold':
+                nextDraft.threshold = value;
+                break;
+            case 'response_format':
+                nextDraft.response_format = value;
+                break;
+            default:
+                throw new Error(`company-voice-providers: unknown field ${field}`);
         }
         this._drafts = { ...this._drafts, [kind]: nextDraft };
     }
 
     _setSecret(kind: string, field: string, value: unknown) {
-        const sec = { ...this._drafts[kind].secrets, [field]: value };
-        this._drafts = { ...this._drafts, [kind]: { ...this._drafts[kind], secrets: sec } };
+        if (typeof value !== 'string') {
+            throw new Error('company-voice-providers: secret value must be a string');
+        }
+        const draft = this._requireDraft(kind);
+        const secrets = { ...draft.secrets };
+        switch (field) {
+            case 'api_key':
+                secrets.api_key = value;
+                break;
+            case 'folder_id':
+                secrets.folder_id = value;
+                break;
+            case 'client_id':
+                secrets.client_id = value;
+                break;
+            case 'client_secret':
+                secrets.client_secret = value;
+                break;
+            case 'scope':
+                secrets.scope = value;
+                break;
+            default:
+                throw new Error(`company-voice-providers: unknown secret ${field}`);
+        }
+        this._drafts = { ...this._drafts, [kind]: { ...draft, secrets } };
         this._credEditedByKind = { ...this._credEditedByKind, [kind]: true };
     }
 
@@ -506,7 +612,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     }
 
     _secretsPayload(kind: string, provider: string) {
-        const s = this._drafts[kind].secrets;
+        const s = this._requireDraft(kind).secrets;
         if (provider === 'cloud_ru') {
             const ak = _trimOrEmpty(s.api_key);
             return { api_key: ak !== '' ? ak : null };
@@ -528,8 +634,8 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     async _saveProvider(kind: string) {
         const company_id = this._activeCompanyId();
         if (!company_id) return;
-        const draft = this._drafts[kind];
-        if (typeof draft.provider !== 'string' || draft.provider.length === 0) {
+        const draft = this._requireDraft(kind);
+        if (draft.provider.length === 0) {
             this.toast('frontend:company_voice_providers_page.err_provider_required', { type: 'error' });
             return;
         }
@@ -586,27 +692,64 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
 
     // ── Pronunciation helpers ────────────────────────────────────────────────
 
-    _getRules() {
+    _getRules(): Record<string, unknown>[] {
         const result = this._rulesLoad.lastResult;
         if (!isPlainRecord(result) || !Array.isArray(result.items)) return [];
-        return result.items;
+        const rows: Record<string, unknown>[] = [];
+        for (const item of result.items) {
+            if (!isPlainRecord(item)) {
+                throw new Error('company-voice-providers: pronunciation rule must be an object');
+            }
+            rows.push(item);
+        }
+        return rows;
     }
 
     _setRuleDraft(field: string, value: unknown) {
-        this._ruleDraft = { ...this._ruleDraft, [field]: value };
+        const next = { ...this._ruleDraft };
+        switch (field) {
+            case 'kind':
+            case 'pattern':
+            case 'replacement':
+            case 'language':
+            case 'note':
+                if (typeof value !== 'string') {
+                    throw new Error(`company-voice-providers: ${field} must be a string`);
+                }
+                next[field] = value;
+                break;
+            case 'case_sensitive':
+            case 'word_boundary':
+            case 'enabled':
+                if (typeof value !== 'boolean') {
+                    throw new Error(`company-voice-providers: ${field} must be a boolean`);
+                }
+                next[field] = value;
+                break;
+            default:
+                throw new Error(`company-voice-providers: unknown rule field ${field}`);
+        }
+        this._ruleDraft = next;
     }
 
-    _startEditRule(item: Record<string, any>) {
-        this._ruleEditId = item.pronunciation_rule_id;
+    _startEditRule(item: Record<string, unknown>) {
+        const ruleId = item.pronunciation_rule_id;
+        if (typeof ruleId !== 'string' || ruleId.length === 0) {
+            throw new Error('company-voice-providers: pronunciation_rule_id required');
+        }
+        if (typeof item.kind !== 'string' || typeof item.pattern !== 'string' || typeof item.replacement !== 'string') {
+            throw new Error('company-voice-providers: rule kind, pattern and replacement required');
+        }
+        this._ruleEditId = ruleId;
         this._ruleDraft = {
-            kind:           item.kind,
-            pattern:        item.pattern,
-            replacement:    item.replacement,
-            language:       typeof item.language === 'string' ? item.language : '',
+            kind: item.kind,
+            pattern: item.pattern,
+            replacement: item.replacement,
+            language: typeof item.language === 'string' ? item.language : '',
             case_sensitive: item.case_sensitive === true,
-            word_boundary:  item.word_boundary !== false,
-            enabled:        item.enabled !== false,
-            note:           typeof item.note === 'string' ? item.note : '',
+            word_boundary: item.word_boundary !== false,
+            enabled: item.enabled !== false,
+            note: typeof item.note === 'string' ? item.note : '',
         };
     }
 
@@ -618,12 +761,12 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     async _saveRule() {
         const company_id = this._activeCompanyId();
         if (!company_id) return;
-        const pattern     = (this._ruleDraft.pattern as string).trim();
-        const replacement = (this._ruleDraft.replacement as string).trim();
-        if (!pattern || !replacement) return;
+        const pattern = this._ruleDraft.pattern.trim();
+        const replacement = this._ruleDraft.replacement.trim();
+        if (pattern.length === 0 || replacement.length === 0) return;
 
-        const lang = (this._ruleDraft.language as string).trim();
-        const note = (this._ruleDraft.note as string).trim();
+        const lang = this._ruleDraft.language.trim();
+        const note = this._ruleDraft.note.trim();
         const base = {
             company_id,
             kind:           this._ruleDraft.kind,
@@ -645,7 +788,10 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         }
     }
 
-    async _deleteRule(ruleId: Record<string, any>) {
+    async _deleteRule(ruleId: unknown) {
+        if (typeof ruleId !== 'string' || ruleId.length === 0) {
+            throw new Error('company-voice-providers: rule_id required');
+        }
         const company_id = this._activeCompanyId();
         if (!company_id) return;
         const result = await this._rulesDelete.run({ company_id, rule_id: ruleId });
@@ -667,7 +813,9 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
             text:     this._testText,
             provider: this._testProvider,
         });
-        if (result) this._testResult = result;
+        if (result !== null && result !== undefined) {
+            this._testResult = pronunciationTestResult(result);
+        }
     }
 
     // ── Render ───────────────────────────────────────────────────────────────
@@ -722,7 +870,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     }
 
     _renderProviderCard(kind: string) {
-        const draft       = this._drafts[kind];
+        const draft = this._requireDraft(kind);
         const secretsMeta = this._secretsMetaForKind(kind);
         const busy        = this._upsert.busy || this._remove.busy;
         const providerValues = [
@@ -797,19 +945,18 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         `;
     }
 
-    _renderCredentials(kind: string, draft: Record<string, any>, secretsMeta: Record<string, any>) {
+    _renderCredentials(kind: string, draft: ProviderDraft, secretsMeta: Record<string, unknown> | null) {
         if (!_needsCredentials(draft.provider)) return nothing;
         const p = draft.provider;
-        const set = secretsMeta;
-        const placeholder = (flag: Record<string, any>) =>
-            flag ? this.t('company_voice_providers_page.placeholder_secret_set') : '';
+        const placeholder = (flag: unknown) =>
+            flag === true ? this.t('company_voice_providers_page.placeholder_secret_set') : '';
         return html`
             <h4>${this.t('company_voice_providers_page.credentials_heading')}</h4>
             ${p === 'cloud_ru' || p === 'yandex' ? html`
                 <platform-field type="string" input-type="password" mode="edit"
                     .label=${this.t('company_voice_providers_page.field_api_key')}
                     .value=${draft.secrets.api_key}
-                    .placeholder=${placeholder(set && set.api_key_set)}
+                    .placeholder=${placeholder(secretsMeta === null ? false : secretsMeta.api_key_set)}
                     @change=${(e: CustomEvent) => this._setSecret(kind, 'api_key', e.detail.value)}
                 ></platform-field>
             ` : nothing}
@@ -829,7 +976,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 <platform-field type="string" input-type="password" mode="edit"
                     .label=${this.t('company_voice_providers_page.field_client_secret')}
                     .value=${draft.secrets.client_secret}
-                    .placeholder=${placeholder(set && set.client_secret_set)}
+                    .placeholder=${placeholder(secretsMeta === null ? false : secretsMeta.client_secret_set)}
                     @change=${(e: CustomEvent) => this._setSecret(kind, 'client_secret', e.detail.value)}
                 ></platform-field>
                 <platform-field type="string" mode="edit"
@@ -855,7 +1002,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         const d      = this._ruleDraft;
         const isEdit = Boolean(this._ruleEditId);
         const isBusy = this._rulesCreate.busy || this._rulesUpdate.busy;
-        const canSave = (d.pattern as string).trim().length > 0 && (d.replacement as string).trim().length > 0 && !isBusy;
+        const canSave = d.pattern.trim().length > 0 && d.replacement.trim().length > 0 && !isBusy;
 
         return html`
             <div class="pron-card">
@@ -966,17 +1113,22 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                             </div>`
                         : html`
                             <div class="rules-list">
-                                ${rules.map((r: Record<string, any>) => this._renderRuleItem(r, isDeleting))}
+                                ${rules.map((rule) => this._renderRuleItem(rule, isDeleting))}
                             </div>`}
             </div>
         `;
     }
 
-    _renderRuleItem(item: Record<string, any>, isDeleting: boolean) {
-        const isEditing = this._ruleEditId === item.pronunciation_rule_id;
+    _renderRuleItem(item: Record<string, unknown>, isDeleting: boolean) {
+        const ruleId = item.pronunciation_rule_id;
+        if (typeof ruleId !== 'string' || ruleId.length === 0) {
+            throw new Error('company-voice-providers: pronunciation_rule_id required');
+        }
+        const isEditing = this._ruleEditId === ruleId;
+        const language = typeof item.language === 'string' ? item.language : '';
         return html`
             <div class="rule-item
-                ${!item.enabled ? 'rule-disabled' : ''}
+                ${item.enabled === false ? 'rule-disabled' : ''}
                 ${isEditing ? 'rule-editing' : ''}
             ">
                 <span class="kind-badge ${kindClass(item.kind)}">
@@ -986,7 +1138,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 <span class="rule-mono rule-pattern">${item.pattern}</span>
                 <span class="rule-arrow">→</span>
                 <span class="rule-mono rule-replacement">${item.replacement}</span>
-                ${item.language ? html`<span class="rule-lang">${item.language}</span>` : nothing}
+                ${language.length > 0 ? html`<span class="rule-lang">${language}</span>` : nothing}
                 <span class="rule-actions">
                     <glass-button size="sm" variant="ghost"
                         title="${this.t('pronunciation_rules_page.btn_edit')}"
@@ -996,7 +1148,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                     <glass-button size="sm" variant="ghost"
                         title="${this.t('pronunciation_rules_page.btn_delete')}"
                         ?disabled=${isDeleting}
-                        @click=${() => this._deleteRule(item.pronunciation_rule_id)}
+                        @click=${() => this._deleteRule(ruleId)}
                     ><platform-icon name="trash" size="14"></platform-icon></glass-button>
                 </span>
             </div>

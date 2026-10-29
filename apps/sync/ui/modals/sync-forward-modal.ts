@@ -12,6 +12,7 @@ import type {CSSResultGroup, PropertyDeclarations} from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import './../components/sync-channel-row.js';
@@ -85,9 +86,9 @@ export class SyncForwardModal extends PlatformModal {
             if (c.channel_id === exclude) return false;
             if (q !== '') {
                 const title = typeof c.name === 'string' ? c.name.toLowerCase() : '';
-                const peerObj = c.peer as Record<string, unknown> | null | undefined;
-                const peer = peerObj && typeof peerObj.display_name === 'string' ? peerObj.display_name.toLowerCase() : '';
-                if (!title.includes(q) && !peer.includes(q)) return false;
+                const peer = c.peer;
+                const peerName = isPlainRecord(peer) && typeof peer.display_name === 'string' ? peer.display_name.toLowerCase() : '';
+                if (!title.includes(q) && !peerName.includes(q)) return false;
             }
             return true;
         });

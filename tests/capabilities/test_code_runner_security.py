@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.code_runner_csharp.services.executor import CsharpSandboxExecutor
 from apps.code_runner_go.services.executor import GoSandboxExecutor

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
+from core.authz.types import AuthzRelation
 from core.documents.authz.tuples import (
     document_catalog_company_link,
     document_catalog_company_viewer_tuple,
@@ -14,9 +17,6 @@ from core.documents.authz.tuples import (
     document_file_member_tuple,
     document_file_owner_tuple,
 )
-from core.authz.models import AuthzObject
-from core.authz.service import AuthzService
-from core.authz.types import AuthzRelation
 from core.identity.company_membership import set_company_member_roles
 from core.models.identity_models import Company, User
 

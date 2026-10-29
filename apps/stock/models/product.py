@@ -121,10 +121,10 @@ class StockProduct(PlatformModel):
         return {row.product_id: row for row in rows}
 
     @classmethod
-    async def list_by_sku(
+    async def list_by_sku_asc(
         cls, company_id: str, *, limit: int, offset: int
     ) -> list[Self]:
-        """Окно товаров компании, ORDER BY sku, limit и offset."""
+        """Окно товаров компании, ORDER BY sku ASC, limit и offset."""
         return await cls.objects.filter(company_id=company_id).order_by("sku").limit(
             limit
         ).offset(offset).all()

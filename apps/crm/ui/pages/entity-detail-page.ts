@@ -65,12 +65,8 @@ function typeIdOf(row: Record<string, unknown>): string {
     return row.type_id;
 }
 
-function copyRecord(value: Record<string, unknown>): Record<string, any> {
-    const row: Record<string, any> = {};
-    for (const [key, field] of Object.entries(value)) {
-        row[key] = field;
-    }
-    return row;
+function copyRecord(value: Record<string, unknown>): Record<string, unknown> {
+    return { ...value };
 }
 
 function eventDetail(ev: Event, label: string): Record<string, unknown> {
@@ -129,7 +125,7 @@ export class CRMEntityDetailPage extends PlatformPage {
     declare embedded: boolean;
     declare itemId: string;
     declare _isMobile: boolean;
-    declare _card: Record<string, any> | null;
+    declare _card: Record<string, unknown> | null;
     declare _cardError: string;
     declare _activeTab: string;
     declare _editToolbarSaveDisabled: boolean;
@@ -659,7 +655,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._cardOp = this.useOp(ENTITY_CARD_OP);
         this._relTypes = this.useResource(REL_TYPES_NAME, { autoload: true });
         this._graphView = this.useSlice('crm/graph_view');
-        this._routerSearchSel = this.select((s: Record<string, any>) => s.router.search);
+        this._routerSearchSel = this.select((state) => state.router.search);
         this._mql = null;
         this._mqlListener = null;
         this._accessModalOpened = false;
@@ -815,7 +811,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._cardOp.run({ entity_id: this.itemId });
     }
 
-    _entity(): Record<string, any> | null {
+    _entity(): Record<string, unknown> | null {
         const byId = this._entities.byId;
         const item = byId && byId[this.itemId];
         if (item === undefined) {
@@ -827,12 +823,12 @@ export class CRMEntityDetailPage extends PlatformPage {
         return copyRecord(item);
     }
 
-    _entityTypesCatalogRows(): Record<string, any>[] {
+    _entityTypesCatalogRows(): Record<string, unknown>[] {
         const ctrl = this._entityTypes;
         if (!ctrl || ctrl.items === undefined || !Array.isArray(ctrl.items)) {
             return [];
         }
-        const rows: Record<string, any>[] = [];
+        const rows: Record<string, unknown>[] = [];
         for (const item of ctrl.items) {
             if (!isPlainRecord(item)) {
                 throw new Error('CRMEntityDetailPage: entity type must be an object');
@@ -937,7 +933,7 @@ export class CRMEntityDetailPage extends PlatformPage {
 
     _relationshipTypeLabel(typeId: unknown): string {
         const items = Array.isArray(this._relTypes.items) ? this._relTypes.items : [];
-        const found = items.find((rt: Record<string, any> | null) => rt && rt.type_id === typeId);
+        const found = items.find((row): row is Record<string, unknown> => isPlainRecord(row) && row.type_id === typeId);
         if (found && typeof found.name === 'string' && found.name.length > 0) return found.name;
         return typeof typeId === 'string' ? typeId : '';
     }
@@ -1050,7 +1046,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         `;
     }
 
-    _detailStoragePairForTemplateUi(entity: Record<string, any> | null): { entity_type: string; subtypeNorm: string | null } {
+    _detailStoragePairForTemplateUi(entity: Record<string, unknown> | null): { entity_type: string; subtypeNorm: string | null } {
         const d = this._draftStorageTypePair;
         if (typeof d.entity_type === 'string' && d.entity_type.length > 0) {
             const stRaw = typeof d.entity_subtype === 'string' ? d.entity_subtype.trim() : '';
@@ -1065,7 +1061,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         return { entity_type: entity.entity_type, subtypeNorm: stRaw.length > 0 ? stRaw : null };
     }
 
-    _detailTemplateDisplayLabel(entity: Record<string, any>): string {
+    _detailTemplateDisplayLabel(entity: Record<string, unknown>): string {
         const { entity_type: et, subtypeNorm } = this._detailStoragePairForTemplateUi(entity);
         const items = catalogRows(this._entityTypes.items);
         for (const t of items) {
@@ -1080,7 +1076,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         return this._entityTemplateLabel(entity);
     }
 
-    _detailTemplateSelectedTypeId(entity: Record<string, any>): string {
+    _detailTemplateSelectedTypeId(entity: Record<string, unknown>): string {
         const { entity_type: et, subtypeNorm } = this._detailStoragePairForTemplateUi(entity);
         const items = catalogRows(this._entityTypes.items);
         for (const t of items) {
@@ -1134,7 +1130,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         card.setEditTemplateFromListRow(copyRecord(item));
     }
 
-    _renderEditTemplateBox(entity: Record<string, any>, isBusy: boolean): TemplateResult {
+    _renderEditTemplateBox(entity: Record<string, unknown>, isBusy: boolean): TemplateResult {
         const typesLoading = this._entityTypes.loading;
         const rawItems = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
         const items = catalogRows(rawItems).sort((a, b) => {
@@ -1196,7 +1192,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         `;
     }
 
-    _entityTemplateLabel(ent: Record<string, any> | null): string {
+    _entityTemplateLabel(ent: Record<string, unknown> | null): string {
         if (!ent || typeof ent.entity_type !== 'string' || ent.entity_type.length === 0) {
             throw new Error('CRMEntityDetailPage._entityTemplateLabel: entity_type required');
         }
@@ -1206,7 +1202,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         return st.length > 0 ? `${ent.entity_type} / ${st}` : ent.entity_type;
     }
 
-    _renderDetailHeaderActions(entity: Record<string, any>, editingCard: boolean, isBusy: boolean): TemplateResult {
+    _renderDetailHeaderActions(entity: Record<string, unknown>, editingCard: boolean, isBusy: boolean): TemplateResult {
         const compactToolbar = this.embedded || this._isMobile;
         if (compactToolbar && !editingCard) {
             return html`
@@ -1381,7 +1377,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._onCardEditCancelled();
     }
 
-    _buildSubtitle(entity: Record<string, any>): string {
+    _buildSubtitle(entity: Record<string, unknown>): string {
         const parts: string[] = [];
         if (typeof entity.namespace === 'string' && entity.namespace.length > 0) parts.push(entity.namespace);
         if (typeof entity.entity_type === 'string' && entity.entity_type.length > 0) parts.push(entity.entity_type);
@@ -1389,7 +1385,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         return parts.join(' · ');
     }
 
-    _renderActiveTab(entity: Record<string, any>): TemplateResult {
+    _renderActiveTab(entity: Record<string, unknown>): TemplateResult {
         if (this._activeTab === TAB_GRAPH) {
             const entityNs =
                 entity && typeof entity.namespace === 'string' && entity.namespace.length > 0
@@ -1458,7 +1454,7 @@ export class CRMEntityDetailPage extends PlatformPage {
             return [];
         }
         const edges = extractNeighborEdges(card, this.itemId, { skipTaskNeighbors: true });
-        return edges.map(({ rel, otherId, otherEntity, isOutgoing }: { rel: Record<string, any>; otherId: string; otherEntity: Record<string, any> | null; isOutgoing: boolean }) => ({
+        return edges.map(({ rel, otherId, otherEntity, isOutgoing }) => ({
             relationshipId: rel.relationship_id,
             otherId,
             otherEntity,
@@ -1472,7 +1468,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         }));
     }
 
-    _renderRelationsTab(_entity: Record<string, any>): TemplateResult {
+    _renderRelationsTab(_entity: Record<string, unknown>): TemplateResult {
         const rows = this._neighborRowsForDetail();
         return html`
             <div class="card-section">

@@ -23,7 +23,7 @@ export class FlowsSpanDetailsModal extends PlatformModal {
         ...PlatformModal.properties,
         span: { type: Object },
     }
-    declare span: Record<string, any> | null;
+    declare span: Record<string, unknown> | null;
 ;
 
     static override styles: CSSResultGroup = [
@@ -47,35 +47,32 @@ export class FlowsSpanDetailsModal extends PlatformModal {
 
     _openLogs() {
         const span = asObject(this.span);
-        const props: any = {};
-        if (typeof (span as any).span_id === 'string' && (span as any).span_id.length > 0) {
-            props.spanId = (span as any).span_id;
-        }
-        if (typeof (span as any).trace_id === 'string' && (span as any).trace_id.length > 0) {
-            props.traceId = (span as any).trace_id;
-        }
-        if (typeof (span as any).request_id === 'string' && (span as any).request_id.length > 0) {
-            props.requestId = (span as any).request_id;
-        }
+        const props: Record<string, string> = {};
+        const spanId = stringValue(span.span_id);
+        const traceId = stringValue(span.trace_id);
+        const requestId = stringValue(span.request_id);
+        if (spanId.length > 0) props.spanId = spanId;
+        if (traceId.length > 0) props.traceId = traceId;
+        if (requestId.length > 0) props.requestId = requestId;
         this.openModal('flows.logs', props);
     }
 
     _workflowSessionId() {
         const span = asObject(this.span);
-        const attrs = asObject((span as any).attributes);
-        const directSession = stringValue((span as any).session_id);
+        const attrs = asObject(span.attributes);
+        const directSession = stringValue(span.session_id);
         if (directSession.length > 0) {
             return directSession;
         }
-        const sessionAgent = stringValue((span as any).session_agent);
+        const sessionAgent = stringValue(span.session_agent);
         if (sessionAgent.length > 0) {
             return sessionAgent;
         }
-        const workflowSession = stringValue((attrs as any)['platform.workflow.session_id']);
+        const workflowSession = stringValue(attrs['platform.workflow.session_id']);
         if (workflowSession.length > 0) {
             return workflowSession;
         }
-        return stringValue((attrs as any)['platform.session.agent']);
+        return stringValue(attrs['platform.session.agent']);
     }
 
     _openDurableHistory() {
@@ -88,15 +85,18 @@ export class FlowsSpanDetailsModal extends PlatformModal {
 
     override renderHeader() {
         const span = asObject(this.span);
-        if (typeof (span as any).operation_name === 'string' && (span as any).operation_name.length > 0) return (span as any).operation_name;
-        if (typeof (span as any).name === 'string' && (span as any).name.length > 0) return (span as any).name;
-        if (typeof (span as any).span_id === 'string' && (span as any).span_id.length > 0) return (span as any).span_id;
+        const operationName = stringValue(span.operation_name);
+        if (operationName.length > 0) return operationName;
+        const name = stringValue(span.name);
+        if (name.length > 0) return name;
+        const spanId = stringValue(span.span_id);
+        if (spanId.length > 0) return spanId;
         return this.t('span_details_modal.title');
     }
 
     override renderHeaderActions() {
         const span = asObject(this.span);
-        const hasSpanId = typeof (span as any).span_id === 'string' && (span as any).span_id.length > 0;
+        const hasSpanId = stringValue(span.span_id).length > 0;
         const hasWorkflowSession = this._workflowSessionId().length > 0;
         return html`
             <platform-button

@@ -6,6 +6,7 @@ import {
     createResourceCollection,
     createForm,
 } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const boardsResource = createResourceCollection({
     name: 'worktracker/boards',
@@ -16,7 +17,7 @@ export const boardsResource = createResourceCollection({
     wsTimeoutMs: 5_000,
     listQuery: (payload: unknown) => {
         const query: Record<string, string> = {};
-        const ns = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).namespace : undefined;
+        const ns = isPlainRecord(payload) ? payload.namespace : undefined;
         if (typeof ns === 'string' && ns.length > 0) {
             query.namespace = ns;
         }

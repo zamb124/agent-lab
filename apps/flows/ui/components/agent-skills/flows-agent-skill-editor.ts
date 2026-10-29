@@ -30,40 +30,111 @@ const EMPTY_SCHEMA = Object.freeze({
     additionalProperties: false,
 });
 
-function _cloneSkill(skill: any) {
+interface SkillToolRef {
+    tool_id: string;
+    description: string;
+    parameters_schema: Record<string, unknown>;
+}
+
+interface SkillDraft {
+    agent_skill_id: string;
+    name: string;
+    description: string;
+    body_markdown: string;
+    tool_refs: SkillToolRef[];
+    depends_on: string[];
+    references: Record<string, unknown>[];
+    assets: Record<string, unknown>[];
+}
+
+function skillText(value: unknown, label: string): string {
+    if (typeof value !== 'string') {
+        throw new Error(`flows-agent-skill-editor: ${label} must be a string`);
+    }
+    return value;
+}
+
+function cloneRecords(value: unknown, label: string): Record<string, unknown>[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.map((item, index) => {
+        if (!isPlainObject(item)) {
+            throw new Error(`flows-agent-skill-editor: ${label}[${index}] must be an object`);
+        }
+        return { ...item };
+    });
+}
+
+function cloneDepends(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.map((item, index) => {
+        if (typeof item !== 'string' || item.length === 0) {
+            throw new Error(`flows-agent-skill-editor: depends_on[${index}] must be a string`);
+        }
+        return item;
+    });
+}
+
+function cloneToolRefs(value: unknown): SkillToolRef[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.map((item, index) => {
+        if (!isPlainObject(item)) {
+            throw new Error(`flows-agent-skill-editor: tool_refs[${index}] must be an object`);
+        }
+        const toolId = asString(item.tool_id);
+        if (toolId.length === 0) {
+            throw new Error(`flows-agent-skill-editor: tool_refs[${index}].tool_id required`);
+        }
+        return {
+            tool_id: toolId,
+            description: typeof item.description === 'string' && item.description.length > 0 ? item.description : toolId,
+            parameters_schema: isPlainObject(item.parameters_schema) ? item.parameters_schema : { ...EMPTY_SCHEMA },
+        };
+    });
+}
+
+function _cloneSkill(skill: unknown): SkillDraft {
+    if (!isPlainObject(skill)) {
+        throw new Error('flows-agent-skill-editor: skill required');
+    }
+    const agentSkillId = skillText(skill.agent_skill_id, 'agent_skill_id');
+    if (agentSkillId.length === 0) {
+        throw new Error('flows-agent-skill-editor: agent_skill_id required');
+    }
     return {
-        agent_skill_id: skill.agent_skill_id,
-        name: skill.name,
-        description: skill.description,
-        body_markdown: skill.body_markdown,
-        tool_refs: Array.isArray(skill.tool_refs)
-            ? skill.tool_refs.map((ref: any) => ({ ...ref }))
-            : [],
-        depends_on: Array.isArray(skill.depends_on) ? [...skill.depends_on] : [],
-        references: Array.isArray(skill.references)
-            ? skill.references.map((ref: any) => ({ ...ref }))
-            : [],
-        assets: Array.isArray(skill.assets) ? skill.assets.map((ref: any) => ({ ...ref })) : [],
+        agent_skill_id: agentSkillId,
+        name: skillText(skill.name, 'name'),
+        description: skillText(skill.description, 'description'),
+        body_markdown: skillText(skill.body_markdown, 'body_markdown'),
+        tool_refs: cloneToolRefs(skill.tool_refs),
+        depends_on: cloneDepends(skill.depends_on),
+        references: cloneRecords(skill.references, 'references'),
+        assets: cloneRecords(skill.assets, 'assets'),
     };
 }
 
-function _draftEqual(a: any, b: any) {
-    return JSON.stringify(a) === JSON.stringify(b);
+function _draftEqual(left: SkillDraft, right: SkillDraft) {
+    return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function _toolRefFromSave(updated: any, previous: any) {
-    const toolId = asString(updated?.tool_id);
+function _toolRefFromSave(updated: Record<string, unknown>, previous: unknown): SkillToolRef {
+    const toolId = asString(updated.tool_id);
     if (toolId.length === 0) {
         throw new Error('flows-agent-skill-editor: onSave tool_id required');
     }
     const description =
         typeof updated.description === 'string' && updated.description.length > 0
             ? updated.description
-            : (typeof previous?.description === 'string' ? previous.description : toolId);
+            : (isPlainObject(previous) && typeof previous.description === 'string' ? previous.description : toolId);
     const parameters_schema =
         isPlainObject(updated.parameters_schema)
             ? updated.parameters_schema
-            : (isPlainObject(previous?.parameters_schema) ? previous.parameters_schema : { ...EMPTY_SCHEMA });
+            : (isPlainObject(previous) && isPlainObject(previous.parameters_schema) ? previous.parameters_schema : { ...EMPTY_SCHEMA });
     return {
         tool_id: toolId,
         description,
@@ -84,9 +155,9 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         _duplicateName: { state: true },
         _duplicateBusy: { state: true },
     }
-    declare skill: Record<string, any> | null;
-    declare catalogItems: any[];
-    declare _draft: Record<string, any> | null;
+    declare skill: unknown;
+    declare catalogItems: unknown[];
+    declare _draft: SkillDraft | null;
     declare _dirty: boolean;
     declare _duplicateOpen: boolean;
     declare _duplicateId: string;
@@ -265,7 +336,7 @@ export class FlowsAgentSkillEditor extends PlatformElement {
     }
 
     override updated(changed: PropertyValues<this>): void {
-        if (changed.has('skill') && this.skill && typeof this.skill === 'object') {
+        if (changed.has('skill') && isPlainObject(this.skill)) {
             const next = _cloneSkill(this.skill);
             if (!this._draft || (this._draft).agent_skill_id !== next.agent_skill_id || !this._dirty) {
                 this._draft = next;
@@ -275,32 +346,32 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         }
     }
 
-    _patchDraft(patch: any) {
+    _patchDraft(patch: Partial<SkillDraft>) {
         if (!this._draft) return;
         this._draft = { ...this._draft, ...patch };
         this._dirty = this.skill ? !_draftEqual(this._draft, _cloneSkill(this.skill)) : true;
     }
 
     _toolIds() {
-        return asArray((this._draft)?.tool_refs).map((ref) => asString(ref.tool_id)).filter((id) => id.length > 0);
+        return asArray((this._draft)?.tool_refs).map((ref) => isPlainObject(ref) ? asString(ref.tool_id) : '').filter((id) => id.length > 0);
     }
 
-    _skillLabel(agentSkillId: any) {
+    _skillLabel(agentSkillId: unknown) {
         const id = asString(agentSkillId);
-        const found = asArray(this.catalogItems).find((item) => asString(item.agent_skill_id) === id);
-        if (found && typeof found.name === 'string' && found.name.length > 0) {
+        const found = asArray(this.catalogItems).find((item) => isPlainObject(item) && asString(item.agent_skill_id) === id);
+        if (isPlainObject(found) && typeof found.name === 'string' && found.name.length > 0) {
             return found.name;
         }
         return id;
     }
 
-    _toolChipIcon(ref: any) {
+    _toolChipIcon(ref: unknown) {
         const normalized = normalizeToolRef(ref);
         if (normalized === null) {
             return html`<platform-icon name="tool" size="14"></platform-icon>`;
         }
         const rawLanguage = inferToolRefLanguage(normalized);
-        if ((rawLanguage as any).length > 0) {
+        if (typeof rawLanguage === 'string' && rawLanguage.length > 0) {
             return html`<flows-code-language-icon language=${rawLanguage} size="16"></flows-code-language-icon>`;
         }
         const vm = getToolRefVisualMeta(normalized);
@@ -310,23 +381,25 @@ export class FlowsAgentSkillEditor extends PlatformElement {
     _onPickTools() {
         this.openModal('flows.tool_picker', {
             pickMode: 'all',
-            onPickBatch: (detail: any) => {
+            onPickBatch: (detail: unknown) => {
                 const batch = Array.isArray(detail)
                     ? detail
-                    : (detail && Array.isArray(detail.items) ? detail.items : []);
+                    : (isPlainObject(detail) && Array.isArray(detail.items) ? detail.items : []);
                 const existing = new Set(this._toolIds());
-                const nextRefs = [...asArray((this._draft)?.tool_refs)];
+                const nextRefs = [...(this._draft === null ? [] : this._draft.tool_refs)];
                 for (const item of batch) {
-                    const toolId = asString(item?.tool_id || item?.id);
+                    if (!isPlainObject(item)) {
+                        continue;
+                    }
+                    const toolId = asString(item.tool_id).length > 0 ? asString(item.tool_id) : asString(item.id);
                     if (toolId.length === 0 || existing.has(toolId)) continue;
                     existing.add(toolId);
                     nextRefs.push({
                         tool_id: toolId,
                         description: typeof item.description === 'string' ? item.description : toolId,
-                        parameters_schema:
-                            item.parameters_schema && typeof item.parameters_schema === 'object'
-                                ? item.parameters_schema
-                                : { ...EMPTY_SCHEMA },
+                        parameters_schema: isPlainObject(item.parameters_schema)
+                            ? item.parameters_schema
+                            : { ...EMPTY_SCHEMA },
                     });
                 }
                 this._patchDraft({ tool_refs: nextRefs });
@@ -334,8 +407,11 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         });
     }
 
-    _onEditTool(ref: any) {
-        const toolId = asString(ref?.tool_id);
+    _onEditTool(ref: unknown) {
+        if (!isPlainObject(ref)) {
+            return;
+        }
+        const toolId = asString(ref.tool_id);
         if (toolId.length === 0) return;
         this.openModal('flows.embedded_tool_config', {
             toolRef: {
@@ -349,12 +425,11 @@ export class FlowsAgentSkillEditor extends PlatformElement {
             focusMode: false,
             flowId: '',
             branchId: 'base',
-            onSave: (updated: any) => {
+            onSave: (updated: unknown) => {
                 if (!isPlainObject(updated)) return;
                 const saved = _toolRefFromSave(updated, ref);
-                const nextRefs = asArray((this._draft)?.tool_refs).map((item) =>
-                    item.tool_id === saved.tool_id ? saved : item,
-                );
+                const currentRefs = this._draft === null ? [] : this._draft.tool_refs;
+                const nextRefs = currentRefs.map((item) => item.tool_id === saved.tool_id ? saved : item);
                 this._patchDraft({ tool_refs: nextRefs });
             },
         });
@@ -362,7 +437,7 @@ export class FlowsAgentSkillEditor extends PlatformElement {
 
     _removeTool(toolId: string) {
         this._patchDraft({
-            tool_refs: asArray((this._draft)?.tool_refs).filter((ref) => ref.tool_id !== toolId),
+            tool_refs: (this._draft === null ? [] : this._draft.tool_refs).filter((ref) => ref.tool_id !== toolId),
         });
     }
 
@@ -371,12 +446,12 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         const current = asArray((this._draft)?.depends_on).map((id) => asString(id)).filter((id) => id.length > 0);
         this.openModal('flows.agent_skill_picker', {
             excludeIds: [selfId, ...current].filter((id) => id.length > 0),
-            onPickBatch: (items: Record<string, any>[]) => {
+            onPickBatch: (items: readonly unknown[]) => {
                 const batch = asArray(items);
                 const existing = new Set(current);
                 const next = [...current];
                 for (const item of batch) {
-                    const id = asString(item?.agent_skill_id);
+                    const id = isPlainObject(item) ? asString(item.agent_skill_id) : '';
                     if (id.length === 0 || id === selfId || existing.has(id)) continue;
                     existing.add(id);
                     next.push(id);
@@ -386,21 +461,26 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         });
     }
 
-    _removeDepends(agentSkillId: any) {
+    _removeDepends(agentSkillId: unknown) {
         const id = asString(agentSkillId);
         this._patchDraft({
-            depends_on: asArray((this._draft)?.depends_on).filter((x) => asString(x) !== id),
+            depends_on: (this._draft === null ? [] : this._draft.depends_on).filter((item) => item !== id),
         });
     }
 
-    _onOpenDepends(agentSkillId: any) {
+    _onOpenDepends(agentSkillId: unknown) {
         const id = asString(agentSkillId);
         if (id.length === 0) {
             throw new Error('flows-agent-skill-editor: depends agent_skill_id required');
         }
         this.openModal('flows.agent_skill_edit', {
             agentSkillId: id,
-            onDuplicated: ({ fromId, toId }: any) => {
+            onDuplicated: (detail: unknown) => {
+                if (!isPlainObject(detail)) {
+                    return;
+                }
+                const fromId = detail.fromId;
+                const toId = detail.toId;
                 if (typeof fromId !== 'string' || typeof toId !== 'string') {
                     return;
                 }
@@ -444,17 +524,19 @@ export class FlowsAgentSkillEditor extends PlatformElement {
             file_size: result.file_size,
         };
         const key = kind === 'assets' ? 'assets' : 'references';
-        this._patchDraft({ [key]: [...asArray((this._draft as any)?.[key]), ref] });
+        const currentFiles = this._draft === null ? [] : (key === 'assets' ? this._draft.assets : this._draft.references);
+        this._patchDraft({ [key]: [...currentFiles, ref] });
     }
 
     _removeFile(kind: string, index: number) {
         const key = kind === 'assets' ? 'assets' : 'references';
+        const currentFiles = this._draft === null ? [] : (key === 'assets' ? this._draft.assets : this._draft.references);
         this._patchDraft({
-            [key]: asArray((this._draft as any)?.[key]).filter((_, i) => i !== index),
+            [key]: currentFiles.filter((_, itemIndex) => itemIndex !== index),
         });
     }
 
-    _openSkillFile(file: any) {
+    _openSkillFile(file: unknown) {
         if (!isPlainObject(file) || typeof file.file_id !== 'string' || file.file_id.length === 0) {
             throw new Error('flows-agent-skill-editor: file_id required to open file');
         }
@@ -510,11 +592,11 @@ export class FlowsAgentSkillEditor extends PlatformElement {
     _existingSkillIds(): Set<string> {
         const ids = new Set<string>();
         for (const item of asArray(this.catalogItems)) {
-            const id = asString(item?.agent_skill_id);
+            const id = isPlainObject(item) ? asString(item.agent_skill_id) : '';
             if (id.length > 0) ids.add(id);
         }
         for (const item of asArray(this._skills.items)) {
-            const id = asString(item?.agent_skill_id);
+            const id = isPlainObject(item) ? asString(item.agent_skill_id) : '';
             if (id.length > 0) ids.add(id);
         }
         if ((this._draft)?.agent_skill_id) {
@@ -547,7 +629,7 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         );
     }
 
-    _waitCreated(requestedId: any) {
+    _waitCreated(requestedId: string) {
         const bus = this._skills.bus;
         const successType = this._skills.resource.events.CREATED;
         const failedType = this._skills.resource.events.CREATE_FAILED;
@@ -558,19 +640,23 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                 if (typeof offSuccess === 'function') offSuccess();
                 if (typeof offFailed === 'function') offFailed();
             };
-            offSuccess = bus.subscribeType(successType, (event: any) => {
-                if (!event.meta || event.meta.causation_id !== requestedId) return;
+            offSuccess = bus.subscribeType(successType, (event) => {
+                if (event.meta.causation_id !== requestedId) return;
                 cleanup();
-                const item = event.payload && typeof event.payload.item === 'object'
-                    ? event.payload.item
-                    : null;
+                const payload = event.payload;
+                const item = isPlainObject(payload) && isPlainObject(payload.item) ? payload.item : null;
+                if (item === null) {
+                    reject(new Error('flows-agent-skill-editor: created skill item required'));
+                    return;
+                }
                 resolve(item);
             });
-            offFailed = bus.subscribeType(failedType, (event: any) => {
-                if (!event.meta || event.meta.causation_id !== requestedId) return;
+            offFailed = bus.subscribeType(failedType, (event) => {
+                if (event.meta.causation_id !== requestedId) return;
                 cleanup();
-                const message = event.payload && typeof event.payload.message === 'string'
-                    ? event.payload.message
+                const payload = event.payload;
+                const message = isPlainObject(payload) && typeof payload.message === 'string'
+                    ? payload.message
                     : 'create failed';
                 reject(new Error(message));
             });
@@ -581,8 +667,8 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         if (!this._draft || !this._canConfirmDuplicate()) return;
         const fromId = (this._draft).agent_skill_id;
         const payload = buildAgentSkillDuplicatePayload(this._draft, {
-            agent_skill_id: (this._duplicateId.trim() as any),
-            name: (this._duplicateName.trim() as any),
+            agent_skill_id: this._duplicateId.trim(),
+            name: this._duplicateName.trim(),
         });
         this._duplicateBusy = true;
         const requested = this._skills.create(payload);
@@ -646,7 +732,9 @@ export class FlowsAgentSkillEditor extends PlatformElement {
     }
 
     _renderFiles(kind: string) {
-        const files = asArray((this._draft as any)?.[kind]);
+        const files = this._draft === null
+            ? []
+            : (kind === 'assets' ? this._draft.assets : this._draft.references);
         return html`
             <div class="field">
                 <div class="field-label-row">
@@ -654,7 +742,11 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                     <platform-help-hint .text=${this.t(kind === 'assets' ? 'agent_skills.field_assets_hint' : 'agent_skills.field_references_hint')}></platform-help-hint>
                 </div>
                 <div class="files">
-                    ${files.map((file, index) => html`
+                    ${files.map((file, index) => {
+                        if (!isPlainObject(file)) {
+                            throw new Error('flows-agent-skill-editor: file required');
+                        }
+                        return html`
                         <div
                             class="file-row"
                             role="button"
@@ -694,7 +786,8 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                                 <platform-icon name="x" size="14"></platform-icon>
                             </platform-button>
                         </div>
-                    `)}
+                    `;
+                    })}
                     <label class="attach-label">
                             <platform-button variant="secondary" density="compact" ?disabled=${this._fileUpload.busy} @click=${(e: Event) => {
                                 const current = e.currentTarget;
@@ -802,7 +895,11 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                     <platform-help-hint .text=${this.t('agent_skills.field_tool_refs_hint')}></platform-help-hint>
                 </div>
                 <div class="chips">
-                    ${asArray(draft.tool_refs).map((ref) => html`
+                    ${asArray(draft.tool_refs).map((ref) => {
+                        if (!isPlainObject(ref)) {
+                            throw new Error('flows-agent-skill-editor: tool ref required');
+                        }
+                        return html`
                         <span
                             class="chip"
                             role="button"
@@ -816,7 +913,7 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                             }}
                         >
                             ${this._toolChipIcon(ref)}
-                            <span class="chip-label">${getToolLabel(ref) || ref.tool_id}</span>
+                            <span class="chip-label">${getToolLabel(ref) || asString(ref.tool_id)}</span>
                             <platform-button
                                 variant="ghost"
                                 icon-only
@@ -824,13 +921,14 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                                 aria-label=${this.t('agent_skills.tools_remove')}
                                 @click=${(e: Event) => {
                                     e.stopPropagation();
-                                    this._removeTool(ref.tool_id);
+                                    this._removeTool(asString(ref.tool_id));
                                 }}
                             >
                                 <platform-icon name="x" size="12"></platform-icon>
                             </platform-button>
                         </span>
-                    `)}
+                    `;
+                    })}
                 </div>
                 <div class="chip-actions">
                     <platform-button variant="secondary" density="compact" @click=${this._onPickTools}>

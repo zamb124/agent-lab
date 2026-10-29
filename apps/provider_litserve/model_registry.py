@@ -425,7 +425,7 @@ def sync_defaults_from_config(cfg: ProviderLitserveInfraConfig) -> None:
             )
 
 
-def list_models(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
+def list_models_by_created_at_desc(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
     with _connect(cfg) as conn:
         rows = _fetch_rows(
             conn,
@@ -438,7 +438,7 @@ def list_models(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
     return [_registry_model_from_row(row) for row in rows]
 
 
-def list_ready_active_models(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
+def list_ready_active_models_by_created_at_desc(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
     with _connect(cfg) as conn:
         rows = _fetch_rows(
             conn,

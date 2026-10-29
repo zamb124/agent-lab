@@ -38,7 +38,6 @@ const PUBLIC_BANNER_ROUTES = new Set([
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
-    'agent-download',
     'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',

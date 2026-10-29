@@ -9,6 +9,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED } from '../_helpers/entity-type-create-events.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
     CSSResultGroup,
     PropertyDeclarations,
@@ -28,8 +29,16 @@ const KIND_ENTITY = 'entity';
 const NOTE_FAMILY_TYPE_IDS = new Set(['note', 'meeting', 'call']);
 const TASK_ROOT_TYPE_ID = 'task';
 
-function _presetRowKind(typeObj: Record<string, any> | null | undefined): string {
-    if (!typeObj || typeof typeObj.type_id !== 'string' || typeObj.type_id.length === 0) {
+function presetTemplateId(row: Record<string, unknown>): string {
+    const id = row.template_id;
+    if (typeof id !== 'string' || id.length === 0) {
+        throw new Error('CRMEntityTypePresetPickerModal: template_id must be a non-empty string');
+    }
+    return id;
+}
+
+function _presetRowKind(typeObj: unknown): string {
+    if (!isPlainRecord(typeObj) || typeof typeObj.type_id !== 'string' || typeObj.type_id.length === 0) {
         throw new Error('CRMEntityTypePresetPickerModal: type snapshot must include type_id');
     }
     const id = typeObj.type_id;
@@ -42,61 +51,81 @@ function _presetRowKind(typeObj: Record<string, any> | null | undefined): string
     return KIND_ENTITY;
 }
 
-function _pickBetterPresetRow(a: Record<string, any>, b: Record<string, any>): Record<string, any> {
-    const pref = (t: Record<string, any>) => (t.template_id === 'sales' ? 0 : 1);
-    const da = pref(a);
-    const db = pref(b);
+function _pickBetterPresetRow(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
+    const rank = (row: Record<string, unknown>) => (presetTemplateId(row) === 'sales' ? 0 : 1);
+    const da = rank(a);
+    const db = rank(b);
     if (da !== db) {
         return da < db ? a : b;
     }
-    if (a.template_id < b.template_id) {
+    const idA = presetTemplateId(a);
+    const idB = presetTemplateId(b);
+    if (idA < idB) {
         return a;
     }
-    if (a.template_id > b.template_id) {
+    if (idA > idB) {
         return b;
     }
     return a;
 }
 
-function _dedupePresetRowsByTypeId(rows: unknown): Record<string, any>[] {
-    const list = Array.isArray(rows) ? rows : [];
-    const bestByType = new Map<string, Record<string, any>>();
-    for (const r of list) {
-        if (!r || !r.type || typeof r.type.type_id !== 'string' || r.type.type_id.length === 0) {
-            continue;
+function presetTypeId(row: Record<string, unknown>): string | null {
+    const typeObj = row.type;
+    if (!isPlainRecord(typeObj)) return null;
+    const typeId = typeObj.type_id;
+    if (typeof typeId !== 'string' || typeId.length === 0) return null;
+    return typeId;
+}
+
+function _dedupePresetRowsByTypeId(rows: unknown): Record<string, unknown>[] {
+    if (!Array.isArray(rows)) {
+        throw new Error('CRMEntityTypePresetPickerModal: preset rows must be an array');
+    }
+    const list: Record<string, unknown>[] = [];
+    for (const row of rows) {
+        if (!isPlainRecord(row)) {
+            throw new Error('CRMEntityTypePresetPickerModal: preset row must be an object');
         }
-        const id = r.type.type_id;
+        list.push(row);
+    }
+    const bestByType = new Map<string, Record<string, unknown>>();
+    for (const row of list) {
+        const id = presetTypeId(row);
+        if (id === null) continue;
         const prev = bestByType.get(id);
         if (prev === undefined) {
-            bestByType.set(id, r);
+            bestByType.set(id, row);
         } else {
-            bestByType.set(id, _pickBetterPresetRow(prev, r));
+            bestByType.set(id, _pickBetterPresetRow(prev, row));
         }
     }
-    const firstIdx = new Map();
+    const firstIdx = new Map<string, number>();
     for (let i = 0; i < list.length; i++) {
-        const r = list[i];
-        if (!r || !r.type || typeof r.type.type_id !== 'string' || r.type.type_id.length === 0) {
-            continue;
+        const row = list[i];
+        if (row === undefined) {
+            throw new Error('CRMEntityTypePresetPickerModal: preset row missing');
         }
-        const id = r.type.type_id;
-        if (!firstIdx.has(id)) {
-            firstIdx.set(id, i);
-        }
+        const id = presetTypeId(row);
+        if (id === null || firstIdx.has(id)) continue;
+        firstIdx.set(id, i);
     }
-    const pairs = [...bestByType.entries()].sort((x, y) => {
-        const ix = firstIdx.get(x[0]);
-        const iy = firstIdx.get(y[0]);
+    const pairs = [...bestByType.entries()].sort((left, right) => {
+        const ix = firstIdx.get(left[0]);
+        const iy = firstIdx.get(right[0]);
+        if (ix === undefined || iy === undefined) {
+            throw new Error('CRMEntityTypePresetPickerModal: preset row index missing');
+        }
         return ix - iy;
     });
     return pairs.map(([, row]) => row);
 }
 
-function _iconNameForPresetType(typeObj: Record<string, any> | null | undefined): string {
-    if (typeObj && typeof typeObj.icon === 'string' && typeObj.icon.trim().length > 0) {
+function _iconNameForPresetType(typeObj: unknown): string {
+    if (!isPlainRecord(typeObj)) return 'layers';
+    if (typeof typeObj.icon === 'string' && typeObj.icon.trim().length > 0) {
         return typeObj.icon.trim();
     }
-    const id = typeObj && typeof typeObj.type_id === 'string' ? typeObj.type_id : '';
+    const id = typeof typeObj.type_id === 'string' ? typeObj.type_id : '';
     if (NOTE_FAMILY_TYPE_IDS.has(id)) {
         return 'doc-detail';
     }
@@ -367,20 +396,15 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
         for (const row of items) {
             const tid = typeof row.template_id === 'string' ? row.template_id : '';
             if (!tid.length) continue;
-            const d = this._templates.byId[tid] as Record<string, any> | undefined;
+            const d = this._templates.byId[tid];
             if (!this._detailReady(d)) {
                 this._templates.get(tid);
             }
         }
     }
 
-    _detailReady(detail: Record<string, any> | null | undefined): detail is Record<string, any> {
-        return (
-            detail !== undefined
-            && detail !== null
-            && typeof detail === 'object'
-            && Array.isArray(detail.types)
-        );
+    _detailReady(detail: unknown): detail is Record<string, unknown> {
+        return isPlainRecord(detail) && Array.isArray(detail.types);
     }
 
     _allDetailsLoaded() {
@@ -401,17 +425,22 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
 
     _presetRows() {
         const items = Array.isArray(this._templates.items) ? this._templates.items : [];
-        const rows: Record<string, any>[] = [];
+        const rows: Record<string, unknown>[] = [];
         for (const row of items) {
             const tid = typeof row.template_id === 'string' ? row.template_id : '';
             if (!tid.length) continue;
-            const d = this._templates.byId[tid] as Record<string, any> | undefined;
+            const d = this._templates.byId[tid];
             if (!this._detailReady(d)) continue;
-            const tname = typeof d.name === 'string' && d.name.length > 0 ? d.name : tid;
-            for (const typ of (d as Record<string, any>).types as Record<string, any>[]) {
-                if (!typ || typeof typ.type_id !== 'string' || typ.type_id.length === 0) continue;
+            const templateName = d.name;
+            const tname = typeof templateName === 'string' && templateName.length > 0 ? templateName : tid;
+            const types = d.types;
+            if (!Array.isArray(types)) continue;
+            for (const typ of types) {
+                if (!isPlainRecord(typ)) continue;
+                const typeId = typ.type_id;
+                if (typeof typeId !== 'string' || typeId.length === 0) continue;
                 rows.push({
-                    key: `${tid}\u0000${typ.type_id}`,
+                    key: `${tid}\u0000${typeId}`,
                     template_id: tid,
                     template_name: tname,
                     type: typ,
@@ -429,13 +458,12 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
         return all.filter((r) => r.template_id === this._filterTemplateId);
     }
 
-    _syncSelectionWithVisibleRows(visibleRows: unknown): void {
-        const rows = (Array.isArray(visibleRows) ? visibleRows : []) as { key?: unknown }[];
+    _syncSelectionWithVisibleRows(visibleRows: readonly { key?: unknown }[]): void {
         const sel = this._selectedKey;
         if (typeof sel !== 'string' || sel.length === 0) {
             return;
         }
-        const still = rows.some((r) => r.key === sel);
+        const still = visibleRows.some((row) => row.key === sel);
         if (!still) {
             this._selectedKey = '';
         }
@@ -457,9 +485,13 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
     }
 
     _templateLabel(templateId: string): string {
-        const d = this._templates.byId[templateId] as Record<string, any> | undefined;
-        if (d && typeof d.name === 'string' && d.name.length > 0) {
-            return d.name;
+        const d = this._templates.byId[templateId];
+        if (!isPlainRecord(d)) {
+            return templateId;
+        }
+        const name = d.name;
+        if (typeof name === 'string' && name.length > 0) {
+            return name;
         }
         return templateId;
     }
@@ -637,10 +669,14 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
                                       <div class="grid">
                                           ${filtered.map((r) => {
                                               const typ = r.type;
+                                              if (!isPlainRecord(typ) || typeof typ.type_id !== 'string' || typ.type_id.length === 0) {
+                                                  throw new Error('CRMEntityTypePresetPickerModal: type snapshot must include type_id');
+                                              }
+                                              const typeId = typ.type_id;
                                               const name =
                                                   typeof typ.name === 'string' && typ.name.length > 0
                                                       ? typ.name
-                                                      : typ.type_id;
+                                                      : typeId;
                                               const desc =
                                                   typeof typ.description === 'string' &&
                                                   typ.description.length > 0
@@ -662,7 +698,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
                                                           <span class="card-title">${name}</span>
                                                           <span class="chip-tpl">${r.template_name}</span>
                                                       </div>
-                                                      <div class="mono">${typ.type_id}</div>
+                                                      <div class="mono">${typeId}</div>
                                                       <p class="card-desc">${desc}</p>
                                                   </button>
                                               `;

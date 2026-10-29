@@ -20,18 +20,31 @@ export const TAG_GROUPS_PAGE_LIMIT = 200;
  * @param {{ offset?: number, picker_category?: string, q?: string }} [opts]
  * @returns {Promise<ToolsAllPage>}
  */
-export async function fetchToolsAllPage(runOp: any, opts = {}) {
+export async function fetchToolsAllPage(
+    runOp: (payload: {
+        limit: number;
+        offset: number;
+        picker_category?: string;
+        q?: string;
+    }) => Promise<unknown>,
+    opts: { offset?: number; picker_category?: string; q?: string } = {},
+) {
     if (typeof runOp !== 'function') {
         throw new Error('fetchToolsAllPage: runOp required');
     }
-    const offset = typeof (opts as Record<string, any>).offset === 'number' && (opts as Record<string, any>).offset >= 0 ? (opts as Record<string, any>).offset : 0;
-    /** @type {{ limit: number, offset: number, picker_category?: string, q?: string }} */
-    const payload: any = { limit: TOOLS_ALL_PAGE_LIMIT, offset };
-    if (typeof (opts as Record<string, any>).picker_category === 'string' && (opts as Record<string, any>).picker_category.length > 0) {
-        payload.picker_category = (opts as Record<string, any>).picker_category;
+    const offsetValue = opts.offset;
+    const offset = typeof offsetValue === 'number' && offsetValue >= 0 ? offsetValue : 0;
+    const payload: { limit: number; offset: number; picker_category?: string; q?: string } = {
+        limit: TOOLS_ALL_PAGE_LIMIT,
+        offset,
+    };
+    const category = opts.picker_category;
+    if (typeof category === 'string' && category.length > 0) {
+        payload.picker_category = category;
     }
-    if (typeof (opts as Record<string, any>).q === 'string' && (opts as Record<string, any>).q.trim().length > 0) {
-        payload.q = (opts as Record<string, any>).q.trim();
+    const query = opts.q;
+    if (typeof query === 'string' && query.trim().length > 0) {
+        payload.q = query.trim();
     }
     const result = await runOp(payload);
     if (result === null || !isPlainObject(result) || !Array.isArray(result.items)) {

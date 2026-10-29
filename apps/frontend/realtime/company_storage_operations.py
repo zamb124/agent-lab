@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from apps.frontend.di import Di
-from apps.idle_worker.tasks.task_names import TASK_STORAGE_MIGRATION_TICK
+from apps.idle.tasks.task_names import TASK_STORAGE_MIGRATION_TICK
 from core.context import require_active_company
 from core.errors.boundary import PlatformNotFoundError
 from core.files.company_storage_service import CompanyStorageService
@@ -90,8 +90,8 @@ async def op_company_storages_list(
     scope = await require_company_admin(di.authz_service)
     company_id = scope.company_id
     return CompanyStorageListResult(
-        storages=await ObjectStorage.list_by_created_at(company_id),
-        routes=await StorageRoute.list_by_source_kind(company_id),
+        storages=await ObjectStorage.list_by_created_at_asc(company_id),
+        routes=await StorageRoute.list_by_source_kind_asc(company_id),
     )
 
 

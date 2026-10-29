@@ -42,7 +42,7 @@ class SyncThreadService:
         limit: int,
         offset: int,
     ) -> OffsetPage[ThreadRow]:
-        threads = await SyncThread.list_in_channel(
+        threads = await SyncThread.list_in_channel_by_created_at_desc(
             company_id,
             channel_id,
             limit=limit,

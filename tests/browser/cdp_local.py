@@ -12,7 +12,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-import httpx
+import httpx2
 
 from apps.browser.config import get_browser_settings
 from apps.browser.services.cdp_url_normalize import (
@@ -60,7 +60,7 @@ async def ensure_cdp_url() -> AsyncIterator[str]:
                 )
                 yield ws
                 return
-            except (httpx.HTTPError, RuntimeError, ValueError) as e:
+            except (httpx2.HTTPError, RuntimeError, ValueError) as e:
                 last_error = e
                 await asyncio.sleep(0.25)
 

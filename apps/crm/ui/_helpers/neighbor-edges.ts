@@ -3,18 +3,19 @@
  */
 
 import { entityKind } from './related-entity-presenter.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 export const NEIGHBOR_EDGE_EXCLUDED_TYPES = Object.freeze(['note_voice', 'in_context']);
 
 export interface NeighborEdge {
-    rel: Record<string, any>;
+    rel: Record<string, unknown>;
     otherId: string;
-    otherEntity: Record<string, any> | null;
+    otherEntity: Record<string, unknown> | null;
     isOutgoing: boolean;
 }
 
 export function extractNeighborEdges(
-    card: Record<string, any> | null,
+    card: Record<string, unknown> | null,
     centerEntityId: string,
     options: { excludedRelationshipTypes?: Iterable<string>; skipTaskNeighbors?: boolean } = {},
 ): NeighborEdge[] {
@@ -32,11 +33,12 @@ export function extractNeighborEdges(
     const related = card !== null && typeof card === 'object' && Array.isArray(card.related_entities)
         ? card.related_entities
         : [];
-    const byId: Record<string, Record<string, any>> = {};
-    for (const e of related) {
-        if (e && typeof e.entity_id === 'string' && e.entity_id.length > 0) {
-            byId[(e as Record<string, any>).entity_id as string] = e;
-        }
+    const byId: Record<string, Record<string, unknown>> = {};
+    for (const raw of related) {
+        if (!isPlainRecord(raw)) continue;
+        const entityId = raw.entity_id;
+        if (typeof entityId !== 'string' || entityId.length === 0) continue;
+        byId[entityId] = raw;
     }
 
     const out: NeighborEdge[] = [];
@@ -50,7 +52,8 @@ export function extractNeighborEdges(
         const isOutgoing = rel.source_entity_id === centerEntityId;
         const otherId = isOutgoing ? rel.target_entity_id : rel.source_entity_id;
         if (typeof otherId !== 'string' || otherId.length === 0) continue;
-        const otherEntity = byId[otherId] !== undefined ? byId[otherId]! : null;
+        const storedEntity = byId[otherId];
+        const otherEntity = storedEntity === undefined ? null : storedEntity;
         if (skipTaskNeighbors && otherEntity !== null && entityKind(otherEntity) === 'task') {
             continue;
         }

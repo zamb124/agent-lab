@@ -267,23 +267,28 @@
         "properties": {
           "event_id": {
             "type": "string",
+            "maxLength": 255,
             "title": "Event Id"
           },
           "source": {
-            "$ref": "#/components/schemas/CalendarEventSource"
+            "$ref": "#/components/schemas/CalendarEventSource",
+            "maxLength": 64
           },
           "source_id": {
             "type": "string",
+            "maxLength": 255,
             "title": "Source Id"
           },
           "company_id": {
             "type": "string",
+            "maxLength": 255,
             "title": "Company Id"
           },
           "namespace": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -293,10 +298,12 @@
           },
           "kind": {
             "type": "string",
+            "maxLength": 64,
             "title": "Kind"
           },
           "title": {
             "type": "string",
+            "maxLength": 1024,
             "title": "Title"
           },
           "description": {
@@ -313,7 +320,8 @@
           "location": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 1024
               },
               {
                 "type": "null"
@@ -323,10 +331,12 @@
           },
           "status": {
             "$ref": "#/components/schemas/CalendarEventStatus",
+            "maxLength": 32,
             "default": "confirmed"
           },
           "timezone": {
             "type": "string",
+            "maxLength": 64,
             "title": "Timezone"
           },
           "all_day": {
@@ -365,7 +375,8 @@
           "recurrence_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -376,7 +387,8 @@
           "series_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -412,7 +424,8 @@
           "mailbox_binding_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -423,7 +436,8 @@
           "created_by_user_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -434,7 +448,8 @@
           "updated_by_user_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -464,11 +479,10 @@
           "title",
           "timezone",
           "start_at",
-          "end_at",
-          "created_at",
-          "updated_at"
+          "end_at"
         ],
-        "title": "CalendarEvent"
+        "title": "CalendarEvent",
+        "description": "Событие календаря. Таблица ``calendar_events`` в ``platform_shared``.\n\n``__global_model__``: напоминание о Sync-встрече читает все компании."
       },
       "CalendarEventSource": {
         "type": "string",
@@ -539,7 +553,7 @@
         ],
         "title": "CalendarExternalRef"
       },
-      "CalendarIntegrationPublic": {
+      "CalendarIntegration": {
         "properties": {
           "integration_id": {
             "type": "string",
@@ -581,17 +595,87 @@
             "title": "Updated At"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "integration_id",
           "company_id",
           "user_id",
           "provider",
-          "settings",
           "created_at",
           "updated_at"
         ],
-        "title": "CalendarIntegrationPublic"
+        "title": "CalendarIntegration"
+      },
+      "CalendarIntegrationCredentials": {
+        "properties": {
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "token_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "access_token"
+        ],
+        "title": "CalendarIntegrationCredentials"
       },
       "CalendarIntegrationSettings": {
         "properties": {
@@ -694,7 +778,7 @@
           },
           "integrations": {
             "items": {
-              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+              "$ref": "#/components/schemas/CalendarIntegration"
             },
             "type": "array",
             "title": "Integrations"
@@ -1000,99 +1084,11 @@
         ],
         "title": "ChunkedUploadPartRecord"
       },
-      "CompanyMailConnectionPublic": {
-        "properties": {
-          "company_mail_connection_id": {
-            "type": "string",
-            "title": "Company Mail Connection Id"
-          },
-          "company_id": {
-            "type": "string",
-            "title": "Company Id"
-          },
-          "scope": {
-            "$ref": "#/components/schemas/MailConnectionScope"
-          },
-          "owner_user_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner User Id"
-          },
-          "mail_domain": {
-            "type": "string",
-            "title": "Mail Domain"
-          },
-          "provider": {
-            "$ref": "#/components/schemas/MailProvider"
-          },
-          "imap_host": {
-            "type": "string",
-            "title": "Imap Host"
-          },
-          "imap_port": {
-            "type": "integer",
-            "title": "Imap Port"
-          },
-          "smtp_host": {
-            "type": "string",
-            "title": "Smtp Host"
-          },
-          "smtp_port": {
-            "type": "integer",
-            "title": "Smtp Port"
-          },
-          "use_ssl": {
-            "type": "boolean",
-            "title": "Use Ssl"
-          },
-          "supports_provision": {
-            "type": "boolean",
-            "title": "Supports Provision"
-          },
-          "status": {
-            "$ref": "#/components/schemas/MailConnectionStatus"
-          },
-          "has_ispmanager_auth": {
-            "type": "boolean",
-            "title": "Has Ispmanager Auth"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
-          }
+      "CompanyMailConnection": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonValue"
         },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "company_mail_connection_id",
-          "company_id",
-          "scope",
-          "mail_domain",
-          "provider",
-          "imap_host",
-          "imap_port",
-          "smtp_host",
-          "smtp_port",
-          "use_ssl",
-          "supports_provision",
-          "status",
-          "has_ispmanager_auth",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "CompanyMailConnectionPublic"
+        "type": "object"
       },
       "CompanyMailConnectionUpsertPayload": {
         "properties": {
@@ -1260,17 +1256,9 @@
         ],
         "title": "DemoLoginRequest"
       },
-      "DocsPlacement": {
+      "DocumentPlacement": {
         "properties": {
-          "namespace": {
-            "type": "string",
-            "title": "Namespace"
-          },
-          "file_id": {
-            "type": "string",
-            "title": "File Id"
-          },
-          "title": {
+          "catalog_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -1279,368 +1267,68 @@
                 "type": "null"
               }
             ],
-            "title": "Title"
+            "title": "Catalog Id"
           },
-          "path_segments": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Path Segments"
+          "catalog_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Catalog Path",
+            "default": []
           },
-          "anchor": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DocsPlacementAnchor"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "retention": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FileRetentionSpec"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "namespace",
-          "file_id"
-        ],
-        "title": "DocsPlacement"
-      },
-      "DocsPlacementAnchor": {
-        "properties": {
-          "source_kind": {
+          "conflict": {
             "type": "string",
             "enum": [
-              "crm_entity",
-              "crm_knowledge_import",
-              "flow_session",
-              "flow_asset",
-              "work_item",
-              "work_item_comment",
-              "work_item_resolution",
-              "sync_message",
-              "sync_channel_message",
-              "sync_call_recording",
-              "sync_speech_segment",
-              "sync_channel_asset",
-              "calendar_event",
-              "browser_artifact",
-              "browser_session",
-              "rag_document",
-              "rag_namespace",
-              "mail_message",
-              "wiki_page",
-              "office_manual",
-              "manual"
+              "autorename",
+              "fail",
+              "replace"
             ],
-            "title": "Source Kind"
-          },
-          "entity_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Entity Id"
-          },
-          "entity_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Entity Type"
-          },
-          "entity_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Entity Title"
-          },
-          "import_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Import Id"
-          },
-          "flow_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Flow Id"
-          },
-          "flow_slug": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Flow Slug"
-          },
-          "session_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Session Id"
-          },
-          "work_item_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Work Item Id"
-          },
-          "work_queue_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Work Queue Id"
-          },
-          "board_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Board Id"
-          },
-          "comment_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Comment Id"
-          },
-          "channel_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Channel Id"
-          },
-          "message_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message Id"
-          },
-          "call_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Call Id"
-          },
-          "recording_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recording Id"
-          },
-          "event_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Event Id"
-          },
-          "browser_session_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Browser Session Id"
-          },
-          "namespace_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Namespace Id"
-          },
-          "mailbox_binding_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mailbox Binding Id"
-          },
-          "mail_uid": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mail Uid"
-          },
-          "mailbox_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mailbox Email"
-          },
-          "mail_subject": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mail Subject"
-          },
-          "wiki_page_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Wiki Page Id"
+            "title": "Conflict",
+            "default": "autorename"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "source_kind"
-        ],
-        "title": "DocsPlacementAnchor"
+        "title": "DocumentPlacement",
+        "description": "Путь от catalog_id (корень namespace, если catalog_id пуст) любой глубины."
       },
       "DocumentProcessingStatus": {
         "properties": {
           "document_id": {
             "type": "string",
+            "maxLength": 255,
             "title": "Document Id"
           },
           "task_id": {
             "type": "string",
+            "maxLength": 255,
             "title": "Task Id"
           },
           "namespace_id": {
             "type": "string",
+            "maxLength": 255,
             "title": "Namespace Id"
           },
           "document_name": {
             "type": "string",
+            "maxLength": 500,
             "title": "Document Name"
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending",
-              "processing",
-              "completed",
-              "failed"
-            ],
+            "maxLength": 50,
             "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
           },
           "error_message": {
             "anyOf": [
@@ -1656,7 +1344,8 @@
           "s3_key": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 1000
               },
               {
                 "type": "null"
@@ -1667,7 +1356,8 @@
           "s3_bucket": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -1696,16 +1386,6 @@
               }
             ],
             "title": "Chunks Count"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
           },
           "completed_at": {
             "anyOf": [
@@ -1750,7 +1430,7 @@
           "updated_at"
         ],
         "title": "DocumentProcessingStatus",
-        "description": "Статус обработки документа в RAG.\n\nСтатусы:\n- pending: документ принят, ожидает обработки\n- processing: документ обрабатывается (парсинг, chunking, индексация)\n- completed: документ успешно проиндексирован\n- failed: ошибка при обработке\n\nПервичный ключ в БД — document_id (одна строка на документ)."
+        "description": "Статус индексации документа. Таблица ``document_processing_status``."
       },
       "DocumentStatusesBatchRequest": {
         "properties": {
@@ -1795,6 +1475,61 @@
         ],
         "title": "DocumentStatusesBatchResponse"
       },
+      "EventDelivery": {
+        "properties": {
+          "user_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Ids"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "broadcast": {
+            "type": "boolean",
+            "title": "Broadcast",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "EventDelivery",
+        "description": "UI-адресация события. Ровно одно из полей должно быть задано.\n\n- user_ids: доставка в WS-сокеты перечисленных пользователей\n  (одно доменное событие — одна запись стрима, сколько бы получателей ни было).\n- company_id: рассылка всем активным сокетам компании.\n- broadcast=True: рассылка всем подключённым сокетам."
+      },
+      "FileCapabilities": {
+        "properties": {
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileDocumentCapability"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FileCapabilities",
+        "description": "Typed capabilities attached to a FileRef."
+      },
       "FileCreateSpec": {
         "properties": {
           "source_kind": {
@@ -1809,7 +1544,7 @@
           "placement": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DocsPlacement"
+                "$ref": "#/components/schemas/DocumentPlacement"
               },
               {
                 "type": "null"
@@ -1863,6 +1598,63 @@
           "retention"
         ],
         "title": "FileCreateSpec"
+      },
+      "FileDocumentCapability": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "onlyoffice",
+            "title": "Kind",
+            "default": "onlyoffice"
+          },
+          "file_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "catalog_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Catalog Id"
+          },
+          "document_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Document Type"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title"
+          },
+          "namespace": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Namespace"
+          },
+          "editor_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Editor Url"
+          },
+          "editable": {
+            "type": "boolean",
+            "title": "Editable",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id",
+          "catalog_id",
+          "document_type",
+          "title",
+          "namespace",
+          "editor_url"
+        ],
+        "title": "FileDocumentCapability",
+        "description": "Documents library capability attached to a FileRef (keyed by file_id)."
       },
       "FilePostCreate": {
         "properties": {
@@ -1966,32 +1758,52 @@
         "title": "FileReadPreviewResponse",
         "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
       },
-      "FileResponse": {
+      "FileRef": {
         "properties": {
           "file_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "File Id"
           },
           "original_name": {
             "type": "string",
+            "minLength": 1,
             "title": "Original Name"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
           },
           "content_type": {
             "type": "string",
+            "minLength": 1,
             "title": "Content Type"
           },
           "file_size": {
             "type": "integer",
+            "minimum": 0.0,
             "title": "File Size"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
           },
           "checksum": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -2000,27 +1812,41 @@
             "title": "Checksum"
           },
           "is_public": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Is Public"
           },
           "created_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Created At"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/FileCapabilities"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
-          "file_id",
           "original_name",
           "content_type",
-          "file_size",
-          "url",
-          "is_public",
-          "created_at"
+          "file_size"
         ],
-        "title": "FileResponse",
-        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+        "title": "FileRef",
+        "description": "Канонический элемент `ExecutionState.files`."
       },
       "FileRetentionKind": {
         "type": "string",
@@ -2087,6 +1913,7 @@
           "calendar_event",
           "mail_message",
           "wiki_page",
+          "code_agent_source",
           "platform_auxiliary",
           "generated_ephemeral"
         ],
@@ -2335,6 +2162,28 @@
               }
             ],
             "title": "Wiki Page Id"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "relative_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relative Dir"
           }
         },
         "additionalProperties": false,
@@ -2389,14 +2238,14 @@
             "title": "Provider"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "results",
           "query",
           "provider"
         ],
-        "title": "GlobalSearchResponse",
-        "description": "Ответ с результатами глобального поиска"
+        "title": "GlobalSearchResponse"
       },
       "GoogleWorkspaceAuthorizeResponse": {
         "properties": {
@@ -2431,6 +2280,11 @@
           "configured": {
             "type": "boolean",
             "title": "Configured"
+          },
+          "can_admin": {
+            "type": "boolean",
+            "title": "Can Admin",
+            "default": false
           },
           "impersonate_email": {
             "anyOf": [
@@ -2533,7 +2387,7 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "InboundMailMessagePublic": {
+      "InboundMailMessage": {
         "properties": {
           "uid": {
             "type": "string",
@@ -2611,6 +2465,16 @@
             "title": "Flagged",
             "default": false
           },
+          "answered": {
+            "type": "boolean",
+            "title": "Answered",
+            "default": false
+          },
+          "draft": {
+            "type": "boolean",
+            "title": "Draft",
+            "default": false
+          },
           "date": {
             "anyOf": [
               {
@@ -2647,7 +2511,7 @@
           },
           "attachments": {
             "items": {
-              "$ref": "#/components/schemas/MailAttachmentPublic"
+              "$ref": "#/components/schemas/MailAttachment-Output"
             },
             "type": "array",
             "title": "Attachments"
@@ -2658,7 +2522,7 @@
         "required": [
           "uid"
         ],
-        "title": "InboundMailMessagePublic"
+        "title": "InboundMailMessage"
       },
       "IndexFileRequest": {
         "properties": {
@@ -2722,6 +2586,47 @@
         ],
         "title": "IndexFileResponse"
       },
+      "IndexProfileSplitConfig": {
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "fixed_tokens",
+              "semantic",
+              "recursive",
+              "structure",
+              "sentence",
+              "code",
+              "table"
+            ],
+            "title": "Strategy",
+            "default": "auto"
+          },
+          "chunk_size": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Chunk Size",
+            "default": 512
+          },
+          "chunk_overlap": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Chunk Overlap",
+            "default": 50
+          },
+          "chonkie_code_language": {
+            "type": "string",
+            "title": "Chonkie Code Language",
+            "description": "Язык tree-sitter для strategy=code (auto | python | javascript | ...).",
+            "default": "auto"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IndexProfileSplitConfig",
+        "description": "Параметры нарезки FileExtract на чанки (Chonkie + fixed-token tiktoken)."
+      },
       "IngestTextRequest": {
         "properties": {
           "text": {
@@ -2765,6 +2670,50 @@
           "text"
         ],
         "title": "IngestTextRequest"
+      },
+      "IntegrationDeletedResponse": {
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deleted"
+        ],
+        "title": "IntegrationDeletedResponse"
+      },
+      "IspmanagerProvisionConfig": {
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "title": "Base Url"
+          },
+          "authinfo_user": {
+            "type": "string",
+            "title": "Authinfo User"
+          },
+          "authinfo_password_encrypted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authinfo Password Encrypted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_url",
+          "authinfo_user"
+        ],
+        "title": "IspmanagerProvisionConfig"
       },
       "JsonValue": {},
       "LegalConfig": {
@@ -2872,7 +2821,7 @@
           "billing_provider": {
             "type": "string",
             "title": "Billing Provider",
-            "default": "YooMoney"
+            "default": "T-Bank"
           },
           "bank_name_ru": {
             "type": "string",
@@ -2919,11 +2868,11 @@
         "title": "LegalConfig",
         "description": "Публичные реквизиты оператора платформы (ООО «ЛАЙНЕКС»)."
       },
-      "ListResponse_CalendarIntegrationPublic_": {
+      "ListResponse_CalendarIntegration_": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+              "$ref": "#/components/schemas/CalendarIntegration"
             },
             "type": "array",
             "title": "Items"
@@ -2933,7 +2882,7 @@
         "required": [
           "items"
         ],
-        "title": "ListResponse[CalendarIntegrationPublic]"
+        "title": "ListResponse[CalendarIntegration]"
       },
       "ListResponse_CompanyMembershipResponse_": {
         "properties": {
@@ -2983,11 +2932,11 @@
         ],
         "title": "ListResponse[MailboxBindingMember]"
       },
-      "ListResponse_MailboxBindingPublic_": {
+      "ListResponse_MailboxBinding_": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/MailboxBindingPublic"
+              "$ref": "#/components/schemas/MailboxBinding"
             },
             "type": "array",
             "title": "Items"
@@ -2997,7 +2946,7 @@
         "required": [
           "items"
         ],
-        "title": "ListResponse[MailboxBindingPublic]"
+        "title": "ListResponse[MailboxBinding]"
       },
       "ListResponse_TeamMemberResponse_": {
         "properties": {
@@ -3031,7 +2980,7 @@
         ],
         "title": "ListResponse[UserSearchResult]"
       },
-      "MailAttachment": {
+      "MailAttachment-Input": {
         "properties": {
           "filename": {
             "type": "string",
@@ -3081,6 +3030,17 @@
               }
             ],
             "title": "File Id"
+          },
+          "content_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Id"
           }
         },
         "additionalProperties": false,
@@ -3092,19 +3052,23 @@
         "title": "MailAttachment",
         "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора.\n\nOutbound MailSendPayload: только ``file_id`` (байты уже в Files через chunked upload).\nInbound MIME / SMTP после resolve: ``content`` in-process."
       },
-      "MailAttachmentPublic": {
+      "MailAttachment-Output": {
         "properties": {
           "filename": {
             "type": "string",
+            "minLength": 1,
             "title": "Filename"
           },
           "content_type": {
             "type": "string",
+            "minLength": 1,
             "title": "Content Type"
           },
           "size": {
             "type": "integer",
-            "title": "Size"
+            "minimum": 0.0,
+            "title": "Size",
+            "default": 0
           },
           "available": {
             "type": "boolean",
@@ -3132,16 +3096,27 @@
               }
             ],
             "title": "File Id"
+          },
+          "content_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Id"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "filename",
-          "content_type",
-          "size"
+          "content_type"
         ],
-        "title": "MailAttachmentPublic"
+        "title": "MailAttachment",
+        "description": "Вложение письма (MIME part). content может быть пустым при list/ошибке разбора.\n\nOutbound MailSendPayload: только ``file_id`` (байты уже в Files через chunked upload).\nInbound MIME / SMTP после resolve: ``content`` in-process."
       },
       "MailConnectionScope": {
         "type": "string",
@@ -3917,6 +3892,20 @@
             },
             "type": "array",
             "title": "User Bindings Ensured"
+          },
+          "role_mailboxes_missing_password": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role Mailboxes Missing Password"
+          },
+          "user_bindings_missing_password": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "User Bindings Missing Password"
           }
         },
         "additionalProperties": false,
@@ -3924,7 +3913,9 @@
         "required": [
           "connection_ensured",
           "role_mailboxes_ensured",
-          "user_bindings_ensured"
+          "user_bindings_ensured",
+          "role_mailboxes_missing_password",
+          "user_bindings_missing_password"
         ],
         "title": "MailReconcileResult"
       },
@@ -3996,7 +3987,7 @@
           },
           "attachments": {
             "items": {
-              "$ref": "#/components/schemas/MailAttachment"
+              "$ref": "#/components/schemas/MailAttachment-Input"
             },
             "type": "array",
             "title": "Attachments"
@@ -4106,7 +4097,7 @@
         ],
         "title": "MailSyncNowResult"
       },
-      "MailThreadMessagePublic": {
+      "MailThreadMessage": {
         "properties": {
           "uid": {
             "type": "string",
@@ -4184,6 +4175,16 @@
             "title": "Flagged",
             "default": false
           },
+          "answered": {
+            "type": "boolean",
+            "title": "Answered",
+            "default": false
+          },
+          "draft": {
+            "type": "boolean",
+            "title": "Draft",
+            "default": false
+          },
           "date": {
             "anyOf": [
               {
@@ -4220,7 +4221,7 @@
           },
           "attachments": {
             "items": {
-              "$ref": "#/components/schemas/MailAttachmentPublic"
+              "$ref": "#/components/schemas/MailAttachment-Output"
             },
             "type": "array",
             "title": "Attachments"
@@ -4236,7 +4237,7 @@
           "uid",
           "folder"
         ],
-        "title": "MailThreadMessagePublic"
+        "title": "MailThreadMessage"
       },
       "MailThreadPayload": {
         "properties": {
@@ -4288,7 +4289,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/MailThreadMessagePublic"
+              "$ref": "#/components/schemas/MailThreadMessage"
             },
             "type": "array",
             "title": "Items"
@@ -4307,6 +4308,12 @@
           "thread_id"
         ],
         "title": "MailThreadResult"
+      },
+      "MailboxBinding": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonValue"
+        },
+        "type": "object"
       },
       "MailboxBindingCreatePayload": {
         "properties": {
@@ -4651,172 +4658,45 @@
         "type": "object",
         "title": "MailboxBindingPatchPayload"
       },
-      "MailboxBindingPublic": {
+      "MailboxBindingsMeResponse": {
         "properties": {
-          "mailbox_binding_id": {
-            "type": "string",
-            "title": "Mailbox Binding Id"
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailboxBinding"
+            },
+            "type": "array",
+            "title": "Items"
           },
-          "company_id": {
-            "type": "string",
-            "title": "Company Id"
-          },
-          "company_mail_connection_id": {
-            "type": "string",
-            "title": "Company Mail Connection Id"
-          },
-          "connection_scope": {
-            "$ref": "#/components/schemas/MailConnectionScope"
-          },
-          "user_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/MailboxBindingKind"
-          },
-          "email_address": {
-            "type": "string",
-            "title": "Email Address"
-          },
-          "local_part": {
-            "type": "string",
-            "title": "Local Part"
-          },
-          "sync_enabled": {
+          "can_admin": {
             "type": "boolean",
-            "title": "Sync Enabled"
-          },
-          "is_default": {
-            "type": "boolean",
-            "title": "Is Default"
-          },
-          "calendar_color": {
-            "type": "string",
-            "title": "Calendar Color"
-          },
-          "calendar_autolink_status": {
-            "$ref": "#/components/schemas/CalendarAutolinkStatus"
-          },
-          "calendar_autolink_detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calendar Autolink Detail"
-          },
-          "has_password": {
-            "type": "boolean",
-            "title": "Has Password"
-          },
-          "imap_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Imap Host"
-          },
-          "imap_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Imap Port"
-          },
-          "smtp_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Smtp Host"
-          },
-          "smtp_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Smtp Port"
-          },
-          "use_ssl": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Use Ssl"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
+            "title": "Can Admin"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "mailbox_binding_id",
-          "company_id",
-          "company_mail_connection_id",
-          "connection_scope",
-          "kind",
-          "email_address",
-          "local_part",
-          "sync_enabled",
-          "is_default",
-          "calendar_color",
-          "calendar_autolink_status",
-          "has_password",
-          "created_at",
-          "updated_at"
+          "items",
+          "can_admin"
         ],
-        "title": "MailboxBindingPublic"
+        "title": "MailboxBindingsMeResponse",
+        "description": "Мои mailbox bindings + server-driven company admin capability."
       },
       "Namespace": {
         "properties": {
-          "name": {
-            "type": "string",
-            "title": "Название",
-            "description": "Имя namespace (например 'default', 'sales')"
-          },
           "company_id": {
             "type": "string",
             "title": "ID компании",
             "description": "ID компании-владельца"
+          },
+          "namespace_id": {
+            "type": "string",
+            "title": "Namespace Id",
+            "default": ""
+          },
+          "name": {
+            "type": "string",
+            "title": "Название",
+            "description": "Имя namespace (например 'default', 'sales')"
           },
           "description": {
             "anyOf": [
@@ -4893,12 +4773,11 @@
         },
         "type": "object",
         "required": [
-          "name",
-          "company_id"
+          "company_id",
+          "name"
         ],
         "title": "Namespace",
-        "description": "Namespace (изолированная область данных).\nИспользуется всеми сервисами для организации данных внутри компании.",
-        "storage_prefix": "namespace"
+        "description": "Пространство компании. Таблица ``namespaces`` в ``platform_shared``.\n\nВнутри компании пространство адресуется ``name``. Первичный ключ строки —\n``namespace_id`` = ``company_id:name``, чтобы ``default`` мог быть у каждой компании."
       },
       "NamespaceAutomationRule": {
         "properties": {
@@ -5047,8 +4926,7 @@
         "required": [
           "name"
         ],
-        "title": "NamespaceCreateRequest",
-        "description": "Запрос на создание namespace"
+        "title": "NamespaceCreateRequest"
       },
       "NamespaceDeleteResponse": {
         "properties": {
@@ -5067,8 +4945,7 @@
           "success",
           "name"
         ],
-        "title": "NamespaceDeleteResponse",
-        "description": "Ответ удаления namespace."
+        "title": "NamespaceDeleteResponse"
       },
       "NamespaceKind": {
         "type": "string",
@@ -5295,10 +5172,6 @@
             "type": "string",
             "title": "Support Email"
           },
-          "agent_product_name": {
-            "type": "string",
-            "title": "Agent Product Name"
-          },
           "models_product_name": {
             "type": "string",
             "title": "Models Product Name"
@@ -5343,7 +5216,6 @@
           "base_domain",
           "platform_name",
           "support_email",
-          "agent_product_name",
           "models_product_name",
           "voice_product_name",
           "llms_display_label",
@@ -5355,6 +5227,137 @@
           "supported_domains"
         ],
         "title": "PlatformBrandResponse"
+      },
+      "PlatformEvent": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "scope/entity/verb"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id",
+            "description": "Компания-скоуп события; system для платформенных событий.",
+            "default": "system"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PlatformEventMeta"
+          },
+          "delivery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventDelivery"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "UI-адресация; None — чисто доменное событие, форвардер пропускает."
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "PlatformEvent",
+        "description": "Универсальная модель события платформы (Redis Stream `platform:events`)."
+      },
+      "PlatformEventMeta": {
+        "properties": {
+          "ts": {
+            "type": "integer",
+            "title": "Ts",
+            "description": "Epoch ms"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "local",
+              "ws",
+              "http",
+              "router",
+              "storage",
+              "timer",
+              "system"
+            ],
+            "title": "Source",
+            "default": "system"
+          },
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id",
+            "description": "user_id инициатора события (если событие вызвано действием пользователя)."
+          },
+          "causation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Causation Id"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id",
+            "description": "E2E request_id запроса-инициатора события (HTTP/WS/TaskIQ)."
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "Активный namespace актора (без префикса company_id).",
+            "default": "default"
+          }
+        },
+        "type": "object",
+        "title": "PlatformEventMeta",
+        "description": "Мета-конверт события."
       },
       "ProviderInfo": {
         "properties": {
@@ -5383,48 +5386,7 @@
           "is_default",
           "type"
         ],
-        "title": "ProviderInfo",
-        "description": "Информация о RAG провайдере"
-      },
-      "ProviderSwitchRequest": {
-        "properties": {
-          "provider_name": {
-            "type": "string",
-            "title": "Provider Name"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "provider_name"
-        ],
-        "title": "ProviderSwitchRequest",
-        "description": "Запрос на переключение провайдера"
-      },
-      "ProviderSwitchResponse": {
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "title": "Success"
-          },
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "success",
-          "provider",
-          "message"
-        ],
-        "title": "ProviderSwitchResponse",
-        "description": "Ответ переключения RAG провайдера."
+        "title": "ProviderInfo"
       },
       "ProvidersView": {
         "properties": {
@@ -5445,8 +5407,7 @@
           "items",
           "current_provider"
         ],
-        "title": "ProvidersView",
-        "description": "Композитный ответ: канонический `items` из core.pagination +\nметаполе `current_provider` (имя активного провайдера для компании).\n\nНаследуется от ``ListResponse[ProviderInfo]`` — не ad-hoc модель\nпагинации, а расширение канонической формы дополнительным полем\n(см. правило «только CursorPage/OffsetPage/ListResponse» в main.mdc)."
+        "title": "ProvidersView"
       },
       "PublicSiteConfig": {
         "properties": {
@@ -5586,16 +5547,12 @@
           "split": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue"
-                },
-                "type": "object"
+                "$ref": "#/components/schemas/IndexProfileSplitConfig"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Split"
+            ]
           }
         },
         "additionalProperties": false,
@@ -6057,10 +6014,6 @@
             "type": "string",
             "title": "Content"
           },
-          "score": {
-            "type": "number",
-            "title": "Score"
-          },
           "document_id": {
             "type": "string",
             "title": "Document Id"
@@ -6069,18 +6022,32 @@
             "type": "string",
             "title": "Document Name"
           },
-          "metadata": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Metadata"
-          },
           "namespace": {
             "type": "string",
             "title": "Namespace"
           },
-          "chunk_id": {
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index",
+            "default": 0
+          },
+          "total_chunks": {
+            "type": "integer",
+            "title": "Total Chunks",
+            "default": 1
+          },
+          "page_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Index"
+          },
+          "page_label": {
             "anyOf": [
               {
                 "type": "string"
@@ -6089,6 +6056,38 @@
                 "type": "null"
               }
             ],
+            "title": "Page Label"
+          },
+          "heading_trail": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Trail"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRef"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "split": {
+            "$ref": "#/components/schemas/IndexProfileSplitConfig"
+          },
+          "attributes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Attributes"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "chunk_id": {
+            "type": "string",
             "title": "Chunk Id"
           },
           "provenance": {
@@ -6103,13 +6102,51 @@
         "type": "object",
         "required": [
           "content",
-          "score",
           "document_id",
           "document_name",
-          "namespace"
+          "namespace",
+          "score",
+          "chunk_id"
         ],
         "title": "RAGSearchResult",
-        "description": "Универсальная модель результата поиска"
+        "description": "Чанк индекса плюс score поиска."
+      },
+      "RagDocumentDeleteResult": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "document_id"
+        ],
+        "title": "RagDocumentDeleteResult"
+      },
+      "RealtimeCommandAccepted": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accepted",
+          "event_id"
+        ],
+        "title": "RealtimeCommandAccepted"
       },
       "RegisterS3Request": {
         "properties": {
@@ -6120,9 +6157,9 @@
             "type": "string",
             "title": "S3 Key"
           },
-          "s3_bucket": {
+          "storage_id": {
             "type": "string",
-            "title": "S3 Bucket"
+            "title": "Storage Id"
           },
           "original_name": {
             "type": "string",
@@ -6142,7 +6179,7 @@
         "required": [
           "spec",
           "s3_key",
-          "s3_bucket",
+          "storage_id",
           "original_name",
           "content_type",
           "file_size"
@@ -6190,6 +6227,7 @@
             "title": "Provider"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "results",
@@ -6197,8 +6235,7 @@
           "namespace_id",
           "provider"
         ],
-        "title": "SearchResponse",
-        "description": "Ответ с результатами поиска"
+        "title": "SearchResponse"
       },
       "SidebarNavEntry": {
         "properties": {

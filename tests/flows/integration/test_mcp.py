@@ -7,7 +7,7 @@ HTTP-сессии идут в локальный stub (`tests.fixtures.mcp_http_
 
 import uuid
 
-import httpx
+import httpx2
 import pytest
 
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
@@ -82,7 +82,7 @@ class TestMCPClientHTTP:
         first_tool = tools[0]
         try:
             result = await client.call_tool(first_tool.tool_name, {"libraryName": "react"})
-        except httpx.ReadTimeout as exc:
+        except httpx2.ReadTimeout as exc:
             raise AssertionError("MCP stub не ответил в отведённое время") from exc
         assert result is not None
         assert hasattr(result, "is_error")

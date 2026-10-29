@@ -23,6 +23,7 @@
  */
 
 import { html, css } from 'lit';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { CRMNamespacePage } from './crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
@@ -98,6 +99,10 @@ const STATUS_LABEL_KEYS = Object.freeze({
     cancelled: 'namespace_tasks_page.status_cancelled',
     review_required: 'namespace_tasks_page.status_review_required',
 });
+
+function hasOwnKey<T extends object>(catalog: T, key: string): key is Extract<keyof T, string> {
+    return Object.prototype.hasOwnProperty.call(catalog, key);
+}
 
 function statusVariant(status: unknown): string {
     switch (status) {
@@ -505,20 +510,20 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
     }
 
     _typeLabel(task: unknown): string {
-        if (!task || typeof task !== 'object') {
+        if (!isPlainRecord(task)) {
             return this.t('namespace_tasks_page.type_unknown');
         }
-        const taskType = (task as Record<string, unknown>).task_type;
+        const taskType = task.task_type;
         if (typeof taskType !== 'string' || taskType.length === 0) {
             return this.t('namespace_tasks_page.type_unknown');
         }
         if (taskType === 'namespace_integration_job') {
-            const data = (task as Record<string, unknown>).data;
-            if (!data || typeof data !== 'object') {
+            const data = task.data;
+            if (!isPlainRecord(data)) {
                 return this.t('namespace_tasks_page.type_unknown');
             }
-            const job = (data as Record<string, unknown>).job;
-            const providerId = (data as Record<string, unknown>).provider_id;
+            const job = data.job;
+            const providerId = data.provider_id;
             const pid = typeof providerId === 'string' ? providerId : '';
             if (job === 'custom_fields') {
                 return this.t('namespace_tasks_page.type_integration_custom_fields', {
@@ -527,22 +532,20 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
             }
             return this.t('namespace_tasks_page.type_integration_entities', { provider_id: pid });
         }
-        const key = (TYPE_LABEL_KEYS as Record<string, string>)[taskType];
-        if (typeof key !== 'string') {
+        if (!hasOwnKey(TYPE_LABEL_KEYS, taskType)) {
             return taskType;
         }
-        return this.t(key);
+        return this.t(TYPE_LABEL_KEYS[taskType]);
     }
 
     _statusLabel(status: unknown): string {
         if (typeof status !== 'string' || status.length === 0) {
             return this.t('namespace_tasks_page.status_unknown');
         }
-        const key = (STATUS_LABEL_KEYS as Record<string, string>)[status as string];
-        if (typeof key !== 'string') {
+        if (!hasOwnKey(STATUS_LABEL_KEYS, status)) {
             return status;
         }
-        return this.t(key);
+        return this.t(STATUS_LABEL_KEYS[status]);
     }
 
     _isAnyOpBusy() {

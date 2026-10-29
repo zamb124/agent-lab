@@ -7,7 +7,7 @@ Integration тесты для API биллинга.
 
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.models.identity_models import Company
 

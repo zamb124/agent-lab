@@ -9,7 +9,7 @@ LokiClient — HTTP-клиент для поиска логов в Grafana Loki.
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 
-import httpx
+import httpx2
 
 from core.logging import get_logger
 from core.models import StrictBaseModel
@@ -183,11 +183,11 @@ class LokiClient:
             "end": str(int(end.timestamp() * 1_000_000_000)),
         }
         url = f"{self._base_url}/loki/api/v1/query_range"
-        resp: httpx.Response | None = None
+        resp: httpx2.Response | None = None
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx2.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.get(url, params=params)
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             raise LokiClientError(f"Loki is unavailable (network or timeout): {exc}") from exc
 
         if resp.status_code != 200:

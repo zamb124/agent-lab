@@ -7,6 +7,29 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
+
+function publicToken(payload: unknown, label: string): string {
+    if (!isPlainRecord(payload)) {
+        throw new Error(`${label}: payload.token required`);
+    }
+    const token = payload.token;
+    if (typeof token !== 'string' || token.length === 0) {
+        throw new Error(`${label}: payload.token required`);
+    }
+    return token;
+}
+
+function publicFileId(payload: unknown): string {
+    if (!isPlainRecord(payload)) {
+        throw new Error('office/public_catalog_binding_open: payload.fileId required');
+    }
+    const fileId = payload.fileId;
+    if (typeof fileId !== 'string' || fileId.length === 0) {
+        throw new Error('office/public_catalog_binding_open: payload.fileId required');
+    }
+    return fileId;
+}
 
 export const catalogAccessGetOp = createAsyncOp({
     name: 'office/catalog_access_get',
@@ -71,13 +94,10 @@ export const publicResolveOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/documents/api/v1/public/resolve/:token' },
     request: ({ payload }) => {
-        const reqPayload = payload as { token?: unknown } | null;
-        if (!reqPayload || typeof reqPayload.token !== 'string' || reqPayload.token.length === 0) {
-            throw new Error('office/public_resolve: payload.token required');
-        }
+        const token = publicToken(payload, 'office/public_resolve');
         return httpRequest({
             method: 'GET',
-            url: `/documents/api/v1/public/resolve/${encodeURIComponent(reqPayload.token)}`,
+            url: `/documents/api/v1/public/resolve/${encodeURIComponent(token)}`,
         });
     },
 });
@@ -87,13 +107,10 @@ export const publicOpenOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/documents/api/v1/public/open/:token' },
     request: ({ payload }) => {
-        const reqPayload = payload as { token?: unknown } | null;
-        if (!reqPayload || typeof reqPayload.token !== 'string' || reqPayload.token.length === 0) {
-            throw new Error('office/public_open: payload.token required');
-        }
+        const token = publicToken(payload, 'office/public_open');
         return httpRequest({
             method: 'GET',
-            url: `/documents/api/v1/public/open/${encodeURIComponent(reqPayload.token)}`,
+            url: `/documents/api/v1/public/open/${encodeURIComponent(token)}`,
         });
     },
 });
@@ -106,16 +123,11 @@ export const publicCatalogBindingOpenOp = createAsyncOp({
         path: '/documents/api/v1/public/catalog/:token/files/:file_id/open',
     },
     request: ({ payload }) => {
-        const reqPayload = payload as { token?: unknown; fileId?: unknown } | null;
-        if (!reqPayload || typeof reqPayload.token !== 'string' || reqPayload.token.length === 0) {
-            throw new Error('office/public_catalog_binding_open: payload.token required');
-        }
-        if (typeof reqPayload.fileId !== 'string' || reqPayload.fileId.length === 0) {
-            throw new Error('office/public_catalog_binding_open: payload.fileId required');
-        }
+        const token = publicToken(payload, 'office/public_catalog_binding_open');
+        const fileId = publicFileId(payload);
         return httpRequest({
             method: 'GET',
-            url: `/documents/api/v1/public/catalog/${encodeURIComponent(reqPayload.token)}/files/${encodeURIComponent(reqPayload.fileId)}/open`,
+            url: `/documents/api/v1/public/catalog/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}/open`,
         });
     },
 });
@@ -125,13 +137,10 @@ export const publicCatalogItemsOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/documents/api/v1/public/catalog/:token/items' },
     request: ({ payload }) => {
-        const reqPayload = payload as { token?: unknown } | null;
-        if (!reqPayload || typeof reqPayload.token !== 'string' || reqPayload.token.length === 0) {
-            throw new Error('office/public_catalog_items: payload.token required');
-        }
+        const token = publicToken(payload, 'office/public_catalog_items');
         return httpRequest({
             method: 'GET',
-            url: `/documents/api/v1/public/catalog/${encodeURIComponent(reqPayload.token)}/items`,
+            url: `/documents/api/v1/public/catalog/${encodeURIComponent(token)}/items`,
         });
     },
 });

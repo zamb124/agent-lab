@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.context import require_context
 from core.flow_ui.document import FlowUIDocument

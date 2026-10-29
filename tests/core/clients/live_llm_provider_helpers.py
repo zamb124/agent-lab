@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import NoReturn, cast
 
-import httpx
+import httpx2
 import pytest
 from a2a.types import Message, Part
 from a2a.types.a2a_pb2 import (
@@ -88,11 +88,11 @@ _SOFT_CATALOG_ERROR_CLASSES = frozenset(
 )
 
 
-def classify_http_status_error(provider: str, exc: httpx.HTTPStatusError) -> AIProviderErrorClass:
+def classify_http_status_error(provider: str, exc: httpx2.HTTPStatusError) -> AIProviderErrorClass:
     return classify_ai_provider_http(provider, exc.response.status_code, exc.response.text)
 
 
-def skip_provider_rate_limit(provider: str, exc: httpx.HTTPStatusError) -> None:
+def skip_provider_rate_limit(provider: str, exc: httpx2.HTTPStatusError) -> None:
     if classify_http_status_error(provider, exc) != AIProviderErrorClass.RATE_LIMITED:
         return
     retry_after = cast(str | None, exc.response.headers.get("retry-after"))
@@ -100,7 +100,7 @@ def skip_provider_rate_limit(provider: str, exc: httpx.HTTPStatusError) -> None:
     pytest.skip(f"{provider}: provider rate limit{suffix}")
 
 
-def skip_provider_auth_error(provider: str, exc: httpx.HTTPStatusError) -> None:
+def skip_provider_auth_error(provider: str, exc: httpx2.HTTPStatusError) -> None:
     if classify_http_status_error(provider, exc) != AIProviderErrorClass.AUTH_REJECTED:
         return
     pytest.skip(f"{provider}: catalog API rejected credentials ({exc.response.status_code})")
@@ -120,13 +120,13 @@ def skip_catalog_http_error(provider: str, exc: AIProviderAdapterError) -> None:
         pytest.skip(f"{provider}: catalog temporarily unavailable ({exc.status_code})")
 
 
-def skip_provider_transient_unavailable(provider: str, exc: httpx.HTTPStatusError) -> None:
+def skip_provider_transient_unavailable(provider: str, exc: httpx2.HTTPStatusError) -> None:
     if classify_http_status_error(provider, exc) != AIProviderErrorClass.TRANSIENT:
         return
     pytest.skip(f"{provider}: provider temporarily unavailable ({exc.response.status_code})")
 
 
-def skip_provider_content_filter(provider: str, exc: httpx.HTTPStatusError) -> None:
+def skip_provider_content_filter(provider: str, exc: httpx2.HTTPStatusError) -> None:
     if classify_http_status_error(provider, exc) != AIProviderErrorClass.CONTENT_FILTER:
         return
     pytest.skip(f"{provider}: smoke prompt rejected by provider content policy")
@@ -139,7 +139,7 @@ def live_chat_smoke_prompt(marker: str) -> str:
     )
 
 
-def skip_openrouter_post_route_issue(response: httpx.Response) -> None:
+def skip_openrouter_post_route_issue(response: httpx2.Response) -> None:
     error_class = classify_ai_provider_http(
         "openrouter",
         response.status_code,
@@ -224,7 +224,7 @@ async def live_model_service() -> LLMModelsService:
 
 
 def _skip_or_raise_catalog_error(provider: str, exc: BaseException) -> NoReturn:
-    if isinstance(exc, httpx.HTTPStatusError):
+    if isinstance(exc, httpx2.HTTPStatusError):
         skip_provider_rate_limit(provider, exc)
         skip_provider_auth_error(provider, exc)
         raise
@@ -238,7 +238,7 @@ async def discover_live_catalog(provider: str) -> list[AIModelRecord]:
     service = await live_model_service()
     try:
         return await service.discover_model_records_by_provider(provider)
-    except (httpx.HTTPStatusError, AIProviderAdapterError) as exc:
+    except (httpx2.HTTPStatusError, AIProviderAdapterError) as exc:
         _skip_or_raise_catalog_error(provider, exc)
 
 
@@ -246,7 +246,7 @@ async def fetch_live_model_ids(provider: str) -> list[str]:
     service = await live_model_service()
     try:
         return await service.fetch_models_by_provider(provider)
-    except (httpx.HTTPStatusError, AIProviderAdapterError) as extra:
+    except (httpx2.HTTPStatusError, AIProviderAdapterError) as extra:
         _skip_or_raise_catalog_error(provider, extra)
 
 
@@ -254,7 +254,7 @@ async def fetch_live_model_records(provider: str) -> list[AIModelRecord]:
     service = await live_model_service()
     try:
         return await service.fetch_model_records_by_provider(provider)
-    except (httpx.HTTPStatusError, AIProviderAdapterError) as extra:
+    except (httpx2.HTTPStatusError, AIProviderAdapterError) as extra:
         _skip_or_raise_catalog_error(provider, extra)
 
 
@@ -426,7 +426,7 @@ class ProviderLiveProbe:
     smoke_model: str | None
 
 
-def _http_error_detail(exc: httpx.HTTPStatusError) -> str:
+def _http_error_detail(exc: httpx2.HTTPStatusError) -> str:
     return truncate_llm_provider_error_text(f"HTTP {exc.response.status_code}: {exc.response.text}")
 
 
@@ -553,7 +553,7 @@ async def probe_openai_compat_provider(provider: str) -> ProviderLiveProbe:
     smoke_model = _configured_smoke_model_or_none(provider)
     try:
         records = await service.discover_model_records_by_provider(provider)
-    except httpx.HTTPStatusError as exc:
+    except httpx2.HTTPStatusError as exc:
         if exc.response.status_code == _CATALOG_GONE_HTTP_STATUS:
             return ProviderLiveProbe(
                 provider=provider,
@@ -597,7 +597,7 @@ async def probe_openai_compat_provider(provider: str) -> ProviderLiveProbe:
             chat_error_class=None,
             smoke_model=smoke_model,
         )
-    except httpx.RequestError as exc:
+    except httpx2.RequestError as exc:
         record = classify_ai_provider_error(provider, exc)
         return ProviderLiveProbe(
             provider=provider,
@@ -712,7 +712,7 @@ async def probe_openai_compat_provider(provider: str) -> ProviderLiveProbe:
         await egress_prefer_proxy_delete(normalized_http_origin(llm.base_url))
         try:
             completion = await llm.invoke([smoke_message(prompt)], max_tokens=128)
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             error_class = classify_http_status_error(provider, exc)
             detail = _http_error_detail(exc)
             if error_class in _SOFT_PROVIDER_ERROR_CLASSES:
@@ -732,7 +732,7 @@ async def probe_openai_compat_provider(provider: str) -> ProviderLiveProbe:
             last_hard_error_class = error_class
             last_hard_detail = detail
             continue
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             record = classify_ai_provider_error(provider, exc)
             last_hard_error_class = record.error_class
             last_hard_detail = record.error_text

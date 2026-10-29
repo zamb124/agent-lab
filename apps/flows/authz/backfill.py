@@ -177,7 +177,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
             set_active_company_id(company.company_id)
             flow_offset = 0
             while True:
-                flow_page = await FlowConfig.list_current(limit=_KV_PAGE_SIZE, offset=flow_offset)
+                flow_page = await FlowConfig.list_current_by_created_at_desc(limit=_KV_PAGE_SIZE, offset=flow_offset)
                 if len(flow_page) == 0:
                     break
                 for config in flow_page:
@@ -233,7 +233,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
             set_active_company_id(company.company_id)
             tool_offset = 0
             while True:
-                tool_page = await ToolReference.list_in_tool_id_order(
+                tool_page = await ToolReference.list_by_tool_id_asc(
                     limit=_KV_PAGE_SIZE,
                     offset=tool_offset,
                 )
@@ -279,7 +279,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
         remaining: int | None = None
         if limit is not None:
             remaining = limit - flows_written - tools_written - shares_written
-        grants = await FlowUIShareGrant.list_unrevoked(limit=remaining)
+        grants = await FlowUIShareGrant.list_unrevoked_by_grant_id_asc(limit=remaining)
         for grant in grants:
             writes = [
                 flow_ui_share_flow_link(grant.grant_id, grant.flow_id, company_id=grant.company_id),

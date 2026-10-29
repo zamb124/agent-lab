@@ -16,7 +16,7 @@ from core.types import JsonObject
 ONLYOFFICE_AI_PLUGIN_GUID: Final[str] = "asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}"
 
 # Browser Origin плагина AI (CDN + DS host). flows CORS обязан их принимать —
-# иначе fetch на /agent/llm/** блокируется до proxy и UI показывает «Ошибка: [provider]».
+# иначе fetch на /llm/** блокируется до proxy и UI показывает «Ошибка: [provider]».
 ONLYOFFICE_AI_BROWSER_CORS_ORIGINS: Final[tuple[str, ...]] = (
     "https://onlyoffice.github.io",
     "https://onlyoffice-plugins.github.io",
@@ -73,7 +73,7 @@ def build_onlyoffice_ai_settings(
     Полный ``aiSettings`` для Document Server.
 
     ``llm_api_base_url`` — origin+path без ``/v1`` (плагин добавит addon ``v1``),
-    например ``https://host/flows/api/v1/agent/llm``.
+    например ``https://host/flows/api/v1/llm``.
     """
     base = llm_api_base_url.rstrip("/")
     if base.endswith("/v1"):

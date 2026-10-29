@@ -2,7 +2,7 @@
 Фикстуры TaskIQ-воркеров: только readiness-проверки готового стека.
 
 Все процессы тестового стека (granian HTTP-сервисы + TaskIQ-воркеры) стартует
-`make test-up` через `scripts/test_stack.py up` — единственный владелец
+`make test-up` через `scripts/testing/stack.py up` — единственный владелец
 процессов. pytest ничего не запускает и не убивает: фикстуры проверяют
 готовность и падают с подсказкой выполнить `make test-up`.
 
@@ -173,7 +173,11 @@ def taskiq_broker(rag_worker):
 
     Зависит от rag_worker - гарантирует что worker запущен.
     """
-    from apps.flows_worker.broker import broker
+    from core.tasks.registry import queue_broker
+
+    broker = queue_broker("flows_worker")
+    if broker is None:
+        raise RuntimeError("flows_worker broker is not registered")
     return broker
 
 

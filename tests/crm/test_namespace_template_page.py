@@ -74,24 +74,24 @@ async def test_page_for_company_orders_newest_first_and_skips_other_company(uniq
         )
     )
 
-    first = await NamespaceTemplate.page_for_company(company_id, limit=2, offset=0)
+    first = await NamespaceTemplate.page_for_company_by_created_at_and_template_id_desc(company_id, limit=2, offset=0)
     assert first.total == 3
     assert first.limit == 2
     assert first.offset == 0
     assert [item.template_key for item in first.items] == [same_moment_high, same_moment_low]
 
-    second = await NamespaceTemplate.page_for_company(company_id, limit=2, offset=2)
+    second = await NamespaceTemplate.page_for_company_by_created_at_and_template_id_desc(company_id, limit=2, offset=2)
     assert second.total == 3
     assert [item.template_key for item in second.items] == [f"old-{unique_id}"]
 
-    empty = await NamespaceTemplate.page_for_company(f"missing-{unique_id}", limit=10, offset=0)
+    empty = await NamespaceTemplate.page_for_company_by_created_at_and_template_id_desc(f"missing-{unique_id}", limit=10, offset=0)
     assert empty.items == []
     assert empty.total == 0
 
     with pytest.raises(ValueError, match="limit must be >= 1"):
-        _ = await NamespaceTemplate.page_for_company(company_id, limit=0, offset=0)
+        _ = await NamespaceTemplate.page_for_company_by_created_at_and_template_id_desc(company_id, limit=0, offset=0)
     with pytest.raises(ValueError, match="offset must be >= 0"):
-        _ = await NamespaceTemplate.page_for_company(company_id, limit=1, offset=-1)
+        _ = await NamespaceTemplate.page_for_company_by_created_at_and_template_id_desc(company_id, limit=1, offset=-1)
 
 
 async def test_update_name_description_icon_and_crm_settings_skips_unset_fields(unique_id: str) -> None:

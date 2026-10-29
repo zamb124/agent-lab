@@ -37,7 +37,6 @@ from apps.flows.src.streaming import Emitter, EventSubscriber, InMemoryEmitter, 
 from apps.flows.src.streaming.subscriber import is_final_event
 from core.a2a import TERMINAL_A2A_TASK_STATES, mapping_from_struct, struct_from_mapping
 from core.clients.redis_client import RedisClient
-from core.db.storage import Storage
 from core.state import ExecutionState
 from core.types import JsonObject
 

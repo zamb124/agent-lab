@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from core.rag.models import RAGSearchResult
 from tests.core.files.golden.bytes import (

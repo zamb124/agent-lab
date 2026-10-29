@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.search_worker.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
+from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
 from core.crawl.models import CrawlDomain, CrawlProfileCreateRequest
 from core.search.index_models import SearchIndexCreateRequest
 from core.tasks import enqueue
@@ -68,7 +68,7 @@ async def test_bootstrap_queues_tranco_import_via_search_worker(
     domain_count = await CrawlDomain.count_for_profile(crawl_profile_id)
     assert domain_count >= 1
 
-    page = await CrawlDomain.page_by_domain(
+    page = await CrawlDomain.page_by_domain_asc(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=10,

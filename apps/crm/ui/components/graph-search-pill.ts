@@ -17,6 +17,14 @@ import type {
 
 const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
 
+function inputValue(event: Event): string {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        throw new Error('graph-search-pill: input required');
+    }
+    return input.value;
+}
+
 export class CRMGraphSearchPill extends PlatformElement {
     static i18nNamespace = 'crm';
 
@@ -213,7 +221,7 @@ export class CRMGraphSearchPill extends PlatformElement {
     }
 
     _onInput(e: Event) {
-        this.emit('search-input', { query: (e.target as HTMLInputElement).value });
+        this.emit('search-input', { query: inputValue(e) });
     }
 
     _onKeydown(e: KeyboardEvent) {
@@ -230,7 +238,7 @@ export class CRMGraphSearchPill extends PlatformElement {
     }
 
     _onMinScoreChange(e: Event) {
-        this.emit('min-score-change', { minScore: parseFloat((e.target as HTMLInputElement).value) });
+        this.emit('min-score-change', { minScore: parseFloat(inputValue(e)) });
     }
 
     _onClear() {

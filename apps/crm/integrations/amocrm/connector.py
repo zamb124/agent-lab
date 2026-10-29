@@ -172,13 +172,13 @@ class AmoCRMConnector:
         if not ns:
             raise ValueError("namespace_name is required")
         for type_id in sorted(amo_canonical_type_ids()):
-            existing_type = await EntityType.by_company_namespace_and_type_id(
+            existing_type = await EntityType.query_by_company_namespace_and_type_id(
                 company_id=company_id,
                 namespace=ns,
                 type_id=type_id,
             ).get_or_none()
             if existing_type is None:
-                src_default = await EntityType.by_company_namespace_and_type_id(
+                src_default = await EntityType.query_by_company_namespace_and_type_id(
                     company_id=company_id,
                     namespace="default",
                     type_id=type_id,

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx2 import AsyncClient, Response
 
 from apps.flows.realtime.command_router import FLOWS_OPERATIONS
 from apps.flows.src.services.browser_preview import create_browser_preview_token
@@ -25,7 +25,6 @@ from core.capabilities.tokens import (
     execution_token_exp,
     issue_execution_token,
 )
-from core.platform_brand.resolver import platform_public_base_url
 from core.types import JsonObject, JsonValue, require_json_object
 from core.utils.tokens import get_token_service
 from tests.realtime.centrifugo_ws import connect_centrifugo, rpc_platform_event
@@ -821,47 +820,6 @@ async def _setup_skill_import(ctx: LiveCtx) -> JsonObject:
     }
 
 
-async def _setup_toolkit_create(ctx: LiveCtx) -> JsonObject:
-    toolkit_id = f"live-tk-{_token(ctx)}"
-    name = f"Live toolkit {_token(ctx)}"
-    ctx.marker = name
-    return {
-        "toolkit_id": toolkit_id,
-        "name": name,
-        "description": name,
-        "default_enabled": False,
-        "position": 100,
-        "flow_ids": [],
-        "tool_ids": [],
-    }
-
-
-async def _setup_toolkit_item(ctx: LiveCtx) -> JsonObject:
-    payload = await _setup_toolkit_create(ctx)
-    created = await ctx.client.post(
-        f"{_API}/agent/toolkits/manage",
-        headers=ctx.headers,
-        json=payload,
-    )
-    body = await _expect_json(created, ok=(200, 201), label="toolkit_create")
-    return {"toolkit_id": _str_field(body, "toolkit_id")}
-
-
-async def _setup_toolkit_update(ctx: LiveCtx) -> JsonObject:
-    item = await _setup_toolkit_item(ctx)
-    name = f"Live toolkit upd {_token(ctx)}"
-    ctx.marker = name
-    return {
-        "toolkit_id": _str_field(item, "toolkit_id"),
-        "name": name,
-        "description": name,
-        "default_enabled": False,
-        "position": 101,
-        "flow_ids": [],
-        "tool_ids": [],
-    }
-
-
 async def _setup_mcp_list(_ctx: LiveCtx) -> JsonObject:
     return {"search": "", "limit": 50, "offset": 0}
 
@@ -1425,12 +1383,6 @@ async def _setup_workspace_put(_ctx: LiveCtx) -> JsonObject:
     return {"service_account_json": "{not-json"}
 
 
-async def _setup_toolkits_catalog(ctx: LiveCtx) -> JsonObject:
-    """REST для локального Host отдаёт `server.platform_public_base_url`; WS передаёт его явно."""
-    _ = ctx
-    return {"frontend_base_url": platform_public_base_url(), "desktop_only": False}
-
-
 async def _setup_tool_runtime_call(ctx: LiveCtx) -> JsonObject:
     """Подписанный capability context: tool runtime поднимает контекст из него, не из сессии."""
     claims = CapabilityExecutionTokenClaims(
@@ -1992,12 +1944,6 @@ _CASES: dict[str, OpCase] = {
     "flows/agent_skills/ensure_seed_requested": _op(
         "POST", f"{_API}/agent-skills/ensure-seed", "none", _empty, same=True,
     ),
-    "flows/agent_toolkits/list_requested": _op(
-        "GET", f"{_API}/agent/toolkits/manage", "none", _empty, same=True,
-    ),
-    "flows/agent_toolkits/catalog_list_requested": _op(
-        "GET", f"{_API}/agent/toolkits", "none", _setup_toolkits_catalog, same=True,
-    ),
     # REST-маршрут анонимный (peer capability-gateway без сессии): без company tools,
     # WS идёт с контекстом компании — сравнивается только успех.
     "flows/tool_runtime/manifest_requested": _op(
@@ -2065,30 +2011,6 @@ _CASES: dict[str, OpCase] = {
         same=True,
         expect="failed",
         query_keys=("token",),
-    ),
-    "flows/agent_toolkits/item_requested": _op(
-        "GET",
-        f"{_API}/agent/toolkits/manage/{{toolkit_id}}",
-        "none",
-        _setup_toolkit_item,
-        same=True,
-    ),
-    "flows/agent_toolkits/create_requested": _op(
-        "POST", f"{_API}/agent/toolkits/manage", "body", _setup_toolkit_create, same=False,
-    ),
-    "flows/agent_toolkits/update_requested": _op(
-        "PUT",
-        f"{_API}/agent/toolkits/manage/{{toolkit_id}}",
-        "body_minus_path",
-        _setup_toolkit_update,
-        same=True,
-    ),
-    "flows/agent_toolkits/remove_requested": _op(
-        "DELETE",
-        f"{_API}/agent/toolkits/manage/{{toolkit_id}}",
-        "none",
-        _setup_toolkit_item,
-        same=False,
     ),
     "flows/mcp_servers/list_requested": _op(
         "GET", f"{_API}/mcp/servers", "query", _setup_mcp_list, same=True,

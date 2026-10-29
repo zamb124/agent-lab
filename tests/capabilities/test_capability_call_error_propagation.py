@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from apps.capability_gateway.api.v1.capabilities import call_capability
-from apps.capability_gateway.di import CapabilityGatewayDi
 from apps.flows.di import FlowsDi
 from core.capabilities import (
     CapabilityCallRequest,
@@ -69,7 +68,7 @@ def _request(
 
 @pytest.mark.asyncio
 async def test_call_capability_propagates_invalid_tool_arguments(
-    capability_gateway_di: CapabilityGatewayDi,
+    capability_gateway_di,
     di: FlowsDi,
 ) -> None:
     _ = di
@@ -87,7 +86,7 @@ async def test_call_capability_propagates_invalid_tool_arguments(
 
 @pytest.mark.asyncio
 async def test_call_capability_keeps_peer_500_as_exception(
-    capability_gateway_di: CapabilityGatewayDi,
+    capability_gateway_di,
     di: FlowsDi,
 ) -> None:
     _ = di

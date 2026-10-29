@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from dataclasses import replace
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from apps.flows.di import FlowsDi
 from apps.flows.realtime.observability_operations import (

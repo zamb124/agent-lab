@@ -140,7 +140,8 @@ class StockMoveLine(PlatformModel):
         return await cls.objects.create(instance=row)
 
     @classmethod
-    async def list_for_move(cls, company_id: str, move_id: str) -> list[Self]:
+    async def list_open_for_move_by_created_at_asc(cls, company_id: str, move_id: str) -> list[Self]:
+        """Открытые строки движения, ORDER BY created_at ASC. Предела нет. Пустые поля не проверяются."""
         return await cls.objects.filter(
             company_id=company_id,
             move_id=move_id,
@@ -148,15 +149,17 @@ class StockMoveLine(PlatformModel):
         ).order_by("created_at").all()
 
     @classmethod
-    async def list_all_for_move(cls, company_id: str, move_id: str) -> list[Self]:
+    async def list_for_move_by_created_at_asc(cls, company_id: str, move_id: str) -> list[Self]:
+        """Все строки движения, ORDER BY created_at ASC. Предела нет. Пустые поля не проверяются."""
         return await cls.objects.filter(
             company_id=company_id, move_id=move_id
         ).order_by("created_at").all()
 
     @classmethod
-    async def list_for_moves(
+    async def list_for_moves_by_created_at_asc(
         cls, company_id: str, move_ids: list[str]
     ) -> list[Self]:
+        """Все строки этих движений, ORDER BY created_at ASC. Пустой move_ids — []. Предела нет."""
         if not move_ids:
             return []
         return await cls.objects.filter(
@@ -193,7 +196,7 @@ class StockMoveLine(PlatformModel):
     # --- очередь заданий (Фаза 4) ---
 
     @classmethod
-    async def list_queue(
+    async def list_open_queue_by_priority_desc_stop_sequence_and_created_at(
         cls,
         company_id: str,
         warehouse_id: str,
@@ -202,19 +205,7 @@ class StockMoveLine(PlatformModel):
         zone_location_id: str | None = None,
         limit: int = 100,
     ) -> list[Self]:
-        """Очередь заданий склада для экрана/ТСД оператора.
-
-        Порядок — «сначала важное и ближнее»: ``priority`` по убыванию
-        (срочная отгрузка выше плановой переборки), затем ``stop_order``
-        (очередь остановок рейса волны — первая отгрузка рейса раньше),
-        затем ``sequence`` (порядок обхода ячеек), затем время создания.
-
-        ``assigned_user_id`` задан — только его задания (экран «моя
-        очередь»); не задан — вся открытая очередь склада (диспетчер).
-        ``zone_location_id`` — зональный отбор: задания, чья ячейка-
-        источник лежит в поддереве зоны (сборщик закреплён за своей
-        зоной и не видит чужие коридоры).
-        """
+        """Открытая очередь склада, ORDER BY priority DESC, stop_order, sequence, created_at. assigned_user_id is None и zone_location_id is None не фильтруют. Пустое поддерево зоны — []. limit по умолчанию 100 и в теле не проверяется. Сначала срочное, затем остановка рейса, затем обход ячеек."""
         q = cls.objects.filter(
             company_id=company_id,
             warehouse_id=warehouse_id,
@@ -223,7 +214,7 @@ class StockMoveLine(PlatformModel):
         if assigned_user_id is not None:
             q = q.filter(assigned_user_id=assigned_user_id)
         if zone_location_id is not None:
-            zone_ids = await StockLocation.list_subtree_ids(
+            zone_ids = await StockLocation.list_subtree_ids_by_parent_path_asc(
                 company_id, zone_location_id
             )
             if not zone_ids:
@@ -234,10 +225,10 @@ class StockMoveLine(PlatformModel):
         ).limit(limit).all()
 
     @classmethod
-    async def list_open_for_moves(
+    async def list_open_for_moves_by_created_at_asc(
         cls, company_id: str, move_ids: list[str]
     ) -> list[Self]:
-        """Открытые строки набора move — сплит/проводка и волны."""
+        """Открытые строки этих движений, ORDER BY created_at ASC. Пустой move_ids — []. Предела нет."""
         if not move_ids:
             return []
         return await cls.objects.filter(
@@ -247,10 +238,10 @@ class StockMoveLine(PlatformModel):
         ).order_by("created_at").all()
 
     @classmethod
-    async def by_ids_locked(
+    async def list_unordered_locked_by_ids(
         cls, company_id: str, move_line_ids: list[str]
     ) -> list[Self]:
-        """Строки под ``SELECT FOR UPDATE`` — внутри полосы склада."""
+        """Строки под SELECT FOR UPDATE внутри полосы склада. Порядка нет. Пустой список id — []."""
         if not move_line_ids:
             return []
         return await cls.objects.filter(
@@ -258,19 +249,13 @@ class StockMoveLine(PlatformModel):
         ).for_update().all()
 
     @classmethod
-    async def list_stale_claimed(
+    async def list_unordered_stale_claimed(
         cls,
         company_id: str,
         warehouse_id: str,
         claimed_before: datetime,
     ) -> list[Self]:
-        """Открытые задания, захваченные давно — кандидаты на освобождение.
-
-        Бизнес-сценарий: кладовщик нажал «взял в работу» и ушёл со
-        смены; задание висит на нём и недоступно остальным. Тик
-        ``stock_claims_gc`` находит такие строки и отпускает их —
-        возвращаются в общую очередь.
-        """
+        """Открытые строки склада с claimed_at раньше claimed_before. Порядка и limit нет. Тик stock_claims_gc отпускает их в общую очередь."""
         return await cls.objects.filter(
             company_id=company_id,
             warehouse_id=warehouse_id,
@@ -338,7 +323,7 @@ class StockMoveLine(PlatformModel):
         async def body(
             _scope: LaneScope,
         ) -> LaneOutcome[StockMoveLineClaimResult]:
-            lines = await cls.by_ids_locked(company_id, move_line_ids)
+            lines = await cls.list_unordered_locked_by_ids(company_id, move_line_ids)
             found = {line.move_line_id: line for line in lines}
             missing = [i for i in move_line_ids if i not in found]
             if missing:
@@ -510,7 +495,7 @@ class StockMoveLine(PlatformModel):
         async def body(
             _scope: LaneScope,
         ) -> LaneOutcome[StockMoveLineClaimResult]:
-            lines = await cls.by_ids_locked(company_id, move_line_ids)
+            lines = await cls.list_unordered_locked_by_ids(company_id, move_line_ids)
             found = {line.move_line_id: line for line in lines}
             missing = [i for i in move_line_ids if i not in found]
             if missing:
@@ -590,7 +575,7 @@ class StockMoveLine(PlatformModel):
         async def body(
             _scope: LaneScope,
         ) -> LaneOutcome[StockMoveLineExceptionResult]:
-            lines = await cls.by_ids_locked(company_id, [move_line_id])
+            lines = await cls.list_unordered_locked_by_ids(company_id, [move_line_id])
             if not lines:
                 raise PlatformNotFoundError(
                     "Move line not found", error_code="move_line_not_found"

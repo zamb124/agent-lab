@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
@@ -274,14 +274,14 @@ def build_files_router(*, files_route_segment: str) -> APIRouter:
             async with get_httpx_client(timeout=120.0) as client:
                 upstream_response = await client.get(storage_url)
             _ = upstream_response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             st = exc.response.status_code
             if st == 404:
                 raise HTTPException(
                     status_code=404, detail="File not found at storage URL."
                 ) from exc
             raise HTTPException(status_code=502, detail="Upstream download failed.") from exc
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise HTTPException(status_code=502, detail="Upstream download failed.") from exc
 
         response_content_type_raw = http_header_text(

@@ -10,7 +10,7 @@
 Получение клиента — **только** через
 ``core.clients.voice_resolver.get_stt_streamer(*, company_id, override)``.
 Прямой импорт конкретных реализаций вне `core/clients/**` запрещён CI
-(`scripts/check_voice_resolver_usage.py`).
+(`scripts/gates/voice/resolver_usage.py`).
 
 Контракт:
 

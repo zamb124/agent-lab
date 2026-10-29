@@ -15,9 +15,18 @@
  */
 
 import { createSlice } from '@platform/lib/events/index.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const TYPING_TTL_MS = 6_000;
-const EMPTY_TYPING = Object.freeze({});
+
+function typingMap(value: unknown): Record<string, unknown> {
+    if (!isPlainRecord(value)) {
+        throw new Error('sync/presence: typingByChannel must be an object');
+    }
+    const row: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(value)) row[key] = field;
+    return row;
+}
 
 export const presenceResource = createSlice({
     name: 'sync/presence',
@@ -32,12 +41,17 @@ export const presenceResource = createSlice({
     },
     extraReducer: (state, event) => {
         if (event.type === 'sync/channel/typing') {
-            const p = event.payload as Record<string, any> | null;
-            if (!p || typeof p.channel_id !== 'string') return state;
-            const typingByChannel = state.typingByChannel as Record<string, Record<string, { ts?: number; thread_id?: unknown }>>;
-            const existing = typingByChannel[p.channel_id];
-            const cur: Record<string, unknown> = (existing && typeof existing === 'object') ? existing : EMPTY_TYPING;
-            const userId = p.user && p.user.user_id;
+            const p = event.payload;
+            if (!isPlainRecord(p) || typeof p.channel_id !== 'string') return state;
+            const channelId = p.channel_id;
+            const typingByChannel = typingMap(state.typingByChannel);
+            const existing = typingByChannel[channelId];
+            if (existing != null && !isPlainRecord(existing)) {
+                throw new Error('sync/presence: channel typing must be an object');
+            }
+            const cur = isPlainRecord(existing) ? existing : {};
+            const user = p.user;
+            const userId = isPlainRecord(user) ? user.user_id : undefined;
             if (typeof userId !== 'string') return state;
             const next: Record<string, unknown> = { ...cur };
             if (p.typing) {
@@ -50,7 +64,7 @@ export const presenceResource = createSlice({
                 ...state,
                 typingByChannel: Object.freeze({
                     ...typingByChannel,
-                    [p.channel_id]: Object.freeze(next),
+                    [channelId]: Object.freeze(next),
                 }),
             };
         }
@@ -58,11 +72,14 @@ export const presenceResource = createSlice({
             const now = Date.now();
             const next: Record<string, unknown> = {};
             let changed = false;
-            const pruneChannel = state.typingByChannel as Record<string, Record<string, { ts?: number }>>;
-            for (const [chId, peers] of Object.entries(pruneChannel)) {
+            const pruneChannel = typingMap(state.typingByChannel);
+            for (const [chId, peersValue] of Object.entries(pruneChannel)) {
+                if (!isPlainRecord(peersValue)) {
+                    throw new Error('sync/presence: channel typing must be an object');
+                }
                 const filtered: Record<string, unknown> = {};
-                for (const [uid, entry] of Object.entries(peers)) {
-                    if (entry && typeof entry.ts === 'number' && now - entry.ts < TYPING_TTL_MS) {
+                for (const [uid, entry] of Object.entries(peersValue)) {
+                    if (isPlainRecord(entry) && typeof entry.ts === 'number' && now - entry.ts < TYPING_TTL_MS) {
                         filtered[uid] = entry;
                     } else {
                         changed = true;
@@ -70,7 +87,7 @@ export const presenceResource = createSlice({
                 }
                 if (Object.keys(filtered).length > 0) {
                     next[chId] = Object.freeze(filtered);
-                } else if (Object.keys(peers).length > 0) {
+                } else if (Object.keys(peersValue).length > 0) {
                     changed = true;
                 }
             }

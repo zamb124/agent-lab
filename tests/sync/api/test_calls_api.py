@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from apps.sync.models.call import SyncCall
 from tests.sync.api._helpers import seed_namespace_via_repo

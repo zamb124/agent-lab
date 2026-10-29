@@ -32,7 +32,7 @@ def oauth_callback_prefers_html_response(request: Request) -> bool:
     - Sec-Fetch-Dest: document (Fetch Metadata в Chromium), или
     - Accept содержит text/html / application/xhtml+xml и первый тип не только application/json.
 
-    JSON остаётся для явного Accept: application/json и для */* (httpx/pytest, curl по умолчанию).
+    JSON остаётся для явного Accept: application/json и для */* (httpx2/pytest, curl по умолчанию).
     """
     raw = request.headers.get("sec-fetch-dest")
     if isinstance(raw, str) and raw.strip().lower() == "document":

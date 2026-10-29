@@ -12,6 +12,7 @@
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
@@ -122,9 +123,10 @@ export class OfficeDocumentCreateEmptyModal extends PlatformFormModal {
             catalog_id: this.catalogId,
         };
         if (opt.spreadsheetFormat) payload.spreadsheet_format = opt.spreadsheetFormat;
-        const created = await this._create.run(payload) as Record<string, unknown> | null;
-        if (this.openAfterCreate === true && created && typeof created.file_id === 'string') {
-            this.navigate('document_editor', { fileId: created.file_id });
+        const created = await this._create.run(payload);
+        const fileId = isPlainRecord(created) ? created.file_id : undefined;
+        if (this.openAfterCreate === true && typeof fileId === 'string') {
+            this.navigate('document_editor', { fileId });
         }
     }
 

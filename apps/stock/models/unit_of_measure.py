@@ -76,26 +76,24 @@ class UnitOfMeasure(PlatformModel):
         ).get_or_none()
 
     @classmethod
-    async def list_by_category_and_name(cls, company_id: str) -> list[Self]:
-        """Все единицы компании, ORDER BY category, name. Предела нет."""
+    async def list_by_category_and_name_asc(cls, company_id: str) -> list[Self]:
+        """Все единицы компании, ORDER BY category, name ASC. Предела нет."""
         return await cls.objects.filter(company_id=company_id).order_by(
             "category", "name"
         ).all()
 
     @classmethod
-    async def list_global(cls, company_id: str) -> list[Self]:
-        """Только глобальные ЕИ (``product_id IS NULL``) — справочник
-        конвертации, не упаковки."""
+    async def list_global_by_category_and_name_asc(cls, company_id: str) -> list[Self]:
+        """Глобальные единицы, product_id пустой, ORDER BY category, name ASC. Предела нет. Пустые поля не проверяются."""
         return await cls.objects.filter(
             company_id=company_id, product_id__isnull=True
         ).order_by("category", "name").all()
 
     @classmethod
-    async def list_packagings(
+    async def list_packagings_by_product_id_and_factor_asc(
         cls, company_id: str, product_id: str | None = None
     ) -> list[Self]:
-        """Товарные упаковки (``product_id IS NOT NULL``), опционально —
-        одного товара."""
+        """Упаковки, product_id не пустой, ORDER BY product_id, factor ASC. product_id is None не фильтрует. Предела нет."""
         query = cls.objects.filter(
             company_id=company_id, product_id__isnull=False
         )

@@ -41,7 +41,7 @@ def _log_python_runtime(service_name: str) -> None:
 def serve(service_name: str, target: str, settings: PlatformBaseSettings) -> None:
     _log_python_runtime(service_name)
     # workers=1 для ASGI: каждый worker — отдельный event loop с отдельным ASGI
-    # lifespan; пулы asyncpg/sqlalchemy/httpx/redis локальны к loop и не шарятся
+    # lifespan; пулы asyncpg/sqlalchemy/httpx2/redis локальны к loop и не шарятся
     # между workers. Масштабирование — replicas в k8s.
     workers = settings.server.granian_workers
     runtime_threads = settings.server.granian_runtime_threads

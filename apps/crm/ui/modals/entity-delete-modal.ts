@@ -19,6 +19,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import type {
@@ -139,10 +140,10 @@ export class CRMEntityDeleteModal extends PlatformModal {
         this._entities.get(this.entityId);
 
         this.useEvent(this._entities.resource.events.REMOVED, (event) => {
-            const payload = event && event.payload;
-            const idField = this._entities.resource.idField;
-            const removedId = payload && typeof (payload as Record<string, unknown>)[idField] === 'string' ? (payload as Record<string, unknown>)[idField] : null;
-            if (removedId !== this.entityId) return;
+            const payload = event.payload;
+            if (!isPlainRecord(payload)) return;
+            const removedId = payload[this._entities.resource.idField];
+            if (typeof removedId !== 'string' || removedId !== this.entityId) return;
             this.close();
             this.navigate(this.redirectRoute);
         });

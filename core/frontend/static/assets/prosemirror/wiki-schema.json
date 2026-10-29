@@ -588,5 +588,5 @@
     "right"
   ],
   "max_heading_level": 6,
-  "_note": "Сгенерировано scripts/generate_wiki_prosemirror_schema.py из apps/wiki/content/schema.py. Не редактировать вручную."
+  "_note": "Сгенерировано scripts/generate/wiki_prosemirror_schema.py из apps/wiki/content/schema.py. Не редактировать вручную."
 }
