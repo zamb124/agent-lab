@@ -13,7 +13,7 @@ import {
     resolveA2aTaskId,
     sendA2ARequest,
     unwrapA2aStreamResult,
-} from '@platform/lib/flow-ui/protocol/a2a-stream.js';
+} from '@platform/lib/a2a/a2a-stream.js';
 import {
     applyJsonPatch,
     decodePart,
@@ -21,8 +21,8 @@ import {
     filesFromParts,
     firstDataFromParts,
     textFromParts,
-} from '@platform/lib/flow-ui/protocol/parts.js';
-import { INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES } from '@platform/lib/flow-ui/protocol/constants.js';
+} from '@platform/lib/a2a/parts.js';
+import { INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES } from '@platform/lib/a2a/constants.js';
 import {
     agentIdentityImageUrlFromDocument,
     flowUIMediaSrc,

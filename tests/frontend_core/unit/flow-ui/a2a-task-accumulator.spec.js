@@ -5,7 +5,7 @@ import {
     createA2ATaskAccumulator,
     serializableTask,
     taskBoundary,
-} from '../../../../core/frontend/static/lib/flow-ui/protocol/a2a-task-accumulator.js';
+} from '../../../../core/frontend/static/lib/a2a/a2a-task-accumulator.js';
 
 describe('a2a-task-accumulator', () => {
     it('appends artifact parts under a stable artifactId', () => {

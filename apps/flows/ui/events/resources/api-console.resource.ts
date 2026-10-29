@@ -2,7 +2,7 @@
  * flows/api_console_run — прогон A2A JSON-RPC запроса из консоли API редактора.
  *
  * Единственная фабрика A2A вне `<platform-flow-ui>`: обычный Send/stream/GetTask
- * идёт через Flow UI protocol (`@platform/lib/flow-ui/protocol/*`).
+ * идёт через Flow UI protocol (`@platform/lib/a2a/*`).
  * Консоль шлёт произвольный JSON-RPC body (`SendStreamingMessage` | `SendMessage` |
  * async submit + `GetTask` polling) и собирает полный request/response
  * exchange для отображения разработчику.
@@ -18,8 +18,8 @@ import {
     resolveA2aContextId as _resolveStreamContextId,
     resolveA2aTaskId as _resolveStreamTaskId,
     unwrapA2aStreamResult as _unwrapA2aStreamResult,
-} from '@platform/lib/flow-ui/protocol/a2a-stream.js';
-import { textFromParts as _extractA2aTextFromParts } from '@platform/lib/flow-ui/protocol/parts.js';
+} from '@platform/lib/a2a/a2a-stream.js';
+import { textFromParts as _extractA2aTextFromParts } from '@platform/lib/a2a/parts.js';
 
 interface ConsoleStream {
     taskId: string | null;

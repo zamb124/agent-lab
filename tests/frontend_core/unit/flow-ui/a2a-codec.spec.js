@@ -11,8 +11,8 @@ import {
     flowUIShareCollectionUrl,
     interfaceUrl,
     normalizeFlowUIBranchId,
-} from '../../../../core/frontend/static/lib/flow-ui/protocol/a2a-codec.js';
-import { A2A_PROTOCOL_VERSION, FLOW_UI_ACTION_MEDIA_TYPE } from '../../../../core/frontend/static/lib/flow-ui/protocol/constants.js';
+} from '../../../../core/frontend/static/lib/a2a/a2a-codec.js';
+import { A2A_PROTOCOL_VERSION, FLOW_UI_ACTION_MEDIA_TYPE } from '../../../../core/frontend/static/lib/a2a/constants.js';
 
 describe('flow-ui a2a codec', () => {
     it('builds flow, embed, interface and share endpoints without inventing ids', () => {

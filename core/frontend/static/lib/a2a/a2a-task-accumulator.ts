@@ -1,4 +1,4 @@
-import { isPlainRecord } from '../../events/payload.js';
+import { isPlainRecord } from '../events/payload.js';
 import { INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES } from './constants.js';
 
 export type A2aJsonObject = Record<string, unknown>;

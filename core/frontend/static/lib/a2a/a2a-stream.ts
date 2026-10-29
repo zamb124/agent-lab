@@ -4,7 +4,7 @@
  * uncaught BodyStreamBuffer AbortError when dispose() cancels mid-read.
  */
 import { a2aRequestHeaders } from './a2a-codec.js';
-import { isPlainRecord } from '../../events/payload.js';
+import { isPlainRecord } from '../events/payload.js';
 import { INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES } from './constants.js';
 
 export interface A2aFrameEvent extends Record<string, unknown> {

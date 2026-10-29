@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { INPUT_BLOCK_TYPES } from '../../../../core/frontend/static/lib/flow-ui/protocol/constants.js';
+import { INPUT_BLOCK_TYPES } from '../../../../core/frontend/static/lib/a2a/constants.js';
 import { FlowUIStore, iterBlocks } from '../../../../core/frontend/static/lib/flow-ui/runtime/flow-ui-store.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../../../fixtures/flow_ui');

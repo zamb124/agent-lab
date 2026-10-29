@@ -14,7 +14,7 @@ import {
     createHistory,
     redoHistory,
     undoHistory,
-} from '../../components/interface-editor/interface-editor-domain.js';
+} from '../../_helpers/interface-editor-domain.js';
 import type { InterfaceEditorUiSlice } from '../editor.types.js';
 
 function requirePayload(event: PlatformEvent): Record<string, unknown> {

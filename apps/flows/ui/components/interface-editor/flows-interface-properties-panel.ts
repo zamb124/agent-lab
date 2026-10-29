@@ -13,7 +13,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-variable-input.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { INPUT_BLOCK_TYPES } from '@platform/lib/flow-ui/protocol/constants.js';
+import { INPUT_BLOCK_TYPES } from '@platform/lib/a2a/constants.js';
 import {
     catalogEntry,
     isFrozenPath,
@@ -25,90 +25,23 @@ import {
     type FlowUiDocument,
     type FlowUiPage,
     type StatePathEntry,
-} from './interface-editor-domain.js';
+} from '../../_helpers/interface-editor-domain.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import {
+    CONVERSATION_DEF,
+    HIDDEN_PROPERTIES,
+    actionField,
+    clickKindValue,
+    conditionEqualsText,
+    documentPages,
+    missingAsEmpty,
+    objectRows,
+    objectValue,
+    parseConditionValue,
+    problemParams,
+    rowListCount,
+} from '../../_helpers/interface-properties-utils.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
-
-function missingAsEmpty(value: unknown): string {
-    if (value === undefined || value === null) return '';
-    return String(value);
-}
-
-function documentPages(document: FlowUiDocument | null): FlowUiPage[] {
-    if (document === null) return [];
-    return document.pages;
-}
-
-function objectRows(value: unknown, label: string): Record<string, unknown>[] {
-    if (!Array.isArray(value)) {
-        throw new Error(`flows-interface-properties-panel: ${label} must be a list`);
-    }
-    const rows: Record<string, unknown>[] = [];
-    for (const item of value) {
-        if (!isPlainRecord(item)) {
-            throw new Error(`flows-interface-properties-panel: ${label} item must be an object`);
-        }
-        rows.push(item);
-    }
-    return rows;
-}
-
-function rowListCount(row: Record<string, unknown>, field: string): number {
-    const items = row[field];
-    if (!Array.isArray(items)) {
-        throw new Error(`flows-interface-properties-panel: ${field} must be a list`);
-    }
-    return items.length;
-}
-
-function actionField(action: unknown, field: string): unknown {
-    if (!isPlainRecord(action)) return undefined;
-    return action[field];
-}
-
-function objectValue(value: unknown): Record<string, unknown> {
-    if (!isPlainRecord(value)) {
-        throw new Error('flows-interface-properties-panel: object value required');
-    }
-    return value;
-}
-
-function problemParams(params: Record<string, unknown>): Record<string, string | number> {
-    const result: Record<string, string | number> = {};
-    for (const [key, value] of Object.entries(params)) {
-        if (typeof value !== 'string' && typeof value !== 'number') {
-            throw new Error(`flows-interface-properties-panel: problem param ${key} must be a string or number`);
-        }
-        result[key] = value;
-    }
-    return result;
-}
-
-function conditionEqualsText(value: Record<string, unknown>): string {
-    if (!('equals' in value)) return '';
-    const equals = value.equals;
-    if (typeof equals === 'string') return equals;
-    return JSON.stringify(equals);
-}
-
-const HIDDEN_PROPERTIES = new Set(['type', 'blocks']);
-const CONVERSATION_DEF = 'FlowUIConversationSettings';
-
-/** Значение условия: JSON-литерал (число, bool, null, объект) или строка как есть. */
-function parseConditionValue(text: string) {
-    const trimmed = text.trim();
-    if (trimmed === '') return null;
-    if (/^(-?\d+(\.\d+)?|true|false|null|\{.*\}|\[.*\])$/s.test(trimmed)) return JSON.parse(trimmed);
-    return trimmed;
-}
-
-function clickKindValue(kinds: readonly { value: string }[]): string {
-    const first = kinds[0];
-    if (first === undefined) {
-        throw new Error('flows-interface-properties-panel: click kind missing');
-    }
-    return first.value;
-}
 
 export class FlowsInterfacePropertiesPanel extends PlatformElement {
     static i18nNamespace = 'flows';

@@ -12,7 +12,7 @@ import '@platform/lib/components/platform-popover.js';
 import '@platform/lib/components/platform-menu.js';
 import '@platform/lib/components/platform-button.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
-import type { FlowUiDocument, FlowUiPage } from './interface-editor-domain.js';
+import type { FlowUiDocument, FlowUiPage } from '../../_helpers/interface-editor-domain.js';
 
 function tabInput(root: ParentNode): HTMLInputElement | null {
     const field = root.querySelector('.tab input');

@@ -394,7 +394,7 @@ describe('flows-resource-node-editor RAG on canvas', () => {
                 .nodeId=${'rag_node'}
                 .flowId=${'flow_rag'}
                 .branchId=${'base'}
-                .nodeType=${'resource'}
+                .flowNodeType=${'resource'}
                 .nodeConfig=${{
                     type: 'resource',
                     name: 'Knowledge',
@@ -426,7 +426,7 @@ describe('flows-resource-node-editor RAG on canvas', () => {
                 .nodeId=${'rag_node'}
                 .flowId=${'flow_rag'}
                 .branchId=${'base'}
-                .nodeType=${'resource'}
+                .flowNodeType=${'resource'}
                 .nodeConfig=${{
                     type: 'resource',
                     name: 'Knowledge',

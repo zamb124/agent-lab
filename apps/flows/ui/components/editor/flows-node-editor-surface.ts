@@ -98,7 +98,7 @@ export function renderFlowsNodeEditorSurface(ctx: any) {
         case 'builtin':
             return html`<flows-builtin-tool-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
-                .nodeConfig=${node} .nodeType=${node.type}
+                .nodeConfig=${node} .flowNodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}

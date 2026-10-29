@@ -6,7 +6,7 @@
 
 import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
-import type { DocumentProblem, EditorHistory } from '../components/interface-editor/interface-editor-domain.js';
+import type { DocumentProblem, EditorHistory } from '../_helpers/interface-editor-domain.js';
 
 export interface FlowEditorSlice extends AsyncOpSlice {
     flowId?: string | null;

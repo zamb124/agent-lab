@@ -11,9 +11,9 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { buildUserMessage } from '../../../../core/frontend/static/lib/flow-ui/protocol/a2a-codec.js';
-import { FLOW_UI_ACTION_MEDIA_TYPE } from '../../../../core/frontend/static/lib/flow-ui/protocol/constants.js';
-import { applyJsonPatch, decodePart, decodeParts } from '../../../../core/frontend/static/lib/flow-ui/protocol/parts.js';
+import { buildUserMessage } from '../../../../core/frontend/static/lib/a2a/a2a-codec.js';
+import { FLOW_UI_ACTION_MEDIA_TYPE } from '../../../../core/frontend/static/lib/a2a/constants.js';
+import { applyJsonPatch, decodePart, decodeParts } from '../../../../core/frontend/static/lib/a2a/parts.js';
 import {
     FLOW_UI_HTML_CSP,
     FLOW_UI_HTML_SANDBOX,

@@ -11,16 +11,16 @@
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest, HttpError } from '@platform/lib/events/http.js';
-import { a2aEndpointUrl, buildSendMessageBody, buildUserMessage } from '@platform/lib/flow-ui/protocol/a2a-codec.js';
+import { a2aEndpointUrl, buildSendMessageBody, buildUserMessage } from '@platform/lib/a2a/a2a-codec.js';
 import {
     consumeA2AStream as consumeA2aStream,
     isTerminalTaskState,
     unwrapA2aStreamResult,
-} from '@platform/lib/flow-ui/protocol/a2a-stream.js';
-import { RESPONSE_ARTIFACT_NAME, STATE_ARTIFACT_ID } from '@platform/lib/flow-ui/protocol/constants.js';
-import { applyJsonPatch, decodePart, textFromParts } from '@platform/lib/flow-ui/protocol/parts.js';
+} from '@platform/lib/a2a/a2a-stream.js';
+import { RESPONSE_ARTIFACT_NAME, STATE_ARTIFACT_ID } from '@platform/lib/a2a/constants.js';
+import { applyJsonPatch, decodePart, textFromParts } from '@platform/lib/a2a/parts.js';
 import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
-import type { A2aUnwrappedFrame } from '@platform/lib/flow-ui/protocol/a2a-stream.js';
+import type { A2aUnwrappedFrame } from '@platform/lib/a2a/a2a-stream.js';
 import {
     takePendingPublicSearchRunFiles,
     uploadPublicSearchFilesForA2a,

@@ -11,10 +11,10 @@
  */
 
 import { recordField } from '../../events/payload.js';
-import { isSettledTaskState } from '../protocol/a2a-stream.js';
-import { applyA2AFrame, createA2ATaskAccumulator } from '../protocol/a2a-task-accumulator.js';
-import { CONVERSATION_SLOT_ID, INPUT_BLOCK_TYPES, STATE_ARTIFACT_ID, UI_ARTIFACT_ID } from '../protocol/constants.js';
-import { applyJsonPatch, decodePart } from '../protocol/parts.js';
+import { isSettledTaskState } from '../../a2a/a2a-stream.js';
+import { applyA2AFrame, createA2ATaskAccumulator } from '../../a2a/a2a-task-accumulator.js';
+import { CONVERSATION_SLOT_ID, INPUT_BLOCK_TYPES, STATE_ARTIFACT_ID, UI_ARTIFACT_ID } from '../../a2a/constants.js';
+import { applyJsonPatch, decodePart } from '../../a2a/parts.js';
 import { valueAtPath } from './templating.js';
 
 export type FlowUiRecord = Record<string, unknown>;
@@ -327,7 +327,7 @@ export class FlowUIStore {
         else this.emitChange();
     }
 
-    task(taskId: string | null): import('../protocol/a2a-task-accumulator.js').A2aAccumulatedTask | null {
+    task(taskId: string | null): import('../../a2a/a2a-task-accumulator.js').A2aAccumulatedTask | null {
         if (taskId === null || taskId.length === 0) return null;
         const task = this.tasks.tasksById[taskId];
         return task === undefined ? null : task;
@@ -351,10 +351,10 @@ export class FlowUIStore {
         return this.pending !== null || this.taskRunning;
     }
 
-    orderedTasks(): import('../protocol/a2a-task-accumulator.js').A2aAccumulatedTask[] {
+    orderedTasks(): import('../../a2a/a2a-task-accumulator.js').A2aAccumulatedTask[] {
         return this.tasks.taskOrder
             .map((taskId) => this.tasks.tasksById[taskId])
-            .filter((task): task is import('../protocol/a2a-task-accumulator.js').A2aAccumulatedTask => task !== undefined);
+            .filter((task): task is import('../../a2a/a2a-task-accumulator.js').A2aAccumulatedTask => task !== undefined);
     }
 
     /**

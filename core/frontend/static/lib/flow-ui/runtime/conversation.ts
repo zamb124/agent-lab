@@ -6,7 +6,7 @@
  */
 
 import { isPlainRecord } from '../../events/payload.js';
-import { isSettledTaskState } from '../protocol/a2a-stream.js';
+import { isSettledTaskState } from '../../a2a/a2a-stream.js';
 import {
     CONVERSATION_SLOT_ID,
     OPERATOR_REPLY_ARTIFACT_NAME,
@@ -14,8 +14,8 @@ import {
     RESPONSE_ARTIFACT_NAME,
     UI_ARTIFACT_ID,
     USER_MESSAGE_ARTIFACT_NAME,
-} from '../protocol/constants.js';
-import { decodePart, filesFromParts, firstDataFromParts, textFromParts } from '../protocol/parts.js';
+} from '../../a2a/constants.js';
+import { decodePart, filesFromParts, firstDataFromParts, textFromParts } from '../../a2a/parts.js';
 import { flowUIText } from '../utils/text.js';
 import { taskInterrupt, type FlowUiTaskInterrupt } from './operator-handoff-from-task.js';
 

@@ -32,7 +32,7 @@ import {
     buildFlowPublishBody,
     getBranchNodes,
 } from '../../_helpers/flows-resolvers.js';
-import type { DocumentProblem } from '../interface-editor/interface-editor-domain.js';
+import type { DocumentProblem } from '../../_helpers/interface-editor-domain.js';
 import { openPlatformLaraAssistant } from '@platform/lib/flow-ui/shell/preferences.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 

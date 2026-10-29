@@ -17,7 +17,7 @@ export class FlowsBuiltinToolEditor extends PlatformElement {
         flowId: { type: String },
         branchId: { type: String },
         nodeConfig: { type: Object },
-        nodeType: { type: String },
+        flowNodeType: { type: String },
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
@@ -28,7 +28,7 @@ export class FlowsBuiltinToolEditor extends PlatformElement {
     declare flowId: string;
     declare branchId: string;
     declare nodeConfig: Record<string, any> | null;
-    declare nodeType: any;
+    declare flowNodeType: string;
     declare flowVariables: Record<string, any> | null;
     declare graphNodes: any[] | null;
     declare previewExecutionState: Record<string, any> | null;
@@ -107,7 +107,7 @@ export class FlowsBuiltinToolEditor extends PlatformElement {
         this.flowId = '';
         this.branchId = '';
         this.nodeConfig = null;
-        this.nodeType = 'builtin';
+        this.flowNodeType = 'builtin';
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;

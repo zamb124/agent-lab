@@ -27,7 +27,6 @@ import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
 import {
     CONTAINER_TYPES,
-    EDITOR_VIEWPORTS,
     type CatalogEntry,
     type DocumentProblem,
     type FlowUiDocument,
@@ -54,50 +53,14 @@ import {
     uniquePageId,
     withColumns,
     wrapInSection,
-} from './interface-editor-domain.js';
+} from '../../_helpers/interface-editor-domain.js';
 import { readDrafts, stableStringify, writeDraft } from './interface-editor-drafts.js';
 import { interfaceEditorStyles } from './flows-interface-editor.styles.js';
+import { HOST_EDITOR_EVENTS, editorFrameWidth, inlineTextControl, type InlineEdit } from '../../_helpers/interface-editor-helpers.js';
 import './flows-interface-pages-tabs.js';
 import './flows-interface-add-panel.js';
 import './flows-interface-properties-panel.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
-
-const HOST_EDITOR_EVENTS = ['editor-undo', 'editor-redo', 'editor-viewport', 'editor-preview', 'editor-templates', 'editor-assist'];
-
-interface EditorFrame {
-    top: number;
-    left: number;
-    width: number;
-    height: number;
-}
-
-interface InlineEdit {
-    blockId: string;
-    property: string;
-    value: unknown;
-    frame: EditorFrame;
-    multiline: boolean;
-}
-
-function editorFrameWidth(viewport: unknown): number {
-    switch (viewport) {
-        case 'desktop':
-            return EDITOR_VIEWPORTS.desktop;
-        case 'tablet':
-            return EDITOR_VIEWPORTS.tablet;
-        case 'mobile':
-            return EDITOR_VIEWPORTS.mobile;
-        default:
-            throw new Error(`flows-interface-editor: unknown viewport ${String(viewport)}`);
-    }
-}
-
-function inlineTextControl(root: ParentNode): HTMLInputElement | HTMLTextAreaElement | null {
-    const field = root.querySelector('.inline-edit');
-    if (field === null) return null;
-    if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) return field;
-    throw new Error('flows-interface-editor: inline edit control must be an input or textarea');
-}
 
 export class FlowsInterfaceEditor extends PlatformElement {
     private _onHostEditorEvent: (event: Event) => void;

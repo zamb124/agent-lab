@@ -8,7 +8,7 @@ import { collectFactories } from '@platform/lib/events/factories/register.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 
 import { interfaceEditorSlice } from '../../../../apps/flows/ui/events/resources/interface-editor.resource.js';
-import { EMPTY_DOCUMENT, HISTORY_LIMIT } from '../../../../apps/flows/ui/components/interface-editor/interface-editor-domain.js';
+import { EMPTY_DOCUMENT, HISTORY_LIMIT } from '../../../../apps/flows/ui/_helpers/interface-editor-domain.js';
 import { buildBus } from '../../helpers/bus-fixtures.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 

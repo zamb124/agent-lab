@@ -5,8 +5,8 @@
  */
 
 import { isPlainRecord } from '../../events/payload.js';
-import { isInterruptedTaskState } from '../protocol/a2a-stream.js';
-import { textFromParts } from '../protocol/parts.js';
+import { isInterruptedTaskState } from '../../a2a/a2a-stream.js';
+import { textFromParts } from '../../a2a/parts.js';
 
 const CONTINUING_KINDS: ReadonlySet<string> = new Set(['operator_task', 'oauth_required', 'handoff']);
 

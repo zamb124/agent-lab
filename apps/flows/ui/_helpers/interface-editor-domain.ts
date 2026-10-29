@@ -7,7 +7,7 @@
  *   ``<block_id>/<index>`` — колонка ``columns`` или вкладка ``tabs``.
  */
 
-import { INPUT_BLOCK_TYPES, STATE_PATH_PATTERN } from '@platform/lib/flow-ui/protocol/constants.js';
+import { INPUT_BLOCK_TYPES, STATE_PATH_PATTERN } from '@platform/lib/a2a/constants.js';
 import { templatePaths, unmatchedBraceMessage } from '@platform/lib/flow-ui/runtime/templating.js';
 
 export const HISTORY_LIMIT = 80;

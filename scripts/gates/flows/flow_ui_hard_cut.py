@@ -257,7 +257,7 @@ def _check_registry_parity(failures: list[str]) -> None:
 
 
 def _check_grammar_constants(failures: list[str]) -> None:
-    constants_path = FLOW_UI_LIB / "protocol/constants.ts"
+    constants_path = FLOW_UI_LIB.parent / "a2a" / "constants.ts"
     source = constants_path.read_text(encoding="utf-8")
     pattern = re.search(r"^export const STATE_PATH_PATTERN = /(.+)/;$", source, re.MULTILINE)
     if pattern is None or pattern.group(1) != STATE_PATH_PATTERN:

@@ -344,7 +344,7 @@ export function createPwaEffect({ baseUrl, suppressHostIntegrations }: { baseUrl
                     window.addEventListener('beforeinstallprompt', (e) => {
                         e.preventDefault();
                         if (!isBeforeInstallPrompt(e)) {
-                            throw new Error('pwa: beforeinstallprompt is missing prompt()');
+                            throw new Error('pwa: beforeinstallprompt event has no prompt method');
                         }
                         window.__platformDeferredInstallPrompt__ = e;
                         ctx.dispatch(CoreEvents.PWA_INSTALL_AVAILABLE, null, { source: 'system' });

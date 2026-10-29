@@ -384,7 +384,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'code', name: 'A', code: 'print(1)' };
         const el = await fixture(html`
             <flows-code-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'code'}>
+                .nodeConfig=${node} .flowNodeType=${'code'}>
             </flows-code-node-editor>
         `);
         await elementUpdated(el);
@@ -406,7 +406,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'code', name: 'A', code: 'print(1)' };
         const el = await fixture(html`
             <flows-code-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'code'}>
+                .nodeConfig=${node} .flowNodeType=${'code'}>
             </flows-code-node-editor>
         `);
         await elementUpdated(el);
@@ -443,7 +443,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'code', name: 'A', code: '' };
         const el = await fixture(html`
             <flows-code-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'code'}>
+                .nodeConfig=${node} .flowNodeType=${'code'}>
             </flows-code-node-editor>
         `);
         await elementUpdated(el);
@@ -720,7 +720,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'channel', name: 'A', channel: 'telegram', action: 'send_message', channel_config: {} };
         const el = await fixture(html`
             <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'channel'}>
+                .nodeConfig=${node} .flowNodeType=${'channel'}>
             </flows-channel-node-editor>
         `);
         await elementUpdated(el);
@@ -764,7 +764,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'channel'}>
+                .nodeConfig=${node} .flowNodeType=${'channel'}>
             </flows-channel-node-editor>
         `);
         await elementUpdated(el);
@@ -844,7 +844,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'channel'}
+                .nodeConfig=${node} .flowNodeType=${'channel'}
                 .flowVariables=${{ chat_id: { value: '1', type: 'string' } }}>
             </flows-channel-node-editor>
         `);
@@ -892,7 +892,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'channel'}>
+                .nodeConfig=${node} .flowNodeType=${'channel'}>
             </flows-channel-node-editor>
         `);
         await elementUpdated(el);
@@ -960,7 +960,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'hitl_node', name: 'A' };
         const el = await fixture(html`
             <flows-hitl-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'hitl_node'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'hitl_node'} .flowVariables=${{}}>
             </flows-hitl-node-editor>
         `);
         await elementUpdated(el);
@@ -996,7 +996,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'hitl_node', name: 'A' };
         const el = await fixture(html`
             <flows-hitl-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'hitl_node'} .flowVariables=${{}}>
+                .nodeConfig=${node} .flowNodeType=${'hitl_node'} .flowVariables=${{}}>
             </flows-hitl-node-editor>
         `);
         await elementUpdated(el);
@@ -1347,7 +1347,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'external_api', name: 'API', url: 'https://x', method: 'POST' };
         const el = await fixture(html`
             <flows-external-api-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'external_api'}>
+                .nodeConfig=${node} .flowNodeType=${'external_api'}>
             </flows-external-api-editor>
         `);
         await elementUpdated(el);
@@ -1382,7 +1382,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-external-api-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'external_api'}>
+                .nodeConfig=${node} .flowNodeType=${'external_api'}>
             </flows-external-api-editor>
         `);
         await elementUpdated(el);
@@ -1412,7 +1412,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-external-api-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'external_api'}>
+                .nodeConfig=${node} .flowNodeType=${'external_api'}>
             </flows-external-api-editor>
         `);
         await elementUpdated(el);
@@ -1454,7 +1454,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'mcp', name: 'M' };
         const el = await fixture(html`
             <flows-mcp-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'mcp'}>
+                .nodeConfig=${node} .flowNodeType=${'mcp'}>
             </flows-mcp-node-editor>
         `);
         await elementUpdated(el);
@@ -1482,7 +1482,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-mcp-node-editor .nodeId=${'mcp:browser:browser_create_session'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'mcp'}>
+                .nodeConfig=${node} .flowNodeType=${'mcp'}>
             </flows-mcp-node-editor>
         `);
         await elementUpdated(el);
@@ -1496,7 +1496,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'flow', name: 'F', flow_id: 'subflow_x', branch_id: 'default' };
         const el = await fixture(html`
             <flows-flow-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'flow'}>
+                .nodeConfig=${node} .flowNodeType=${'flow'}>
             </flows-flow-node-editor>
         `);
         await elementUpdated(el);
@@ -1517,7 +1517,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         };
         const el = await fixture(html`
             <flows-flow-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'flow'}>
+                .nodeConfig=${node} .flowNodeType=${'flow'}>
             </flows-flow-node-editor>
         `);
         await elementUpdated(el);
@@ -1542,7 +1542,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'remote_flow', name: 'R', url: 'https://api/x' };
         const el = await fixture(html`
             <flows-remote-flow-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'remote_flow'}>
+                .nodeConfig=${node} .flowNodeType=${'remote_flow'}>
             </flows-remote-flow-editor>
         `);
         await elementUpdated(el);
@@ -1571,7 +1571,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         const node = { node_id: 'a', type: 'remote_flow', name: 'R', url: 'https://api/x' };
         const el = await fixture(html`
             <flows-remote-flow-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'remote_flow'}>
+                .nodeConfig=${node} .flowNodeType=${'remote_flow'}>
             </flows-remote-flow-editor>
         `);
         await elementUpdated(el);

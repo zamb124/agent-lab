@@ -43,8 +43,8 @@ import {
     buildCancelTaskBody,
     buildSendMessageBody,
     buildUserMessage,
-} from '../flow-ui/protocol/a2a-codec.js';
-import { consumeA2AStream, unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-stream.js';
+} from '../a2a/a2a-codec.js';
+import { consumeA2AStream, unwrapA2aStreamResult } from '../a2a/a2a-stream.js';
 import { devtoolsLog, isPlatformDevtoolsEnabled } from '../events/devtools.js';
 import { isPlainRecord } from '../events/payload.js';
 

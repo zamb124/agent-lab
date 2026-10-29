@@ -5,7 +5,7 @@
  * сервер не дублирует этот текст артефактом `response`.
  */
 
-import { isInterruptedTaskState, isSettledTaskState, unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-stream.js';
+import { isInterruptedTaskState, isSettledTaskState, unwrapA2aStreamResult } from '../a2a/a2a-stream.js';
 import { isPlainRecord } from '../events/payload.js';
 import { extractSpeakableText } from './speakable.js';
 import type { VoiceMediaSession } from './voice-media-session.js';

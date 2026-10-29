@@ -15,27 +15,20 @@
  */
 
 import { isPlainRecord, recordField } from '../../events/payload.js';
-
-function presentText(value: unknown): string {
-    if (value === undefined || value === null) return '';
-    return String(value);
-}
 import { LitElement, html, nothing, type PropertyValues } from '../../lit-shim.js';
 import { buildFlowSessionFileCreateSpecJson } from '../../utils/file-create-spec.js';
 import { resolvePlatformFileRefs } from '../../utils/platform-file-upload.js';
 import { stopStreamTtsPlayback } from '../../voice/stream-tts-registry.js';
 import type { VoiceAgentBridge } from '../../voice/voice-agent-bridge.js';
 import type { VoiceMediaSession } from '../../voice/voice-media-session.js';
-import type { A2aFileSource } from '../protocol/a2a-codec.js';
-import { normalizeFlowUIBranchId } from '../protocol/a2a-codec.js';
-import { flowUIIsAbortError } from '../protocol/a2a-stream.js';
+import { normalizeFlowUIBranchId } from '../../a2a/a2a-codec.js';
+import { flowUIIsAbortError } from '../../a2a/a2a-stream.js';
 import { resolveAgentIdentityImageSrc } from '../runtime/agent-identity-image.js';
 import { sessionFiles } from '../runtime/conversation.js';
 import type { FlowUiSendInput } from '../runtime/flow-ui-client.js';
 import { FlowUIClient } from '../runtime/flow-ui-client.js';
 import type { FlowUiBlock, FlowUiDocument, FlowUiHostLike, FlowUiPage, FlowUiRecord, FlowUiRenderContext } from '../runtime/flow-ui-store.js';
 import { FlowUIStore } from '../runtime/flow-ui-store.js';
-import type { HitlConversation } from '../runtime/hitl-transport.js';
 import { FlowUIHitlTransport, operatorTurnFromAction } from '../runtime/hitl-transport.js';
 import { operatorHandoffFromTasks } from '../runtime/operator-handoff-from-task.js';
 import { resolvedText } from '../runtime/templating.js';
@@ -45,6 +38,15 @@ import { resolveFlowUITheme } from '../shell/resolve-theme.js';
 import { flowUIText, hitlComposerSendLabel, resolveFlowUILocale } from '../utils/text.js';
 import { flowUIVoiceSessionReady, stopFlowUIVoiceSession, toggleFlowUIVoiceSession } from '../voice/coordinator.js';
 import { platformFlowUIStyles } from './platform-flow-ui.styles.js';
+import {
+    EDITING_CAPABILITIES,
+    fileSources,
+    flowRecord,
+    formControlValue,
+    presentText,
+    requireHitlConversation,
+} from './platform-flow-ui-helpers.js';
+import type { FlowUiInteractionPolicy, FlowUiStatus, HitlMode } from './platform-flow-ui-helpers.js';
 import { pageFillsViewport } from './flow-ui-page.js';
 import './flow-ui-page.js';
 import './flow-ui-conversation.js';
@@ -57,53 +59,7 @@ import './flow-ui-drawer-controls.js';
 import './flow-ui-run-trace.js';
 import '../../components/platform-work-item-badge.js';
 
-const EDITING_CAPABILITIES = Object.freeze({ cancel: false, files: false, voice: false });
-
-type FlowUiStatus = 'idle' | 'loading' | 'ready' | 'error';
-type HitlMode = 'takeover' | 'single_reply';
-
-/** Политика взаимодействия профиля ``operator_handoff`` (настройки embed от бэкенда). */
-function flowRecord(value: unknown): FlowUiRecord | undefined {
-    if (value === undefined || value === null) {
-        return undefined;
-    }
-    if (!isPlainRecord(value)) {
-        throw new Error('platform-flow-ui: object required');
-    }
-    return value;
-}
-
-function requireHitlConversation(policy: FlowUiInteractionPolicy | null): HitlConversation {
-    const conversation = policy === null ? undefined : policy.conversation;
-    if (conversation === undefined) {
-        throw new Error('platform-flow-ui: interactionPolicy.conversation required');
-    }
-    return conversation;
-}
-
-function fileSources(refs: readonly Record<string, unknown>[]): A2aFileSource[] {
-    return refs.map((ref) => {
-        const source: A2aFileSource = {};
-        if ('url' in ref) source.url = ref.url;
-        if ('content_type' in ref) source.content_type = ref.content_type;
-        if ('original_name' in ref) source.original_name = ref.original_name;
-        return source;
-    });
-}
-
-function formControlValue(event: Event): string {
-    const target = event.target;
-    if (!(target instanceof HTMLTextAreaElement) && !(target instanceof HTMLInputElement)) {
-        throw new Error('platform-flow-ui: form control required');
-    }
-    return target.value;
-}
-
-export interface FlowUiInteractionPolicy {
-    mode?: string;
-    conversation?: HitlConversation;
-    can_send?: boolean;
-}
+export type { FlowUiInteractionPolicy } from './platform-flow-ui-helpers.js';
 
 export class PlatformFlowUI extends LitElement {
     declare flowId: string;

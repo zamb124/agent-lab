@@ -284,6 +284,10 @@ def parse_namespace_from_args(rest: str) -> str | None:
     if m:
         const = m.group(1)
         return I18N_NS_MAP.get(const)
+    # rest обрезан по первой ')' внутри вложенного вызова (CALL_RE наивный) —
+    # хвост не является последним аргументом t(); резолв ns невозможен.
+    if rest.count("(") != rest.count(")"):
+        return "__dynamic__"
     m = re.search(r",\s*['\"]([a-z][a-z0-9_]*)['\"]\s*\)?\s*$", rest)
     if m:
         return m.group(1)

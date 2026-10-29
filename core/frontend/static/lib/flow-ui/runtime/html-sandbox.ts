@@ -10,7 +10,7 @@
  */
 
 import { isPlainRecord } from '../../events/payload.js';
-import { STATE_PATH_PATTERN } from '../protocol/constants.js';
+import { STATE_PATH_PATTERN } from '../../a2a/constants.js';
 import { valueAtPath } from './templating.js';
 
 export const FLOW_UI_HTML_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; font-src data: https:; media-src https:";

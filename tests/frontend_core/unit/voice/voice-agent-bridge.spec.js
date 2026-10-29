@@ -3,7 +3,7 @@
  *
  * Проверяется:
  *  - на финальный `transcript{final:true}` от VoiceMediaSession bridge
- *    отправляет `SendStreamingMessage` в A2A через consumeA2AStream (flow-ui/protocol/a2a-stream.js);
+ *    отправляет `SendStreamingMessage` в A2A через consumeA2AStream (a2a/a2a-stream.js);
  *  - speakable `TaskArtifactUpdateEvent` → `feedStreamTtsFromA2aResult` + registry → `mediaSession.speak`;
  *  - финальный `statusUpdate`: текст в `status.message` при `TASK_STATE_INPUT_REQUIRED` / `metadata.platform_interrupt`
  *    → `speak` (interrupt ask_user и т.п.), затем `endUtterance`; иначе только `endUtterance`;
@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const streamMock = vi.fn();
 
-vi.mock('@platform/lib/flow-ui/protocol/a2a-stream.js', async (importOriginal) => {
+vi.mock('@platform/lib/a2a/a2a-stream.js', async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...actual,

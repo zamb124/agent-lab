@@ -17,7 +17,7 @@ import {
     catalogEntry,
     defaultBlock,
     frozenStateFields,
-} from '../../../../apps/flows/ui/components/interface-editor/interface-editor-domain.js';
+} from '../../../../apps/flows/ui/_helpers/interface-editor-domain.js';
 import '../../../../apps/flows/ui/components/interface-editor/flows-interface-properties-panel.js';
 
 const catalog = blockCatalog(schema);

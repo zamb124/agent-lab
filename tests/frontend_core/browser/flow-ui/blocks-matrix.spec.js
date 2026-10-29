@@ -9,7 +9,7 @@ import { installFetchMock } from '../helpers/fake-fetch.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import { blockElement, pageRenderRoot } from '@platform/lib/flow-ui/editor/selection.js';
 import { FLOW_UI_BLOCK_RENDERERS } from '@platform/lib/flow-ui/blocks/registry.js';
-import { CONTAINER_TYPES, blockCatalog, catalogEntry, defaultBlock, uniqueBlockId } from '../../../../apps/flows/ui/components/interface-editor/interface-editor-domain.js';
+import { CONTAINER_TYPES, blockCatalog, catalogEntry, defaultBlock, uniqueBlockId } from '../../../../apps/flows/ui/_helpers/interface-editor-domain.js';
 import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
 import schema from '../../../fixtures/flow_ui/schema.json' with { type: 'json' };
 

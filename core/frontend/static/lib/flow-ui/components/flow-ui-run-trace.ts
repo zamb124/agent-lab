@@ -8,7 +8,7 @@ import { LitElement, css, html, nothing } from '../../lit-shim.js';
 import { isPlainRecord } from '../../events/payload.js';
 import type { FlowUiTask } from '../runtime/conversation.js';
 import type { FlowUiRecord } from '../runtime/flow-ui-store.js';
-import { firstDataFromParts, textFromParts } from '../protocol/parts.js';
+import { firstDataFromParts, textFromParts } from '../../a2a/parts.js';
 import { flowUIGlyph } from '../utils/glyph.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
 

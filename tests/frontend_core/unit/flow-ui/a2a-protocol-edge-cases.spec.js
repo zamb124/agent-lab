@@ -6,14 +6,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { propertyKind, replacePageBlocks } from '../../../../apps/flows/ui/components/interface-editor/interface-editor-domain.js';
-import { buildA2aFileParts, createProtocolId, randomUuid } from '@platform/lib/flow-ui/protocol/a2a-codec.js';
+import { propertyKind, replacePageBlocks } from '../../../../apps/flows/ui/_helpers/interface-editor-domain.js';
+import { buildA2aFileParts, createProtocolId, randomUuid } from '@platform/lib/a2a/a2a-codec.js';
 import {
     applyA2AFrame,
     createA2ATaskAccumulator,
     serializableTask,
     taskBoundary,
-} from '@platform/lib/flow-ui/protocol/a2a-task-accumulator.js';
+} from '@platform/lib/a2a/a2a-task-accumulator.js';
 
 function statusUpdate(taskId, state, extra = {}) {
     return { result: { statusUpdate: { taskId, contextId: 'c1', status: { state }, ...extra } } };

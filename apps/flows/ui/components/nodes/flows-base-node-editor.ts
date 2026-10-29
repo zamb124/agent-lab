@@ -56,11 +56,11 @@ function llmOverrideRecord(value: unknown): Record<string, unknown> {
     return isPlainObject(value) ? { ...value } : {};
 }
 
-interface HelpHintElement extends HTMLElement {
+type HelpHintElement = HTMLElement & {
     size: string;
     label: string;
     text: string;
-}
+};
 
 function isHelpHintElement(value: HTMLElement): value is HelpHintElement {
     return 'size' in value && 'label' in value && 'text' in value;

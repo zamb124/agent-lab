@@ -6,7 +6,7 @@
 
 import { buildWorkItemFileCreateSpecJson } from '../../utils/file-create-spec.js';
 import { isPlatformFileRef, uploadPlatformFile } from '../../utils/platform-file-upload.js';
-import { randomUuid } from '../protocol/a2a-codec.js';
+import { randomUuid } from '../../a2a/a2a-codec.js';
 import { flowUIText } from '../utils/text.js';
 import type { FlowUiBlock, FlowUiRecord } from './flow-ui-store.js';
 import { templatePaths } from './templating.js';

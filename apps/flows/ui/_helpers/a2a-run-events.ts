@@ -10,8 +10,8 @@ import {
     resolveA2aContextId,
     resolveA2aTaskId,
     unwrapA2aStreamResult,
-} from '@platform/lib/flow-ui/protocol/a2a-stream.js';
-import { decodePart, textFromParts } from '@platform/lib/flow-ui/protocol/parts.js';
+} from '@platform/lib/a2a/a2a-stream.js';
+import { decodePart, textFromParts } from '@platform/lib/a2a/parts.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function finiteInt(value: unknown) {

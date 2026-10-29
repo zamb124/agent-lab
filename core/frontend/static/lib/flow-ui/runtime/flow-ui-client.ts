@@ -17,7 +17,7 @@ import {
     flowUIShareCollectionUrl,
     interfaceUrl,
     normalizeFlowUIBranchId,
-} from '../protocol/a2a-codec.js';
+} from '../../a2a/a2a-codec.js';
 import {
     consumeA2AStream,
     flowUIIsAbortError,
@@ -25,10 +25,10 @@ import {
     isTerminalTaskState,
     sendA2ARequest,
     type A2aError,
-} from '../protocol/a2a-stream.js';
-import { STATE_ARTIFACT_ID } from '../protocol/constants.js';
-import type { A2aFileSource, A2aUiActionInput } from '../protocol/a2a-codec.js';
-import type { A2aAccumulatedTask } from '../protocol/a2a-task-accumulator.js';
+} from '../../a2a/a2a-stream.js';
+import { STATE_ARTIFACT_ID } from '../../a2a/constants.js';
+import type { A2aFileSource, A2aUiActionInput } from '../../a2a/a2a-codec.js';
+import type { A2aAccumulatedTask } from '../../a2a/a2a-task-accumulator.js';
 import type { ApplyFrameResult, FlowUiDocument, FlowUiRecord } from './flow-ui-store.js';
 import { FlowUIStore } from './flow-ui-store.js';
 import { taskInterrupt } from './operator-handoff-from-task.js';

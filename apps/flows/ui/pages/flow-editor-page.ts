@@ -48,7 +48,7 @@ import '../components/editor/flows-agent-focus-studio.js';
 import { FlowsInterfaceEditor } from '../components/interface-editor/flows-interface-editor.js';
 import '../components/interface-editor/flows-interface-toolbar.js';
 import { clearStoredInterfaceDraft, stableStringify } from '../components/interface-editor/interface-editor-drafts.js';
-import { hasBlockingProblems } from '../components/interface-editor/interface-editor-domain.js';
+import { hasBlockingProblems } from '../_helpers/interface-editor-domain.js';
 import type { InterfaceEditorUiSlice } from '../events/editor.types.js';
 import '../modals/flows-interface-template-modal.js';
 import '../modals/flows-interface-html-editor-modal.js';

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { INPUT_BLOCK_TYPES } from '../../../../core/frontend/static/lib/flow-ui/protocol/constants.js';
+import { INPUT_BLOCK_TYPES } from '../../../../core/frontend/static/lib/a2a/constants.js';
 import {
     CONTAINER_TYPES,
     EMPTY_DOCUMENT,
@@ -38,7 +38,7 @@ import {
     walkPage,
     withColumns,
     wrapInSection,
-} from '../../../../apps/flows/ui/components/interface-editor/interface-editor-domain.js';
+} from '../../../../apps/flows/ui/_helpers/interface-editor-domain.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../../../fixtures/flow_ui');
 const schema = JSON.parse(readFileSync(join(FIXTURES, 'schema.json'), 'utf8'));
