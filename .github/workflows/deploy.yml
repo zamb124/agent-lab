@@ -332,6 +332,8 @@ jobs:
           REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
           REGRU_PASSWORD: ${{ secrets.REGRU_PASSWORD }}
           PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
+          # На первом деплое deploy/frontend ещё нет — Job fallback берёт образ этого же тега.
+          BRAND_DNS_IMAGE: ${{ env.IMAGE }}:${{ steps.tag.outputs.image_tag }}
         run: |
           set -euo pipefail
           if [ -z "${REGRU_USERNAME:-}" ] || [ -z "${REGRU_PASSWORD:-}" ]; then
