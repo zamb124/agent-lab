@@ -116,7 +116,9 @@ core = [
 ]
 
 agents = [
-    "pymupdf>=2.0",
+    # <2.0: у 2.0 нет cp314t-wheels, под free-threaded Python собирается
+    # только из sdist и падает на py_limited_api+Py_GIL_DISABLED.
+    "pymupdf>=1.28.2,<2.0",
     "simpleeval>=1.0.8",
     "openai>=3.40.0",
     "Pillow>=13.0.0",
