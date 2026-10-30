@@ -1,6 +1,14 @@
 .PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-ui-kit test-ui-kit-playwright test-ui-kit-doc ui ui-doc test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness test-observability
 
-WORKERS ?= 10
+# Дефолт — по ресурсам машины: scripts.testing.stack.default_pytest_workers
+# (min(10, cpu//2, ram_gb//4), минимум 2). Явный WORKERS=N / env переопределяет;
+# WORKERS=auto резолвится в то же число, что и в stack.resolve_pytest_workers.
+_WORKERS_RESOURCE_DEFAULT = $(shell uv run python -c "from scripts.testing.stack import default_pytest_workers; print(default_pytest_workers())")
+ifeq ($(WORKERS),auto)
+override WORKERS := $(_WORKERS_RESOURCE_DEFAULT)
+else
+WORKERS ?= $(_WORKERS_RESOURCE_DEFAULT)
+endif
 DB_PROFILE ?= 1
 PYTEST_WORKERS_PROFILE ?= 1
 TEST_COVERAGE ?= 1
@@ -17,7 +25,7 @@ BASEDPYRIGHT_CHECK_ARGS ?= --level warning --warnings $(PYTHON_CHECK_PATHS)
 _PYTEST_IGNORE_UI := --ignore=tests/ui
 
 # Все тесты параллельны: xdist_group/сериализация запрещены (testing.mdc § Параллельный прогон).
-_PYTEST_XDIST := -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
+_PYTEST_XDIST = -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
 
 # Coverage (default-on): TEST_COVERAGE=0 make test
 COV_RUN_ID := $(if $(filter 1,$(TEST_COVERAGE)),$(shell date +%Y%m%dT%H%M%S),)

@@ -177,10 +177,28 @@ def _bootstrap_parent_test_env() -> None:
     core.config.base._settings_instance = None
 
 
+def default_pytest_workers() -> int:
+    """xdist-воркеров по ресурсам машины: min(BASELINE, cpu//2, ram_gb//4), минимум 2.
+
+    cpu//2 — половина ядер остаётся стеку granian/TaskIQ/Docker; ram_gb//4 — пик RSS
+    воркера ~1GB (импорт платформы), иначе swap. Больше BASELINE машина тоже не получает:
+    таймаут-политика набрана под -n10.
+    """
+    cpu = os.process_cpu_count() or os.cpu_count() or 4
+    bounds = [cpu // 2]
+    try:
+        ram_gb = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / (1 << 30)
+    except (ValueError, OSError, AttributeError):
+        ram_gb = 0
+    if ram_gb > 0:
+        bounds.append(int(ram_gb) // 4)
+    return max(2, min(BASELINE_PYTEST_WORKERS, *bounds))
+
+
 def resolve_pytest_workers() -> int:
-    raw = os.environ.get("WORKERS", "10").strip()
-    if raw == "auto":
-        return BASELINE_PYTEST_WORKERS
+    raw = os.environ.get("WORKERS", "").strip()
+    if raw == "" or raw == "auto":
+        return default_pytest_workers()
     return int(raw)
 
 
