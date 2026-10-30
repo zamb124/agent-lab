@@ -182,10 +182,11 @@ EOF
 
   local job_pod
   job_pod="$($K get pods -n "$PLATFORM_NS" -l "job-name=${JOB_NAME}" -o jsonpath='{.items[0].metadata.name}')"
+  # Pull app-образа на чистой ноде — гигабайты; 180s не хватает на медленном egress.
   if ! wait_for \
     "Pod ${job_pod} Running|Succeeded" \
     "phase=\$($K get pod ${job_pod} -n ${PLATFORM_NS} -o jsonpath='{.status.phase}' 2>/dev/null); [ \"\$phase\" = 'Running' ] || [ \"\$phase\" = 'Succeeded' ]" \
-    180 5; then
+    "${BRAND_DNS_POD_TIMEOUT:-600}" 5; then
     log_error "Pod ${job_pod} не стартовал (phase=$($K get pod "$job_pod" -n "$PLATFORM_NS" -o jsonpath='{.status.phase}' 2>/dev/null || echo unknown))"
     $K describe pod "$job_pod" -n "$PLATFORM_NS" || true
     exit 1
