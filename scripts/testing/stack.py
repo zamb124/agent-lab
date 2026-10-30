@@ -938,10 +938,33 @@ def _require_listen_backlog() -> None:
         )
 
 
+def _seed_shared_stack_services(*args: str, timeout: float = 600) -> bool:
+    """Шаг ``service_seed``: до спауна — сид общих данных, после — reconcile."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "scripts.testing.service_seed", *args],
+            env=_build_process_env({}),
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        print("test_stack: service_seed TIMEOUT", file=sys.stderr)
+        return False
+    if result.returncode != 0:
+        print(f"test_stack: service_seed FAILED rc={result.returncode}", file=sys.stderr)
+        return False
+    return True
+
+
 def cmd_up() -> int:
     _require_listen_backlog()
     _bootstrap_parent_test_env()
     cmd_down(quiet=True)
+
+    # Reseed системной компании один раз до спауна: иначе каждый granian-воркер
+    # crm делает полный reseed под pg_advisory_lock (~50s сериализовано на процесс).
+    print("test_stack: reseed системной компании crm до спауна процессов...")
+    if not _seed_shared_stack_services():
+        return 1
 
     pytest_workers = resolve_pytest_workers()
     granian_services = build_granian_services(pytest_workers)
@@ -1014,6 +1037,13 @@ def cmd_up() -> int:
             print("test_stack: readiness FAILED, останавливаю стек:", file=sys.stderr)
             for error_text in errors:
                 print(f"\n--- {error_text}", file=sys.stderr)
+            _terminate_started()
+            return 1
+
+        # Сид каталога flows и reconcile stale-задач CRM — после readiness:
+        # обе части ходят по HTTP в secrets/realtime/MCP-peers стека.
+        print("test_stack: сид каталога flows + reconcile stale-задач после readiness...")
+        if not _seed_shared_stack_services("after", timeout=600):
             _terminate_started()
             return 1
 

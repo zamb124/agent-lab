@@ -30,8 +30,8 @@ from core.rag_indexing_schema import IndexProfileConfig, IndexProfileSplitConfig
 
 _ENCODING_NAME = "cl100k_base"
 # tiktoken-инстанс, а не имя: строковый id в chonkie сначала идёт в
-# HFTokenizer.from_pretrained → hf_hub_download (сеть), и только потом fallback
-# на tiktoken. Под мёртвым прокси это вечный backoff вместо мгновенного пути.
+# HFTokenizer.from_pretrained → hf_hub_download (сеть), и лишь затем tiktoken.
+# Под мёртвым прокси это вечный backoff вместо мгновенного пути.
 _TIKTOKEN = tiktoken.get_encoding(_ENCODING_NAME)
 
 

@@ -105,15 +105,100 @@ _FLOWS_DEV_CORS_ORIGIN_REGEX = (
 )
 
 
-async def boot_flows(
-    settings: FlowSettings,
-    files_service: FilesService,
-    redis_client: RedisClient,
+async def seed_testing_bundle(
     shared_storage: SharedStorage,
+    files_service: FilesService,
     flow_access_service: FlowAccessService,
     variables_service: VariablesService,
     authz_service: AuthzService,
     work_item_service: WorkItemService,
+) -> None:
+    """Сид каталога flows для тест-контура: маркер до лока, повторная проверка внутри.
+
+    Запускается из ``boot_flows`` (self-healing) и из ``scripts.testing.service_seed``
+    в ``stack up`` — там он один раз готовит данные до спауна N granian-воркеров,
+    иначе каждый воркер встаёт в очередь на ``pg_advisory_lock``.
+    """
+    system_context = Context(
+        user=User(user_id="system", name="System", groups=["admin"]),
+        host="system",
+        session_id="system-startup",
+        channel="system",
+        language=Language.RU,
+        active_company=Company(
+            company_id="system",
+            name="System",
+            subdomain="system",
+        ),
+        user_companies=[],
+        trace_id="system:startup",
+    )
+    startup_context = set_context(system_context)
+    try:
+        seed_marker = await shared_storage.get("flows:testing_bundle_seed")
+        if seed_marker == "done":
+            logger.info("flows.startup.seed_already_done")
+            return
+        async with flows_bundle_seed_lock():
+            # Пока ждали лок, сид мог завершить другой процесс — повторная проверка.
+            seed_marker = await shared_storage.get("flows:testing_bundle_seed")
+            if seed_marker == "done":
+                logger.info("flows.startup.seed_already_done")
+                return
+            loaded_tools = await load_tools_to_db(
+                flow_access_service=flow_access_service,
+            )
+            logger.info("flows.startup.tools_loaded", tools=loaded_tools)
+            logger.info("flows.bundles.testing.true")
+            loaded_flow_ids = await load_flows_to_db(
+                flow_access_service,
+                files_service=files_service,
+            )
+            logger.info("flows.startup.flows_loaded", flow_ids=loaded_flow_ids)
+            try:
+                _ = await ensure_default_mcp_servers_for_company()
+                synced = await sync_auto_mcp_servers_for_company(
+                    variables_service=variables_service,
+                    flow_access_service=flow_access_service,
+                )
+                logger.info(
+                    "flows.mcp.system.servers.tools",
+                    servers=synced["servers"],
+                    tools=synced["tools"],
+                )
+            except Exception as mcp_err:
+                logger.warning("flows.mcp", mcp_err=mcp_err, exc_info=True)
+            seeded_variables = await seed_demo_company_variables(
+                variables_service,
+                "system",
+            )
+            logger.info("flows.system.count", count=seeded_variables)
+            seeded_skills = await seed_platform_assistant_skills(
+                files_service,
+                "system",
+            )
+            logger.info("flows.platform_assistant", count=seeded_skills)
+            stored_company = await Company.get("system")
+            member_user_ids = (
+                await hitl_demo_operator_user_ids(authz_service, "system")
+                if stored_company is not None
+                else []
+            )
+            await ensure_example_hitl_queue(
+                work_item_service,
+                "system",
+                member_user_ids=member_user_ids,
+            )
+            _ = await shared_storage.set("flows:testing_bundle_seed", '"done"')
+    finally:
+        reset_context(startup_context)
+
+
+async def boot_flows(
+    settings: FlowSettings,
+    files_service: FilesService,
+    redis_client: RedisClient,
+    flow_access_service: FlowAccessService,
     flow_factory: FlowFactory,
 ) -> AsyncIterator[None]:
     """Логика при старте сервиса flows."""
@@ -191,82 +276,10 @@ async def boot_flows(
 
     # Production/dev system bootstrap: idle_worker → POST /internal/company/init → flows_worker.
     # Тяжёлый company/MCP init в HTTP-процессе flows запрещён (healthcheck + ownership).
-    if is_testing():
-        system_context = Context(
-            user=User(user_id="system", name="System", groups=["admin"]),
-            host="system",
-            session_id="system-startup",
-            channel="system",
-            language=Language.RU,
-            active_company=Company(
-                company_id="system",
-                name="System",
-                subdomain="system",
-            ),
-            user_companies=[],
-            trace_id="system:startup",
-        )
-        startup_context = set_context(system_context)
-        try:
-            seed_marker = await shared_storage.get("flows:testing_bundle_seed")
-            if seed_marker == "done":
-                logger.info("flows.startup.seed_already_done")
-            else:
-                async with flows_bundle_seed_lock():
-                    # Пока ждали лок, сид мог завершить другой процесс — повторная проверка.
-                    seed_marker = await shared_storage.get("flows:testing_bundle_seed")
-                    if seed_marker == "done":
-                        logger.info("flows.startup.seed_already_done")
-                    else:
-                        loaded_tools = await load_tools_to_db(
-                            flow_access_service=flow_access_service,
-                        )
-                        logger.info("flows.startup.tools_loaded", tools=loaded_tools)
-                        logger.info("flows.bundles.testing.true")
-                        loaded_flow_ids = await load_flows_to_db(
-                            flow_access_service,
-                            files_service=files_service,
-                        )
-                        logger.info("flows.startup.flows_loaded", flow_ids=loaded_flow_ids)
-                        try:
-                            _ = await ensure_default_mcp_servers_for_company()
-                            synced = await sync_auto_mcp_servers_for_company(
-                                variables_service=variables_service,
-                                flow_access_service=flow_access_service,
-                            )
-                            logger.info(
-                                "flows.mcp.system.servers.tools",
-                                servers=synced["servers"],
-                                tools=synced["tools"],
-                            )
-                        except Exception as mcp_err:
-                            logger.warning("flows.mcp", mcp_err=mcp_err, exc_info=True)
-                        seeded_variables = await seed_demo_company_variables(
-                            variables_service,
-                            "system",
-                        )
-                        logger.info("flows.system.count", count=seeded_variables)
-                        seeded_skills = await seed_platform_assistant_skills(
-                            files_service,
-                            "system",
-                        )
-                        logger.info("flows.platform_assistant", count=seeded_skills)
-                        stored_company = await Company.get("system")
-                        member_user_ids = (
-                            await hitl_demo_operator_user_ids(authz_service, "system")
-                            if stored_company is not None
-                            else []
-                        )
-                        await ensure_example_hitl_queue(
-                            work_item_service,
-                            "system",
-                            member_user_ids=member_user_ids,
-                        )
-                        _ = await shared_storage.set("flows:testing_bundle_seed", '"done"')
-        except Exception as e:
-            logger.error("flows.startup.system_migrate_failed", error=str(e), exc_info=True)
-        finally:
-            reset_context(startup_context)
+    # Каталог и системные данные в тест-контуре сеет один процесс —
+    # scripts.testing.service_seed в stack up (peers secrets/realtime должны быть
+    # живы: на спаде старта сид не завершается и каждый из N воркеров встаёт на
+    # pg_advisory_lock). Воркеры сами не сеют и не ждут.
 
     if is_testing():
         logger.info("flows.llm.testing")

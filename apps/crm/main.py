@@ -6,7 +6,6 @@ NetWorkle Service - FastAPI приложение для управления Net
 """
 
 import importlib
-import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -21,7 +20,7 @@ from apps.crm.services.task_service import TaskService
 from core.app import create_service_app
 from core.app.spa import mount_service_spa
 from core.config import get_settings
-from core.config.testing import is_testing
+from core.config.testing import in_xdist_worker, is_testing
 from core.context import reset_context, set_context
 from core.di import recipe
 from core.integrations.models import IntegrationCredential
@@ -48,15 +47,16 @@ async def crm_http_startup(
             channel="lifespan",
         )
     )
-    # In-process lifespan xdist-воркера — клиентский вид приложения, а не
-    # сервис: reseed и reconcile — обязанность granian-процесса из test-up.
-    # Иначе каждый gw ждёт полный reseed под pg_advisory_lock (~50s сериализовано
-    # на воркера → hang_guard) и reconcile закрывает active-задачи соседей.
-    is_stack_client = is_testing() and os.environ.get("PYTEST_XDIST_WORKER") is not None
+    # В тест-контуре reseed+reconcile делает test-up один раз
+    # (scripts.testing.service_seed до спауна стека): каждый granian-воркер
+    # и in-process lifespan идут insert-only fast-path по CompanyMapping без
+    # очереди на pg_advisory_lock (~50s сериализовано на процесс → hang_guard)
+    # и без перетирания active-задач соседних процессов.
+    test_mode = is_testing() or in_xdist_worker()
     try:
         init_result = await company_init_service.initialize_company(
             "system",
-            reseed=not is_stack_client,
+            reseed=not test_mode,
         )
         logger.info("crm.entities.system", result=init_result)
     finally:
@@ -80,7 +80,7 @@ async def crm_http_startup(
 
     set_oauth_credential_saved_hook(_on_oauth_credential_saved)
 
-    if not is_stack_client:
+    if not test_mode:
         reconciled = await task_service.reconcile_stale_worker_tasks()
         if reconciled:
             logger.warning(
@@ -88,6 +88,34 @@ async def crm_http_startup(
                 service="crm",
                 reconciled=reconciled,
             )
+
+
+async def crm_test_stack_seed(company_init_service: CompanyInitService) -> None:
+    """Reseed системной компании в ``test-up``: один процесс до спауна стека
+    вместо полного reseed под ``pg_advisory_lock`` в каждом granian-воркере."""
+    seed_context = set_context(
+        Context(
+            user=User(user_id="system", name="System"),
+            active_company=Company(company_id="system", name="System"),
+            channel="lifespan",
+        )
+    )
+    try:
+        init_result = await company_init_service.initialize_company("system", reseed=True)
+        logger.info("crm.entities.system", result=init_result)
+    finally:
+        reset_context(seed_context)
+
+
+async def crm_test_stack_reconcile(task_service: TaskService) -> None:
+    """Reconcile stale-задач после readiness стека: broadcast идёт в realtime."""
+    reconciled = await task_service.reconcile_stale_worker_tasks()
+    if reconciled:
+        logger.warning(
+            "crm.reconcile_stale_crm_tasks_on_api_startup",
+            service="crm",
+            reconciled=reconciled,
+        )
 
 
 def create_app() -> FastAPI:
