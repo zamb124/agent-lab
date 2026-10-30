@@ -652,6 +652,25 @@ def _probe_code_runner_python_execute() -> str | None:
     return None
 
 
+def _warm_sandbox_caches() -> list[str]:
+    """Прогрев sandbox-кэшей code-runner'ов до pytest: npm/pip install под flock
+    здесь идёт один раз серийно — в параллельных тестах только fast-path,
+    иначе первый попавшийся тест держит лок минуты, а остальные висят в setup."""
+    from apps.code_runner_node.services.executor import ensure_node_sandbox_modules
+    from apps.code_runner_python.services.executor import ensure_python_sandbox_site
+
+    errors: list[str] = []
+    for name, ensure in (
+        ("python_sandbox_site", ensure_python_sandbox_site),
+        ("node_sandbox_modules", ensure_node_sandbox_modules),
+    ):
+        try:
+            ensure()
+        except Exception as exc:  # noqa: BLE001 — сбор ошибок для отчёта стека
+            errors.append(f"sandbox cache {name}: {exc}")
+    return errors
+
+
 def _run_sandbox_execute_probes() -> list[str]:
     errors: list[str] = []
     for attempt in range(3):
@@ -954,8 +973,11 @@ def cmd_up() -> int:
         )
 
         errors: list[str] = []
-        with ThreadPoolExecutor(max_workers=len(processes) + len(EXTERNAL_READINESS)) as pool:
+        with ThreadPoolExecutor(
+            max_workers=len(processes) + len(EXTERNAL_READINESS) + 1
+        ) as pool:
             futures = []
+            cache_future = pool.submit(_warm_sandbox_caches)
             for granian_service in granian_services:
                 futures.append(
                     pool.submit(
@@ -981,6 +1003,7 @@ def cmd_up() -> int:
                     failure = future.result()
                     if failure is not None:
                         errors.append(failure)
+                errors.extend(cache_future.result())
             except BaseException:
                 # Убить процессы до выхода из `with`: pool.shutdown(wait=True)
                 # ждёт потоки — с cancel и мёртвыми детьми они выходят мгновенно.

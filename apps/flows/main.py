@@ -208,56 +208,61 @@ async def boot_flows(
         )
         startup_context = set_context(system_context)
         try:
-            async with flows_bundle_seed_lock():
-                seed_marker = await shared_storage.get("flows:testing_bundle_seed")
-                if seed_marker == "done":
-                    logger.info("flows.startup.seed_already_done")
-                else:
-                    loaded_tools = await load_tools_to_db(
-                        flow_access_service=flow_access_service,
-                    )
-                    logger.info("flows.startup.tools_loaded", tools=loaded_tools)
-                    logger.info("flows.bundles.testing.true")
-                    loaded_flow_ids = await load_flows_to_db(
-                        flow_access_service,
-                        files_service=files_service,
-                    )
-                    logger.info("flows.startup.flows_loaded", flow_ids=loaded_flow_ids)
-                    try:
-                        _ = await ensure_default_mcp_servers_for_company()
-                        synced = await sync_auto_mcp_servers_for_company(
-                            variables_service=variables_service,
+            seed_marker = await shared_storage.get("flows:testing_bundle_seed")
+            if seed_marker == "done":
+                logger.info("flows.startup.seed_already_done")
+            else:
+                async with flows_bundle_seed_lock():
+                    # Пока ждали лок, сид мог завершить другой процесс — повторная проверка.
+                    seed_marker = await shared_storage.get("flows:testing_bundle_seed")
+                    if seed_marker == "done":
+                        logger.info("flows.startup.seed_already_done")
+                    else:
+                        loaded_tools = await load_tools_to_db(
                             flow_access_service=flow_access_service,
                         )
-                        logger.info(
-                            "flows.mcp.system.servers.tools",
-                            servers=synced["servers"],
-                            tools=synced["tools"],
+                        logger.info("flows.startup.tools_loaded", tools=loaded_tools)
+                        logger.info("flows.bundles.testing.true")
+                        loaded_flow_ids = await load_flows_to_db(
+                            flow_access_service,
+                            files_service=files_service,
                         )
-                    except Exception as mcp_err:
-                        logger.warning("flows.mcp", mcp_err=mcp_err, exc_info=True)
-                    seeded_variables = await seed_demo_company_variables(
-                        variables_service,
-                        "system",
-                    )
-                    logger.info("flows.system.count", count=seeded_variables)
-                    seeded_skills = await seed_platform_assistant_skills(
-                        files_service,
-                        "system",
-                    )
-                    logger.info("flows.platform_assistant", count=seeded_skills)
-                    stored_company = await Company.get("system")
-                    member_user_ids = (
-                        await hitl_demo_operator_user_ids(authz_service, "system")
-                        if stored_company is not None
-                        else []
-                    )
-                    await ensure_example_hitl_queue(
-                        work_item_service,
-                        "system",
-                        member_user_ids=member_user_ids,
-                    )
-                    _ = await shared_storage.set("flows:testing_bundle_seed", '"done"')
+                        logger.info("flows.startup.flows_loaded", flow_ids=loaded_flow_ids)
+                        try:
+                            _ = await ensure_default_mcp_servers_for_company()
+                            synced = await sync_auto_mcp_servers_for_company(
+                                variables_service=variables_service,
+                                flow_access_service=flow_access_service,
+                            )
+                            logger.info(
+                                "flows.mcp.system.servers.tools",
+                                servers=synced["servers"],
+                                tools=synced["tools"],
+                            )
+                        except Exception as mcp_err:
+                            logger.warning("flows.mcp", mcp_err=mcp_err, exc_info=True)
+                        seeded_variables = await seed_demo_company_variables(
+                            variables_service,
+                            "system",
+                        )
+                        logger.info("flows.system.count", count=seeded_variables)
+                        seeded_skills = await seed_platform_assistant_skills(
+                            files_service,
+                            "system",
+                        )
+                        logger.info("flows.platform_assistant", count=seeded_skills)
+                        stored_company = await Company.get("system")
+                        member_user_ids = (
+                            await hitl_demo_operator_user_ids(authz_service, "system")
+                            if stored_company is not None
+                            else []
+                        )
+                        await ensure_example_hitl_queue(
+                            work_item_service,
+                            "system",
+                            member_user_ids=member_user_ids,
+                        )
+                        _ = await shared_storage.set("flows:testing_bundle_seed", '"done"')
         except Exception as e:
             logger.error("flows.startup.system_migrate_failed", error=str(e), exc_info=True)
         finally:
