@@ -1402,15 +1402,18 @@ class MailService:
             updated_at=now,
         )
         stored = await MailboxBinding.upsert_by_company_and_email(binding)
-        owner_user_id = (
-            stored.user_id if stored.user_id is not None else self._active_user_id()
-        )
+        owner_user_id = stored.user_id
+        if owner_user_id is None and payload.kind != MailboxBindingKind.ROLE:
+            owner_user_id = self._active_user_id()
         try:
-            await self._write_binding_owner(
-                stored.mailbox_binding_id,
-                owner_user_id,
-                company_id=resolved_company_id,
-            )
+            tuples = [
+                mailbox_binding_company_link(stored.mailbox_binding_id, resolved_company_id)
+            ]
+            if owner_user_id is not None:
+                tuples.append(
+                    mailbox_binding_owner_tuple(stored.mailbox_binding_id, owner_user_id)
+                )
+            await self._authz.write(tuples)
         except Exception:
             if existing is None:
                 _ = await MailboxBinding.delete_by_company_and_binding(

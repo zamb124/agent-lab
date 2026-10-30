@@ -91,6 +91,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # CUDA Torch stack ПОСЛЕ lock-install: uv.lock тянет torch без torchvision,
 # и рассинхрон (torchvision 0.28+) даёт RuntimeError: operator torchvision::nms
 # does not exist. --no-deps: иначе uv требует torch==2.12.1 для torchvision==0.27.1.
+# nvidia-curand ставим явно: при --no-deps cuda-toolkit extras torch не доезжают,
+# и torch._C падает на ImportError: libcurand.so.10.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --python "${VIRTUAL_ENV}/bin/python" --force-reinstall --no-deps \
-        "torch==2.12.0" "torchvision==0.27.1" "torchaudio==2.11.0"
+        "torch==2.12.0" "torchvision==0.27.1" "torchaudio==2.11.0" \
+        "nvidia-curand==10.4.4.72"
