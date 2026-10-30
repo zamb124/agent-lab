@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, override
 
 import tiktoken
 from chonkie import (
@@ -13,6 +14,7 @@ from chonkie import (
     TokenChunker,
 )
 from chonkie.refinery import OverlapRefinery
+from chonkie.tokenizer import Tokenizer
 from chonkie.types import Chunk
 
 from core.files.file_ref import FileRef
@@ -29,10 +31,41 @@ from core.rag.models import RAGChunk
 from core.rag_indexing_schema import IndexProfileConfig, IndexProfileSplitConfig
 
 _ENCODING_NAME = "cl100k_base"
-# tiktoken-инстанс, а не имя: строковый id в chonkie сначала идёт в
-# HFTokenizer.from_pretrained → hf_hub_download (сеть), и лишь затем tiktoken.
-# Под мёртвым прокси это вечный backoff вместо мгновенного пути.
 _TIKTOKEN = tiktoken.get_encoding(_ENCODING_NAME)
+
+
+class _TiktokenTokenizer(Tokenizer):
+    """chonkie-токенизатор поверх ``tiktoken.Encoding`` — без сетевых путей.
+
+    Строковый id в chonkie сначала идёт в HFTokenizer.from_pretrained →
+    hf_hub_download (сеть), и лишь затем tiktoken — под мёртвым прокси это
+    вечный backoff вместо мгновенного пути.
+    """
+
+    _encoding: tiktoken.Encoding
+
+    def __init__(self, encoding: tiktoken.Encoding) -> None:
+        super().__init__()
+        self._encoding = encoding
+
+    @override
+    def __repr__(self) -> str:
+        return f"_TiktokenTokenizer({self._encoding.name})"
+
+    @override
+    def encode(self, text: str) -> Sequence[int]:
+        return self._encoding.encode(text)
+
+    @override
+    def decode(self, tokens: Sequence[int]) -> str:
+        return self._encoding.decode(list(tokens))
+
+    @override
+    def tokenize(self, text: str) -> Sequence[int]:
+        return self._encoding.encode(text)
+
+
+_CHONKIE_TOKENIZER = _TiktokenTokenizer(_TIKTOKEN)
 
 
 class _TextChunker(Protocol):
@@ -77,14 +110,14 @@ def _chunker_to_texts(chunker: _TextChunker, text: str) -> list[str]:
 
 def _recursive_texts(text: str, split_config: IndexProfileSplitConfig) -> list[str]:
     chunker = RecursiveChunker(
-        tokenizer=_TIKTOKEN,
+        tokenizer=_CHONKIE_TOKENIZER,
         chunk_size=split_config.chunk_size,
     )
     parts = chunker(text)
     if split_config.chunk_overlap <= 0:
         return [c.text for c in parts]
     refinery = OverlapRefinery(
-        tokenizer=_TIKTOKEN,
+        tokenizer=_CHONKIE_TOKENIZER,
         context_size=split_config.chunk_overlap,
     )
     refined = refinery(parts)
@@ -175,13 +208,13 @@ def _texts_for_strategy(
         return _recursive_texts(raw, split_config)
     if strategy == "recursive":
         chunker = RecursiveChunker(
-            tokenizer=_TIKTOKEN,
+            tokenizer=_CHONKIE_TOKENIZER,
             chunk_size=split_config.chunk_size,
         )
         return _chunker_to_texts(chunker, raw)
     if strategy == "sentence":
         chunker = SentenceChunker(
-            tokenizer=_TIKTOKEN,
+            tokenizer=_CHONKIE_TOKENIZER,
             chunk_size=split_config.chunk_size,
             chunk_overlap=split_config.chunk_overlap,
         )
@@ -252,7 +285,7 @@ def _merge_files(*groups: list[FileRef]) -> list[FileRef]:
 
 def _split_structure(extract: FileExtract, split_config: IndexProfileSplitConfig) -> list[_SplitUnit]:
     chunker = TokenChunker(
-        tokenizer=_TIKTOKEN,
+        tokenizer=_CHONKIE_TOKENIZER,
         chunk_size=split_config.chunk_size,
         chunk_overlap=split_config.chunk_overlap,
     )

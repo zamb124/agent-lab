@@ -1,5 +1,6 @@
 from typing import Literal
 
+from chonkie.tokenizer import TokenizerProtocol
 from chonkie.types import Chunk
 
 class _Chunker:
@@ -9,7 +10,7 @@ class _Chunker:
 class TokenChunker(_Chunker):
     def __init__(
         self,
-        tokenizer: str = "character",
+        tokenizer: str | TokenizerProtocol = "character",
         chunk_size: int = 2048,
         chunk_overlap: int | float = 0,
     ) -> None: ...
@@ -48,7 +49,7 @@ class SemanticChunker(_Chunker):
 class RecursiveChunker(_Chunker):
     def __init__(
         self,
-        tokenizer: str = "character",
+        tokenizer: str | TokenizerProtocol = "character",
         chunk_size: int = 2048,
         min_characters_per_chunk: int = 24,
     ) -> None: ...
@@ -57,7 +58,7 @@ class RecursiveChunker(_Chunker):
 class SentenceChunker(_Chunker):
     def __init__(
         self,
-        tokenizer: str = "character",
+        tokenizer: str | TokenizerProtocol = "character",
         chunk_size: int = 2048,
         chunk_overlap: int = 0,
         min_sentences_per_chunk: int = 1,
@@ -71,7 +72,7 @@ class SentenceChunker(_Chunker):
 class CodeChunker(_Chunker):
     def __init__(
         self,
-        tokenizer: str = "character",
+        tokenizer: str | TokenizerProtocol = "character",
         chunk_size: int = 2048,
         language: Literal["auto"] | str = "auto",
         include_nodes: bool = False,
@@ -79,4 +80,4 @@ class CodeChunker(_Chunker):
 
 
 class TableChunker(_Chunker):
-    def __init__(self, tokenizer: str = "row", chunk_size: int = 3) -> None: ...
+    def __init__(self, tokenizer: str | TokenizerProtocol = "row", chunk_size: int = 3) -> None: ...
