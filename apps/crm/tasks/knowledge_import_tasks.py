@@ -20,13 +20,13 @@ from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     get_pending_import_text,
 )
+from apps.crm.services.knowledge_text_split import split_knowledge_text
 from apps.crm.tasks.crm_context import set_crm_context
 from apps.crm.tasks.task_names import CRM_RUN_KNOWLEDGE_IMPORT
 from core.logging import get_logger
 from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
-from core.utils.knowledge_text_split import split_knowledge_text
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)

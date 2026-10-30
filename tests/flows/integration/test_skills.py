@@ -5,9 +5,9 @@
 
 import pytest
 
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models import BranchConfig, Edge, FlowConfig, MergeMode
 from apps.flows.src.runtime.flow import Flow
-from core.flow_ui.templates import default_chat_document
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 

@@ -8,8 +8,8 @@ from datetime import datetime
 from typing import ClassVar, override
 
 from apps.flows.src.runtime.nodes import LlmNode, NodeInputs, NodeRunResult
+from apps.flows.src.state import ExecutionState
 from core.logging import get_logger
-from core.state import ExecutionState
 from core.types import JsonObject
 
 logger = get_logger(__name__)

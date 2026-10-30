@@ -16,14 +16,15 @@ from uuid import UUID
 
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.a2a_messages import build_user_message
-from core.clients.llm import LLMToolCall
-from core.logging import get_logger
-from core.state import ExecutionState, InterruptData, InterruptPathItem, NestedStateData
-from core.state.interrupt import (
+from apps.flows.src.state.execution_state import ExecutionState, InterruptPathItem, NestedStateData
+from apps.flows.src.state.interrupt import (
     HandoffInterrupt,
     InterruptBody,
+    InterruptData,
     InterruptSystemContext,
 )
+from core.clients.llm import LLMToolCall
+from core.logging import get_logger
 from core.types import JsonObject
 
 logger = get_logger(__name__)

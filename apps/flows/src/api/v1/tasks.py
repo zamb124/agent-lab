@@ -45,13 +45,13 @@ from apps.flows.src.models.durable_api import (
     WorkflowHistoryResponse,
 )
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.a2a import platform_task_state_to_a2a, set_task_status_state, struct_from_mapping
 from core.authz.models import AuthzObject
 from core.context import get_context, require_active_company, require_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
-from core.state import ExecutionState
 from core.tasks import enqueue
 from core.types import JsonObject, require_json_object
 from core.websocket import WsCommandError

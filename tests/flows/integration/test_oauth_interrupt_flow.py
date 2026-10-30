@@ -21,9 +21,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.state import ExecutionState, InterruptKind
 from core.clients.google_docs_client import GoogleDocsClient
 from core.integrations.models import IntegrationCredential, IntegrationProvider
-from core.state import ExecutionState, InterruptKind
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_flow
 

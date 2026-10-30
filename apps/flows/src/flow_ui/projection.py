@@ -1,9 +1,9 @@
-"""Проекция ExecutionState для клиента Flow UI и патчи RFC 6902.
+"""Проекция ExecutionState для клиента Flow UI.
 
 Клиент получает ровно те пути state, на которые ссылается интерфейс:
 ``{path}`` в текстовых свойствах, ``field`` input-блоков, ``visible_when.path``,
 привязки данных, ``fields`` и ``data-bind``/``data-show`` блоков ``html``.
-Frozen-поля в проекцию не попадают никогда.
+Frozen-поля в проекцию не попадают никогда. Патчи RFC 6902 — ``core/ui_document/json_patch``.
 """
 
 from __future__ import annotations
@@ -15,7 +15,10 @@ from typing import Annotated, TypeVar, cast, get_args, get_origin
 from pydantic import BaseModel
 from typing_extensions import TypeForm
 
-from core.flow_ui.document import (
+from apps.flows.src.flow_ui.html_bindings import html_bound_paths
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
+from core.types import JsonObject, JsonValue
+from core.ui_document.document import (
     FlowUIBlockBase,
     FlowUIBlockModel,
     FlowUIDataTable,
@@ -27,10 +30,7 @@ from core.flow_ui.document import (
     FlowUITemplateText,
     iter_blocks,
 )
-from core.flow_ui.html_bindings import html_bound_paths
-from core.flow_ui.protocol import JsonPatchOperation
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
-from core.types import JsonObject, JsonValue
+from core.ui_document.json_patch import pointer_segment, pointer_segments
 from core.variables.template_scan import scan_prompt_template
 
 
@@ -216,92 +216,17 @@ def project_state(payload: JsonObject, paths: frozenset[str] | set[str]) -> Json
     return projection
 
 
-def _pointer_segment(segment: str) -> str:
-    return segment.replace("~", "~0").replace("/", "~1")
-
-
-def json_patch_operations(before: JsonObject, after: JsonObject) -> list[JsonPatchOperation]:
-    """RFC 6902 diff двух проекций: объекты — по ключам, списки и скаляры — целиком."""
-
-    operations: list[JsonPatchOperation] = []
-    _diff_objects(before, after, "", operations)
-    return operations
-
-
-def _diff_objects(
-    before: JsonObject, after: JsonObject, prefix: str, out: list[JsonPatchOperation]
-) -> None:
-    for key in before:
-        if key not in after:
-            out.append(JsonPatchOperation(op="remove", path=f"{prefix}/{_pointer_segment(key)}"))
-    for key, value in after.items():
-        path = f"{prefix}/{_pointer_segment(key)}"
-        if key not in before:
-            out.append(JsonPatchOperation(op="add", path=path, value=value))
-            continue
-        previous = before[key]
-        if previous == value:
-            continue
-        if isinstance(previous, dict) and isinstance(value, dict):
-            _diff_objects(previous, value, path, out)
-            continue
-        out.append(JsonPatchOperation(op="replace", path=path, value=value))
-
-
-def _pointer_segments(pointer: str) -> list[str]:
-    if pointer == "":
-        return []
-    if not pointer.startswith("/"):
-        raise ValueError(f"json patch: pointer must start with '/': {pointer!r}")
-    return [part.replace("~1", "/").replace("~0", "~") for part in pointer.split("/")[1:]]
-
-
-def apply_json_patch(target: JsonObject, operations: list[JsonPatchOperation]) -> JsonObject:
-    """Применяет add/replace/remove к копии ``target``; чужой путь — ошибка."""
-
-    patched: JsonObject = dict(target)
-    for operation in operations:
-        segments = _pointer_segments(operation.path)
-        if not segments:
-            if operation.op == "remove":
-                raise ValueError("json patch: cannot remove document root")
-            if not isinstance(operation.value, dict):
-                raise ValueError("json patch: root value must be an object")
-            patched = dict(operation.value)
-            continue
-        parent: JsonObject = patched
-        for segment in segments[:-1]:
-            child = parent.get(segment)
-            if not isinstance(child, dict):
-                if operation.op == "remove":
-                    raise ValueError(f"json patch: path {operation.path!r} does not exist")
-                child = {}
-                parent[segment] = child
-            else:
-                child = dict(child)
-                parent[segment] = child
-            parent = child
-        leaf = segments[-1]
-        if operation.op == "remove":
-            if leaf not in parent:
-                raise ValueError(f"json patch: path {operation.path!r} does not exist")
-            del parent[leaf]
-        else:
-            parent[leaf] = operation.value
-    return patched
-
-
 def validate_redacted_paths(pointers: list[str]) -> list[str]:
     """JSON Pointers полей state для share-редакции: непустые, уникальные, вне frozen-корней."""
 
     validated: list[str] = []
     for pointer in pointers:
-        segments = _pointer_segments(pointer.strip())
+        segments = pointer_segments(pointer.strip())
         if not segments or segments[0] == "":
             raise ValueError(f"redacted path must point to a state field: {pointer!r}")
         if segments[0] in FROZEN_STATE_FIELDS:
             raise ValueError(f"redacted path cannot target a system field: {pointer!r}")
-        normalized = "/" + "/".join(_pointer_segment(segment) for segment in segments)
+        normalized = "/" + "/".join(pointer_segment(segment) for segment in segments)
         if normalized not in validated:
             validated.append(normalized)
     return validated
@@ -312,7 +237,7 @@ def redact_state(projection: JsonObject, redacted_paths: list[str]) -> JsonObjec
 
     redacted: JsonObject = dict(projection)
     for pointer in redacted_paths:
-        segments = _pointer_segments(pointer)
+        segments = pointer_segments(pointer)
         parent: JsonObject = redacted
         missing = False
         for segment in segments[:-1]:
@@ -333,7 +258,7 @@ def assert_fields_outside_redacted(fields: Iterable[str], redacted_paths: list[s
     """Editor-посетитель share не пишет в скрытые от него поля: ни в путь, ни внутрь, ни поверх."""
 
     for field in fields:
-        pointer = "/" + "/".join(_pointer_segment(segment) for segment in field.split("."))
+        pointer = "/" + "/".join(pointer_segment(segment) for segment in field.split("."))
         for redacted in redacted_paths:
             if (
                 pointer == redacted
@@ -346,11 +271,9 @@ def assert_fields_outside_redacted(fields: Iterable[str], redacted_paths: list[s
 
 
 __all__ = [
-    "apply_json_patch",
     "assert_fields_outside_redacted",
     "block_paths",
     "block_templates",
-    "json_patch_operations",
     "project_state",
     "redact_state",
     "referenced_paths",

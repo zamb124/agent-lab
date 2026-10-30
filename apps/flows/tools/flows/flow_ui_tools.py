@@ -13,21 +13,21 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.runtime.flow_interface_context import current_flow_interface
-from apps.flows.src.tools.decorator import tool
-from core.flow_ui.document import FlowUIBlock, FlowUIBlockId, FlowUIPageId
-from core.flow_ui.protocol import FlowUINavigate, FlowUIRender
-from core.flow_ui.runtime import (
+from apps.flows.src.flow_ui.runtime import (
     apply_ui_navigate,
     apply_ui_render,
     assert_known_page,
     assert_known_slot,
 )
-from core.state.state_path import assign_state_path
+from apps.flows.src.runtime.flow_interface_context import current_flow_interface
+from apps.flows.src.state.state_path import assign_state_path
+from apps.flows.src.tools.decorator import tool
 from core.types import JsonObject, JsonValue
+from core.ui_document.document import FlowUIBlock, FlowUIBlockId, FlowUIPageId
+from core.ui_document.protocol import FlowUINavigate, FlowUIRender
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class UIRenderArgs(BaseModel):

@@ -16,9 +16,12 @@ import httpx2
 from pydantic import Field, TypeAdapter
 
 from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
-from core.flow_ui.interface import FlowInterfaceResponse
-from core.flow_ui.projection import apply_json_patch
-from core.flow_ui.protocol import (
+from core.http import get_httpx_client
+from core.models.base import StrictBaseModel
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from core.ui_document.interface import FlowInterfaceResponse
+from core.ui_document.json_patch import apply_json_patch
+from core.ui_document.protocol import (
     FLOW_UI_ACTION_MEDIA_TYPE,
     FLOW_UI_MEDIA_TYPE,
     FLOW_UI_OUTPUT_MEDIA_TYPES,
@@ -32,9 +35,6 @@ from core.flow_ui.protocol import (
     FlowUIRender,
     JsonPatchOperation,
 )
-from core.http import get_httpx_client
-from core.models.base import StrictBaseModel
-from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 DEFAULT_BRANCH_ID = "default"
 

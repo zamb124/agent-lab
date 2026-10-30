@@ -9,7 +9,6 @@ from core.authz.company_sync import remove_company_member, sync_company_member_r
 from core.authz.errors import AuthzUnavailable
 from core.authz.group_sync import sync_user_groups
 from core.authz.service import AuthzService
-from core.errors.boundary import PlatformNotFoundError
 from core.models.identity_models import Company, User, UserStatus
 
 
@@ -171,10 +170,9 @@ async def ensure_system_actor_membership(*, authz: AuthzService, company_id: str
     Middleware создаёт ``User('system')`` как internal runtime user с roster
     ``['guest']``: FGA-только грант при таком roster стирается первым же
     roster-derived sync — поэтому roster здесь приводится к owner/admin.
+    Компании без строки (init до создания) получают user-side roster + FGA.
     """
     company = await Company.get(company_id)
-    if company is None:
-        raise PlatformNotFoundError(f"Company {company_id} not found", error_code="not_found")
     user = await User.get(SYSTEM_ACTOR_USER_ID)
     if user is None:
         user = User(
@@ -190,12 +188,23 @@ async def ensure_system_actor_membership(*, authz: AuthzService, company_id: str
     merged_groups = list(dict.fromkeys([*user.groups, *_SYSTEM_ACTOR_GROUPS]))
     if merged_groups != user.groups:
         user.groups = merged_groups
-    _ = await set_company_member_roles(
-        authz=authz,
-        company=company,
-        user=user,
-        roles=_SYSTEM_ACTOR_ROLES,
-    )
+    if company is None:
+        user.companies[company_id] = list(_SYSTEM_ACTOR_ROLES)
+        user.updated_at = datetime.now(timezone.utc)
+        _ = await User.set(user)
+        await sync_company_member_roles(
+            authz,
+            company_id=company_id,
+            user_id=SYSTEM_ACTOR_USER_ID,
+            roles=_SYSTEM_ACTOR_ROLES,
+        )
+    else:
+        _ = await set_company_member_roles(
+            authz=authz,
+            company=company,
+            user=user,
+            roles=_SYSTEM_ACTOR_ROLES,
+        )
     await sync_user_groups(
         authz,
         user_id=SYSTEM_ACTOR_USER_ID,

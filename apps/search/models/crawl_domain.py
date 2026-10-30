@@ -10,7 +10,7 @@ from oxyde import Field as DbField
 from oxyde import Index, atomic, execute_raw
 from pydantic import field_validator
 
-from core.crawl.models.contracts import (
+from apps.search.models.contracts import (
     CrawlDomainCreateRequest,
     CrawlDomainPatchRequest,
     CrawlDomainSeed,

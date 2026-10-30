@@ -19,23 +19,7 @@ from apps.search.config import (
     get_search_settings,
 )
 from apps.search.di import Di
-from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS, CRAWL_ORCHESTRATOR_TICK
-from core.ai.company_settings import encrypt_secret, mask_encrypted_secret
-from core.company_search import (
-    COMPANY_SEARCH_METADATA_KEY,
-    CompanyLinkupSearchProvider,
-    CompanySearchProviderBase,
-    CompanySearchProviders,
-    CompanySearchProvidersResponse,
-    CompanySearchProviderView,
-    CompanySerperSearchProvider,
-    CompanyTavilySearchProvider,
-    CompanyTinyFishSearchProvider,
-    SearchCredentialSource,
-    SearchProviderId,
-)
-from core.context import get_context
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainCreateRequest,
     CrawlDomainPatchRequest,
@@ -55,6 +39,22 @@ from core.crawl.models import (
     SeedImportResult,
     UpsertStats,
 )
+from apps.search.services.company_search_schema import (
+    COMPANY_SEARCH_METADATA_KEY,
+    CompanyLinkupSearchProvider,
+    CompanySearchProviderBase,
+    CompanySearchProviders,
+    CompanySearchProvidersResponse,
+    CompanySearchProviderView,
+    CompanySerperSearchProvider,
+    CompanyTavilySearchProvider,
+    CompanyTinyFishSearchProvider,
+    SearchCredentialSource,
+    SearchProviderId,
+)
+from apps.search.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS, CRAWL_ORCHESTRATOR_TICK
+from core.ai.company_settings import encrypt_secret, mask_encrypted_secret
+from core.context import get_context
 from core.errors.boundary import PlatformNotFoundError
 from core.models import StrictBaseModel
 from core.models.identity_models import Company, User

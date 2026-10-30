@@ -7,6 +7,8 @@ from hashlib import sha256
 
 import pytest
 
+from apps.flows.src.flow_ui.effects import apply_capability_platform_effects
+from apps.flows.src.state import ExecutionState
 from core.capabilities.models import (
     CapabilityDefinition,
     CapabilityExecutionContext,
@@ -14,10 +16,8 @@ from core.capabilities.models import (
     PlatformEffectEnvelope,
     PlatformEffectOrigin,
 )
-from core.flow_ui.document import FlowUIDocument, FlowUIMarkdownText
-from core.flow_ui.effects import apply_capability_platform_effects
-from core.flow_ui.protocol import FlowUINavigate, FlowUIRender
-from core.state import ExecutionState
+from core.ui_document.document import FlowUIDocument, FlowUIMarkdownText
+from core.ui_document.protocol import FlowUINavigate, FlowUIRender
 
 
 def _context() -> CapabilityExecutionContext:

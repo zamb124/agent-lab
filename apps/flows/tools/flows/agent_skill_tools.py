@@ -20,7 +20,7 @@ from core.llm_context.models import LLMContextBlock
 from core.types import JsonObject
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class LoadAgentSkillArgs(BaseModel):

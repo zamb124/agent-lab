@@ -156,7 +156,7 @@ def test_render_terminal_and_html_smoke() -> None:
 
 
 def test_report_writes_summary_and_html(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from scripts import pytest_workers_profile as module
+    from scripts.testing import pytest_workers_profile as module
 
     reports_root = tmp_path / "reports" / "pytest_workers_profile"
     run_id = "20260101T120000"

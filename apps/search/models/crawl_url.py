@@ -10,7 +10,7 @@ from oxyde import Field as DbField
 from oxyde import Index, atomic, execute_raw
 from pydantic import Field
 
-from core.crawl.models.contracts import (
+from apps.search.models.contracts import (
     CrawlFetchTransport,
     CrawlPageFilterMetadata,
     CrawlStatusCount,
@@ -21,7 +21,7 @@ from core.crawl.models.contracts import (
     UpsertStats,
     canonicalize_url,
 )
-from core.crawl.models.crawl_domain import CrawlDomain
+from apps.search.models.crawl_domain import CrawlDomain
 from core.errors.boundary import PlatformNotFoundError
 from core.models import StrictBaseModel
 from core.models.platform_model import PlatformModel

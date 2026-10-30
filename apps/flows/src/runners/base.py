@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 from core.types import JsonObject, JsonValue
 

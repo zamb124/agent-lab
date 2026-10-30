@@ -1,8 +1,8 @@
 """Инвариант: prepare и process_task используют один и тот же stream task_id."""
 
 from apps.flows.src.channels.base import effective_stream_task_id_for_session
-from core.state.execution_state import ExecutionState
-from core.state.interrupt import (
+from apps.flows.src.state.execution_state import ExecutionState
+from apps.flows.src.state.interrupt import (
     InterruptData,
     InterruptSystemContext,
     UserMessageInterrupt,

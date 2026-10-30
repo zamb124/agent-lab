@@ -12,10 +12,10 @@ from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
 )
+from apps.flows.src.state import ExecutionState
 from core.authz.company_sync import sync_company_member_roles
 from core.context import Context, clear_context, get_context, set_context
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 _BUNDLES_DIR = Path(__file__).resolve().parents[2] / "apps" / "flows" / "bundles"

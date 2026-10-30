@@ -16,11 +16,11 @@ from apps.flows.src.services.platform_assistant_skills import (
     PLATFORM_ASSISTANT_SEED_SKILL_IDS,
     seed_platform_assistant_skills,
 )
+from apps.flows.src.state import ExecutionState
 from core.clients.llm.mock import MockLLM, MockLLMQueuedResponse
 from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue
 from core.worktracker.models import (
     QueueAssignment,

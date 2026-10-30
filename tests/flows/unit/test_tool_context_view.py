@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from apps.flows.src.runners.tool_context_view import build_tool_context_view
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 
 def test_tool_context_view_includes_user_extras() -> None:

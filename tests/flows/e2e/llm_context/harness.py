@@ -9,11 +9,11 @@ from typing import Any
 from apps.flows.di import FlowsDi
 from apps.flows.src.models import Edge, FlowConfig, ResourceDefinition, ResourceType
 from apps.flows.src.runtime.a2a_messages import build_assistant_message, build_user_message
+from apps.flows.src.state import ExecutionState
 from core.context import get_context
 from core.db.models.rag import VectorDocument
-from core.rag.llm_context_memory_store import llm_context_memory_namespace_id
-from core.rag.rag_resource import RAGResource
-from core.state import ExecutionState
+from apps.flows.src.runtime.llm_context_memory_store import llm_context_memory_namespace_id
+from apps.flows.src.resources.rag_resource import RAGResource
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.flows.durable_runtime_harness import run_flow
 

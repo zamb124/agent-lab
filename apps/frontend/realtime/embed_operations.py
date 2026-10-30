@@ -20,7 +20,6 @@ from core.authz.models import AuthzObject
 from core.config import get_settings
 from core.context import require_active_company
 from core.errors.boundary import PlatformNotFoundError
-from core.flow_ui.document import FlowUIConversationSettings, FlowUIPageId
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.embed_models import (
@@ -34,6 +33,7 @@ from core.models.identity_models import SYSTEM_COMPANY_ID, User
 from core.pagination import OffsetPage
 from core.platform_brand.resolver import resolve_embed_origins
 from core.request_scope import CompanyScope, require_company_viewer
+from core.ui_document.document import FlowUIConversationSettings, FlowUIPageId
 from core.websocket import raise_forbidden, raise_invalid
 
 logger = get_logger(__name__)

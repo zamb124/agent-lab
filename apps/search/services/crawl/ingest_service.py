@@ -5,21 +5,21 @@ from __future__ import annotations
 import hashlib
 import time
 
-from core.clients.rag_client import RagClient
-from core.clients.service_client import ServiceClientError
-from core.crawl.enrichment_skip import compute_enriched_content_hash
-from core.crawl.logging_events import (
+from apps.search.crawl.enrichment_skip import compute_enriched_content_hash
+from apps.search.crawl.logging_events import (
     log_crawl_ingest_completed,
     log_crawl_ingest_failed,
     log_crawl_reingest_completed,
 )
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlEnrichedPage,
     CrawlFetchResult,
     CrawlIngestPayload,
     CrawlPageFilterMetadata,
 )
+from core.clients.rag_client import RagClient
+from core.clients.service_client import ServiceClientError
 from core.rag.index_profile_registry import resolve_index_profile
 from core.rag.models import RAGMetadata
 from core.search.index_models import SearchIndexDefinition

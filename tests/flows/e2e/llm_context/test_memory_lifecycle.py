@@ -5,7 +5,7 @@ import pytest
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.models import FlowConfig
-from core.rag.llm_context_memory_store import llm_context_memory_namespace_id
+from apps.flows.src.runtime.llm_context_memory_store import llm_context_memory_namespace_id
 from tests.flows.e2e.llm_context.harness import (
     _documents_matching,
     cleanup_flow_context,

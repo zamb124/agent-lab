@@ -71,8 +71,8 @@ DOMAIN_FLOWS_ONLY_ALLOWLIST: frozenset[str] = frozenset(
 
 A2A_UI_EVENT_ALLOWLIST_FILES = frozenset(
     {
-        "core/state/execution_state.py",
-        "core/state/__init__.py",
+        "apps/flows/src/state/execution_state.py",
+        "apps/flows/src/state/__init__.py",
         "core/a2a",
         "apps/flows/src/streaming/ui_events.py",
         "apps/flows/src/runtime_helpers/state_utils.py",

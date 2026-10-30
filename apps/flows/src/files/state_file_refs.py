@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from apps.flows.src.state import ExecutionState
 from core.files.file_ref import FileDocumentCapability, FileRef
-from core.state import ExecutionState
 from core.types import JsonObject
 
 

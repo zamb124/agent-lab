@@ -17,7 +17,7 @@ from core.integrations.mcp import validate_mcp_parameters_schema
 from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class MCPTool(BaseTool):

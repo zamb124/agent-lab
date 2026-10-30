@@ -20,6 +20,7 @@ import time
 import pytest
 
 from apps.flows.config import get_settings
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models.execution_limits import (
     get_flow_execution_wall_time_cap_seconds,
     get_graph_max_iterations,
@@ -38,7 +39,6 @@ from apps.flows.src.state.cancellation import (
 )
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from core.errors import FlowWallClockTimeoutError, NodeWallClockTimeoutError
-from core.flow_ui.templates import default_chat_document
 from tests.flows.durable_runtime_harness import run_flow, run_node
 
 

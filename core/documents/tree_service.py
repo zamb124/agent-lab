@@ -278,7 +278,10 @@ class DocumentTreeService:
             document_catalog_company_link(catalog.catalog_id, catalog.company_id),
         ]
         if catalog.parent_catalog_id is None:
-            writes.append(document_catalog_lister_tuple(catalog.catalog_id, catalog.company_id))
+            if catalog.company_visible or catalog.managed:
+                writes.append(
+                    document_catalog_lister_tuple(catalog.catalog_id, catalog.company_id)
+                )
         else:
             writes.append(document_catalog_parent_tuple(catalog.catalog_id, catalog.parent_catalog_id))
         if catalog.company_visible:

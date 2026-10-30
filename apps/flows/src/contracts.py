@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypedDict
 
-from core.flow_ui.document import FlowUIDocument
 from core.mail.service import MailService
 from core.types import JsonObject, JsonValue
+from core.ui_document.document import FlowUIDocument
 
 if TYPE_CHECKING:
     from apps.flows.src.models import (
@@ -29,9 +29,9 @@ if TYPE_CHECKING:
         EvaluationTaskiqExecutionContext,
     )
     from apps.flows.src.models.flow_config import Edge
+    from apps.flows.src.state import ExecutionState
     from apps.flows.src.tools.base import BaseTool
     from core.mail.service import MailService
-    from core.state import ExecutionState
 
 
 class EffectiveFlowConfig(TypedDict):

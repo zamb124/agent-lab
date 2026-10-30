@@ -15,6 +15,8 @@ from apps.flows.src.observability.hitl_timing import (
     maybe_record_hitl_operator_response,
     record_hitl_interrupt,
 )
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import HandoffMode
 from core.logging.attributes import (
     LOG_HANDOFF_TARGET_FLOW_ID,
     LOG_HANDOFF_WALL_MS,
@@ -22,8 +24,6 @@ from core.logging.attributes import (
     LOG_HITL_WAIT_MS,
     LOG_HITL_WORK_ITEM_ID,
 )
-from core.state import ExecutionState
-from core.state.interrupt import HandoffMode
 from tests.fixtures.observability_log_capture import (
     find_caplog_record,
     require_log_fields,

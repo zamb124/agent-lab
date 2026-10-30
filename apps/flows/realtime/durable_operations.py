@@ -22,8 +22,8 @@ from apps.flows.src.models.durable_api import (
     WorkflowBranchesResponse,
     WorkflowHistoryResponse,
 )
+from apps.flows.src.state import ExecutionState
 from core.models.identity_models import User
-from core.state import ExecutionState
 from core.websocket import (
     WsCommandError,
     raise_conflict,

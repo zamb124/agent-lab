@@ -30,7 +30,7 @@ from core.worktracker.models import (
 )
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 _TAGS = ["worktracker"]
 

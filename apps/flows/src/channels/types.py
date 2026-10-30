@@ -8,13 +8,13 @@ from typing import TypeAlias
 from a2a.types import Message
 from pydantic import Field
 
+from apps.flows.src.state import ExecutionTaskState, InterruptData
 from core.files.file_ref import FileRef
-from core.flow_ui.protocol import FlowUIActionMessage
 from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.flow_ui_share import FlowUIShareGrant
-from core.state import ExecutionTaskState, InterruptData
 from core.types import JsonObject
+from core.ui_document.protocol import FlowUIActionMessage
 
 ChannelRequestContext: TypeAlias = Context | JsonObject | None
 

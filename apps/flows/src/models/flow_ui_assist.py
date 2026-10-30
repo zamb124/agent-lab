@@ -6,7 +6,8 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from core.flow_ui.document import (
+from core.models.base import StrictBaseModel
+from core.ui_document.document import (
     FlowUIBlock,
     FlowUIBlockModel,
     FlowUIDocument,
@@ -14,7 +15,6 @@ from core.flow_ui.document import (
     FlowUIPageId,
     iter_blocks,
 )
-from core.models.base import StrictBaseModel
 
 FlowUIAssistScope = Literal["page", "block"]
 

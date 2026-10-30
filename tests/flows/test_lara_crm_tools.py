@@ -13,14 +13,14 @@ import pytest_asyncio
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.services.lara_client import LaraClient
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.crm.crm_tools import (
     crm_analyze_note_text,
     crm_create_note,
     crm_create_note_and_analyze,
     crm_search_entities,
 )
-from core.flow_ui.document import FlowUIActionPreview, FlowUIButton
-from core.state import ExecutionState
+from core.ui_document.document import FlowUIActionPreview, FlowUIButton
 from core.types import JsonObject, JsonValue, require_json_object
 from tests.flows._flow_ui import conversation_blocks
 

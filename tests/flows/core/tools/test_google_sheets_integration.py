@@ -22,6 +22,7 @@ import pytest
 from a2a.helpers.proto_helpers import get_message_text
 
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.google_sheets.google_sheets import (
     sheets_add_sheet,
     sheets_append_rows,
@@ -39,7 +40,6 @@ from apps.flows.tools.google_sheets.google_sheets import (
     sheets_update_values,
 )
 from core.clients.google_sheets_client import GoogleSheetsClient
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.fixtures.google_sheets_live import (
     google_sheets_service_account_client_email,

@@ -7,7 +7,7 @@ from oxyde.exceptions import IntegrityError
 from apps.search.config import get_search_settings
 from apps.search.di import SearchDi
 from apps.search.errors import SearchIndexNotFoundError
-from core.crawl.models import CrawlProfile, CrawlProfileCreateRequest
+from apps.search.models import CrawlProfile, CrawlProfileCreateRequest
 from core.di import open_di
 from core.di.kit import ProcessIdentity
 from core.errors.boundary import PlatformNotFoundError

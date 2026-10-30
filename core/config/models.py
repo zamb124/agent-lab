@@ -2566,7 +2566,7 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
     - stt / tts: секунды аудио / символы синтеза per-provider (spans stt.{provider}, tts.{provider}).
     - billing:rub — единица = 1 ₽; quantity из platform.billing.settlement_quantity_rub (OpenRouter USD×usd_to_rub_rate).
     - livekit: поминутное списание — room_minute, egress_composite_minute, egress_segmented_minute
-      (см. core/calls/livekit_usage_spans.py); "*" — прочие livekit:*.
+      (см. apps/sync/services/livekit_usage_spans.py); "*" — прочие livekit:*.
     - search: внешние Search provider calls из search.provider.* spans.
 
     Категория tool в биллинге не используется (тулы flows бесплатны в учёте).

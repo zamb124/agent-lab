@@ -10,7 +10,7 @@ from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.tools.decorator import tool
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class FinishArgs(BaseModel):

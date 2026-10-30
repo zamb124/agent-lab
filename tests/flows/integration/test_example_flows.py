@@ -59,13 +59,13 @@ def filter_messages_by_role(messages: List[Message], role: str) -> List[Message]
 
 
 from apps.flows.di import FlowsDi  # noqa: E402
-from apps.flows.src.models import (
-    FlowConfig,  # noqa: E402
+from apps.flows.src.models import (  # noqa: E402
+    FlowConfig,
     NodeConfig,
     ToolReference,
 )
 from apps.flows.src.runtime.flow import Flow  # noqa: E402
-from core.state import ExecutionState  # noqa: E402
+from apps.flows.src.state import ExecutionState  # noqa: E402
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state  # noqa: E402
 
 

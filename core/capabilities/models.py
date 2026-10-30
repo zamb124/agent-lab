@@ -7,8 +7,8 @@ from typing import ClassVar, Literal, Self, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from core.flow_ui.protocol import FlowUIEvent
 from core.types import JsonObject, JsonValue
+from core.ui_document.protocol import FlowUIEvent
 
 CapabilityLanguage: TypeAlias = Literal[
     "python",

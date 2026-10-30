@@ -317,7 +317,11 @@ class TestProcessAgentTaskResume:
     @pytest.fixture
     async def setup_flow_with_state(self, app, di, unique_id):
         """Создает flow и state для тестов resume."""
-        from core.state.interrupt import InterruptData, InterruptSystemContext, UserMessageInterrupt
+        from apps.flows.src.state.interrupt import (
+            InterruptData,
+            InterruptSystemContext,
+            UserMessageInterrupt,
+        )
 
         flow_config = FlowConfig(
             flow_id="interrupt_test_flow",
@@ -518,7 +522,7 @@ async def run(args, state):
     @pytest.mark.asyncio
     async def test_execute_tool_calculator(self, app, calculator_config, di):
         """execute_tool выполняет calculator tool."""
-        from core.state import ExecutionState
+        from apps.flows.src.state import ExecutionState
 
         state = ExecutionState(
             task_id="test",
@@ -539,7 +543,7 @@ async def run(args, state):
     @pytest.mark.asyncio
     async def test_execute_tool_returns_result_structure(self, app, calculator_config, di):
         """execute_tool возвращает структуру с tool_id и result."""
-        from core.state import ExecutionState
+        from apps.flows.src.state import ExecutionState
 
         state = ExecutionState(
             task_id="test",
@@ -562,7 +566,7 @@ async def run(args, state):
     @pytest.mark.asyncio
     async def test_execute_tool_with_state(self, app, calculator_config, di):
         """execute_tool получает state."""
-        from core.state import ExecutionState
+        from apps.flows.src.state import ExecutionState
 
         state = ExecutionState(
             task_id="test",
@@ -583,7 +587,7 @@ async def run(args, state):
     @pytest.mark.asyncio
     async def test_execute_tool_raises_on_unknown_tool(self, app, di):
         """execute_tool выбрасывает ошибку для tool без code."""
-        from core.state import ExecutionState
+        from apps.flows.src.state import ExecutionState
 
         state = ExecutionState(
             task_id="test",
@@ -602,7 +606,7 @@ async def run(args, state):
     @pytest.mark.asyncio
     async def test_execute_tool_handles_interrupt(self, app, di):
         """execute_tool обрабатывает FlowInterrupt."""
-        from core.state import ExecutionState
+        from apps.flows.src.state import ExecutionState
 
         state = ExecutionState(
             task_id="test",
@@ -635,7 +639,7 @@ async def run(args, state):
     @pytest.mark.asyncio
     async def test_execute_tool_complex_expression(self, app, calculator_config, di):
         """execute_tool с комплексным выражением."""
-        from core.state import ExecutionState
+        from apps.flows.src.state import ExecutionState
 
         state = ExecutionState(
             task_id="test",

@@ -8,8 +8,8 @@ Zero-Guess: все типы нод регистрируются явно при 
 from typing import override
 
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.registry.base import ResourceRegistry
 from apps.flows.src.runtime.nodes import RUNTIME_NODE_CLASSES, BaseNode
-from core.registry.base import ResourceRegistry
 from core.types import JsonObject
 
 

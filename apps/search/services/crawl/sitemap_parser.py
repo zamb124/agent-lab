@@ -7,8 +7,8 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
-from core.crawl.models import SitemapEntry
-from core.crawl.url_filter import CrawlUrlFilter
+from apps.search.crawl.url_filter import CrawlUrlFilter
+from apps.search.models import SitemapEntry
 from core.http import get_httpx_client
 
 _SITEMAP_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}

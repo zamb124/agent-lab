@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.files.docx_template import fill_docx_template
 from core.files.file_ref import FileRef
 from core.files.writer.exceptions import FileWriteError
-from core.state import ExecutionState
 from core.types import require_json_object
 
 

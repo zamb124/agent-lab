@@ -27,7 +27,7 @@ REQUIRE_BALANCE_ALLOWLIST: frozenset[str] = frozenset(
     {
         "core/clients/llm/billing.py",
         "core/ai/embedding_client.py",
-        "core/calls/livekit_client.py",
+        "apps/sync/services/livekit_client.py",
         "apps/guest_runtime/services/farm_service.py",
         "apps/search/services/meta.py",
         "apps/voice/api/session.py",

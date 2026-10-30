@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, TypeAlias, TypeVar, get_type_hints, override
 from pydantic import BaseModel
 
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.base import (
     BaseTool,
     ToolArguments,
@@ -23,12 +24,11 @@ from apps.flows.src.tools.base import (
     ToolResult,
 )
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object, require_json_value
 
 if TYPE_CHECKING:
+    from apps.flows.src.state import ExecutionState
     from apps.flows.src.tools.builtin_dependencies import BuiltinToolClient
-    from core.state import ExecutionState
 
 Permission = str | list[str] | None
 

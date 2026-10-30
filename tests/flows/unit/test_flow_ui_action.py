@@ -7,18 +7,18 @@ from typing import cast
 import pytest
 from a2a.types import Message, Part, Role
 
-from core.a2a.codec import value_from_json
-from core.files.file_ref import FileRef
-from core.flow_ui.action import (
+from apps.flows.src.flow_ui.action import (
     apply_flow_ui_action,
     render_ui_action_markdown,
     ui_action_from_message,
     validate_flow_ui_action,
 )
-from core.flow_ui.document import FlowUIDocument, FlowUIMarkdownText
-from core.flow_ui.projection import assert_fields_outside_redacted
-from core.flow_ui.protocol import FLOW_UI_ACTION_MEDIA_TYPE, FlowUIActionMessage
-from core.state import ExecutionState
+from apps.flows.src.flow_ui.projection import assert_fields_outside_redacted
+from apps.flows.src.state import ExecutionState
+from core.a2a.codec import value_from_json
+from core.files.file_ref import FileRef
+from core.ui_document.document import FlowUIDocument, FlowUIMarkdownText
+from core.ui_document.protocol import FLOW_UI_ACTION_MEDIA_TYPE, FlowUIActionMessage
 from core.types import JsonObject
 
 FILE_PAYLOAD = {

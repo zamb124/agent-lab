@@ -13,8 +13,8 @@ import pytest
 from a2a.helpers.proto_helpers import get_message_text
 
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.state import ExecutionState
 from core.clients.google_docs_client import GoogleDocsClient
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.fixtures.google_api_emulator import GoogleApiEmulatorHandle
 from tests.flows.durable_runtime_harness import ensure_workflow_started

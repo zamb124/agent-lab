@@ -22,6 +22,7 @@ from apps.flows.src.durable_execution import RunStartedPayload, WorkflowEventTyp
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.tools.documents.documents_catalog import (
     documents_find,
@@ -34,7 +35,6 @@ from core.context import clear_context, set_context
 from core.di import require_di
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.flows.durable_runtime_harness import ensure_workflow_started
 from tests.office.helpers import upload_office_file_bytes

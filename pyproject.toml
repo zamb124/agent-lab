@@ -202,6 +202,7 @@ source = ["apps", "core"]
 omit = ["*/tests/*", "*/__pycache__/*"]
 
 [tool.coverage.report]
+ignore_errors = true
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 show_missing = true
 precision = 2

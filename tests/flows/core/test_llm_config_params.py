@@ -9,7 +9,7 @@ from apps.flows.src.runtime.llm_config_params import (
     split_llm_config_for_client,
     stream_kwargs_from_llm_config,
 )
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 
 def test_split_llm_config_for_client_none():

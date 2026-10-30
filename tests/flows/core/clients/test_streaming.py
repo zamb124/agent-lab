@@ -33,11 +33,11 @@ from a2a.types.a2a_pb2 import (
 from apps.flows.config import get_settings
 from apps.flows.src.a2a import A2ATaskProjectionService
 from apps.flows.src.models.a2a_projection import A2ATaskProjection
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.streaming import Emitter, EventSubscriber, InMemoryEmitter, StreamEvent
 from apps.flows.src.streaming.subscriber import is_final_event
 from core.a2a import TERMINAL_A2A_TASK_STATES, mapping_from_struct, struct_from_mapping
 from core.clients.redis_client import RedisClient
-from core.state import ExecutionState
 from core.types import JsonObject
 
 

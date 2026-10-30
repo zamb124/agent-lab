@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.files.files import read_file
 from core.files.reader import ContentMode, ReadLane
-from core.state import ExecutionState
 from core.types import require_json_object
 from tests.core.files.corpus.helpers import corpus_stt_company_id
 from tests.core.files.corpus.manifest import POSITIVE

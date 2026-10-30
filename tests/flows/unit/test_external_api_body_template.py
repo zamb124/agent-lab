@@ -3,7 +3,7 @@
 import pytest
 
 from apps.flows.src.mapping import MappingResolver
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 
 def test_resolve_json_template_state_and_var_and_literal():

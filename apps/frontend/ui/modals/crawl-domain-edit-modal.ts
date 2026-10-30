@@ -1,7 +1,7 @@
 /**
  * Модалка редактирования crawl-домена (company system).
  *
- * Поля API (core/crawl/models.py::CrawlDomainPatchRequest):
+ * Поля API (apps/search/models/contracts.py::CrawlDomainPatchRequest):
  *   status:                   active | paused | blocked | error
  *   refresh_interval_seconds: int | null
  *   include_url_patterns:     list[str]

@@ -9,14 +9,14 @@ from apps.flows.src.models import NodeConfig, NodeLLMConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.flow_config import Edge, SimpleEdgeCondition
 from apps.flows.src.models.node_config import ReactConfig, ReactLoopMode
-from core.ai.llm_config import LLMCallConfig
-from core.reflection import (
+from apps.flows.src.reflection import (
     CriticCriterion,
     CriticExit,
     CriticExitWhen,
     CriticPolicy,
     ReflectionTarget,
 )
+from core.ai.llm_config import LLMCallConfig
 from tests.flows.fixtures.reflection import reflection_policy
 
 

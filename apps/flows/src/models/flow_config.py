@@ -23,15 +23,15 @@ from oxyde import Field as DbField
 from oxyde import Index, Query, execute_raw
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models.execution_limits import get_flow_execution_wall_time_cap_seconds
+from apps.flows.src.models.urn import extract_resource_id
 from core.context.context import get_context
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.templates import default_chat_document
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.platform_model import CompanyScopedModel
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
-from core.urn import extract_resource_id
+from core.ui_document.document import FlowUIDocument
 from core.variables.models import VariableEntry, normalize_variables_map
 
 from .enums import MergeMode

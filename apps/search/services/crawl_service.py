@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainCreateRequest,
     CrawlDomainPatchRequest,
@@ -23,6 +22,7 @@ from core.crawl.models import (
     SeedImportResult,
     UpsertStats,
 )
+from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from core.errors.boundary import PlatformNotFoundError
 from core.pagination import OffsetPage
 

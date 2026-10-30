@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from core.crawl.models import CrawlDomain, CrawlUrl
+from apps.search.models import CrawlDomain, CrawlUrl
 from core.errors.boundary import PlatformNotFoundError
 
 

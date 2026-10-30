@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pydantic import Field, model_validator
 
-from core.flow_ui.document import FlowUIDocument
 from core.models import StrictBaseModel
 from core.types import JsonObject, JsonValue
+from core.ui_document.document import FlowUIDocument
 
 from .enums import MergeMode
 from .flow_config import (

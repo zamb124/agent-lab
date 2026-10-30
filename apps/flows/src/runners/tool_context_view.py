@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.a2a.codec import messages_to_json_list
 from core.files.file_ref import FileRef
-from core.state import ExecutionState
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject, require_json_object
 
 

@@ -4,7 +4,7 @@ globs:
   - "apps/flows/src/runtime/**"
   - "apps/flows/src/durable_execution/**"
   - "apps/flows/src/state/**"
-  - "core/state/**"
+  - "apps/flows/src/state/**"
 alwaysApply: false
 ---
 
@@ -19,7 +19,7 @@ Flows исполняются как durable workflow: append-only ledger `workfl
 - `workflow_snapshots` — anchors для rehydrate; создаются на `RunStarted`, terminal, каждые N событий, при крупной delta; не заменяют историю.
 - `execution_branches` — линии fork/rewind/retry/manual_patch; `execution_branch_id` не путается с `branch_id` конфига flow. `WorkflowInstance.branch_records_by_created_at_asc(*, company_id, session_id) -> list[WorkflowBranchRecord]` — записи веток сессии, `ORDER BY created_at ASC`. Предела нет. Нет головы сессии — `is_active` ложен у всех.
 - `activity_tasks` (`ActivityTask`: identity, `input_hash`, `idempotency_key`, `side_effect_policy` `pure`/`idempotent`/`non_idempotent`) и `activity_attempts` (`ActivityAttempt`: попытка, статус, lease). `ActivityTask.any_activity_record(*, company_id, session_id, execution_branch_id, activity_id=None, idempotency_key=None) -> ActivityRecord | None` — запись ветки по `activity_id` или `idempotency_key`. Задача через `.first()` без порядка: какая взята, не задано. Попытка — `ActivityAttempt.latest_by_attempt_desc(activity_id, *, for_update) -> ActivityAttempt | None`, `ORDER BY attempt DESC`. Нет строки — `None`. Нет ни одного ключа — `ValueError` с текстом `activity_id or idempotency_key is required`. Нет попытки — `RuntimeError`. `completed_result` возвращает `result_json` только у `completed`: нет записи или другой статус — `None`, другой `input_hash` — `ValueError`.
-- `ExecutionState` (`core/state/execution_state.py`) — нативный Pydantic во всём runtime; сериализация — только на границах (snapshot, event, TaskIQ, API, tracing). Граф нод и JSON flow в state не хранятся; ресурсы — `FlowFactory.get_resource_maps(...)`.
+- `ExecutionState` (`apps/flows/src/state/execution_state.py`) — нативный Pydantic во всём runtime; сериализация — только на границах (snapshot, event, TaskIQ, API, tracing). Граф нод и JSON flow в state не хранятся; ресурсы — `FlowFactory.get_resource_maps(...)`.
 - `session_id` = `{flow_id}:{context_id}`; один `context_id` — одна durable-беседа, каждый ход (текст или `ui-action`) — новый `task_id` в ней.
 - Итог задачи — `terminal_task_state` + `terminal_task_error`; имена `terminal_status`, `terminal_error` запрещены.
 
@@ -52,7 +52,7 @@ Flows исполняются как durable workflow: append-only ledger `workfl
 
 ### Прерывания
 
-1. `FlowInterrupt(question=...)` или `FlowInterrupt(body=UserMessageInterrupt|OperatorTaskInterrupt|OAuthInterrupt|HandoffInterrupt)` останавливает выполнение; `state.interrupt` — `InterruptData` `{body, system, correlation_id?}` (`core/state/interrupt.py`); плоская форма `{question, context}` запрещена.
+1. `FlowInterrupt(question=...)` или `FlowInterrupt(body=UserMessageInterrupt|OperatorTaskInterrupt|OAuthInterrupt|HandoffInterrupt)` останавливает выполнение; `state.interrupt` — `InterruptData` `{body, system, correlation_id?}` (`apps/flows/src/state/interrupt.py`); плоская форма `{question, context}` запрещена.
 2. Запись прерывания — только `InterruptManager.apply_interrupt`; канал дополняет `system` через `enrich_system_from_channel` (`apps/flows/src/state/interrupt_manager.py`).
 3. `state.interrupt_path` — путь к месту прерывания; `nested_states` — только activity-local вложенные tools; `child_workflows` — durable-связи `FlowNode`; `current_nodes` — точка resume.
 4. HITL: `hitl_node` и tool `hitl_operator_task` через `HitlWorkItemService` создают `WorkItem(kind=operator_handoff, blocking=True)`; resume находит завершённый WorkItem по `correlation_id` (`any_by_correlation_id`, `core/worktracker/models/work_item.py`), идемпотентен; HTTP wake запрещён → `worktracker.mdc`. `handoff_mode` (`single_reply`/`takeover`) — режим HITL, не agent handoff.
@@ -62,10 +62,10 @@ Flows исполняются как durable workflow: append-only ledger `workfl
 
 ### Состояние
 
-1. Системные поля `FROZEN_STATE_FIELDS` (`core/state/mutation_policy.py`) не меняются пользовательским кодом (CodeNode, inline tool, evaluation) — `FrozenStateFieldError`; остальные поля и extra нода пишет свободно.
+1. Системные поля `FROZEN_STATE_FIELDS` (`apps/flows/src/state/mutation_policy.py`) не меняются пользовательским кодом (CodeNode, inline tool, evaluation) — `FrozenStateFieldError`; остальные поля и extra нода пишет свободно.
 2. Параллельный merge: `messages` — extend, `tool_results` — update; из параллельных tools переносятся только `USER_TOOL_PARALLEL_STATE_MERGE_FIELDS`; системные поля веток не перезаписывают объединённый state.
 3. `messages` — единый упорядоченный лог с `metadata.node_id` источника; физически сокращает его только async-запись памяти context layer (`prune_state_messages_to_memory_cursor_for_runtime`).
-4. Flow UI: документ интерфейса в state не хранится; `apply_flow_ui_action` (`core/flow_ui/action.py`) пишет `fields` по их путям, ставит `ui_action` и `content`; события агента копятся в `queue_ui_events` и забираются `drain_ui_events()`; `ui_slots` пишет только доверенный runtime (`FIELDS_COPY_FROM_RUNTIME_NODE_STATE`) → `flow_ui.mdc`.
+4. Flow UI: документ интерфейса в state не хранится; `apply_flow_ui_action` (`apps/flows/src/flow_ui/action.py`) пишет `fields` по их путям, ставит `ui_action` и `content`; события агента копятся в `queue_ui_events` и забираются `drain_ui_events()`; `ui_slots` пишет только доверенный runtime (`FIELDS_COPY_FROM_RUNTIME_NODE_STATE`) → `flow_ui.mdc`.
 5. Для вложенного flow `current_nodes` сбрасывается в `[]`.
 
 ### Time travel

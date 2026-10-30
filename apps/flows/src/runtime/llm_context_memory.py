@@ -8,6 +8,7 @@ from typing import Literal
 from a2a.types import Message
 from pydantic import Field
 
+from apps.flows.src.state import ExecutionState
 from core.clients.llm.messages import messages_to_openai
 from core.llm_context import LLMContextProfile
 from core.llm_context.memory import (
@@ -22,7 +23,6 @@ from core.llm_context.memory_compaction import (
 )
 from core.llm_context.models import LLMContextMemoryScope
 from core.models import StrictBaseModel
-from core.state import ExecutionState
 from core.types import JsonObject
 
 RuntimeMemoryCompaction = Literal["raw", "llm_summary"]

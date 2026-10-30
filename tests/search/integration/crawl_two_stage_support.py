@@ -7,7 +7,7 @@ import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainSeed,
     CrawlEnrichedPage,

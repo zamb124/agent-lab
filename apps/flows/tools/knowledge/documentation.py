@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from core.clients.rag_client import RagClient
 from core.config import get_settings
@@ -18,7 +19,6 @@ from core.docs.assistant import (
 )
 from core.rag.models import RAGSearchOptions
 from core.rag.search_options_resolver import resolve_platform_search_options
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 _DOCS_SEARCH_DESCRIPTION = """

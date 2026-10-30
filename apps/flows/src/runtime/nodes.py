@@ -49,6 +49,7 @@ from apps.flows.src.durable_execution import (
     build_state_delta,
     hash_state_json,
 )
+from apps.flows.src.flow_ui.effects import apply_capability_platform_effects
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models import (
     MCPServerConfig,
@@ -65,6 +66,14 @@ from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowNam
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.models.hitl_schemas import HitlInterruptSnapshot, build_hitl_handoff_command
 from apps.flows.src.models.resource import ResourceType
+from apps.flows.src.reflection import (
+    CriticPolicy,
+    ReflectionCritiqueResult,
+    ReflectionGateResult,
+    ReflectionRecord,
+    ReflectionTargetSnapshot,
+    evaluate_reflection_gate,
+)
 from apps.flows.src.runtime.agent_skill_runtime import AgentSkillRuntimeHost
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
@@ -75,6 +84,7 @@ from apps.flows.src.runtime.execution_context import (
 )
 from apps.flows.src.runtime.flow_interface_context import current_flow_interface
 from apps.flows.src.runtime.llm_context_memory import resolve_memory_context_source_for_runtime
+from apps.flows.src.runtime.llm_context_memory_store import RAGLLMContextMemoryStore
 from apps.flows.src.runtime.llm_context_rag import resolve_rag_context_source_registry_for_runtime
 from apps.flows.src.runtime.llm_context_resource import resolve_llm_context_policy_for_runtime
 from apps.flows.src.runtime.llm_resource_config import (
@@ -95,7 +105,21 @@ from apps.flows.src.services.hitl_work_item_service import (
 )
 from apps.flows.src.services.mcp_client import MCPClient
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
+from apps.flows.src.state import (
+    ChildWorkflowLink,
+    ChildWorkflowStatus,
+    ExecutionExceptionRecord,
+    ExecutionState,
+    InterruptPathItem,
+    parse_interrupt_body_from_external_dict,
+)
+from apps.flows.src.state.execution_state import ExecutionStateValue
+from apps.flows.src.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from apps.flows.src.state.interrupt_manager import InterruptManager
+from apps.flows.src.state.mutation_policy import (
+    forbid_frozen_update_key,
+    should_skip_field_on_user_returned_state_copy,
+)
 from apps.flows.src.streaming.emitter import EmitterFactory
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.materialize import ToolMaterializeInput
@@ -126,7 +150,6 @@ from core.context import get_context as get_request_context
 from core.datasources.models import DatasourceOperation
 from core.datasources.service import DatasourceExecutors, DatasourceService
 from core.errors import NodeWallClockTimeoutError
-from core.flow_ui.effects import apply_capability_platform_effects
 from core.guest_runtime.env import (
     guest_env_key_is_reserved,
     guest_env_key_is_valid,
@@ -143,29 +166,6 @@ from core.llm_context import (
 from core.logging import get_log_context, get_logger
 from core.mail.service import MailService
 from core.namespace.service import NamespaceService
-from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
-from core.reflection import (
-    CriticPolicy,
-    ReflectionCritiqueResult,
-    ReflectionGateResult,
-    ReflectionRecord,
-    ReflectionTargetSnapshot,
-    evaluate_reflection_gate,
-)
-from core.state import (
-    ChildWorkflowLink,
-    ChildWorkflowStatus,
-    ExecutionExceptionRecord,
-    ExecutionState,
-    InterruptPathItem,
-    parse_interrupt_body_from_external_dict,
-)
-from core.state.execution_state import ExecutionStateValue
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
-from core.state.mutation_policy import (
-    forbid_frozen_update_key,
-    should_skip_field_on_user_returned_state_copy,
-)
 from core.test_scope import resolve_test_scope
 from core.text_transforms.service import TextTransformService
 from core.tracing.attributes import (
@@ -1297,7 +1297,7 @@ class LlmNode(BaseNode):
         )
         return create_llm_client_from_call_config(
             effective.config,
-            state=state,
+            variables=state.variables if state is not None else None,
             fallback_models=effective.config.fallback_models,
         )
 
@@ -3580,7 +3580,7 @@ class ReflectionNode(BaseNode):
         llm_cfg = self.llm_config
         llm = create_llm_client_from_call_config(
             llm_cfg,
-            state=state,
+            variables=state.variables,
             fallback_models=llm_cfg.fallback_models,
             allow_platform_paid_fallback=False,
         )

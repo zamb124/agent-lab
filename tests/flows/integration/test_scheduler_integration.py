@@ -46,7 +46,7 @@ class TestScheduleService:
     @pytest.mark.asyncio
     async def test_schedule_one_time_task_creates_in_db(self, app, di, unique_id, schedule_service):
         """schedule_one_time_task создает запись в PostgreSQL."""
-        from core.scheduler.models import ContentType
+        from apps.flows.src.models.scheduled_task import ContentType
 
         service = schedule_service
         run_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=1)
@@ -75,7 +75,7 @@ class TestScheduleService:
     @pytest.mark.asyncio
     async def test_schedule_cron_task_creates_in_db(self, app, di, unique_id, schedule_service):
         """schedule_cron_task создает периодическую задачу."""
-        from core.scheduler.models import ContentType
+        from apps.flows.src.models.scheduled_task import ContentType
 
         service = schedule_service
         flow_id = f"test_agent_{unique_id}"
@@ -99,7 +99,7 @@ class TestScheduleService:
     @pytest.mark.asyncio
     async def test_schedule_interval_task_creates_in_db(self, app, di, unique_id, schedule_service):
         """schedule_interval_task создает интервальную задачу."""
-        from core.scheduler.models import ContentType
+        from apps.flows.src.models.scheduled_task import ContentType
 
         service = schedule_service
         flow_id = f"test_agent_{unique_id}"
@@ -123,7 +123,7 @@ class TestScheduleService:
     @pytest.mark.asyncio
     async def test_list_tasks_returns_session_tasks(self, app, di, unique_id, schedule_service):
         """list_tasks возвращает задачи сессии."""
-        from core.scheduler.models import ContentType
+        from apps.flows.src.models.scheduled_task import ContentType
 
         service = schedule_service
         flow_id = f"test_agent_{unique_id}"
@@ -153,7 +153,7 @@ class TestScheduleService:
     @pytest.mark.asyncio
     async def test_cancel_task_updates_status(self, app, di, unique_id, schedule_service):
         """cancel_task меняет статус на cancelled."""
-        from core.scheduler.models import ContentType
+        from apps.flows.src.models.scheduled_task import ContentType
 
         service = schedule_service
         flow_id = f"test_agent_{unique_id}"
@@ -186,7 +186,7 @@ class TestSchedulingTools:
     @pytest.fixture
     def make_state(self):
         """Фабрика для создания ExecutionState."""
-        from core.state import ExecutionState
+        from apps.flows.src.state import ExecutionState
 
         def _make(unique_id: str, session_suffix: str = ""):
             flow_id = f"test_agent_{unique_id}"
@@ -329,8 +329,9 @@ class TestScheduledTaskExecution:
         self, app, di, unique_id, mock_llm_redis
     ):
         """Одноразовая задача выполняется когда время пришло."""
+        from apps.flows.src.models.scheduled_task import ContentType
         from apps.flows.src.tasks.scheduled_tasks import execute_scheduled_task
-        from core.scheduler.models import ContentType, ScheduledTaskStatus
+        from core.scheduler.models import ScheduledTaskStatus
 
         flow_id = f"scheduler_test_agent_{unique_id}"
         flow_config = FlowConfig(
@@ -384,8 +385,8 @@ class TestScheduledTaskExecution:
     @pytest.mark.asyncio
     async def test_tool_call_task_executes_tool(self, app, di, unique_id):
         """Tool call задача вызывает указанный tool."""
+        from apps.flows.src.models.scheduled_task import ContentType
         from apps.flows.src.tasks.scheduled_tasks import execute_scheduled_task
-        from core.scheduler.models import ContentType
 
         flow_id = f"test_agent_{unique_id}"
         flow_config = FlowConfig(

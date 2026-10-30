@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from apps.flows.src.runners.remote import RemoteCodeRunner
+from apps.flows.src.state import ExecutionState
 from core.capabilities import CAPABILITY_LANGUAGE_SET
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue
 
 

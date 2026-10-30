@@ -1,7 +1,7 @@
 /**
  * Модалка настроек crawl-профиля (company system): фильтры, лимиты, периоды, LLM enrichment.
  *
- * Поля API (core/crawl/models.py::CrawlProfilePatchRequest).
+ * Поля API (apps/search/models/contracts.py::CrawlProfilePatchRequest).
  */
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';

@@ -20,13 +20,13 @@ from apps.flows.src.observability.hitl_timing import (
     record_hitl_interrupt,
 )
 from apps.flows.src.services.hitl_conversation_service import HitlConversationService
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import HandoffMode
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.clients.redis_client import RedisClient
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
-from core.state import ExecutionState
-from core.state.interrupt import HandoffMode
 from core.tasks import enqueue
 from core.types import JsonObject, require_json_object
 from core.variables.models import normalize_variables_map

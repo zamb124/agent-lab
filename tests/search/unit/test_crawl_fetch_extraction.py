@@ -9,8 +9,8 @@ from apps.search.services.crawl.fetch_service import (
     _extract_markdown_and_signals,
     _markdown_from_structural_signals,
 )
-from core.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
-from core.crawl.models import CrawlStructuralSignals
+from apps.search.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
+from apps.search.models import CrawlStructuralSignals
 
 pytestmark = pytest.mark.unit
 

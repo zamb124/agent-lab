@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 
+from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
 from core.clients.rag_client import RagClient
 from core.context import get_context
 from core.llm_context.memory import (
@@ -18,7 +19,6 @@ from core.models.identity_models import NamespaceKind
 from core.namespace import NamespaceService
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchResult
-from core.rag.rag_resource_bind import RagResourceBindParams
 from core.types import JsonObject, JsonValue, require_json_object
 
 _DEFAULT_NAMESPACE_PREFIX = "llm-memory"

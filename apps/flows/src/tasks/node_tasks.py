@@ -17,9 +17,9 @@ from apps.flows.src.durable_execution import (
     build_state_delta,
 )
 from apps.flows.src.runtime.nodes import create_node
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_NODE
 from core.logging import get_logger
-from core.state import ExecutionState
 from core.tasks import platform_task
 from core.types import JsonObject, require_json_object
 

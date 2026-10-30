@@ -26,8 +26,8 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
-from scripts.tools.report_ui_kostyli import scope_of
 from scripts.gates.frontend.ui_canon_rules import RULES, iter_findings
+from scripts.tools.report_ui_kostyli import scope_of
 
 REPO = Path(__file__).resolve().parents[4]
 SELF = Path(__file__).resolve()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
 
 STATE_DIFF_SKIP_KEYS: frozenset[str] = frozenset({

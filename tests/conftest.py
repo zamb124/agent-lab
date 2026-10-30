@@ -794,7 +794,7 @@ def state():
     Реальный пустой state для тестов.
     Возвращает ExecutionState с минимальными обязательными полями.
     """
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
     return ExecutionState(
         task_id="test-task-id",
@@ -809,7 +809,7 @@ def state_with_content():
     """
     Реальный state с content.
     """
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
     return ExecutionState(
         task_id="test-task-id",
@@ -831,7 +831,7 @@ def make_test_state():
             state = make_test_state(content="hello", user={"name": "John"})
             result = await node.run(state)
     """
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
     def _make_state(**kwargs: Any) -> ExecutionState:
         defaults: dict[str, Any] = {

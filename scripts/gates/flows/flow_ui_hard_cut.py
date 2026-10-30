@@ -6,13 +6,14 @@
    A2UI и его каталог, платформенные надстройки над A2A (negotiation/representation/
    interaction parser/session service/OCC ``mutation_id``/``base_revision``), grid-раскладка
    (``row_start``/``column_span``/``container_layout``/``grid-geometry``), дубли состояния
-   интерфейса в ExecutionState (``ui_document``/``ui_values``/``ui_state``), старый control plane
+   интерфейса в ExecutionState (поле ``ui_document``/``ui_values``/``ui_state``; токен
+   ``ui_document`` запрещён вне пакета ``core.ui_document``), старый control plane
    и capability ``ui.*`` кроме ``ui.render``/``ui.navigate``.
 2. В зонах Flow UI нет маркеров недоделанности и слоёв совместимости
    (``TODO|FIXME|HACK|XXX|compat|legacy|deprecated|shim|_v2|V2``).
 3. Ключи рендереров ``blocks/*.ts`` совпадают с типами Pydantic-union ``FlowUIBlock``;
    ``STATE_PATH_PATTERN`` и ``INPUT_BLOCK_TYPES`` в ``protocol/constants.ts`` равны
-   значениям ``core/flow_ui/document.py``.
+   значениям ``core/ui_document/document.py``.
 4. Бюджеты: ни одного файла > 600 строк в ``flow-ui/`` и ``interface-editor/``;
    ``flow-ui/*.ts`` ≤ 9000 строк; редактор (``interface-editor/`` + ``flows-interface-*`` модалки) ≤ 2800.
 5. Sandbox блока ``html``: в ``flow-ui/`` нет ``allow-same-origin``/``unsafe-eval``; константы
@@ -31,7 +32,7 @@ from scripts.gates.kit import REPO_ROOT as ROOT
 
 sys.path.insert(0, str(ROOT))
 
-from core.flow_ui.document import INPUT_BLOCK_TYPES, STATE_PATH_PATTERN, FlowUIBlock  # noqa: E402
+from core.ui_document.document import INPUT_BLOCK_TYPES, STATE_PATH_PATTERN, FlowUIBlock  # noqa: E402
 
 FLOW_UI_LIB = ROOT / "core/frontend/static/lib/flow-ui"
 EDITOR_DIR = ROOT / "apps/flows/ui/components/interface-editor"
@@ -68,7 +69,7 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "legacy flow ui state duplicates",
         re.compile(
-            r"\bui_document\b|\bui_values\b|\bui_value\b|\bui_state\b|\bui_interaction\b|\bui_effect_cursor\b|"
+            r"(?<!core\.)(?<!core/)\bui_document\b|\bui_values\b|\bui_value\b|\bui_state\b|\bui_interaction\b|\bui_effect_cursor\b|"
             r"ui_template_version|ui_conflict|ui_applied_effect_ids|ui_last_synced_at|"
             r"ui_last_accepted_client_mutation|FlowUITransition|FlowUIInteraction|FlowUIConflict"
         ),
@@ -126,7 +127,7 @@ ALLOWLIST_PREFIXES = (
     "migrations/",  # data-миграции читают старые ключи
     "scripts/gates/flows/flow_ui_hard_cut.py",
     "scripts/gates/backend/platform_events.py",
-    "core/state/execution_state.py",  # FORBIDDEN_* registry перечисляет удалённые поля
+    "apps/flows/src/state/execution_state.py",  # FORBIDDEN_* registry перечисляет удалённые поля
     "core/i18n/generated/",  # регенерируется из translations
 )
 
@@ -178,7 +179,7 @@ def _flow_ui_zone_files() -> list[Path]:
     zone: list[Path] = sorted(FLOW_UI_LIB.rglob("*.ts"))
     zone.extend(sorted(EDITOR_DIR.glob("*.ts")))
     zone.extend(EDITOR_MODALS)
-    zone.extend(sorted((ROOT / "core/flow_ui").glob("*.py")))
+    zone.extend(sorted((ROOT / "core/ui_document").glob("*.py")))
     zone.extend(sorted((ROOT / "apps/flows/src/api/v1").glob("flow_ui*.py")))
     zone.extend(sorted((ROOT / "apps/flows/src/services").glob("flow_ui*.py")))
     return zone
@@ -261,7 +262,7 @@ def _check_grammar_constants(failures: list[str]) -> None:
     source = constants_path.read_text(encoding="utf-8")
     pattern = re.search(r"^export const STATE_PATH_PATTERN = /(.+)/;$", source, re.MULTILINE)
     if pattern is None or pattern.group(1) != STATE_PATH_PATTERN:
-        failures.append(f"{_rel(constants_path)}: STATE_PATH_PATTERN differs from core/flow_ui/document.py")
+        failures.append(f"{_rel(constants_path)}: STATE_PATH_PATTERN differs from core/ui_document/document.py")
     types_block = re.search(
         r"^export const INPUT_BLOCK_TYPES(?:: [^=]+)? = (?:Object\.freeze\()?new Set(?:<string>)?\(\[\n((?:    '[a-z_]+',\n)+)\]\)(?:\)\))?;$",
         source,
@@ -272,7 +273,7 @@ def _check_grammar_constants(failures: list[str]) -> None:
         return
     js_types = set(re.findall(r"'([a-z_]+)'", types_block.group(1)))
     if js_types != set(INPUT_BLOCK_TYPES):
-        failures.append(f"{_rel(constants_path)}: INPUT_BLOCK_TYPES differs from core/flow_ui/document.py")
+        failures.append(f"{_rel(constants_path)}: INPUT_BLOCK_TYPES differs from core/ui_document/document.py")
 
 
 def _check_budgets(failures: list[str]) -> None:

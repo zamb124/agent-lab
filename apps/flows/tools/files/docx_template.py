@@ -8,11 +8,11 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.state.state_utils import find_file, normalize_file_lookup_name
 from apps.flows.src.tools.decorator import tool
 from core.files.docx_template import DocxTemplater
 from core.files.file_ref import stored_file_ref
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 JsonDict = JsonObject

@@ -10,7 +10,7 @@ import re
 from html.parser import HTMLParser
 from typing import override
 
-from core.flow_ui.document import STATE_PATH_PATTERN
+from core.ui_document.document import STATE_PATH_PATTERN
 
 HTML_BIND_ATTRIBUTE = "data-bind"
 HTML_SHOW_ATTRIBUTE = "data-show"

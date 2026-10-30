@@ -11,13 +11,13 @@ from contextlib import contextmanager
 import pytest
 from httpx2 import AsyncClient
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.sync.sync_tools import sync_list_messages, sync_send_message
 from core.clients.service_client import ServiceClientError
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.identity.flow_employee import ensure_flow_employee, flow_employee_user_id
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 from tests.fixtures.ai_provider_defaults import make_test_company
 from tests.sync.api._helpers import seed_namespace_via_repo
 

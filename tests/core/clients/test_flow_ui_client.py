@@ -27,7 +27,7 @@ from core.clients.flow_ui_client import (
     task_text,
     task_ui_events,
 )
-from core.flow_ui.protocol import (
+from core.ui_document.protocol import (
     FLOW_UI_MEDIA_TYPE,
     STATE_ARTIFACT_ID,
     UI_ARTIFACT_ID,

@@ -12,12 +12,12 @@ import httpx2
 import trafilatura
 from bs4 import BeautifulSoup
 
+from apps.search.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
+from apps.search.crawl.logging_events import log_crawl_fetch_completed, log_crawl_fetch_failed
+from apps.search.crawl.structural_signals import extract_structural_signals_from_html
+from apps.search.models import CrawlFetchResult, CrawlStructuralSignals, canonicalize_url
 from core.clients.browser.crawl_fetch_types import BrowserCrawlFetchResponse
 from core.clients.browser_fetch_client import BrowserFetchClient
-from core.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
-from core.crawl.logging_events import log_crawl_fetch_completed, log_crawl_fetch_failed
-from core.crawl.models import CrawlFetchResult, CrawlStructuralSignals, canonicalize_url
-from core.crawl.structural_signals import extract_structural_signals_from_html
 from core.http import get_httpx_client
 from core.http.text_encoding import decode_response_body_bytes
 

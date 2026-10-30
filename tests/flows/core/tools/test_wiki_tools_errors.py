@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.di import FlowsDi
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.wiki.wiki_tools import wiki_get_page
 from core.clients.service_client import ServiceClientError
 from core.clients.wiki_models import WikiPageIdArgs
 from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 
 
 @pytest.mark.asyncio

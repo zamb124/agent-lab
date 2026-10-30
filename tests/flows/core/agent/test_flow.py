@@ -10,6 +10,7 @@ from typing import override
 import pytest
 
 from apps.flows.di import FlowsDi
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import (
@@ -20,9 +21,8 @@ from apps.flows.src.runtime.nodes import (
     NodeRunResult,
     create_node,
 )
+from apps.flows.src.state import ExecutionState
 from core.errors import FlowInfiniteLoopError
-from core.flow_ui.templates import default_chat_document
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
 from core.variables import VariableResolver
 from tests.flows.durable_runtime_harness import run_flow

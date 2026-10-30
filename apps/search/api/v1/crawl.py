@@ -7,6 +7,26 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from apps.search.di import Di
+from apps.search.models import (
+    CrawlDomain,
+    CrawlDomainCreateRequest,
+    CrawlDomainPatchRequest,
+    CrawlDomainRunResponse,
+    CrawlJob,
+    CrawlJobCreateRequest,
+    CrawlJobQueuedResponse,
+    CrawlProfileCreateRequest,
+    CrawlProfilePatchRequest,
+    CrawlProfileSummary,
+    CrawlProfileWithIndex,
+    CrawlUrl,
+    CrawlUrlAddRequest,
+    CrawlUrlDetail,
+    CrawlUrlListItem,
+    SeedImportRequest,
+    SeedImportResult,
+    UpsertStats,
+)
 from apps.search.realtime.operations import (
     CrawlDomainCreatePayload,
     CrawlDomainRefPayload,
@@ -42,26 +62,6 @@ from apps.search.realtime.operations import (
     op_crawl_urls_recrawl,
 )
 from core.context import require_context
-from core.crawl.models import (
-    CrawlDomain,
-    CrawlDomainCreateRequest,
-    CrawlDomainPatchRequest,
-    CrawlDomainRunResponse,
-    CrawlJob,
-    CrawlJobCreateRequest,
-    CrawlJobQueuedResponse,
-    CrawlProfileCreateRequest,
-    CrawlProfilePatchRequest,
-    CrawlProfileSummary,
-    CrawlProfileWithIndex,
-    CrawlUrl,
-    CrawlUrlAddRequest,
-    CrawlUrlDetail,
-    CrawlUrlListItem,
-    SeedImportRequest,
-    SeedImportResult,
-    UpsertStats,
-)
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/crawl", tags=["crawl"])

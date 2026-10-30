@@ -17,6 +17,7 @@ from apps.flows.src.models import NodeConfig, ReactConfig, ReactLoopMode
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.misc.agent_session_tools import final_answer, reason
@@ -24,7 +25,6 @@ from apps.flows.tools.misc.finish_tool import finish
 from apps.flows.tools.misc.math_tools import calculator
 from core.a2a import get_part_text, part_has_text
 from core.clients.llm import LLMClient, MockLLM
-from core.state import ExecutionState
 
 
 def _llm_runner(

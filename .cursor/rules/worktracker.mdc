@@ -33,7 +33,7 @@ alwaysApply: false
 
 ### HITL
 
-- HITL — `WorkItem(kind=operator_handoff, blocking=true)` в очереди с хуком `completed` (`service="flows"`, `path="platform:events"`, snapshot сессии в `binding`), связью `FlowSessionLink` и `interaction.mode` из `handoff_mode`. Создаёт его `HitlWorkItemService.register_handoff` (`apps/flows/src/services/hitl_work_item_service.py`) на `OperatorTaskInterrupt` (`core/state/interrupt.py`), идемпотентно по correlation. `[без гейта]`
+- HITL — `WorkItem(kind=operator_handoff, blocking=true)` в очереди с хуком `completed` (`service="flows"`, `path="platform:events"`, snapshot сессии в `binding`), связью `FlowSessionLink` и `interaction.mode` из `handoff_mode`. Создаёт его `HitlWorkItemService.register_handoff` (`apps/flows/src/services/hitl_work_item_service.py`) на `OperatorTaskInterrupt` (`apps/flows/src/state/interrupt.py`), идемпотентно по correlation. `[без гейта]`
 - Flow возобновляется только consumer group `flows` по `worktracker/work_item/completed` (`HitlWorkItemService.resume_from_completion`, закрывающий ответ — `resolution.text` в durable messages); хук срабатывает одинаково, кто бы ни завершил задачу.
 - Диалог HITL — durable-append в `ExecutionState.messages` через `HitlConversationService` (`apps/flows/src/services/hitl_conversation_service.py`) и `op_flows_hitl_conversation_*`; `WorkItemComment` для диалога не используется.
 - `single_reply`: ответ оператора — `complete` с текстом или файлами, `complete` без них — `ValueError`; реплика оператора без завершения и ход пользователя до ответа отвергаются, кроме Flow UI BOOTSTRAP и SYNC (`_prepare_task_params`, `apps/flows/src/channels/base.py`).

@@ -12,6 +12,7 @@ from typing import Literal
 from apps.flows.src.files.state_file_refs import upsert_state_file, with_document_capability
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from apps.flows.src.services.flow_ui_cards import show_files
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.state.state_utils import find_file
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
@@ -30,7 +31,6 @@ from core.clients.documents_models import (
 )
 from core.context import resolve_namespace_or_raise
 from core.files.file_ref import FileRef
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 _TAGS = ["documents"]

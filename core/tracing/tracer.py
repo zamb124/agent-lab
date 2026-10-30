@@ -14,7 +14,6 @@ import uuid
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import Span as SDKSpan
@@ -36,8 +35,6 @@ from core.types import (
     require_json_object,
 )
 
-if TYPE_CHECKING:
-    from core.state import ExecutionState
 from .context import TraceContext
 from .operation_log_mirror import log_operation_finished, log_tool_call_finished
 from .provider import ensure_tracer_provider
@@ -887,13 +884,9 @@ class PlatformTracer:
             span_attributes=span_attributes,
         )
 
-    def record_state_snapshot(self, span: OtelSpan, state: "ExecutionState") -> None:
+    def record_state_snapshot(self, span: OtelSpan, state_dump: JsonObject) -> None:
         """Записывает projection snapshot в span."""
-        # Конвертируем ExecutionState в dict для JSON сериализации
-        state_dict = require_json_object(
-            state.model_dump(mode="json", exclude_none=False),
-            "state.snapshot",
-        )
+        state_dict = require_json_object(state_dump, "state.snapshot")
 
         snapshot = {
             k: v for k, v in state_dict.items() if not k.startswith("__") or k == "__tools__"

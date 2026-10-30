@@ -5,17 +5,17 @@ from __future__ import annotations
 import pytest
 from httpx2 import AsyncClient
 
+from apps.flows.src.flow_ui.schema import flow_ui_schema
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.context import Context, clear_context, set_context
-from core.flow_ui.document import (
+from core.ui_document.document import (
     FlowUIAgentIdentity,
     FlowUIConversation,
     FlowUIDocument,
 )
-from core.flow_ui.schema import flow_ui_schema
-from core.flow_ui.templates import default_chat_document
 from core.models.identity_models import Company, User
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject
 
 INTERFACE_KEYS = {

@@ -7,14 +7,11 @@ import time
 from datetime import datetime
 
 from apps.search.config import SearchCrawlEnrichmentConfig
-from apps.search.services.crawl.taxonomy_registry import resolve_crawl_taxonomy
-from core.ai.models import ResolvedAIModel
-from core.ai.providers import AICapability
-from core.ai.requirements import AIRequestRequirements, AISelection
-from core.ai.resolver import resolve_ai_model
-from core.ai.runtime import create_llm_client_from_ai_model
-from core.clients.llm.client import LLMClient
-from core.crawl.models import (
+from apps.search.crawl.taxonomy import (
+    coerce_filter_metadata_for_taxonomy_by_tag_asc,
+    validate_filter_metadata_against_taxonomy,
+)
+from apps.search.models import (
     CrawlDomain,
     CrawlEnrichedPage,
     CrawlEnrichedPageLLMOutput,
@@ -22,10 +19,13 @@ from core.crawl.models import (
     CrawlProfile,
     CrawlStructuralSignals,
 )
-from core.crawl.taxonomy import (
-    coerce_filter_metadata_for_taxonomy_by_tag_asc,
-    validate_filter_metadata_against_taxonomy,
-)
+from apps.search.services.crawl.taxonomy_registry import resolve_crawl_taxonomy
+from core.ai.models import ResolvedAIModel
+from core.ai.providers import AICapability
+from core.ai.requirements import AIRequestRequirements, AISelection
+from core.ai.resolver import resolve_ai_model
+from core.ai.runtime import create_llm_client_from_ai_model
+from core.clients.llm.client import LLMClient
 from core.search.index_models import SearchIndexCrawlTaxonomy
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject

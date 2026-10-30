@@ -11,7 +11,7 @@ from apps.flows.src.tools.decorator import tool
 from core.types import JsonObject, JsonValue
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 DEFAULT_BROWSER_MARKDOWN_MAX_CHARS = 12_000
 

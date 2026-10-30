@@ -11,11 +11,11 @@ from apps.flows.src.models.external_api import (
     ResponseStatus,
     ResponseType,
 )
+from apps.flows.src.state import ExecutionState
 from core.errors import ExternalAPIError
 from core.http import ProxyStrategy, get_httpx_client
 from core.http.client import HttpRequestKwargs
 from core.logging import get_logger
-from core.state import ExecutionState
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, parse_json_value, require_json_object
 

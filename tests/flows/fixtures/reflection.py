@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.reflection import (
+from apps.flows.src.reflection import (
     CriticCriterion,
     CriticDecision,
     CriticPolicy,

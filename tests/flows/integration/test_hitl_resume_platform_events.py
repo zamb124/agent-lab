@@ -8,8 +8,8 @@ import pytest
 from httpx2 import AsyncClient
 
 from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.context import get_context, reset_context, set_context
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.worktracker.models import UserActor
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 from tests.flows.hitl_test_harness import hitl_flow_create_payload

@@ -34,8 +34,8 @@ from apps.flows.src.durable_execution.models.contracts import (
 from apps.flows.src.durable_execution.models.execution_branch import ExecutionBranch
 from apps.flows.src.durable_execution.models.workflow_event import WorkflowEvent
 from apps.flows.src.durable_execution.models.workflow_snapshot import WorkflowSnapshot
+from apps.flows.src.state.execution_state import ExecutionState
 from core.models.platform_model import PlatformModel
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
 from core.utils.time import utcnow
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from core.state import ExecutionState
-from core.state.mutation_policy import FrozenStateFieldError
-from core.state.state_path import assign_state_path
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.mutation_policy import FrozenStateFieldError
+from apps.flows.src.state.state_path import assign_state_path
 
 
 def _state(unique_id: str) -> ExecutionState:

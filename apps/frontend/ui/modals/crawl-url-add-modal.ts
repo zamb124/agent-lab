@@ -1,7 +1,7 @@
 /**
  * Модалка добавления конкретных страниц (URL) в домен (company system).
  *
- * Поля API (core/crawl/models.py::CrawlUrlAddRequest):
+ * Поля API (apps/search/models/contracts.py::CrawlUrlAddRequest):
  *   urls: list[str] (required)
  */
 import { html, css } from 'lit';

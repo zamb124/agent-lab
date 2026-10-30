@@ -15,8 +15,8 @@ from apps.flows.src.durable_execution import (
 )
 from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime
 from apps.flows.src.runners.remote import RemoteCodeRunner
+from apps.flows.src.state import ExecutionState
 from core.capabilities import CAPABILITY_LANGUAGE_SET
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_value
 
 

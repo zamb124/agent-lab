@@ -15,8 +15,9 @@ from apps.flows.src.services.flow_ui_cards import (
     show_reflection,
     show_skill_activity,
 )
+from apps.flows.src.state import ExecutionState
 from core.files.file_ref import FileRef
-from core.flow_ui.document import (
+from core.ui_document.document import (
     FlowUIActionPreview,
     FlowUIActionResult,
     FlowUIActivity,
@@ -27,8 +28,7 @@ from core.flow_ui.document import (
     FlowUIReflection,
     FlowUISkillActivity,
 )
-from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUIRender
-from core.state import ExecutionState
+from core.ui_document.protocol import CONVERSATION_SLOT_ID, FlowUIRender
 
 pytestmark = [pytest.mark.no_test_doubles]
 

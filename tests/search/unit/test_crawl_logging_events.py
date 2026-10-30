@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-import core.crawl.logging_events as crawl_logging_events
+import apps.search.crawl.logging_events as crawl_logging_events
 from core.config.models import LoggingConfig
-from core.crawl.logging_events import log_crawl_url_outcome
+from apps.search.crawl.logging_events import log_crawl_url_outcome
 from core.logging import enter_request_scope, exit_request_scope, get_logger
 from core.logging.attributes import EVENT_CRAWL_URL_OUTCOME
 from core.logging.setup import reset_logging_for_tests, setup_logging

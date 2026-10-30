@@ -15,12 +15,12 @@ import pytest
 
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.reflection import CriticCriterion, CriticPolicy, ReflectionTarget
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import LlmNode
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from core.a2a import mapping_from_struct
-from core.reflection import CriticCriterion, CriticPolicy, ReflectionTarget
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 

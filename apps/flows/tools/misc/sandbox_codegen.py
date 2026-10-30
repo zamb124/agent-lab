@@ -8,6 +8,7 @@ from typing import ClassVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.flows.src.services.code_runner_client import CodeRunnerClient
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import AICapability, split_provider_prefixed_model
@@ -18,7 +19,6 @@ from core.capabilities import CAPABILITY_LANGUAGES, CapabilityLanguage
 from core.clients.capability_gateway_client import CapabilityGatewayClient
 from core.config import get_settings
 from core.errors import CodeExecutionRuntimeError
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 _LANGUAGES = CAPABILITY_LANGUAGES
@@ -222,7 +222,7 @@ async def sandbox_codegen(
     docs = await _language_docs(capability_language, max_doc_chars)
     llm = create_llm_client_from_ai_model(
         resolved_llm,
-        state=exec_state,
+        variables=exec_state.variables,
     )
     runner = CodeRunnerClient(language=capability_language)
     args: JsonObject = dict(run_args) if run_args is not None else {}

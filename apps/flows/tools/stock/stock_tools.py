@@ -8,6 +8,7 @@ Tag: stock. Пишущие инструменты идут только чере
 
 from __future__ import annotations
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.stock_client import StockClient
@@ -26,7 +27,6 @@ from core.clients.stock_models import (
     StockValuationProductValueArgs,
     StockWarehouseIdArgs,
 )
-from core.state import ExecutionState
 from core.types import JsonObject
 
 _TAGS = ["stock"]

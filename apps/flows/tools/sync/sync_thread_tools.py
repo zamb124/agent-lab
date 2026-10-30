@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from core.clients.sync_client import SyncClient
 from core.clients.sync_models import (
@@ -10,7 +11,6 @@ from core.clients.sync_models import (
     SyncListThreadMessagesArgs,
     SyncListThreadsArgs,
 )
-from core.state import ExecutionState
 from core.types import JsonObject
 
 _TAGS = ["sync"]

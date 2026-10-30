@@ -1,6 +1,6 @@
 """Краул: одна таблица — один модуль, контракты без таблицы — contracts."""
 
-from core.crawl.models.contracts import (
+from apps.search.models.contracts import (
     DEFAULT_CRAWL_EXCLUDE_EXTENSIONS,
     DEFAULT_CRAWL_EXCLUDE_URL_PATTERNS,
     CrawlBootstrapAction,
@@ -41,18 +41,18 @@ from core.crawl.models.contracts import (
     UpsertStats,
     canonicalize_url,
 )
-from core.crawl.models.crawl_domain import (
+from apps.search.models.crawl_domain import (
     CrawlDomain,
 )
-from core.crawl.models.crawl_job import (
+from apps.search.models.crawl_job import (
     CrawlJob,
     CrawlProfileSummary,
 )
-from core.crawl.models.crawl_profile import (
+from apps.search.models.crawl_profile import (
     CrawlProfile,
     CrawlProfileWithIndex,
 )
-from core.crawl.models.crawl_url import (
+from apps.search.models.crawl_url import (
     CrawlUrl,
     CrawlUrlDetail,
     CrawlUrlIndexedContent,

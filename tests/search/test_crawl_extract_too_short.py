@@ -17,7 +17,7 @@ from core.clients.rag_client import RagClient
 from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlJob,
     CrawlProfile,

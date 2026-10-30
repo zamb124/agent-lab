@@ -1,17 +1,95 @@
 """
-State модуль - управление состоянием агентов.
+State модуль - управление состоянием выполнения агентов.
+
+Основные компоненты:
+- ExecutionState: типизированная модель состояния
+- InterruptData: данные прерывания
+- NestedStateData: вложенное состояние субагентов
 
 Локальные компоненты interrupt/files остаются здесь. Durable persistence — `apps.flows.src.durable_execution`.
 """
 
-from apps.flows.src.durable_execution import create_initial_state
-
+from .execution_state import (
+    TERMINAL_TASK_STATES,
+    ChildWorkflowLink,
+    ChildWorkflowStatus,
+    ExecutionExceptionRecord,
+    ExecutionState,
+    ExecutionTaskState,
+    InterruptPathItem,
+    NestedStateData,
+    NodeCallInfo,
+    PromptHistoryItem,
+    State,
+    assert_frozen_fields_unchanged,
+    snapshot_frozen_fields,
+)
+from .interrupt import (
+    HandoffMode,
+    InterruptBody,
+    InterruptData,
+    InterruptKind,
+    InterruptSystemContext,
+    OAuthInterrupt,
+    OperatorTaskInterrupt,
+    UserMessageInterrupt,
+    interrupt_body_public_question,
+    interrupt_to_response_dict,
+    parse_interrupt_body_from_external_dict,
+)
 from .interrupt_manager import InterruptManager
+from .mutation_policy import (
+    FROZEN_STATE_FIELDS,
+    FROZEN_STATE_SNAPSHOT_FIELDS,
+    USER_CODE_OVERRIDABLE_FROZEN_FIELDS,
+    USER_RETURN_FORBIDDEN_FROZEN_FIELDS,
+    USER_TOOL_PARALLEL_STATE_MERGE_FIELDS,
+    forbid_frozen_update_key,
+    guard_setattr_if_user_code,
+    is_runtime_state_mutation_allowed,
+    should_skip_field_on_user_returned_state_copy,
+    user_code_state_mutation_guard,
+)
 from .node_files import collect_flow_node_files, validate_node_files_list
+from .trigger_runtime import TriggerRuntimeSnapshot
 
 __all__ = [
-    "create_initial_state",
     "InterruptManager",
     "collect_flow_node_files",
     "validate_node_files_list",
+    "FROZEN_STATE_FIELDS",
+    "FROZEN_STATE_SNAPSHOT_FIELDS",
+    "USER_CODE_OVERRIDABLE_FROZEN_FIELDS",
+    "USER_RETURN_FORBIDDEN_FROZEN_FIELDS",
+    "USER_TOOL_PARALLEL_STATE_MERGE_FIELDS",
+    "assert_frozen_fields_unchanged",
+    "forbid_frozen_update_key",
+    "guard_setattr_if_user_code",
+    "is_runtime_state_mutation_allowed",
+    "should_skip_field_on_user_returned_state_copy",
+    "snapshot_frozen_fields",
+    "user_code_state_mutation_guard",
+    "ExecutionState",
+    "ExecutionTaskState",
+    "State",
+    "TERMINAL_TASK_STATES",
+    "HandoffMode",
+    "InterruptData",
+    "InterruptBody",
+    "InterruptKind",
+    "InterruptSystemContext",
+    "UserMessageInterrupt",
+    "OperatorTaskInterrupt",
+    "OAuthInterrupt",
+    "interrupt_body_public_question",
+    "interrupt_to_response_dict",
+    "parse_interrupt_body_from_external_dict",
+    "InterruptPathItem",
+    "ChildWorkflowLink",
+    "ChildWorkflowStatus",
+    "NodeCallInfo",
+    "NestedStateData",
+    "PromptHistoryItem",
+    "ExecutionExceptionRecord",
+    "TriggerRuntimeSnapshot",
 ]

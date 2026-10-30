@@ -11,7 +11,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from core.flow_ui.document import FlowUIDocument
+from core.ui_document.document import FlowUIDocument
 
 _FLOW_INTERFACE: ContextVar[FlowUIDocument | None] = ContextVar(
     "flows_current_flow_interface",

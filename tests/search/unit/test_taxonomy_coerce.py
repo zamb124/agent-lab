@@ -2,8 +2,8 @@
 
 import pytest
 
-from core.crawl.models import CrawlPageFilterMetadata
-from core.crawl.taxonomy import (
+from apps.search.models import CrawlPageFilterMetadata
+from apps.search.crawl.taxonomy import (
     coerce_filter_metadata_for_taxonomy_by_tag_asc,
     validate_filter_metadata_against_taxonomy,
 )

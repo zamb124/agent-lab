@@ -6,12 +6,12 @@
 
 import pytest
 
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models import Edge
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode, create_node
-from core.flow_ui.templates import default_chat_document
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 
 

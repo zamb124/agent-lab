@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import math
 
+from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
 from core.clients.rag_client import RagClient
 from core.config import get_settings
 from core.llm_context import LLMContextBlock, LLMContextSourceRequest
 from core.llm_context.retrieval_rag_bridge import rag_search_options_override_from_retrieval
 from core.rag.models import RAGMetadataFilter, RAGSearchOptions, RAGSearchResult
 from core.rag.rag_http_namespace_search import merge_search_request_options
-from core.rag.rag_resource_bind import RagResourceBindParams
 from core.rag.search_options_resolver import resolve_platform_search_options
 from core.types import JsonObject, JsonValue, require_json_object
 

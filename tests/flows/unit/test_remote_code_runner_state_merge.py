@@ -7,7 +7,7 @@ from apps.flows.src.runners.remote import (
     _merge_returned_state_fields,
     _restore_frozen_fields_from_snapshot,
 )
-from core.state import ExecutionState, snapshot_frozen_fields
+from apps.flows.src.state import ExecutionState, snapshot_frozen_fields
 
 
 def _minimal_state() -> ExecutionState:

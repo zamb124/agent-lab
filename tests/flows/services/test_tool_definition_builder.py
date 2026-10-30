@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.src.services.tool_definition_builder import build_tool_definition_from_base_tool
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.base import BaseTool
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue
 
 

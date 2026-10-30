@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from core.crawl.models import CrawlEnrichedPage
+from apps.search.models import CrawlEnrichedPage
 
 
 def compute_enriched_content_hash(enriched_page: CrawlEnrichedPage) -> str:

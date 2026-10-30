@@ -22,13 +22,13 @@ from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.json_schema_parameters import (
     pydantic_model_to_parameters_schema,
     sanitize_parameters_schema_for_llm,
 )
 from apps.flows.tools.crm.crm_tools import CrmSearchEntitiesArgs
-from core.state import ExecutionState
 
 
 def _json_pointer_resolve(root: Dict[str, Any], pointer: str) -> Dict[str, Any]:

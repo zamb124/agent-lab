@@ -13,14 +13,14 @@ from apps.flows.src.models.flow_ui_assist import (
     FlowUIAssistRequest,
     FlowUIAssistResult,
 )
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.ai.providers import AICapability
 from core.ai.requirements import AIRequestRequirements
 from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
 from core.clients.llm.client import LLMClient
 from core.clients.llm.mock import MockLLM
-from core.flow_ui.document import FlowUIPage, iter_blocks
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
+from core.ui_document.document import FlowUIPage, iter_blocks
 
 GRAMMAR_RULES = "\n".join(
     [

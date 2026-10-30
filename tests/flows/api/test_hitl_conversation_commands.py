@@ -17,10 +17,10 @@ from apps.flows.src.models.hitl_conversation import (
     HitlConversationWorkItemPayload,
     OperatorMessageRequest,
 )
+from apps.flows.src.state.interrupt import HandoffMode
 from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
-from core.state.interrupt import HandoffMode
 from core.websocket import WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
 from tests.flows.hitl_test_harness import park_hitl_session

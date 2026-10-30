@@ -7,7 +7,7 @@ import pytest
 
 from apps.search.config import get_search_settings
 from apps.search.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainSeed,
     CrawlJob,
@@ -29,7 +29,7 @@ REAL_CRAWL_QUERY = "documentation examples"
 async def test_discover_sitemap_example_com_real_http(crawl_search_di, search_system_context, unique_id):
     search_di = crawl_search_di
     from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
-    from core.crawl.url_filter import build_url_filter
+    from apps.search.crawl.url_filter import build_url_filter
 
     search_index_id = make_search_index_slug(unique_id)
     crawl_profile_id = f"cr_{search_index_id}"[:64]

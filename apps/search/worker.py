@@ -22,7 +22,7 @@ from apps.search.config import get_search_settings
 from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
 from apps.search.di import SearchDi
 from apps.worker_manifest import wire_worker
-from core.crawl.logging_events import log_crawl_bootstrap
+from apps.search.crawl.logging_events import log_crawl_bootstrap
 from core.di import recipe
 from core.tasks.worker_bootstrap import build_worker
 

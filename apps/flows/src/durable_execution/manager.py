@@ -41,10 +41,14 @@ from apps.flows.src.durable_execution.models import (
 )
 from apps.flows.src.models import SessionConfig
 from apps.flows.src.models.enums import SessionStatus
+from apps.flows.src.state.execution_state import (
+    TERMINAL_TASK_STATES,
+    ExecutionState,
+    ExecutionTaskState,
+)
 from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.logging import get_logger
-from core.state import TERMINAL_TASK_STATES, ExecutionState, ExecutionTaskState
 from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)

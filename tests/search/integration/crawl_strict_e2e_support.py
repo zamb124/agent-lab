@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainSeed,
     CrawlJob,

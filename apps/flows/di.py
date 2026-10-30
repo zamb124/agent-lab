@@ -10,6 +10,7 @@ from apps.flows.src.evaluation.lab_service import EvaluationLabService
 from apps.flows.src.models import TriggerType
 from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_registry
 from apps.flows.src.runtime.execution_context import CodeRunnerRegistry
+from apps.flows.src.runtime.llm_context_memory_store import RAGLLMContextMemoryStore
 from apps.flows.src.runtime.nodes import NodeConstructor
 from apps.flows.src.services.code_agent_source_service import CodeAgentSourceService
 from apps.flows.src.services.code_lsp_service import CodeLspService
@@ -55,7 +56,6 @@ from core.mail.service import MailService
 from core.namespace.service import NamespaceService
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
-from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
 from core.short_links.service import ShortLinkService
 from core.variables.service import VariablesService
 from core.worktracker.access_service import WorkQueueAccessService

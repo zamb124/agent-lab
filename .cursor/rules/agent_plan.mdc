@@ -1,7 +1,7 @@
 ---
 description: "AgentPlan: чеклист шагов в ExecutionState.agent_plan, tools agent_plan_write/get, skill agent-planning, UI. Не WorkItem. Читать при правке планирования llm_node"
 globs:
-  - "core/agent_plan/**"
+  - "apps/flows/src/agent_plan/**"
   - "apps/flows/tools/flows/agent_plan_tools.py"
   - "apps/flows/bundles/_seed/agent_skills/agent-planning/**"
   - "core/frontend/static/lib/components/platform-agent-plan.ts"
@@ -14,7 +14,7 @@ alwaysApply: false
 
 ## Модель
 
-- `AgentPlan`, `AgentPlanStep`, `AgentPlanStepStatus` (`core/agent_plan/models.py`); ids — `agent_plan_id`, `step_id`.
+- `AgentPlan`, `AgentPlanStep`, `AgentPlanStepStatus` (`apps/flows/src/agent_plan/models.py`); ids — `agent_plan_id`, `step_id`.
 - Хранение — `ExecutionState.agent_plan: AgentPlan | None` (системное поле, пишут только tools).
 - Статусы шага: `pending`, `in_progress`, `completed`, `need_help`, `failed`; `in_progress` — не больше одного.
 

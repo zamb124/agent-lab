@@ -5,8 +5,8 @@ from __future__ import annotations
 from a2a.types import Message, Part, Role, Task, TaskState, TaskStatus
 
 from apps.flows.src.models.a2a_projection import A2ATaskProjection
+from apps.flows.src.state import ExecutionState
 from core.a2a import set_task_status_state
-from core.state import ExecutionState
 
 
 async def ensure_submitted_a2a_task(

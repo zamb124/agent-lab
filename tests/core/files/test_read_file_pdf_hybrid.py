@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.files.files import read_file
 from core.files.file_ref import FileRef
 from core.files.reader import ReadLane
-from core.state import ExecutionState
 from core.types import require_json_array, require_json_object
 from tests.core.files.corpus.manifest import POSITIVE
 from tests.core.files.corpus.read_helpers import store_corpus_in_files_service

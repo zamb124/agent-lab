@@ -16,8 +16,8 @@ from httpx2 import AsyncClient
 
 from core.clients.flow_ui_client import FlowUIStateEvent, decode_task_events
 from core.context import require_context
-from core.flow_ui.document import FlowUIDocument, FlowUIMetric
-from core.flow_ui.protocol import (
+from core.ui_document.document import FlowUIDocument, FlowUIMetric
+from core.ui_document.protocol import (
     FLOW_UI_MEDIA_TYPE,
     JSON_MEDIA_TYPE,
     JSON_PATCH_MEDIA_TYPE,

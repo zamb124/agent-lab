@@ -3,7 +3,7 @@
 import pytest
 
 from apps.flows.src.mapping import MappingResolver
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from core.types import JsonObject
 from core.variables import VariableResolutionError
 

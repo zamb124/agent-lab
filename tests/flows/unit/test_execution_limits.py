@@ -4,8 +4,8 @@ import pytest
 
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
-from core.state import ExecutionState
 
 
 def test_apply_flow_wall_clock_deadline() -> None:

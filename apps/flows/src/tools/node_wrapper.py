@@ -37,6 +37,8 @@ from apps.flows.src.runtime.nodes import (
     RemoteFlowNode,
     ResourceNode,
 )
+from apps.flows.src.state import ExecutionState, InterruptPathItem
+from apps.flows.src.state.interrupt import HandoffInterrupt
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import (
     BaseTool,
@@ -46,8 +48,6 @@ from apps.flows.src.tools.base import (
     sanitize_tool_name,
 )
 from core.logging import get_logger
-from core.state import ExecutionState, InterruptPathItem
-from core.state.interrupt import HandoffInterrupt
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 if TYPE_CHECKING:

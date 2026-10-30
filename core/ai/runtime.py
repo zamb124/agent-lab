@@ -7,7 +7,6 @@ constructing provider-specific clients directly.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
 from a2a.types import Message
 
@@ -75,9 +74,6 @@ from core.config.testing import is_testing
 from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.types import JsonObject
 
-if TYPE_CHECKING:
-    from core.state import ExecutionState
-
 
 def _string_headers(headers: JsonObject) -> dict[str, str] | None:
     return {key: str(value) for key, value in headers.items()} or None
@@ -97,7 +93,7 @@ def create_llm_client_from_ai_model(
     *,
     temperature: float | None = None,
     max_tokens: int | None = None,
-    state: "ExecutionState | None" = None,
+    variables: JsonObject | None = None,
     allow_platform_paid_fallback: bool = True,
     top_p: float | None = None,
     top_k: int | None = None,
@@ -129,7 +125,7 @@ def create_llm_client_from_ai_model(
             folder_id=resolved.folder_id,
             temperature=temperature,
             max_tokens=max_tokens,
-            state=state,
+            variables=variables,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
             top_p=top_p,
             top_k=top_k,
@@ -198,7 +194,7 @@ def create_llm_client_for_capability(
 def create_llm_client_from_call_config(
     config: LLMCallConfig | None,
     *,
-    state: "ExecutionState | None" = None,
+    variables: JsonObject | None = None,
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None = None,
     allow_platform_paid_fallback: bool = True,
     cost_origin: str = "platform",
@@ -212,7 +208,7 @@ def create_llm_client_from_call_config(
     if config is None:
         return _with_llm_billing(
             create_llm_transport_client(
-                state=state,
+                variables=variables,
                 allow_platform_paid_fallback=allow_platform_paid_fallback,
             ),
             billing,
@@ -226,7 +222,7 @@ def create_llm_client_from_call_config(
             folder_id=config.folder_id,
             temperature=config.temperature,
             max_tokens=config.max_tokens,
-            state=state,
+            variables=variables,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
             top_p=config.top_p,
             top_k=config.top_k,

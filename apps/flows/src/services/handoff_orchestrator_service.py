@@ -35,6 +35,8 @@ from apps.flows.src.services.handoff_tracing import (
     handoff_span_attributes,
     trace_context_to_kiq_payload,
 )
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import HandoffInterrupt, InterruptKind
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming.emitter import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
@@ -42,8 +44,6 @@ from apps.flows.src.tools.json_schema_parameters import validate_tool_args_again
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.models.context_models import Context
-from core.state import ExecutionState
-from core.state.interrupt import HandoffInterrupt, InterruptKind
 from core.tasks import enqueue
 from core.tracing.context import TraceContext
 from core.tracing.operation_span import traced_operation

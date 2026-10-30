@@ -8,7 +8,7 @@ from typing import ClassVar
 from oxyde import Field as DbField
 from oxyde import Index
 
-from core.crawl.models.contracts import (
+from apps.search.models.contracts import (
     CrawlProfileCreateRequest,
     CrawlProfilePatchRequest,
 )

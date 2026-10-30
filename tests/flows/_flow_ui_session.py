@@ -13,11 +13,11 @@ from collections.abc import Sequence
 from httpx2 import AsyncClient
 
 from apps.flows.src.models.flow_config import Edge, FlowConfig
+from apps.flows.src.state import ExecutionState
 from core.clients.flow_ui_client import task_state, task_text, task_ui_events
 from core.context import require_context
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.protocol import FLOW_UI_ACTION_MEDIA_TYPE, FlowUIEvent, FlowUIRender
-from core.state import ExecutionState
+from core.ui_document.document import FlowUIDocument
+from core.ui_document.protocol import FLOW_UI_ACTION_MEDIA_TYPE, FlowUIEvent, FlowUIRender
 from core.types import JsonArray, JsonObject, JsonValue, parse_json_object, require_json_object
 from tests.flows._a2a_v1 import A2A_HEADERS, GET_TASK, SEND_MESSAGE, a2a_rpc
 

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.misc.math_tools import calculator
 from core.context import set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 from tests.fixtures.auth import set_test_company_member_roles
 
 

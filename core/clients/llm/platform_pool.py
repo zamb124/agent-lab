@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
-from typing import TYPE_CHECKING
 
 from core.ai.free_pool import (
     PLATFORM_FREE_MODEL_SOURCE,
@@ -27,9 +26,6 @@ from core.config.llm_openai_compat import (
     llm_provider_block,
 )
 from core.types import JsonObject
-
-if TYPE_CHECKING:
-    from core.state import ExecutionState
 
 _platform_free_pool_redis: RedisClient | None = None
 
@@ -125,7 +121,7 @@ def _find_platform_free_record(
 def _authoring_overrides(
     config: LLMCallConfig,
     *,
-    state: "ExecutionState | None",
+    variables: JsonObject | None,
 ) -> dict[str, object]:
     return {
         field: value
@@ -142,7 +138,7 @@ def _authoring_overrides(
                 dict(config.extra_request_body) if config.extra_request_body else None
             ),
             "extra_request_headers": (
-                _resolve_headers_vars(config.extra_request_headers, state)
+                _resolve_headers_vars(config.extra_request_headers, variables)
                 if config.extra_request_headers
                 else None
             ),
@@ -155,9 +151,9 @@ def _with_authoring_overrides(
     candidate: LLMCallConfig,
     config: LLMCallConfig,
     *,
-    state: "ExecutionState | None",
+    variables: JsonObject | None,
 ) -> LLMCallConfig:
-    overrides = _authoring_overrides(config, state=state)
+    overrides = _authoring_overrides(config, variables=variables)
     if not overrides:
         return candidate
     return candidate.model_copy(update=overrides)
@@ -182,14 +178,14 @@ def _candidate_from_humanitec_llms_ref(
     model: str,
     *,
     settings: BaseSettings,
-    state: "ExecutionState | None",
+    variables: JsonObject | None,
     source: str = PLATFORM_FREE_MODEL_SOURCE,
 ) -> LLMCallConfig:
     provider, model_id = _humanitec_llms_ref_or_raise(model)
     return _resolve_llm_call_config(
         LLMCallConfig(provider=provider, model=model_id, source=source),
         settings=settings,
-        state=state,
+        variables=variables,
         source=source,
     )
 
@@ -198,7 +194,7 @@ def bootstrap_humanitec_llms_config(
     config: LLMCallConfig,
     *,
     settings: BaseSettings,
-    state: "ExecutionState | None",
+    variables: JsonObject | None,
 ) -> LLMCallConfig:
     model = _humanitec_llms_model(config, settings)
     if model == HUMANITEC_LLM_AUTO_MODEL:
@@ -206,7 +202,7 @@ def bootstrap_humanitec_llms_config(
     return _candidate_from_humanitec_llms_ref(
         model,
         settings=settings,
-        state=state,
+        variables=variables,
         source=PLATFORM_FREE_MODEL_SOURCE,
     )
 
@@ -237,7 +233,7 @@ async def _expand_humanitec_llms_config(
     *,
     settings: BaseSettings,
     records: Sequence[PlatformFreeModelRecord],
-    state: "ExecutionState | None",
+    variables: JsonObject | None,
     include_paid_fallback: bool,
 ) -> list[LLMCallConfig]:
     model = _humanitec_llms_model(config, settings)
@@ -254,7 +250,7 @@ async def _expand_humanitec_llms_config(
                             api_key=api_key,
                         ),
                         config,
-                        state=state,
+                        variables=variables,
                     )
                 )
         if include_paid_fallback:
@@ -262,7 +258,7 @@ async def _expand_humanitec_llms_config(
                 _with_authoring_overrides(
                     _platform_paid_fallback_candidate(settings),
                     config,
-                    state=state,
+                    variables=variables,
                 )
             )
         return candidates
@@ -279,7 +275,7 @@ async def _expand_humanitec_llms_config(
                 api_key=api_key,
             ),
             config,
-            state=state,
+            variables=variables,
         )
         for api_key in _api_keys_for_free_pool_provider(settings, provider)
     ]
@@ -334,7 +330,7 @@ def _make_humanitec_llms_candidate_chain_resolver(
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None,
     *,
     settings: BaseSettings,
-    state: "ExecutionState | None",
+    variables: JsonObject | None,
     include_paid_fallback: bool,
 ) -> Callable[[], Awaitable[list[LLMCallConfig]]]:
     async def _resolve() -> list[LLMCallConfig]:
@@ -346,7 +342,7 @@ def _make_humanitec_llms_candidate_chain_resolver(
                     primary_config,
                     settings=settings,
                     records=records,
-                    state=state,
+                    variables=variables,
                     include_paid_fallback=include_paid_fallback,
                 )
             )
@@ -355,7 +351,7 @@ def _make_humanitec_llms_candidate_chain_resolver(
             primary = _resolve_llm_call_config(
                 primary_config,
                 settings=settings,
-                state=state,
+                variables=variables,
                 source=primary_config.source,
             )
             candidates.append(primary)
@@ -369,7 +365,7 @@ def _make_humanitec_llms_candidate_chain_resolver(
                         fallback,
                         settings=settings,
                         records=records,
-                        state=state,
+                        variables=variables,
                         include_paid_fallback=include_paid_fallback,
                     )
                 )
@@ -378,7 +374,7 @@ def _make_humanitec_llms_candidate_chain_resolver(
                 _resolve_llm_call_config(
                     fallback,
                     settings=settings,
-                    state=state,
+                    variables=variables,
                     inherit_transport_from=inherit_transport_from,
                     source="fallback",
                 )

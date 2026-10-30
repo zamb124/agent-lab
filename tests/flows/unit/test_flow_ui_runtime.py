@@ -9,9 +9,7 @@ from __future__ import annotations
 import pytest
 from pydantic import TypeAdapter
 
-from core.flow_ui.document import FlowUIBlock, FlowUIBlockModel, FlowUIDocument
-from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
-from core.flow_ui.runtime import (
+from apps.flows.src.flow_ui.runtime import (
     apply_ui_navigate,
     apply_ui_render,
     assert_known_page,
@@ -19,7 +17,9 @@ from core.flow_ui.runtime import (
     render_conversation,
     slot_ids,
 )
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
+from core.ui_document.document import FlowUIBlock, FlowUIBlockModel, FlowUIDocument
+from core.ui_document.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
 from core.types import JsonObject
 
 BLOCK_ADAPTER: TypeAdapter[FlowUIBlockModel] = TypeAdapter(FlowUIBlock)

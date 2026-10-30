@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from httpx2 import AsyncClient
 
-from core.state.interrupt import HandoffMode
+from apps.flows.src.state.interrupt import HandoffMode
 from core.worktracker.models import WorkItem, WorkItemState
 from tests.flows.hitl_test_harness import park_hitl_session
 from tests.sync.api._helpers import upload_platform_file

@@ -10,16 +10,16 @@ from __future__ import annotations
 
 from a2a.types import Artifact, Part, Task, TaskArtifactUpdateEvent
 
+from apps.flows.src.flow_ui.projection import redact_state
 from core.a2a.codec import get_part_data, part_has_data, value_from_json
-from core.flow_ui.projection import redact_state
-from core.flow_ui.protocol import (
+from core.models.flow_ui_share import FlowUIShareGrant
+from core.types import JsonObject, JsonValue, require_json_object
+from core.ui_document.protocol import (
     JSON_MEDIA_TYPE,
     JSON_PATCH_MEDIA_TYPE,
     STATE_ARTIFACT_ID,
     JsonPatchOperation,
 )
-from core.models.flow_ui_share import FlowUIShareGrant
-from core.types import JsonObject, JsonValue, require_json_object
 
 
 def _pointer_covers(redacted: str, path: str) -> bool:

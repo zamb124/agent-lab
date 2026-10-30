@@ -58,12 +58,6 @@ from core.a2a import (
 from core.a2a.codec import stream_response_from_event, stream_response_to_json_dict
 from core.authz.models import AuthzObject
 from core.context import get_context, require_active_company, require_context
-from core.flow_ui.interface import (
-    FlowInterfaceCapabilities,
-    FlowInterfaceIdentity,
-    FlowInterfaceResponse,
-    FlowInterfaceViewer,
-)
 from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
     EMBED_GUEST_USER_TURNS_TTL_SECONDS,
@@ -74,6 +68,12 @@ from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.context_models import Context
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from core.ui_document.interface import (
+    FlowInterfaceCapabilities,
+    FlowInterfaceIdentity,
+    FlowInterfaceResponse,
+    FlowInterfaceViewer,
+)
 from core.utils.tokens import TokenData, TokenType
 from core.websocket import WsCommandError, raise_forbidden, raise_not_found
 

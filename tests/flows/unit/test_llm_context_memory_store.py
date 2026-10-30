@@ -14,7 +14,7 @@ from core.llm_context.memory_compaction import LLM_CONTEXT_MEMORY_RECALL_CONTENT
 from core.models.identity_models import Namespace, NamespaceKind
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
-from core.rag.llm_context_memory_store import (
+from apps.flows.src.runtime.llm_context_memory_store import (
     RAGLLMContextMemoryStore,
     _clamp_score,
     _parse_datetime,

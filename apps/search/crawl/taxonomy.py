@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.crawl.models import CrawlPageFilterMetadata
+from apps.search.models import CrawlPageFilterMetadata
 from core.search.index_models import SearchIndexCrawlTaxonomy
 
 _TOPIC_TAG_ALIASES: dict[str, str] = {

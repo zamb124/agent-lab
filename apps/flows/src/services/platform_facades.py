@@ -37,7 +37,7 @@ logger = get_logger(__name__)
 if TYPE_CHECKING:
     from apps.flows.src.models.mcp import MCPCallResult
     from apps.flows.src.services.mcp_client import MCPClient
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 _SPEECH_PROVIDERS = STT_TTS_PROVIDER_IDS
 _SPEECH_RESPONSE_FORMATS = VOICE_RESPONSE_FORMAT_IDS

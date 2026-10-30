@@ -7,11 +7,12 @@ from datetime import UTC, datetime, timedelta
 from typing import final
 
 from apps.flows.src.durable_execution import DurableWorkflowRuntime
+from apps.flows.src.flow_ui.projection import validate_redacted_paths
 from apps.flows.src.services.flow_access_service import FlowAccessService
+from apps.flows.src.state import ExecutionState
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation
-from core.flow_ui.projection import validate_redacted_paths
 from core.models.flow_ui_share import (
     FlowUIShareCreateRequest,
     FlowUIShareCreateResponse,
@@ -19,7 +20,6 @@ from core.models.flow_ui_share import (
     FlowUIShareGrant,
 )
 from core.short_links.service import ShortLinkService
-from core.state import ExecutionState
 from core.utils.tokens import TokenService
 
 _FLOWS_SERVICE_BASE_URL = "/flows"

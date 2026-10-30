@@ -12,14 +12,14 @@ from apps.search.config import (
     SearchTavilyConfig,
     SearchTinyFishConfig,
 )
-from core.ai.company_settings.crypto import decrypt_secret
-from core.company_search import (
+from apps.search.services.company_search_schema import (
     CompanyLinkupSearchProvider,
     CompanySearchProviderBase,
     CompanySearchProviders,
     CompanyTavilySearchProvider,
     SearchCredentialSource,
 )
+from core.ai.company_settings.crypto import decrypt_secret
 from core.models.identity_models import Company
 
 

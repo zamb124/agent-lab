@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from apps.flows.src.state import ExecutionState
     from apps.flows.src.streaming import BaseEmitter
-    from core.state import ExecutionState
 
 
 @dataclass(frozen=True)

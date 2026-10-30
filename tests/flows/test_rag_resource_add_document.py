@@ -6,7 +6,7 @@ import pytest
 
 from apps.flows.di import FlowsDi
 from core.db.models.rag.vector_document import VectorDocument
-from core.rag.rag_resource import RAGResource
+from apps.flows.src.resources.rag_resource import RAGResource
 from core.types import JsonObject, require_json_object
 
 

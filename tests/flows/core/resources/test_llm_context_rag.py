@@ -11,12 +11,12 @@ from apps.flows.src.runtime.llm_context_rag import (
     resolve_rag_context_source_registry_for_runtime,
     resolve_rag_resource_binds_for_runtime,
 )
+from apps.flows.src.state import ExecutionState
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.group_sync import sync_user_groups
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 from core.types import JsonObject
 
 

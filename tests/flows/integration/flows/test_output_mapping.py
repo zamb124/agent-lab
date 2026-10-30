@@ -17,7 +17,7 @@ from apps.flows.src.runtime.nodes import (
     CodeNode,
     LlmNode,
 )
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_node, workflow_state
 
 

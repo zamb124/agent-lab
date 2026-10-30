@@ -10,7 +10,7 @@ from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 

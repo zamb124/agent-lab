@@ -10,9 +10,9 @@ from apps.flows.realtime.flow_ui_operations import (
     op_flows_flow_ui_schema,
     op_flows_flow_ui_templates,
 )
+from apps.flows.src.flow_ui.templates import FlowUITemplate, FlowUITemplatesPayload
 from apps.flows.src.models.flow_ui_assist import FlowUIAssistRequest, FlowUIAssistResult
 from core.context import require_context
-from core.flow_ui.templates import FlowUITemplate, FlowUITemplatesPayload
 from core.pagination import OffsetPage
 from core.types import JsonObject
 from core.websocket import EmptyPayload

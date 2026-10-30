@@ -10,7 +10,9 @@ from apps.flows.di import Di
 from apps.flows.src.channels.factory import get_channel
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.models.scheduled_task import ContentType
 from apps.flows.src.services.execution_identity import resolve_execution_context
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
 from apps.flows.src.tools.base import ToolArguments
 from core.context import set_context
@@ -24,12 +26,10 @@ from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.scheduler import get_schedule_source
 from core.scheduler.models import (
-    ContentType,
     PlatformScheduledTask,
     PlatformScheduleType,
     ScheduledTaskStatus,
 )
-from core.state import ExecutionState
 from core.tasks import platform_task
 from core.types import JsonObject, require_json_object, require_json_value
 from core.websocket.publisher import Notification, NotificationType, notify_user

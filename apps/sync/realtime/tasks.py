@@ -46,7 +46,7 @@ from apps.sync.realtime.task_names import (
     SYNC_TRANSCRIBE_VIDEO_MESSAGE,
 )
 from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
-from core.calls.livekit_client import LiveKitClient
+from apps.sync.services.livekit_client import LiveKitClient
 from core.clients.files_client import FilesClient
 from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings

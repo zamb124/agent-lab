@@ -9,20 +9,20 @@ from __future__ import annotations
 
 from hashlib import sha256
 
-from core.capabilities.models import (
-    CapabilityExecutionContext,
-    CapabilityManifest,
-    PlatformEffectEnvelope,
-)
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.protocol import FlowUIRender
-from core.flow_ui.runtime import (
+from apps.flows.src.flow_ui.runtime import (
     apply_ui_navigate,
     apply_ui_render,
     assert_known_page,
     assert_known_slot,
 )
-from core.state.execution_state import ExecutionState
+from apps.flows.src.state.execution_state import ExecutionState
+from core.capabilities.models import (
+    CapabilityExecutionContext,
+    CapabilityManifest,
+    PlatformEffectEnvelope,
+)
+from core.ui_document.document import FlowUIDocument
+from core.ui_document.protocol import FlowUIRender
 
 
 def apply_capability_platform_effects(

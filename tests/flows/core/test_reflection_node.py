@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 
 from apps.flows.di import FlowsDi
+from apps.flows.src.reflection import CriticSeverity, ReflectionTargetKind
 from apps.flows.src.runtime.nodes import ReflectionNode, create_node
+from apps.flows.src.state import ExecutionState
 from core.clients.llm.mock import MockLLM
-from core.flow_ui.document import FlowUIReflection
-from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUIRender
-from core.reflection import CriticSeverity, ReflectionTargetKind
-from core.state import ExecutionState
+from core.ui_document.document import FlowUIReflection
+from core.ui_document.protocol import CONVERSATION_SLOT_ID, FlowUIRender
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import ensure_workflow_started, run_node, workflow_state
 from tests.flows.fixtures.reflection import (

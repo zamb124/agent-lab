@@ -1,14 +1,13 @@
 ---
-description: "Sync — чат людей и агентов: каналы, треды, сообщения, звонки LiveKit, гостевые ссылки, запись, речь в ленту, Git-ссылки. Читать при правке apps/sync и core/calls"
+description: "Sync — чат людей и агентов: каналы, треды, сообщения, звонки LiveKit, гостевые ссылки, запись, речь в ленту, Git-ссылки. Читать при правке apps/sync"
 globs:
   - "apps/sync/**"
-  - "core/calls/**"
 alwaysApply: false
 ---
 
 # Sync
 
-Сервис `sync` (порт 8005, база `platform_sync`, алиас Oxyde `sync`) и воркер `sync_worker` (очередь `sync`, тот же `SyncDi`, задачи — `apps/sync/realtime/tasks.py` и `apps/sync/realtime/notification_tasks.py`). Sync владеет общением людей и агентов: каналы, треды, сообщения, звонки SFU LiveKit, запись встреч и Git-ссылки; клиент LiveKit и TURN — `core/calls/`. Не владеет: реестром `Namespace` → `namespace.mdc`; байтами файлов → `files.mdc`; распознаванием речи → `voice.mdc`; пробуждением flow-сотрудника → `flow_employee.mdc`; доставкой уведомлений → `events.mdc`.
+Сервис `sync` (порт 8005, база `platform_sync`, алиас Oxyde `sync`) и воркер `sync_worker` (очередь `sync`, тот же `SyncDi`, задачи — `apps/sync/realtime/tasks.py` и `apps/sync/realtime/notification_tasks.py`). Sync владеет общением людей и агентов: каналы, треды, сообщения, звонки SFU LiveKit, запись встреч и Git-ссылки; клиент LiveKit и TURN — `apps/sync/services/`. Не владеет: реестром `Namespace` → `namespace.mdc`; байтами файлов → `files.mdc`; распознаванием речи → `voice.mdc`; пробуждением flow-сотрудника → `flow_employee.mdc`; доставкой уведомлений → `events.mdc`.
 
 ## Модель
 
@@ -20,7 +19,7 @@ alwaysApply: false
 - `SyncCallLink` (`apps/sync/models/call_link.py`): `link_token`, `expires_at`, `is_persistent_channel_link`. `update_expires_at_by_link_token(link_token, expires_at) -> None` пишет `expires_at` по PK. Нет строки — ничего не меняет. `list_unordered_scheduled_calendar_links_for_user(company_id, user_id, *, range_start, range_end, channel_id)` — календарные ссылки каналов участника, пересекающие окно: `scheduled_start_at < range_end` и `scheduled_end_at > range_start`. `channel_id is None` — все такие каналы. Чужой `channel_id` и пустое членство — `[]`. Порядка и limit нет. `SyncCallRecording` (`apps/sync/models/meetings.py`), PK `recording_id`: `status` ∈ `requested` | `recording` | `uploaded` | `failed`, `provider_job_id`, `started_by_user_id`, `raw_file_id`. `list_by_created_at_desc_for_call(call_id, company_id) -> list[SyncCallRecording]` — записи звонка компании, `ORDER BY created_at DESC`, без предела. `SyncCallSpeechEgressTrack` (`apps/sync/models/speech_egress.py`) — сегменты речи по `(call_id, track_sid)`. `by_call_and_track` читает эту уникальную пару: нет строки — `None`. Повтор читает ту же. `list_by_created_at_asc_for_call(call_id, company_id) -> list[SyncCallSpeechEgressTrack]` — сегменты речи звонка компании, `ORDER BY created_at ASC` по возрастанию, без предела.
 - `SyncFile` (`apps/sync/models/files.py`) — метаданные файла записи звонка. `GitResourceRef` (`apps/sync/models/git.py`), PK `git_ref_id`: `provider`, `kind`, `project_key`, `external_id`, `url`.
 - `participant_identity` — identity LiveKit, не `user_id`: пользователь — `user_id`, гость — `guest:{uuid8}:{name}`; поле `identity` — только в LiveKit SDK.
-- Конфиг звонков — секция `calls` (`CallsConfig`, `SpeechToChatConfig` в `core/config/models.py`). `core/calls/`: `LiveKitClient` (`core/calls/livekit_client.py`), `generate_turn_credentials` (`core/calls/turn.py`, HMAC-SHA1 coturn), `TurnCredentials`, `SignalType` (`core/calls/models.py`).
+- Конфиг звонков — секция `calls` (`CallsConfig`, `SpeechToChatConfig` в `core/config/models.py`). `apps/sync/services/` + `apps/sync/models/calls.py`: `LiveKitClient` (`apps/sync/services/livekit_client.py`), `generate_turn_credentials` (`apps/sync/services/turn.py`, HMAC-SHA1 coturn), `TurnCredentials`, `SignalType` (`apps/sync/models/calls.py`).
 
 ## Инварианты
 
@@ -84,7 +83,7 @@ alwaysApply: false
 - Flows — builtins `sync_*` (`apps/flows/tools/sync/`) через `SyncClient` (`core/clients/sync_client.py`) под JWT сотрудника; звонки, Git и presence — только UI.
 - Календарь — `CalendarService` (`core/calendar/service.py`) через `ServiceClient` на `/sync/api/v1/calls/links`; уведомления о внешних календарях шлёт `calendar_sync_tick` (`apps/idle/tasks/calendar_sync_tasks.py`), не Sync → `mail.mdc § Интеграции`.
 - Уведомления — `notify_user` из задач `apps/sync/realtime/notification_tasks.py` → `events.mdc § Канон`.
-- Short links — `SyncDi.short_link_service`; биллинг LiveKit — spans `core/calls/livekit_usage_spans.py` → `billing.mdc § Канон`.
+- Short links — `SyncDi.short_link_service`; биллинг LiveKit — spans `apps/sync/services/livekit_usage_spans.py` → `billing.mdc § Канон`.
 
 ## Запреты
 

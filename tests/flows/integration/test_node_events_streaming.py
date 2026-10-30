@@ -11,12 +11,12 @@ import uuid
 import pytest
 from a2a.types import TaskArtifactUpdateEvent
 
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.runtime.flow import Flow
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.streaming import EventSubscriber
 from core.a2a import get_part_data
 from core.errors import CodeExecutionRuntimeError
-from core.flow_ui.templates import default_chat_document
-from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow
 
 

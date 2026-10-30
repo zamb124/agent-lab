@@ -7,14 +7,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from apps.sync.models.calls import CallRead
+from apps.sync.models.calls import CallRead, SignalType
 from apps.sync.models.channels import ChannelRead
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.messages import MessageRead, MessageStatus, ReactionEntry
 from apps.sync.models.threads import ThreadRead
-from core.calls.models import SignalType
 from core.events import register_platform_event
 from core.events.contract import EventDelivery, PlatformEvent
 from core.types import JsonArray, JsonObject, parse_json_object

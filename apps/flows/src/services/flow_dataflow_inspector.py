@@ -35,11 +35,11 @@ from apps.flows.src.models import (
     GraphNodeConfig,
     TriggerConfig,
 )
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
 from apps.flows.src.triggers.output_condition import parse_numeric_literal
 from core.code_contract import CodeContract, scan_code_contract
-from core.flow_ui.document import FlowUIDocument, input_field_type_name
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject, JsonValue, model_json_object, require_json_object
+from core.ui_document.document import FlowUIDocument, input_field_type_name
 from core.variables import scan_prompt_template
 
 SYSTEM_STATE_FIELDS: dict[str, str] = {

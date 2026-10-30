@@ -1,7 +1,7 @@
 """
 Доменные модели ядра задач WorkItem.
 
-Дискриминированные union строятся по образцу `core/state/interrupt.py`:
+Дискриминированные union строятся по образцу `apps/flows/src/state/interrupt.py`:
 поле-дискриминатор `Literal[Enum.MEMBER] = Enum.MEMBER`, обёртка через
 `Annotated[..., Field(discriminator=...)]`.
 """

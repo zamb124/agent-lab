@@ -70,12 +70,22 @@ from apps.flows.src.runtime.llm_context_memory import (
     write_runtime_memory_episode,
 )
 from apps.flows.src.runtime.tool_call_context import active_tool_call_context
+from apps.flows.src.state import (
+    ExecutionExceptionRecord,
+    ExecutionState,
+    InterruptPathItem,
+    PromptHistoryItem,
+)
 from apps.flows.src.state.cancellation import (
     FlowCancelled,
     check_cancellation,
     get_cancellation_token,
 )
 from apps.flows.src.state.interrupt_manager import InterruptManager
+from apps.flows.src.state.mutation_policy import (
+    FROZEN_STATE_FIELDS,
+    USER_TOOL_PARALLEL_STATE_MERGE_FIELDS,
+)
 from apps.flows.src.streaming import BaseEmitter
 from apps.flows.src.streaming.emitter import EmitterFactory
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
@@ -121,13 +131,6 @@ from core.logging.attributes import (
     LOG_FLOW_REACT_MAX_ITERATIONS,
     LOG_TASK_ID,
 )
-from core.state import (
-    ExecutionExceptionRecord,
-    ExecutionState,
-    InterruptPathItem,
-    PromptHistoryItem,
-)
-from core.state.mutation_policy import FROZEN_STATE_FIELDS, USER_TOOL_PARALLEL_STATE_MERGE_FIELDS
 from core.text_transforms.service import TextTransformService
 from core.tracing import TraceContext, get_tracer
 from core.tracing.attributes import (
@@ -1266,7 +1269,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     )
             except FlowInterrupt:
                 await self._checkpoint_state(state)
-                tracer.record_state_snapshot(llm_node_span, state)
+                tracer.record_state_snapshot(llm_node_span, state.model_dump(mode="json", exclude_none=False))
                 raise
             finally:
                 if iteration > 0:
@@ -1283,7 +1286,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     )
                 if final_response:
                     state.response = final_response
-                    tracer.record_state_snapshot(llm_node_span, state)
+                    tracer.record_state_snapshot(llm_node_span, state.model_dump(mode="json", exclude_none=False))
                     await self._close_context_memory_window(state)
                     await self._checkpoint_state(state)
 
@@ -1300,7 +1303,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             return mock_llm_client, max_tok
         llm = create_llm_client_from_call_config(
             llm_config,
-            state=state,
+            variables=state.variables,
             fallback_models=llm_config.fallback_models,
             cost_origin=effective_llm.cost_origin,
             billing_resource_name=effective_llm.billing_resource_name,
@@ -1743,7 +1746,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                 tool_duration = (time.time() - tool_start) * 1000
                 tracer.record_tool_result(tool_span, result, tool_duration)
-                tracer.record_state_snapshot(tool_span, state)
+                tracer.record_state_snapshot(tool_span, state.model_dump(mode="json", exclude_none=False))
                 state_delta = build_state_delta(before_tool_state, state)
                 tool_result_content = _format_tool_result_content(result)
                 completed = await runtime.record_activity_completed(

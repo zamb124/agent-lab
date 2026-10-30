@@ -14,7 +14,7 @@ from core.types import JsonObject
 from core.worktracker.models import Board, BoardColumn, WorkItemState, build_generic_board_columns
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 _TAGS = ["worktracker"]
 

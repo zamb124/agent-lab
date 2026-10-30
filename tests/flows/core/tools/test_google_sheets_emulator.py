@@ -10,6 +10,7 @@ import pytest
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.google_sheets.google_sheets import (
     sheets_add_sheet,
     sheets_append_rows,
@@ -26,7 +27,6 @@ from apps.flows.tools.google_sheets.google_sheets import (
     sheets_share,
     sheets_update_values,
 )
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.fixtures.google_api_emulator import GoogleApiEmulatorHandle
 

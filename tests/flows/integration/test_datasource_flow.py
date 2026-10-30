@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models import Edge
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import DatasourceNode
-from core.flow_ui.templates import default_chat_document
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.fixtures.datasources import CustomerDatasource
 from tests.flows.durable_runtime_harness import run_flow, workflow_state

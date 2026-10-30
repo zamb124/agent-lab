@@ -14,12 +14,12 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.state.interrupt import HandoffInterrupt
 from apps.flows.src.tools.decorator import tool
-from core.state.interrupt import HandoffInterrupt
 from core.types import JsonObject
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class HandoffToFlowArgs(BaseModel):

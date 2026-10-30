@@ -37,12 +37,12 @@ from apps.sync.models.calls import (
 from apps.sync.models.channel import SyncChannel
 from apps.sync.models.channels import ChannelType
 from apps.sync.realtime.speech_to_chat_workflow import stop_speech_egresses_for_call_room
+from apps.sync.services.livekit_client import LiveKitClient
+from apps.sync.services.livekit_usage_spans import trace_livekit_room_session_usage
 from apps.sync.services.message_service import SyncMessageService
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
-from core.calls.livekit_client import LiveKitClient
-from core.calls.livekit_usage_spans import trace_livekit_room_session_usage
 from core.config import get_settings
 from core.events.contract import PlatformEvent
 from core.files.service import FilesService

@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from types import TracebackType
 
+from apps.rag.upload_profile_binding import UploadProfileBinding
 from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.config.models import RAGProviderConfig
@@ -30,7 +31,6 @@ from core.rag.models import (
     RAGSearchOptions,
     RAGSearchResult,
 )
-from core.rag.upload_profile_binding import UploadProfileBinding
 from core.types import JsonValue
 
 logger = get_logger(__name__)

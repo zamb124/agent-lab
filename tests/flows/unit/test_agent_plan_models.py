@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from core.agent_plan.models import (
+from apps.flows.src.agent_plan.models import (
     AgentPlan,
     AgentPlanStep,
     AgentPlanStepStatus,

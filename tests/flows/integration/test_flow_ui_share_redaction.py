@@ -7,7 +7,7 @@ import json
 import pytest
 from httpx2 import AsyncClient
 
-from core.flow_ui.document import (
+from core.ui_document.document import (
     FlowUIButton,
     FlowUIConversation,
     FlowUIDocument,

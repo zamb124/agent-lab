@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 
 def test_runtime_copy_preserves_durable_node_context() -> None:

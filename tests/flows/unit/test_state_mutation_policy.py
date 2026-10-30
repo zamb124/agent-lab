@@ -8,23 +8,23 @@ from typing import cast, override
 
 import pytest
 
+from apps.flows.src.flow_ui.runtime import render_conversation
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
-from core.errors import FrozenStateFieldError
-from core.flow_ui.document import FlowUIMarkdownText
-from core.flow_ui.runtime import render_conversation
-from core.state import (
+from apps.flows.src.state import (
     ExecutionState,
     assert_frozen_fields_unchanged,
     snapshot_frozen_fields,
 )
-from core.state.mutation_policy import (
+from apps.flows.src.state.mutation_policy import (
     FIELDS_COPY_FROM_RUNTIME_NODE_STATE,
     FROZEN_STATE_FIELDS,
     USER_TOOL_PARALLEL_STATE_MERGE_FIELDS,
     should_skip_field_on_runtime_node_state_merge,
     user_code_state_mutation_guard,
 )
+from core.errors import FrozenStateFieldError
+from core.ui_document.document import FlowUIMarkdownText
 from core.types import JsonObject
 
 

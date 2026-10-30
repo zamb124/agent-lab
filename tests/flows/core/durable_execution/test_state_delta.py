@@ -1,5 +1,5 @@
 from apps.flows.src.durable_execution import apply_state_delta, build_state_delta
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 
 def _state(**overrides: object) -> ExecutionState:

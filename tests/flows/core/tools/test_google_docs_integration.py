@@ -23,6 +23,7 @@ import pytest
 from a2a.helpers.proto_helpers import get_message_text
 
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
@@ -33,7 +34,6 @@ from apps.flows.tools.google_docs.google_docs import (
     gdocs_share_document,
 )
 from core.clients.google_docs_client import GoogleDocsClient
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.fixtures.google_sheets_live import (
     google_sheets_live_auth_material,

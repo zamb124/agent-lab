@@ -6,10 +6,10 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.text_client import TextClient
-from core.state import ExecutionState
 from core.types import JsonObject
 
 

@@ -12,6 +12,7 @@ from typing import ClassVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from core.clients.google_sheets_client import GoogleSheetsClient
 from core.clients.google_sheets_models import (
@@ -22,7 +23,6 @@ from core.clients.google_sheets_models import (
     ValueRangeWrite,
     ValueRenderOption,
 )
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 _TAGS = ["google_sheets"]

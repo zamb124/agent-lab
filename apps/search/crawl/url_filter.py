@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit
 
-from core.crawl.models import CrawlDomain, CrawlProfile
+from apps.search.models import CrawlDomain, CrawlProfile
 
 
 class CrawlUrlFilter:

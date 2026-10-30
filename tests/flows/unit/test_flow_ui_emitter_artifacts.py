@@ -10,10 +10,13 @@ from __future__ import annotations
 import pytest
 from a2a.types import TaskArtifactUpdateEvent
 
+from apps.flows.src.flow_ui.runtime import apply_ui_navigate, apply_ui_render
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.state_path import assign_state_path
 from apps.flows.src.streaming import InMemoryEmitter
 from core.a2a.codec import get_part_data
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.protocol import (
+from core.ui_document.document import FlowUIDocument
+from core.ui_document.protocol import (
     CONVERSATION_SLOT_ID,
     FLOW_UI_MEDIA_TYPE,
     JSON_MEDIA_TYPE,
@@ -23,9 +26,6 @@ from core.flow_ui.protocol import (
     FlowUINavigate,
     FlowUIRender,
 )
-from core.flow_ui.runtime import apply_ui_navigate, apply_ui_render
-from core.state import ExecutionState
-from core.state.state_path import assign_state_path
 from core.types import JsonObject, JsonValue
 
 pytestmark = [pytest.mark.no_test_doubles]

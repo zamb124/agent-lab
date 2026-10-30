@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from core.crawl.models import CrawlJob
+from apps.search.models import CrawlJob
 
 
 @pytest.mark.asyncio

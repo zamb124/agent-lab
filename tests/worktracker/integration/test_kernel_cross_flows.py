@@ -19,6 +19,8 @@ from apps.crm.models.crm_entity import CRMEntity
 from apps.flows.src.models.hitl_conversation import ConversationTurnRole
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand
 from apps.flows.src.runtime.a2a_messages import build_user_message
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import HandoffMode
 from apps.flows.tools.worktracker.work_item_tools import (
     work_item_complete,
     work_item_create,
@@ -26,8 +28,6 @@ from apps.flows.tools.worktracker.work_item_tools import (
 )
 from core.files.file_ref import FileRef
 from core.identity.flow_employee import flow_employee_user_id
-from core.state import ExecutionState
-from core.state.interrupt import HandoffMode
 from core.variables.models import normalize_variables_map
 from core.worktracker.access_service import WorkQueueAccessService
 from core.worktracker.models import (

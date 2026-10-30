@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.crawl.models import (
+from apps.search.models import (
     CrawlEnrichedChunk,
     CrawlEnrichedPage,
     CrawlPageFilterMetadata,

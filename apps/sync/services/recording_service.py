@@ -15,11 +15,11 @@ from apps.sync.models.meetings import CallRecordingRead, SyncCallRecording
 from apps.sync.realtime.handlers import channel_recipient_user_ids
 from apps.sync.realtime.livekit_sdk_boundary import read_livekit_egress_id
 from apps.sync.realtime.task_names import SYNC_FINALIZE_RECORDING
+from apps.sync.services.livekit_client import LiveKitClient
+from apps.sync.services.livekit_usage_spans import trace_livekit_egress_composite_usage
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
-from core.calls.livekit_client import LiveKitClient
-from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
 from core.config import get_settings
 from core.events import publish_events
 from core.files.create_spec import FileSourceKind

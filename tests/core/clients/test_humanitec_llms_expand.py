@@ -102,7 +102,7 @@ async def test_auto_empty_redis_without_fallbacks_raises(
         LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
         None,
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     with pytest.raises(RuntimeError, match="humanitec_llm auto: нет кандидатов"):
@@ -119,7 +119,7 @@ async def test_auto_empty_redis_with_paid_fallback(
         LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
         None,
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=True,
     )
     candidates = await resolver()
@@ -144,7 +144,7 @@ async def test_auto_empty_redis_uses_authored_fallback(
             )
         ],
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     candidates = await resolver()
@@ -170,7 +170,7 @@ async def test_empty_humanitec_fallback_skips_to_openai(
             ),
         ],
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     candidates = await resolver()
@@ -187,7 +187,7 @@ async def test_pinned_missing_without_fallback_raises(
         LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model="groq:missing-id"),
         None,
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     with pytest.raises(RuntimeError, match="не найден в verified free-pool cache"):
@@ -211,7 +211,7 @@ async def test_pinned_missing_uses_authored_fallback(
             )
         ],
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     candidates = await resolver()
@@ -236,7 +236,7 @@ async def test_records_without_api_key_are_skipped(
         LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
         None,
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     with pytest.raises(RuntimeError, match="humanitec_llm auto: нет кандидатов"):
@@ -260,7 +260,7 @@ async def test_paid_disabled_still_uses_authored_fallback(
             )
         ],
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     candidates = await resolver()
@@ -291,7 +291,7 @@ async def test_empty_models_snapshot_uses_authored_fallback(
             )
         ],
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     candidates = await resolver()
@@ -367,7 +367,7 @@ async def test_corrupt_cache_raises_and_does_not_use_fallback(
             )
         ],
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     with pytest.raises(ValueError):
@@ -455,7 +455,7 @@ async def test_auto_expands_one_model_per_api_key(
         LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
         None,
         settings=settings,
-        state=None,
+        variables=None,
         include_paid_fallback=False,
     )
     candidates = await resolver()

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from core.crawl.models import CrawlProfile, CrawlProfileCreateRequest
+from apps.search.models import CrawlProfile, CrawlProfileCreateRequest
 from core.errors.boundary import PlatformNotFoundError
 from core.search.index_models import SearchIndexDefinition
 

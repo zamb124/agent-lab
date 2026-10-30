@@ -17,8 +17,8 @@ import pytest
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.state import ExecutionState
 from core.context import Context, User, clear_context, set_context
-from core.state import ExecutionState
 
 
 @pytest.fixture

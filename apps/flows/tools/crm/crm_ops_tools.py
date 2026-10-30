@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from core.clients.crm_client import CrmClient
 from core.clients.crm_models import (
@@ -9,7 +10,6 @@ from core.clients.crm_models import (
     CrmListSuggestsArgs,
     CrmSuggestIdArgs,
 )
-from core.state import ExecutionState
 from core.types import JsonObject
 
 _TAGS = ["crm"]

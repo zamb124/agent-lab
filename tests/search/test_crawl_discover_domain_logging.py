@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import httpx2
 import pytest
 
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainCreateRequest,
     CrawlProfile,

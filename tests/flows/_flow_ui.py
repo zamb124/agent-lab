@@ -8,9 +8,9 @@
 
 from __future__ import annotations
 
-from core.flow_ui.document import FlowUIBlockModel, iter_blocks
-from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUIRender
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
+from core.ui_document.document import FlowUIBlockModel, iter_blocks
+from core.ui_document.protocol import CONVERSATION_SLOT_ID, FlowUIRender
 
 
 def conversation_blocks(

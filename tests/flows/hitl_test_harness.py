@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand
-from core.state import ExecutionState
-from core.state.interrupt import (
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import (
     HandoffMode,
     InterruptData,
     InterruptSystemContext,

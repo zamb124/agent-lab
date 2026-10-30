@@ -1,6 +1,6 @@
 """Грамматика Flow UI: каждый блок, его лимиты и инварианты документа.
 
-Pydantic-модели ``core/flow_ui/document.py`` — единственная спецификация интерфейса, поэтому
+Pydantic-модели ``core/ui_document/document.py`` — единственная спецификация интерфейса, поэтому
 здесь закреплены границы, на которые опираются редактор, тулы ``ui_render`` и валидация
 сохранения flow: паттерны id и путей, обязательные поля, взаимоисключающие источники,
 уникальность block_id внутри страницы и стартовая страница документа.
@@ -13,7 +13,7 @@ from typing import cast
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from core.flow_ui.document import (
+from core.ui_document.document import (
     ACTION_NAME_PATTERN,
     BLOCK_ID_PATTERN,
     INPUT_BLOCK_TYPES,

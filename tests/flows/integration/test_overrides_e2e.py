@@ -8,7 +8,7 @@ import pytest
 
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from core.types import JsonObject, JsonValue
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 

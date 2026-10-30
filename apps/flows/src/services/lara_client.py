@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from apps.flows.src.services.flow_ui_cards import show_action_preview, show_action_result
 from apps.flows.src.services.lara_facade import LaraFacade
+from apps.flows.src.state import ExecutionState
 from core.context import resolve_namespace_or_raise
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 

@@ -7,8 +7,8 @@ from apps.flows.src.runtime.message_author import (
     FlowMessageAuthor,
     build_flow_message_author,
 )
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.streaming import InMemoryEmitter
-from core.state import ExecutionState
 
 pytestmark = [pytest.mark.no_test_doubles]
 

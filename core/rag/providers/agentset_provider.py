@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlparse
 
 import httpx2
 
+from apps.rag.upload_profile_binding import UploadProfileBinding
 from core.config import get_settings
 from core.config.models import RAGProviderConfig
 from core.http import ProxyStrategy, get_httpx_client
@@ -26,7 +27,6 @@ from core.rag.models import (
     RAGSearchResult,
 )
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
-from core.rag.upload_profile_binding import UploadProfileBinding
 from core.types import JsonObject, JsonValue, require_json_object
 
 # Object storage для RAG — через FileGate / BaseRAGProvider

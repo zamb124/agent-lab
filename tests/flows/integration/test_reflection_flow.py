@@ -8,14 +8,14 @@ from typing import Any
 import pytest
 
 from apps.flows.di import FlowsDi
+from apps.flows.src.flow_ui.templates import default_chat_document
+from apps.flows.src.reflection import CriticExit, CriticExitWhen
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, ReflectionNode, create_node
+from apps.flows.src.state import ExecutionState
 from core.clients.llm.mock import MockLLM
 from core.errors import FlowPrematureCompletionError
-from core.flow_ui.templates import default_chat_document
-from core.reflection import CriticExit, CriticExitWhen
-from core.state import ExecutionState
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 from tests.flows.fixtures.reflection import (

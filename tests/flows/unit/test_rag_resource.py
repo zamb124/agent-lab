@@ -4,7 +4,7 @@ import pytest
 
 from apps.flows.di import FlowsDi
 from core.clients.service_client import ServiceClient
-from core.rag.rag_resource import RAGResource
+from apps.flows.src.resources.rag_resource import RAGResource
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ from apps.flows.src.runtime.llm_context_memory import (
     write_runtime_memory_episode,
 )
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.streaming.emitter import EmitterFactory
 from apps.flows.src.tools.base import BaseTool
 from core.a2a import get_part_text
@@ -31,7 +32,6 @@ from core.llm_context.memory import (
     LLMContextMemoryRecallRequest,
     LLMContextMemoryRecord,
 )
-from core.state import ExecutionState
 from core.text_transforms.service import TextTransformService
 from core.types import JsonObject
 

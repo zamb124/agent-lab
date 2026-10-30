@@ -7,6 +7,7 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.files.state_file_refs import upsert_state_file
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.data_table_client import DataTableClient
@@ -17,7 +18,6 @@ from core.data_tables.models import (
     DataTableSchemaSnapshot,
 )
 from core.files.file_ref import FileRef
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 _TAGS = ["tables"]

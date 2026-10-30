@@ -18,8 +18,8 @@ from apps.flows.src.durable_execution import (
     create_initial_state,
 )
 from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime
+from apps.flows.src.state import ExecutionState
 from core.a2a import get_part_text, part_has_text
-from core.state import ExecutionState
 
 
 def _msg(text: str, role: Role = ROLE_USER) -> Message:

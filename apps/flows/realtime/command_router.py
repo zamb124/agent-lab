@@ -267,6 +267,7 @@ from apps.flows.realtime.trigger_operations import (
     op_flows_triggers_update,
     op_flows_triggers_verify,
 )
+from apps.flows.src.flow_ui.templates import FlowUITemplatesPayload
 from apps.flows.src.models import BranchCreateRequest, BranchUpdateRequest
 from apps.flows.src.models.agent_skill import (
     AgentSkill,
@@ -411,7 +412,6 @@ from core.datasources.models import (
     DatasourceSchemaArgs,
     DatasourceSqlCallArgs,
 )
-from core.flow_ui.templates import FlowUITemplatesPayload
 from core.guest_runtime.models import (
     CodeAgentCopyTreeRequest,
     CodeAgentDeletePayload,

@@ -18,9 +18,9 @@ from apps.flows.src.durable_execution import (
     create_initial_state,
 )
 from apps.flows.src.durable_execution.models import ExecutionBranchReason, WorkflowBranchResult
+from apps.flows.src.state import ExecutionState
 from core.context import Context, clear_context, set_context
 from core.models.identity_models import User
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.fixtures.ai_provider_defaults import make_test_company
 

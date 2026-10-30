@@ -15,15 +15,15 @@ from apps.flows.src.contracts import (
 from apps.flows.src.models import BranchConfig, FlowConfig, ResourceMapInput, ResourceReference
 from apps.flows.src.models.enums import MergeMode
 from apps.flows.src.models.flow_config import Edge
+from apps.flows.src.resources.json_merge import deep_merge
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import NodeConstructor
 from apps.flows.src.services.flow_access_service import FlowAccessService
-from core.compiler import GraphCompiler
+from apps.flows.src.services.graph_compiler import GraphCompiler
 from core.context import require_context
 from core.errors import InvalidGraphError
 from core.logging import get_logger
 from core.types import JsonArray, JsonObject, JsonValue, require_json_object
-from core.utils.json_merge import deep_merge
 from core.variables import VarResolver
 from core.variables.service import VariablesService
 

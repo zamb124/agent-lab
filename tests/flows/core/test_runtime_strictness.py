@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, CodeNode, NodeInputs, NodeRunResult, create_node
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.streaming.emitter import EmitterFactory
 from core.clients.redis_client import RedisClient
-from core.flow_ui.templates import default_chat_document
-from core.state import ExecutionState
 
 
 class _NoWorkflowRuntime:

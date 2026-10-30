@@ -35,10 +35,10 @@ from apps.flows.src.models.durable_api import (
     WorkflowBranchesResponse,
     WorkflowHistoryResponse,
 )
+from apps.flows.src.state import ExecutionState
 from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
-from core.state import ExecutionState
 from core.websocket import WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
 

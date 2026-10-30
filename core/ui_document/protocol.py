@@ -13,14 +13,14 @@ from typing import Annotated, Literal
 
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
-from core.flow_ui.document import (
+from core.models.base import StrictBaseModel
+from core.types import JsonObject, JsonValue, require_serializer_json_object
+from core.ui_document.document import (
     FlowUIActionName,
     FlowUIBlock,
     FlowUIBlockId,
     FlowUIPageId,
 )
-from core.models.base import StrictBaseModel
-from core.types import JsonObject, JsonValue, require_serializer_json_object
 
 JSON_MEDIA_TYPE = "application/json"
 JSON_PATCH_MEDIA_TYPE = "application/json-patch+json"

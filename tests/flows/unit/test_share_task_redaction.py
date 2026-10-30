@@ -14,7 +14,7 @@ from apps.flows.src.a2a.share_task_redaction import (
     task_for_share_viewer,
 )
 from core.a2a.codec import get_part_data, value_from_json
-from core.flow_ui.protocol import (
+from core.ui_document.protocol import (
     FLOW_UI_MEDIA_TYPE,
     JSON_MEDIA_TYPE,
     JSON_PATCH_MEDIA_TYPE,

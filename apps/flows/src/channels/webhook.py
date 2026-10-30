@@ -7,6 +7,7 @@ from a2a.types import Message, Part, Role, StreamResponse, TaskState, TaskStatus
 from google.protobuf.json_format import MessageToDict
 
 from apps.flows.src.models.enums import ChannelType
+from apps.flows.src.state import ExecutionState
 from core.a2a import (
     a2a_task_state_to_platform,
     is_interrupted_a2a_task_state,
@@ -18,7 +19,6 @@ from core.a2a import (
 )
 from core.http import get_httpx_client
 from core.logging import get_logger
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 from .base import BaseChannelHandler

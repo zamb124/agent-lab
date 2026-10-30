@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from core.crawl.models import CrawlProfile, CrawlProfileWithIndex, CrawlUrl
+from apps.search.models import CrawlProfile, CrawlProfileWithIndex, CrawlUrl
 from core.search.index_models import SearchIndexDefinition
 from tests.fixtures.taskiq_capture import taskiq_task_name
 

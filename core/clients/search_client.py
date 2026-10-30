@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from core.clients.service_client import ServiceClient
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainCreateRequest,
     CrawlDomainPatchRequest,
@@ -16,6 +15,7 @@ from core.crawl.models import (
     CrawlUrlAddRequest,
     UpsertStats,
 )
+from core.clients.service_client import ServiceClient
 from core.search.models import MetaSearchRefineRequest, MetaSearchRequest, MetaSearchResponse
 from core.search.public import PUBLIC_SEARCH_WALL_TIME_SECONDS
 

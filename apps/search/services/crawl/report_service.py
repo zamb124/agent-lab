@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from core.clients.rag_client import RagClient
-from core.clients.service_client import ServiceClientError
-from core.crawl.models import (
+from apps.search.crawl.report_projection import filter_metadata_from_rag_metadata
+from apps.search.models import (
     CrawlDomain,
     CrawlJob,
     CrawlProfile,
@@ -17,7 +16,8 @@ from core.crawl.models import (
     CrawlUrlIndexedContent,
     CrawlUrlListItem,
 )
-from core.crawl.report_projection import filter_metadata_from_rag_metadata
+from core.clients.rag_client import RagClient
+from core.clients.service_client import ServiceClientError
 from core.logging import get_logger
 from core.pagination import OffsetPage
 

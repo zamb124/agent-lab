@@ -2,7 +2,7 @@
 
 import pytest
 
-from core.crawl.enrichment_skip import should_skip_crawl_url_after_fetch
+from apps.search.crawl.enrichment_skip import should_skip_crawl_url_after_fetch
 
 pytestmark = pytest.mark.unit
 

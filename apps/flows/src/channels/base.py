@@ -67,6 +67,7 @@ from apps.flows.src.durable_execution import (
 )
 from apps.flows.src.durable_execution.models import WorkflowConcurrencyError
 from apps.flows.src.files.state_file_refs import upsert_state_file
+from apps.flows.src.flow_ui.action import apply_flow_ui_action, validate_flow_ui_action
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.enums import ChannelType
 from apps.flows.src.models.flow_config import FlowConfig
@@ -87,14 +88,21 @@ from apps.flows.src.services.handoff_tracing import (
     resolve_active_trace_context,
     trace_context_to_kiq_payload,
 )
-from apps.flows.src.state import collect_flow_node_files
+from apps.flows.src.state import (
+    ChildWorkflowLink,
+    ExecutionState,
+    ExecutionTaskState,
+    collect_flow_node_files,
+)
 from apps.flows.src.state.cancellation import (
     CancellationToken,
     FlowCancelled,
     set_cancellation_token,
 )
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
+from apps.flows.src.state.interrupt import HandoffInterrupt, HandoffMode, OperatorTaskInterrupt
 from apps.flows.src.state.interrupt_manager import InterruptManager
+from apps.flows.src.state.trigger_runtime import TriggerRuntimeSnapshot
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.triggers.output_actions import OutputActionExecutor
@@ -119,20 +127,11 @@ from core.clients.redis_client import RedisClient
 from core.context import clear_context, get_context, set_context
 from core.db.storage import Storage
 from core.files.file_ref import FileRef
-from core.flow_ui.action import apply_flow_ui_action, validate_flow_ui_action
-from core.flow_ui.protocol import (
-    FLOW_UI_ACTION_MEDIA_TYPE,
-    FLOW_UI_OUTPUT_MEDIA_TYPES,
-    FlowUIActionMessage,
-)
 from core.logging import bind_session_agent, get_logger
 from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.flow_ui_share import FlowUIShareGrant
 from core.models.identity_models import User
-from core.state import ChildWorkflowLink, ExecutionState, ExecutionTaskState
-from core.state.interrupt import HandoffInterrupt, HandoffMode, OperatorTaskInterrupt
-from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.tasks import enqueue
 from core.tracing import get_tracer
 from core.tracing.context import TraceContext
@@ -144,6 +143,11 @@ from core.types import (
     parse_json_response_or_none,
     require_json_array,
     require_json_object,
+)
+from core.ui_document.protocol import (
+    FLOW_UI_ACTION_MEDIA_TYPE,
+    FLOW_UI_OUTPUT_MEDIA_TYPES,
+    FlowUIActionMessage,
 )
 from core.utils.background import run_with_log_context
 from core.variables.service import VariablesService

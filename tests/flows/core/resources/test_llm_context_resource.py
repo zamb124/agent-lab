@@ -6,7 +6,7 @@ from apps.flows.src.models.resource import (
     parse_typed_resource_config,
 )
 from core.llm_context import LLMContextPatch
-from core.rag import RagResourceBindParams
+from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
 
 
 def test_llm_context_resource_config_is_strictly_typed() -> None:

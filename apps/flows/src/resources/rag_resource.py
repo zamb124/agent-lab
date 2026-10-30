@@ -7,16 +7,16 @@ from __future__ import annotations
 
 from typing import override
 
+from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
+from apps.flows.src.resources.index_profile_merge import merge_index_profile_dict_overlays
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.namespace import NamespaceService
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
-from core.rag.index_profile_merge import merge_index_profile_dict_overlays
 from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchOptions
 from core.rag.rag_http_namespace_search import merge_search_request_options
-from core.rag.rag_resource_bind import RagResourceBindParams
 from core.types import JsonObject, require_json_object
 
 

@@ -15,8 +15,8 @@ import pytest
 from apps.flows.src.models import FlowConfig, ReactConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.state import ExecutionState
 from core.errors import FlowExecutionError
-from core.state import ExecutionState
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 

@@ -26,6 +26,7 @@ from core.authz.types import AuthzRelation, AuthzSubjectKind
 from core.documents.authz.tuples import (
     document_catalog_company_link,
     document_catalog_company_viewer_tuple,
+    document_catalog_lister_tuple,
     document_catalog_member_tuple,
     document_catalog_owner_tuple,
     document_catalog_parent_tuple,
@@ -146,9 +147,19 @@ class OfficeAccessService:
             catalog.catalog_id, catalog.company_id
         )
         if company_visible:
-            await self._authz.write([link, viewer])
+            writes = [link, viewer]
+            if catalog.parent_catalog_id is None:
+                writes.append(
+                    document_catalog_lister_tuple(catalog.catalog_id, catalog.company_id)
+                )
+            await self._authz.write(writes)
         else:
-            await self._authz.write_and_delete([link], [viewer])
+            deletes = [viewer]
+            if catalog.parent_catalog_id is None and not catalog.managed:
+                deletes.append(
+                    document_catalog_lister_tuple(catalog.catalog_id, catalog.company_id)
+                )
+            await self._authz.write_and_delete([link], deletes)
 
     async def catalog_is_company_visible(self, catalog_id: str, company_id: str) -> bool:
         tuples = await self._authz.list_tuples(self._catalog_obj(catalog_id))

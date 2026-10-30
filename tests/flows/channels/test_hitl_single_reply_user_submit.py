@@ -13,13 +13,13 @@ from apps.flows.src.durable_execution import (
     WorkflowEventType,
     create_initial_state,
 )
-from core.flow_ui.protocol import FlowUIActionMessage
-from core.state.interrupt import (
+from apps.flows.src.state.interrupt import (
     HandoffMode,
     InterruptData,
     InterruptSystemContext,
     OperatorTaskInterrupt,
 )
+from core.ui_document.protocol import FlowUIActionMessage
 
 
 def _operator_interrupt(*, unique_id: str, task_id: str, context_id: str) -> InterruptData:

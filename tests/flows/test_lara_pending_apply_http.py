@@ -8,9 +8,9 @@ import pytest
 import pytest_asyncio
 
 from apps.flows.src.services.lara_client import LaraClient
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.execution_state_records import ToolResult
 from apps.flows.tools.crm.crm_tools import crm_create_note
-from core.state import ExecutionState
-from core.state.execution_state_records import ToolResult
 
 pytestmark = [
     pytest.mark.timeout(120, func_only=True),

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import OAuthInterrupt
 from core.clients.google_workspace_auth import (
     GoogleAuthMaterial,
     auth_material_from_execution_variables,
@@ -18,8 +20,6 @@ from core.integrations.constants import TOKEN_TYPE_SERVICE_ACCOUNT
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService
 from core.logging import get_logger
-from core.state import ExecutionState
-from core.state.interrupt import OAuthInterrupt
 from core.tracing.context import get_current_trace_context
 from core.types import JsonObject
 

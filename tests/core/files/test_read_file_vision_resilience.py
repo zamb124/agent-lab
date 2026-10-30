@@ -7,6 +7,7 @@ from io import BytesIO
 import pytest
 from PIL import Image
 
+from apps.flows.src.state import ExecutionState
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import CompressionMode
 from core.files.reader.vision import (
@@ -16,7 +17,6 @@ from core.files.reader.vision import (
     prepare_visual_payload,
     transcode_to_jpeg,
 )
-from core.state import ExecutionState
 from core.types import require_json_object
 from tests.core.files.corpus.helpers import require_heic_entry_supported
 from tests.core.files.corpus.manifest import CORPUS, POSITIVE

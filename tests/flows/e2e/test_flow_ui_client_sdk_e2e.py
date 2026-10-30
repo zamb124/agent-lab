@@ -19,7 +19,7 @@ from core.clients.flow_ui_client import (
     FlowUIStateEvent,
     FlowUITextEvent,
 )
-from core.flow_ui.protocol import FlowUIActionMessage
+from core.ui_document.protocol import FlowUIActionMessage
 
 pytestmark = [pytest.mark.e2e, pytest.mark.real_taskiq, pytest.mark.timeout(120, func_only=True)]
 

@@ -13,6 +13,7 @@ from apps.rag.tasks.task_names import (
     RAG_REEMBED_STALE_DOCUMENTS_TICK,
     RAG_REINDEX_DOCUMENT,
 )
+from apps.rag.upload_profile_binding import UploadProfileBinding
 from core.config import get_settings
 from core.context import clear_context, set_context
 from core.db.models.rag import DocumentProcessingStatus
@@ -30,7 +31,6 @@ from core.rag.models import (
 )
 from core.rag.reembed_stale_documents import execute_reembed_tick
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
-from core.rag.upload_profile_binding import UploadProfileBinding
 from core.tasks import platform_task
 from core.types import JsonObject
 

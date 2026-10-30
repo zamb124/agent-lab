@@ -7,6 +7,8 @@ import pytest
 from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import InterruptKind, OAuthInterrupt
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.tools.google_sheets.google_sheets import (
@@ -17,8 +19,6 @@ from apps.flows.tools.google_sheets.google_sheets import (
 )
 from core.config import get_settings
 from core.config.models import AuthConfig, AuthProviderConfig
-from core.state import ExecutionState
-from core.state.interrupt import InterruptKind, OAuthInterrupt
 
 
 def _make_state() -> ExecutionState:

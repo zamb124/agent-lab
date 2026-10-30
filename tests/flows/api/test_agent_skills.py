@@ -19,14 +19,14 @@ from apps.flows.src.runtime.agent_skill_runtime import (
     agent_skill_runtime_host_scope,
 )
 from apps.flows.src.services.platform_assistant_skills import PLATFORM_ASSISTANT_SEED_SKILL_IDS
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.authz.company_sync import sync_company_member_roles
 from core.context import Context, clear_context, get_context, set_context
 from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef
-from core.flow_ui.document import FlowUISkillActivity
+from core.ui_document.document import FlowUISkillActivity
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 from tests.flows._flow_ui import conversation_blocks
 from tests.flows.agent_skills_harness import company_scope
 

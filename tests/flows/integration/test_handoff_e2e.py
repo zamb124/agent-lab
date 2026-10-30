@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.state.interrupt import HandoffInterrupt, InterruptKind
 from core.clients.llm import setup_mock_responses
-from core.state.interrupt import HandoffInterrupt, InterruptKind
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 

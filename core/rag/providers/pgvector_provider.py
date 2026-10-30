@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal, override
 
+from apps.rag.upload_profile_binding import UploadProfileBinding
 from core.ai.embedding_client import AIEmbeddingClient
 from core.ai.runtime import create_embedding_client_from_runtime
 from core.config import get_settings
@@ -45,7 +46,6 @@ from core.rag.models import (
 )
 from core.rag.rrf import reciprocal_rank_fusion
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
-from core.rag.upload_profile_binding import UploadProfileBinding
 from core.rag_indexing_schema import IndexProfileConfig, IndexProfileSplitConfig
 from core.types import JsonObject, JsonValue, require_json_object
 

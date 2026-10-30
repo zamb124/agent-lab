@@ -19,9 +19,9 @@ import uuid
 import pytest
 
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.state import ExecutionState, InterruptData
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_TOOL, TASK_PROCESS_FLOW
 from core.clients.llm import LLMToolCall
-from core.state import ExecutionState, InterruptData
 from core.tasks import enqueue
 from tests.fixtures.taskiq_timeouts import TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.documents_client import DocumentsClient
@@ -25,7 +26,6 @@ from core.clients.documents_models import (
     DocumentsUpdateCatalogArgs,
 )
 from core.files.reader.models import MAX_READ_BUDGET
-from core.state import ExecutionState
 from core.types import JsonObject
 
 _TAGS = ["documents"]

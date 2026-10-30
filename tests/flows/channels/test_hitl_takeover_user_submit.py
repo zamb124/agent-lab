@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from httpx2 import AsyncClient
 
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
+from apps.flows.src.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.worktracker.models import WorkItem, WorkItemState
 from tests.flows._a2a_v1 import A2A_HEADERS, SEND_MESSAGE, a2a_rpc, a2a_text_message
 from tests.flows._flow_ui_session import a2a_send, ui_action_message

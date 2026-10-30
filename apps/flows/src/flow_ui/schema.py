@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from core.flow_ui.document import FlowUIDocument
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject, require_json_object
+from core.ui_document.document import FlowUIDocument
 
 
 def flow_ui_schema() -> JsonObject:

@@ -15,9 +15,9 @@ from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.flow_ui_cards import show_action_preview, show_action_result
 from apps.flows.src.services.lara_facade import LaraFacade, flow_config_from_flow_api_response
 from apps.flows.src.services.tool_approval import ToolApprovalStore
+from apps.flows.src.state import ExecutionState
 from core.clients.service_client import ServiceClient
 from core.context import get_context
-from core.state import ExecutionState
 from core.types import (
     JsonObject,
     JsonValue,

@@ -17,8 +17,8 @@ from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import ExternalAPINode, create_node
 from apps.flows.src.services.external_api_client import ExternalAPIClient
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.base import ExternalAPITool
-from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow, run_node
 from tests.flows.fixtures.external_api.main import external_api_app
 

@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from core.flow_ui.document import FlowUIDocument
 from core.models.base import StrictBaseModel
 from core.models.embed_models import EmbedInterfaceLook
+from core.ui_document.document import FlowUIDocument
 
 
 class FlowInterfaceViewer(StrictBaseModel):

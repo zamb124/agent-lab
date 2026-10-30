@@ -16,7 +16,10 @@ from apps.search.realtime.operations import (
     op_providers_reset,
     op_providers_update,
 )
-from core.company_search import CompanySearchProvidersResponse, SearchProviderId
+from apps.search.services.company_search_schema import (
+    CompanySearchProvidersResponse,
+    SearchProviderId,
+)
 from core.context import require_context
 from core.websocket import EmptyPayload
 

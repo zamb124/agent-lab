@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.flow_ui.html_bindings import (
+from apps.flows.src.flow_ui.html_bindings import (
     HTML_BIND_ATTRIBUTE,
     HTML_SHOW_ATTRIBUTE,
     html_bound_paths,

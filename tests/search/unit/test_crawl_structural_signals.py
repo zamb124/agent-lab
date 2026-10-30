@@ -2,7 +2,7 @@
 
 import pytest
 
-from core.crawl.structural_signals import extract_structural_signals_from_html
+from apps.search.crawl.structural_signals import extract_structural_signals_from_html
 
 pytestmark = pytest.mark.unit
 

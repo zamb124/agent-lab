@@ -12,6 +12,7 @@ from typing import ClassVar, Literal, Self, TypeAlias, assert_never, override
 from oxyde import Field as DbField
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
 from core.ai.llm_config import (
     LLMCallConfig,
     ReasoningEffort,
@@ -21,7 +22,6 @@ from core.context.context import get_context
 from core.llm_context.models import LLMContextPatch
 from core.models import StrictBaseModel
 from core.models.platform_model import CompanyScopedModel
-from core.rag.rag_resource_bind import RagResourceBindParams
 from core.types import JsonObject, JsonValue, require_json_object
 
 

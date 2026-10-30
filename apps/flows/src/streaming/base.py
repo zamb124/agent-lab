@@ -20,17 +20,20 @@ from a2a.types import (
 )
 from google.protobuf.struct_pb2 import Struct
 
-from apps.flows.src.runtime.message_author import build_flow_message_author
-from core.a2a import make_task_status
-from core.a2a.codec import struct_from_mapping
-from core.flow_ui.document import FlowUIDocument, iter_blocks
-from core.flow_ui.projection import (
+from apps.flows.src.flow_ui.projection import (
     block_paths,
-    json_patch_operations,
     project_state,
     referenced_paths,
 )
-from core.flow_ui.protocol import (
+from apps.flows.src.runtime.message_author import build_flow_message_author
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import InterruptKind
+from core.a2a import make_task_status
+from core.a2a.codec import struct_from_mapping
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from core.ui_document.document import FlowUIDocument, iter_blocks
+from core.ui_document.json_patch import json_patch_operations
+from core.ui_document.protocol import (
     CONVERSATION_SLOT_ID,
     FLOW_UI_MEDIA_TYPE,
     JSON_MEDIA_TYPE,
@@ -42,12 +45,9 @@ from core.flow_ui.protocol import (
     FlowUIEvent,
     FlowUIRender,
 )
-from core.state import ExecutionState
-from core.state.interrupt import InterruptKind
-from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 if TYPE_CHECKING:
-    from core.state import InterruptData
+    from apps.flows.src.state import InterruptData
 
 StreamEvent = TaskStatusUpdateEvent | TaskArtifactUpdateEvent
 

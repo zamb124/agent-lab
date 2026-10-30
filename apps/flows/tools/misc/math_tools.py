@@ -11,7 +11,7 @@ from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 type Number = int | float
 type AstConstantValue = str | bytes | bool | int | float | complex | None | EllipsisType

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 import pytest
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.builtin_dependencies import BuiltinToolClient
 from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.tools.worktracker.work_item_tools import (
@@ -16,7 +17,6 @@ from apps.flows.tools.worktracker.work_item_tools import (
     work_item_list_mine,
 )
 from core.identity.flow_employee import flow_employee_user_id
-from core.state import ExecutionState
 from core.worktracker.models import (
     ActorKind,
     AssigneeKind,

@@ -10,12 +10,12 @@ from google.protobuf.json_format import MessageToDict
 from apps.flows.src.a2a.ensure_submitted_task import ensure_submitted_a2a_task
 from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
 from apps.flows.src.observability.flow_timing import maybe_record_flow_first_content_chunk
+from apps.flows.src.state import ExecutionState
 from core.a2a import struct_from_mapping
 from core.context import require_context
-from core.flow_ui.protocol import RESPONSE_ARTIFACT_NAME
 from core.logging import get_logger
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
+from core.ui_document.protocol import RESPONSE_ARTIFACT_NAME
 
 from .base import BaseEmitter, StreamEvent
 

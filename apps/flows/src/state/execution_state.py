@@ -20,22 +20,22 @@ from pydantic import (
     model_validator,
 )
 
-from core.a2a.codec import messages_from_json_list, messages_to_json_list
-from core.agent_plan.models import AgentPlan
-from core.clients.llm.messages import LLMToolCall
-from core.errors import FrozenStateFieldError
-from core.files.file_ref import FileRef
-from core.flow_ui.document import FlowUIBlock
-from core.flow_ui.protocol import FlowUIAction, FlowUIEvent
-from core.models import FlexibleBaseModel, StrictBaseModel
-from core.reflection import ReflectionRecord
-from core.state.interrupt import InterruptData
-from core.state.mutation_policy import (
+from apps.flows.src.agent_plan.models import AgentPlan
+from apps.flows.src.reflection import ReflectionRecord
+from apps.flows.src.state.interrupt import InterruptData
+from apps.flows.src.state.mutation_policy import (
     FROZEN_STATE_SNAPSHOT_FIELDS,
     guard_setattr_if_user_code,
 )
-from core.state.trigger_runtime import TriggerRuntimeSnapshot
+from apps.flows.src.state.trigger_runtime import TriggerRuntimeSnapshot
+from core.a2a.codec import messages_from_json_list, messages_to_json_list
+from core.clients.llm.messages import LLMToolCall
+from core.errors import FrozenStateFieldError
+from core.files.file_ref import FileRef
+from core.models import FlexibleBaseModel, StrictBaseModel
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.ui_document.document import FlowUIBlock
+from core.ui_document.protocol import FlowUIAction, FlowUIEvent
 
 ExecutionTaskState = Literal[
     "completed",
@@ -72,7 +72,7 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     hitl_handoff_correlation_id: str | None
     hitl_streamed_closing_text: str | None
     # Pydantic-схемы значений документированы в
-    # `core/state/execution_state_records.py`:
+    # `apps/flows/src/state/execution_state_records.py`:
     # node_history — NodeHistoryEntry, tool_results — ToolResult,
     # reasoning_history/pending_reasoning — ReasoningEntry,
     # breakpoint_state — BreakpointState, scheduled_tasks — ScheduledTaskRef.

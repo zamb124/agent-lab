@@ -33,8 +33,8 @@ from typing import ClassVar, cast
 
 from pydantic import BaseModel
 
+from apps.flows.src.state.execution_state import ExecutionState, ExecutionStateValue
 from core.guest_runtime.env import validate_guest_env
-from core.state.execution_state import ExecutionState, ExecutionStateValue
 from core.types import (
     JsonObject,
     JsonValue,

@@ -16,6 +16,7 @@ from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.runners.tool_context_view import build_tool_context_view
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.tool_call_context import active_tool_call_context
+from apps.flows.src.state import ExecutionState
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
     CapabilityCallResponse,
@@ -31,7 +32,6 @@ from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from core.websocket import raise_forbidden, raise_invalid
 

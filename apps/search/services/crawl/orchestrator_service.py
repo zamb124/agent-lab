@@ -10,25 +10,12 @@ from typing import Literal
 import httpx2
 
 from apps.search.config import SearchCrawlConfig
-from apps.search.services.crawl.fetch_service import CrawlFetchService
-from apps.search.services.crawl.ingest_service import CrawlIngestService
-from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
-from apps.search.services.crawl.politeness_service import CrawlPolitenessService
-from apps.search.services.crawl.seed_loader import import_tranco_domains
-from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
-from apps.search.tasks.task_names import (
-    CRAWL_DISCOVER_DOMAIN,
-    CRAWL_ENRICH_URL,
-    CRAWL_FETCH_URL,
-    CRAWL_ORCHESTRATOR_TICK,
-)
-from core.clients.rag_client import RagClient
-from core.crawl.enrichment_skip import (
+from apps.search.crawl.enrichment_skip import (
     compute_enriched_content_hash,
     should_skip_crawl_url_after_fetch,
 )
-from core.crawl.errors import CrawlExtractTooShortError
-from core.crawl.logging_events import (
+from apps.search.crawl.errors import CrawlExtractTooShortError
+from apps.search.crawl.logging_events import (
     log_crawl_discover_completed,
     log_crawl_discover_failed,
     log_crawl_domain_scheduled,
@@ -40,7 +27,9 @@ from core.crawl.logging_events import (
     log_crawl_tick_started,
     log_crawl_url_outcome,
 )
-from core.crawl.models import (
+from apps.search.crawl.report_projection import enrichment_snapshot_from_enriched_page
+from apps.search.crawl.url_filter import build_url_filter
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainRunResponse,
     CrawlFetchResult,
@@ -54,8 +43,19 @@ from core.crawl.models import (
     SeedImportRequest,
     SeedImportResult,
 )
-from core.crawl.report_projection import enrichment_snapshot_from_enriched_page
-from core.crawl.url_filter import build_url_filter
+from apps.search.services.crawl.fetch_service import CrawlFetchService
+from apps.search.services.crawl.ingest_service import CrawlIngestService
+from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
+from apps.search.services.crawl.politeness_service import CrawlPolitenessService
+from apps.search.services.crawl.seed_loader import import_tranco_domains
+from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
+from apps.search.tasks.task_names import (
+    CRAWL_DISCOVER_DOMAIN,
+    CRAWL_ENRICH_URL,
+    CRAWL_FETCH_URL,
+    CRAWL_ORCHESTRATOR_TICK,
+)
+from core.clients.rag_client import RagClient
 from core.errors.boundary import PlatformNotFoundError
 from core.search.index_models import SearchIndexDefinition
 from core.tasks import enqueue

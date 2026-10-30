@@ -24,7 +24,7 @@ from apps.flows.src.tools.json_schema_parameters import validate_tool_args_again
 from core.types import JsonObject, require_json_object, require_json_value
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class CodeTool(BaseTool):

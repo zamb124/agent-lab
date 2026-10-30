@@ -5,8 +5,8 @@ from __future__ import annotations
 from pydantic import Field
 
 from apps.flows.src.durable_execution.models import WorkflowBranchRecord, WorkflowEventRecord
+from apps.flows.src.state import ExecutionState
 from core.models.base import StrictBaseModel
-from core.state import ExecutionState
 
 
 class DurableSessionStatePayload(StrictBaseModel):

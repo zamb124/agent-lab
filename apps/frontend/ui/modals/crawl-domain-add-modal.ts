@@ -1,7 +1,7 @@
 /**
  * Модалка добавления домена в crawl-профиль (company system).
  *
- * Поля API (core/crawl/models.py::CrawlDomainCreateRequest):
+ * Поля API (apps/search/models/contracts.py::CrawlDomainCreateRequest):
  *   domain:                   str (required)
  *   category:                 str
  *   refresh_interval_seconds: int | null

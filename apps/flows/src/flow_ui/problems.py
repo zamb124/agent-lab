@@ -7,9 +7,12 @@
 
 from __future__ import annotations
 
-from pydantic import Field
-
-from core.flow_ui.document import (
+from apps.flows.src.flow_ui.limits import FlowUILimits
+from apps.flows.src.flow_ui.projection import block_paths, block_templates
+from apps.flows.src.state.execution_state import ExecutionState
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
+from core.models.base import StrictBaseModel
+from core.ui_document.document import (
     FlowUIBlockModel,
     FlowUIButton,
     FlowUIDocument,
@@ -20,24 +23,9 @@ from core.flow_ui.document import (
     FlowUISelect,
     iter_blocks,
 )
-from core.flow_ui.projection import block_paths, block_templates
-from core.models.base import StrictBaseModel
-from core.state.execution_state import ExecutionState
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.variables.template_scan import unmatched_brace_message
 
 RESERVED_WRITE_FIELDS: frozenset[str] = FROZEN_STATE_FIELDS | frozenset(ExecutionState.model_fields)
-
-
-class FlowUILimits(StrictBaseModel):
-    """Лимиты интерфейса; задаются в настройках сервиса flows, не в документе."""
-
-    max_pages: int = Field(default=24, ge=1, le=100)
-    max_blocks_per_page: int = Field(default=400, ge=1, le=5000)
-    max_blocks_per_render: int = Field(default=60, ge=1, le=500)
-    max_state_bytes: int = Field(default=1_000_000, ge=1024, le=50_000_000)
-    max_html_source_bytes: int = Field(default=200_000, ge=1024, le=5_000_000)
-    max_html_blocks_per_page: int = Field(default=12, ge=1, le=100)
 
 
 class FlowUIProblem(StrictBaseModel):

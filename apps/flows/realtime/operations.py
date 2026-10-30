@@ -13,6 +13,8 @@ from pydantic import Field, TypeAdapter, field_validator
 from apps.flows.config import get_settings
 from apps.flows.di import Di
 from apps.flows.src.contracts import RuntimeFlowProtocol
+from apps.flows.src.flow_ui.problems import assert_flow_ui_publishable
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models import (
     BranchConfig,
     BranchCreateRequest,
@@ -77,9 +79,6 @@ from core.authz.types import AuthzRelation
 from core.datasources.models import DatasourceConnectorSpec
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.events import publish_event_to_user
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.problems import assert_flow_ui_publishable
-from core.flow_ui.templates import default_chat_document
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
 from core.identity.runtime_users import ensure_persisted_runtime_user
@@ -100,6 +99,7 @@ from core.types import (
     require_json_object,
     require_json_value,
 )
+from core.ui_document.document import FlowUIDocument
 from core.utils.tokens import get_token_service
 from core.websocket import (
     EmptyPayload,

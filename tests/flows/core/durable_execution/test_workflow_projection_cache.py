@@ -15,7 +15,7 @@ from apps.flows.src.durable_execution.models import (
     WorkflowProjectionMismatchError,
     WorkflowStatus,
 )
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 
 class _RecordingRedis:

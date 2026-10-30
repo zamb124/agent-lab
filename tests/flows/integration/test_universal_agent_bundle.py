@@ -20,8 +20,8 @@ from pydantic import TypeAdapter
 from apps.flows.di import FlowsDi
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
+from apps.flows.src.state import ExecutionState
 from core.clients.llm.mock import MockLLM, MockLLMQueuedResponse
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.flows.durable_runtime_harness import run_flow

@@ -5,7 +5,7 @@ from typing import get_args
 import pytest
 
 from apps.search.config import SearchCrawlConfig
-from core.crawl.models import CrawlContentType
+from apps.search.models import CrawlContentType
 
 pytestmark = pytest.mark.unit
 

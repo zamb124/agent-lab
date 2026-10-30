@@ -7,7 +7,8 @@
 
 from __future__ import annotations
 
-from core.flow_ui.document import (
+from apps.flows.src.state.execution_state import ExecutionState
+from core.ui_document.document import (
     FlowUIBlock,
     FlowUIBlockId,
     FlowUIConversation,
@@ -17,8 +18,7 @@ from core.flow_ui.document import (
     assert_unique_block_ids,
     iter_blocks,
 )
-from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
-from core.state.execution_state import ExecutionState
+from core.ui_document.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
 
 
 def slot_ids(document: FlowUIDocument) -> set[str]:

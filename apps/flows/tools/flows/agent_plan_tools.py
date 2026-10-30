@@ -10,16 +10,16 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.tools.decorator import tool
-from core.agent_plan.models import (
+from apps.flows.src.agent_plan.models import (
     AgentPlan,
     AgentPlanStepWriteInput,
     steps_from_write_inputs,
 )
+from apps.flows.src.tools.decorator import tool
 from core.types import JsonObject, JsonValue
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class AgentPlanWriteArgs(BaseModel):

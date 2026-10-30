@@ -83,7 +83,7 @@ A2A JSON-RPC (`SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `Su
 
 ## Грамматика блоков
 
-Единственная спецификация — Pydantic-модели `core/flow_ui/document.py`; JSON Schema из `GET /flow-ui/schema` — их проекция. Документ:
+Единственная спецификация — Pydantic-модели `core/ui_document/document.py`; JSON Schema из `GET /flow-ui/schema` — их проекция. Документ:
 
 ```json title="tests/fixtures/flow_ui/ui_artifacts.json#document"
 {
@@ -173,7 +173,7 @@ Python — `core.clients.flow_ui_client.FlowUIClient` поверх `A2AClient`:
 
 ```python
 from core.clients.flow_ui_client import FlowUIClient
-from core.flow_ui.protocol import FlowUIActionMessage
+from core.ui_document.protocol import FlowUIActionMessage
 
 client = FlowUIClient("https://acme.linnex.io/flows", flow_id="lead_form")
 interface = await client.open()

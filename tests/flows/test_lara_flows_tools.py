@@ -8,6 +8,7 @@ import pytest_asyncio
 from apps.flows.di import FlowsDi
 from apps.flows.src.services.flows_client import FlowsClient
 from apps.flows.src.services.tool_approval import ToolApprovalStore
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.flows.flows_editor_tools import (
     flows_get_node,
     flows_list_nodes,
@@ -15,8 +16,7 @@ from apps.flows.tools.flows.flows_editor_tools import (
     flows_patch_node,
     flows_read_context,
 )
-from core.flow_ui.document import FlowUIActionPreview, FlowUIActionResult, FlowUIButton
-from core.state import ExecutionState
+from core.ui_document.document import FlowUIActionPreview, FlowUIActionResult, FlowUIButton
 from tests.flows._flow_ui import conversation_block, conversation_blocks
 
 pytestmark = [pytest.mark.timeout(90, func_only=True)]

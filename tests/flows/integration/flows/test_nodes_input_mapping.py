@@ -17,7 +17,7 @@ from apps.flows.src.runtime.nodes import (
     LlmNode,
     RemoteFlowNode,
 )
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from core.types import JsonObject
 from core.variables import VariableResolver
 

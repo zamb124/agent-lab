@@ -6,10 +6,10 @@ from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.models import Edge, FlowConfig, FlowToolReference
 from apps.flows.src.models.enums import NodeToolCallType
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.state import ChildWorkflowLink
+from apps.flows.src.state.interrupt import HandoffInterrupt, InterruptKind
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.handoff_tools import handback_to_parent, handoff_to_flow
-from core.state import ChildWorkflowLink
-from core.state.interrupt import HandoffInterrupt, InterruptKind
 from tests.flows.durable_runtime_harness import workflow_state
 
 pytestmark = [

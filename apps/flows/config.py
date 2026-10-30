@@ -8,12 +8,12 @@ from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from apps.flows.src.flow_ui.limits import FlowUILimits
 from core.config import BaseSettings
 from core.config import get_settings as core_get_settings
 from core.config import set_settings as core_set_settings
 from core.config.loader import load_merged_config
 from core.config.models import LLMConfig, PushConfig, S3Config
-from core.flow_ui.problems import FlowUILimits
 
 FLOWS_PUBLIC_API_PREFIX = "/flows/api/v1"
 

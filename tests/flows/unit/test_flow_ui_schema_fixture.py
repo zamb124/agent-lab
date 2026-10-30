@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.templates import FlowUITemplate, flow_ui_templates
+from apps.flows.src.flow_ui.templates import FlowUITemplate, flow_ui_templates
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
+from core.ui_document.document import FlowUIDocument
 from core.pagination import OffsetPage
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
 
 FIXTURE = Path(__file__).resolve().parents[2] / "fixtures" / "flow_ui" / "schema.json"
 TEMPLATES_FIXTURE = FIXTURE.with_name("templates.json")

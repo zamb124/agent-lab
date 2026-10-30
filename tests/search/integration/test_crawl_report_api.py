@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from apps.search.tasks.task_names import CRAWL_DISCOVER_DOMAIN
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlDomainSeed,
     CrawlJob,

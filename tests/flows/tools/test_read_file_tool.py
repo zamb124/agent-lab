@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.files.files import read_file
 from core.files.file_ref import FileRef
-from core.state import ExecutionState
 from core.types import require_json_array, require_json_object
 
 

@@ -13,7 +13,7 @@ from apps.flows.di import FlowsDi
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import FlowNode
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from core.types import JsonObject
 
 

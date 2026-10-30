@@ -11,10 +11,10 @@ from typing import Final, Literal, override
 import aiosmtplib
 
 from apps.flows.src.models.enums import ChannelType
+from apps.flows.src.state import ExecutionState
 from core.logging import get_logger
 from core.mail.models import MailSendPayload
 from core.mail.service import MailService
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue
 
 from .base import BaseChannelHandler

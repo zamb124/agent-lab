@@ -10,9 +10,13 @@ from typing import ClassVar, Literal, TypeAlias
 
 from pydantic import ConfigDict, Field
 
+from apps.flows.src.state.execution_state import (
+    ChildWorkflowStatus,
+    ExecutionState,
+    ExecutionTaskState,
+)
+from apps.flows.src.state.interrupt import HandoffMode
 from core.models import StrictBaseModel
-from core.state import ChildWorkflowStatus, ExecutionState, ExecutionTaskState
-from core.state.interrupt import HandoffMode
 from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 
 

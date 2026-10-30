@@ -4,7 +4,7 @@
 ``x-flow-ui-frozen-state-fields``) и ``GET /flows/api/v1/flow-ui/templates`` (галерея на ``en``,
 ``OffsetPage``). Фикстуры ``tests/fixtures/flow_ui/schema.json`` и ``templates.json`` читаются
 vitest/WTR-тестами ``interface-editor-domain``, ``blocks-matrix`` и ``template-modal``; дрейф ловит
-``tests/core/flow_ui/test_flow_ui_schema_fixture.py``.
+``tests/core/ui_document/test_flow_ui_schema_fixture.py``.
 
     uv run python -m scripts.generate.flow_ui_schema_fixture          # перезаписать
     uv run python -m scripts.generate.flow_ui_schema_fixture --check  # только сравнить
@@ -20,8 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from core.flow_ui.schema import flow_ui_schema  # noqa: E402
-from core.flow_ui.templates import FlowUITemplate, flow_ui_templates  # noqa: E402
+from apps.flows.src.flow_ui.schema import flow_ui_schema  # noqa: E402
+from apps.flows.src.flow_ui.templates import FlowUITemplate, flow_ui_templates  # noqa: E402
 from core.pagination import OffsetPage  # noqa: E402
 
 SCHEMA_FIXTURE = ROOT / "tests/fixtures/flow_ui/schema.json"

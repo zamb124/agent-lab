@@ -72,7 +72,8 @@ async def _write_office_authz_edges(authz: AuthzService, *, limit: int | None) -
             document_catalog_company_link(row.catalog_id, row.company_id),
         ]
         if row.parent_catalog_id is None:
-            writes.append(document_catalog_lister_tuple(row.catalog_id, row.company_id))
+            if row.company_visible or row.managed:
+                writes.append(document_catalog_lister_tuple(row.catalog_id, row.company_id))
         else:
             writes.append(document_catalog_parent_tuple(row.catalog_id, row.parent_catalog_id))
         await authz.write(writes)

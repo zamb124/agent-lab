@@ -8,9 +8,9 @@
 - flows.llm_resource.complete | .chat | .chat_with_tools — apps/flows/src/resources/wrappers/llm_resource.py
 - rag.embed.batch — core/ai/embedding_client.py
 - livekit.room.session_usage | livekit.egress.composite_usage | livekit.egress.segmented_usage
-  — core/calls/livekit_usage_spans.py (поминутное списание после завершения сессии / записи / речи в ленту)
+  — apps/sync/services/livekit_usage_spans.py (поминутное списание после завершения сессии / записи / речи в ленту)
 - livekit.room.create | livekit.egress.room_composite_s3 | livekit.egress.track_composite_segmented
-  — core/calls/livekit_client.py observability без pending_settlement (списание только через *usage выше)
+  — apps/sync/services/livekit_client.py observability без pending_settlement (списание только через *usage выше)
 - sync.calls.* | sync.stt.* (без pending_settlement) — apps/sync/realtime/tasks.py, только трейсинг
 - flows.external_api.call | flows.mcp.call_tool | flows.channel.execute_action — без pending_settlement, только трейсинг
 - stt.{provider} | tts.{provider} | rerank.{model} — core/billing/speech_usage.py и core/ai/rerank_client.py

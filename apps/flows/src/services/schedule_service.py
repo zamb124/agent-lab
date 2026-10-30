@@ -2,18 +2,17 @@
 
 import datetime
 
+from apps.flows.src.models.scheduled_task import ContentType, ScheduledTaskInfo
 from apps.flows.src.models.scheduled_task_payload import FlowScheduledTaskPayload
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
 from core.clients.scheduler_client import SchedulerClient
 from core.context import get_context
 from core.logging import get_logger
 from core.scheduler.models import (
-    ContentType,
     PlatformScheduleCreateRequest,
     PlatformScheduledTask,
     PlatformScheduleFilter,
     PlatformScheduleType,
-    ScheduledTaskInfo,
     ScheduledTaskStatus,
 )
 from core.scheduler.service import SchedulerService

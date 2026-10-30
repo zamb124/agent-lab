@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import subprocess
 import uuid
 
 import pytest
@@ -26,7 +24,7 @@ from core.files.chunked_upload import ChunkedUploadService
 from core.files.company_storage_service import CompanyStorageService
 from core.files.create_spec import FileCreateSpec, FileSourceKind
 from core.files.models import FileRecord
-from core.files.object_storage import PLATFORM_STORAGE_ID, ObjectStorage
+from core.files.object_storage import ObjectStorage
 from core.files.object_store.gate import FileGate
 from core.files.object_store.pool import client_for
 from core.files.object_store.principals import (
@@ -42,7 +40,7 @@ from tests.files.test_company_object_storage import _bind_company, _ensure_bucke
 _EXT = "http://127.0.0.1:19003"
 _KEY = "extadmin"
 _SECRET = "extadminsecret"
-_EXT_CONTAINER = "agentlab_seaweedfs_ext_test"
+
 
 
 def _spec(kind: str) -> FileCreateSpec:
@@ -197,6 +195,7 @@ async def test_migration_resumes_and_delete_follows_remaining_files(frontend_di)
         target = await _connect(service, company_id, name="ext-b", bucket="ext-b")
         _ = await service.set_route(company_id, source_kind=None, storage_id=source.storage_id)
         digest = ""
+        watched = ""
         for index in range(21):
             body = f"move-{index}".encode()
             record = await frontend_di.files_service.create(
@@ -252,32 +251,21 @@ async def test_stopped_company_s3_is_unavailable_and_skips_platform(frontend_di)
             content_type="text/plain",
         )
         assert existing.storage_id == storage.storage_id
-        platform_before = await FileRecord.count_for_storage(PLATFORM_STORAGE_ID)
-        _ = subprocess.run(["docker", "stop", _EXT_CONTAINER], check=True)
-        try:
-            with pytest.raises(PlatformUnavailableError):
-                await frontend_di.files_service.create(
-                    _spec("generated_ephemeral"),
-                    b"should-not-land",
-                    original_name="miss.txt",
-                    content_type="text/plain",
-                )
-            handle = await FileGate().open(existing.file_id, SystemPrincipal(company_id))
-            with pytest.raises(PlatformUnavailableError):
-                _ = await handle.read_bytes()
-        finally:
-            _ = subprocess.run(["docker", "start", _EXT_CONTAINER], check=True)
-            ready = False
-            for _attempt in range(30):
-                try:
-                    await _ensure_bucket(_EXT, _KEY, _SECRET, "ext-a")
-                    ready = True
-                    break
-                except Exception:
-                    await asyncio.sleep(1)
-            if not ready:
-                raise RuntimeError("seaweedfs-test-ext did not come back")
-        assert await FileRecord.count_for_storage(PLATFORM_STORAGE_ID) == platform_before
+        company_records = await FileRecord.count_alive(company_id)
+        storage.endpoint_url = "http://127.0.0.1:19099"
+        storage.credentials_version += 1
+        _ = await ObjectStorage.set(storage)
+        with pytest.raises(PlatformUnavailableError):
+            await frontend_di.files_service.create(
+                _spec("generated_ephemeral"),
+                b"should-not-land",
+                original_name="miss.txt",
+                content_type="text/plain",
+            )
+        handle = await FileGate().open(existing.file_id, SystemPrincipal(company_id))
+        with pytest.raises(PlatformUnavailableError):
+            _ = await handle.read_bytes()
+        assert await FileRecord.count_alive(company_id) == company_records
     finally:
         reset_context(token)
 

@@ -7,7 +7,6 @@ Stream-first: all internal transport calls create ``LLMClient`` and use ``LLMCli
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
 from core.ai.free_pool import (
     PLATFORM_FREE_MODEL_SOURCE,
@@ -67,9 +66,6 @@ from core.config.testing import is_testing as _is_testing
 from core.logging import get_logger
 from core.types import JsonObject
 
-if TYPE_CHECKING:
-    from core.state import ExecutionState
-
 logger = get_logger(__name__)
 
 
@@ -101,7 +97,7 @@ def create_llm_transport_client(
     base_url: str | None = None,
     folder_id: str | None = None,
     max_tokens: int | None = None,
-    state: ExecutionState | None = None,
+    variables: JsonObject | None = None,
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None = None,
     allow_platform_paid_fallback: bool = True,
     top_p: float | None = None,
@@ -126,7 +122,7 @@ def create_llm_transport_client(
         base_url: Base URL провайдера (напрямую или @var:my_url)
         folder_id: Каталог Yandex Cloud (yandex); иначе из llm.yandex.folder_id
         max_tokens: Лимит токенов ответа (если None — из настроек модели / глобальных)
-        state: ExecutionState для резолюции @var:
+        variables: JsonObject для резолюции @var: (обычно ExecutionState.variables)
         fallback_models: Упорядоченный список полных конфигов fallback (LLMCallConfig).
         allow_platform_paid_fallback: Для платформенного default-route через free-pool
             разрешает последний платный fallback. Рантайм flows выключает его при
@@ -190,7 +186,7 @@ def create_llm_transport_client(
                 source=PLATFORM_PAID_FALLBACK_SOURCE,
             ),
             settings=settings,
-            state=state,
+            variables=variables,
             source=PLATFORM_PAID_FALLBACK_SOURCE,
         )
         candidate_resolver = (
@@ -198,7 +194,7 @@ def create_llm_transport_client(
                 primary_config,
                 fallback_models,
                 settings=settings,
-                state=state,
+                variables=variables,
                 include_paid_fallback=allow_platform_paid_fallback,
             )
             if _is_humanitec_llm_provider(provider)
@@ -230,7 +226,7 @@ def create_llm_transport_client(
             seed=seed,
             reasoning_effort=reasoning_effort,
             extra_request_body=extra_request_body,
-            extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
+            extra_request_headers=_resolve_headers_vars(extra_request_headers, variables),
             context_length=primary_candidate.context_length,
         )
 
@@ -276,7 +272,7 @@ def create_llm_transport_client(
             primary_candidate = bootstrap_humanitec_llms_config(
                 primary_config,
                 settings=settings,
-                state=state,
+                variables=variables,
             )
         elif authored_fallback is None:
             raise ValueError(
@@ -287,7 +283,7 @@ def create_llm_transport_client(
             primary_candidate = _resolve_llm_call_config(
                 authored_fallback,
                 settings=settings,
-                state=state,
+                variables=variables,
                 source="fallback",
             )
         return LLMClient(
@@ -304,7 +300,7 @@ def create_llm_transport_client(
                 primary_config,
                 fallback_models,
                 settings=settings,
-                state=state,
+                variables=variables,
                 include_paid_fallback=allow_platform_paid_fallback,
             ),
             first_token_timeout=settings.llm.platform_free_pool.first_token_timeout_seconds,
@@ -319,7 +315,7 @@ def create_llm_transport_client(
             seed=seed,
             reasoning_effort=reasoning_effort,
             extra_request_body=extra_request_body,
-            extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
+            extra_request_headers=_resolve_headers_vars(extra_request_headers, variables),
             context_length=primary_candidate.context_length,
         )
 
@@ -374,7 +370,7 @@ def create_llm_transport_client(
             _resolve_llm_call_config(
                 primary_config,
                 settings=settings,
-                state=state,
+                variables=variables,
                 source=primary_config.source,
             )
         ]
@@ -382,7 +378,7 @@ def create_llm_transport_client(
             primary_config,
             fallback_models,
             settings=settings,
-            state=state,
+            variables=variables,
             include_paid_fallback=allow_platform_paid_fallback,
         )
     else:
@@ -390,7 +386,7 @@ def create_llm_transport_client(
             primary_config,
             fallback_models,
             settings=settings,
-            state=state,
+            variables=variables,
         )
         candidate_resolver = None
     primary_candidate = candidates[0]
@@ -423,7 +419,7 @@ def create_llm_transport_client(
         seed=seed,
         reasoning_effort=reasoning_effort,
         extra_request_body=extra_request_body,
-        extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
+        extra_request_headers=_resolve_headers_vars(extra_request_headers, variables),
         context_length=primary_candidate.context_length,
     )
 

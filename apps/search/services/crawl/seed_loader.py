@@ -7,7 +7,7 @@ import io
 import zipfile
 from datetime import UTC, datetime, timedelta
 
-from core.crawl.models import CrawlDomain, CrawlDomainSeed, SeedImportResult
+from apps.search.models import CrawlDomain, CrawlDomainSeed, SeedImportResult
 from core.http import get_httpx_client
 from core.http.client import SmartProxyClient
 from core.types import JsonObject, parse_json_object

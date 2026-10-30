@@ -10,10 +10,10 @@ from a2a.helpers.proto_helpers import get_message_text
 from httpx2 import AsyncClient
 
 from apps.flows.di import FlowsDi
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.clients.llm.mock import MockLLMQueuedResponse
 from core.context import get_context, reset_context, set_context
-from core.state import ExecutionState
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.types import JsonObject
 from core.worktracker.models import UserActor, WorkItem, WorkItemState
 from tests.flows._a2a_v1 import A2A_HEADERS, SEND_MESSAGE, a2a_rpc, a2a_text_message

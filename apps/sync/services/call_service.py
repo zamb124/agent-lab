@@ -20,6 +20,7 @@ from apps.sync.models.calls import (
     CallsHangupPayload,
     CallsInvitePayload,
     CallsSignalPayload,
+    TurnCredentials,
 )
 from apps.sync.models.channel import SyncChannel
 from apps.sync.models.meetings import CallRecordingRead, SyncCallRecording
@@ -41,14 +42,13 @@ from apps.sync.realtime.handlers import (
     channel_recipient_user_ids,
     maybe_start_speech_to_chat_poll,
 )
+from apps.sync.services.livekit_client import LiveKitClient
 from apps.sync.services.message_service import SyncMessageService, send_message
 from apps.sync.services.recording_service import SyncCallRecordingService
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
+from apps.sync.services.turn import generate_turn_credentials
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
-from core.calls.livekit_client import LiveKitClient
-from core.calls.models import TurnCredentials
-from core.calls.turn import generate_turn_credentials
 from core.config import BaseSettings, get_settings
 from core.events import publish_events
 from core.events.contract import PlatformEvent

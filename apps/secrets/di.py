@@ -2,9 +2,9 @@
 
 from typing import Annotated
 
+from apps.secrets.secrets_service import SecretsService
 from core.di import http_di, task_di
 from core.di.platform import PlatformDi
-from core.secrets.service import SecretsService
 
 
 class SecretsDi(PlatformDi):

@@ -21,8 +21,8 @@ import pytest_asyncio
 
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
-from core.state import ExecutionState
 from core.tasks import enqueue
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 

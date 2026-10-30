@@ -23,7 +23,7 @@ TEXT_SCAN_PATHS: tuple[str, ...] = (
     "apps/flows/tools",
     "apps/flows/bundles",
     "core/integrations/mcp.py",
-    "core/reflection.py",
+    "apps/flows/src/reflection.py",
     "tests/flows",
 )
 
@@ -31,8 +31,8 @@ PYTHON_STRICT_PATHS: tuple[str, ...] = (
     "apps/flows/src",
     "apps/flows/tools",
     "core/integrations/mcp.py",
-    "core/reflection.py",
-    "core/state/execution_state.py",
+    "apps/flows/src/reflection.py",
+    "apps/flows/src/state/execution_state.py",
 )
 
 FLOW_FROM_CONFIG_PATHS: tuple[str, ...] = (

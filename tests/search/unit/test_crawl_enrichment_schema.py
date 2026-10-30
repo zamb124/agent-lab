@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from core.crawl.models import CrawlEnrichedPage, CrawlEnrichedPageLLMOutput
-from core.crawl.taxonomy import validate_filter_metadata_against_taxonomy
+from apps.search.models import CrawlEnrichedPage, CrawlEnrichedPageLLMOutput
+from apps.search.crawl.taxonomy import validate_filter_metadata_against_taxonomy
 from core.search.index_models import SearchIndexCrawlTaxonomy
 from tests.search.unit.crawl_enrichment_fixtures import (
     sample_enriched_chunk,

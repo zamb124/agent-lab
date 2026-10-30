@@ -47,7 +47,7 @@
     },
     {
       "name": "search",
-      "models_module": "core.crawl.models",
+      "models_module": "apps.search.models",
       "database_url_key": "search_url"
     },
     {

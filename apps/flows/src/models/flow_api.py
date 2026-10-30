@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from apps.flows.src.flow_ui.templates import default_chat_document
 from apps.flows.src.models.branch_contracts import BranchPayload
 from apps.flows.src.models.flow_config import (
     BranchConfig,
@@ -19,10 +20,9 @@ from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
 from apps.flows.src.models.node_config import GraphNodeConfig
 from apps.flows.src.models.resource import ResourceReference
 from apps.flows.src.models.trigger_config import TriggerConfig
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.templates import default_chat_document
 from core.models.base import StrictBaseModel
 from core.types import JsonObject, JsonValue
+from core.ui_document.document import FlowUIDocument
 
 
 class FlowCreateRequest(BaseModel):

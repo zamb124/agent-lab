@@ -19,7 +19,7 @@ from core.capabilities import (
     issue_execution_token,
     locked_down_code_sandbox_policy,
 )
-from core.flow_ui.protocol import CONVERSATION_SLOT_ID
+from core.ui_document.protocol import CONVERSATION_SLOT_ID
 
 STATIC_PLATFORM_CAPABILITIES = {
     "channel.send",

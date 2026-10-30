@@ -15,9 +15,9 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field
 
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import HandoffMode
 from core.models import StrictBaseModel
-from core.state import ExecutionState
-from core.state.interrupt import HandoffMode
 
 HANDOFF_COMMAND_NAMESPACE = UUID("7f74c4a1-6b92-45a4-942a-7e4f983ddc58")
 

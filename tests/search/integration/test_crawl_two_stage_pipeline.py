@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from core.crawl.enrichment_skip import compute_enriched_content_hash
-from core.crawl.models import CrawlJob, CrawlUrl
+from apps.search.crawl.enrichment_skip import compute_enriched_content_hash
+from apps.search.models import CrawlJob, CrawlUrl
 from tests.search.integration.crawl_two_stage_support import (
     REAL_CRAWL_DOMAIN,
     REAL_CRAWL_MARKER,

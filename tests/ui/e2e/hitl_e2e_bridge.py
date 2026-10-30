@@ -14,7 +14,7 @@ import httpx2
 from playwright.async_api import Locator, Page, expect
 
 from apps.flows.src.services.hitl_demo_queue import EXAMPLE_HITL_SLUG
-from core.flow_ui.document import (
+from core.ui_document.document import (
     FlowUIActionSpec,
     FlowUIButton,
     FlowUIDocument,

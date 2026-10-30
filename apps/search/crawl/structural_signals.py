@@ -9,7 +9,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
-from core.crawl.models import CrawlContentType, CrawlStructuralSignals
+from apps.search.models import CrawlContentType, CrawlStructuralSignals
 from core.types import JsonObject, JsonValue, parse_json_value, require_json_object
 
 _ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")

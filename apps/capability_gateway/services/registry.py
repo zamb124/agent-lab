@@ -107,8 +107,6 @@ from core.files.reader.models import ReadFileArgs, ReadLane
 from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
 from core.files.writer import ContentMode, FileWriteError, FileWriter
-from core.flow_ui.document import FlowUISuggestedPrompts
-from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
 from core.http.client import HttpRequestKwargs
 from core.logging import get_logger
 from core.models.context_models import Context
@@ -123,6 +121,8 @@ from core.types import (
     require_json_object,
     require_json_value,
 )
+from core.ui_document.document import FlowUISuggestedPrompts
+from core.ui_document.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
 
 
 @dataclass(frozen=True)

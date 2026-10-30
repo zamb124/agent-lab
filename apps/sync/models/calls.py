@@ -7,13 +7,22 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from core.calls.models import SignalType
 from core.types import JsonObject
 
 CallStatus = Literal["ringing", "active", "ended"]
 CallType = Literal["video"]
 CallMode = Literal["p2p", "sfu"]
+SignalType = Literal["offer", "answer", "ice_candidate"]
 ParticipantStatus = Literal["invited", "joined", "declined", "left"]
+
+
+class TurnCredentials(BaseModel):
+    """Временные TURN credentials для клиента (coturn REST API)."""
+
+    username: str
+    credential: str
+    ttl: int
+    uris: list[str]
 
 
 class CallsInvitePayload(BaseModel):

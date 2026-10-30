@@ -13,6 +13,8 @@ import pytest
 from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import InterruptKind, OAuthInterrupt
 from core.ai.company_settings import decrypt_secret
 from core.authz.errors import AuthzDenied
 from core.authz.service import AuthzService
@@ -36,8 +38,6 @@ from core.integrations.constants import (
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models import Company, Context, User
 from core.models.identity_models import SYSTEM_COMPANY_ID
-from core.state import ExecutionState
-from core.state.interrupt import InterruptKind, OAuthInterrupt
 
 _MINIMAL_SA_JSON = json.dumps(
     {

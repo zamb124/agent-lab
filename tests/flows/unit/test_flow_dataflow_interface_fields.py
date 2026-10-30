@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.flow_ui.document import (
+from core.ui_document.document import (
     FlowUIActionSpec,
     FlowUIButton,
     FlowUIConversation,

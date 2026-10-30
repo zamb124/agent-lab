@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 
 def extract_ids_from_state(state: ExecutionState) -> tuple[str, str, str]:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from core.crawl.models import (
+from apps.search.models import (
     CrawlEnrichedPage,
     CrawlPageFilterMetadata,
     CrawlUrlEnrichmentSnapshot,

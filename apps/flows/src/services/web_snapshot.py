@@ -11,9 +11,9 @@ from urllib.parse import urlparse
 
 from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.services.mcp_client import get_mcp_client
+from apps.flows.src.state import ExecutionState
 from core.files.reader import FileReader
 from core.files.reader.models import ReadFileArgs
-from core.state import ExecutionState
 from core.types import JsonObject, parse_json_object, require_json_object
 
 _DUCKDUCKGO_SESSION_CREATE: JsonObject = {

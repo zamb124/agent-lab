@@ -8,6 +8,7 @@ from typing import NamedTuple
 
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models import ResourceType
+from apps.flows.src.models.rag_resource_bind import RagResourceBindParams
 from apps.flows.src.models.resource import (
     ResourceDefinition,
     ResourceReference,
@@ -17,6 +18,8 @@ from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
     merge_shared_definition_config_with_patch,
 )
+from apps.flows.src.runtime.llm_context_source import RAGLLMContextSource
+from apps.flows.src.state import ExecutionState
 from core.authz.errors import AuthzDenied
 from core.authz.ids import PLATFORM_ADMIN_GROUP
 from core.authz.models import AuthzObject, AuthzSubject
@@ -26,9 +29,6 @@ from core.clients.rag_client import RagClient
 from core.context import require_active_company
 from core.llm_context import LLMContextSourceRegistry
 from core.namespace import NamespaceService
-from core.rag.llm_context_source import RAGLLMContextSource
-from core.rag.rag_resource_bind import RagResourceBindParams
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 

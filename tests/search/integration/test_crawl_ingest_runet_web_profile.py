@@ -9,7 +9,7 @@ import pytest
 
 from apps.search.services.crawl.ingest_service import CrawlIngestService
 from core.config import get_settings
-from core.crawl.models import CrawlDomain, CrawlFetchResult, CrawlIngestPayload
+from apps.search.models import CrawlDomain, CrawlFetchResult, CrawlIngestPayload
 from core.rag.index_profile_registry import resolve_index_profile
 from core.search.index_models import SearchIndexDefinition
 

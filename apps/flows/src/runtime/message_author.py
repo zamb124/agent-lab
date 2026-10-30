@@ -11,7 +11,7 @@ from core.models import StrictBaseModel
 from core.types import JsonObject
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class FlowMessageAuthorKind(StrEnum):

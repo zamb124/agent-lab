@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from apps.flows.src.services.web_snapshot import BrowserSnapshotDescribe, DuckDuckGoBrowserSearch
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from core.types import JsonObject
 
 

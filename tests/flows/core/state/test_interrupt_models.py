@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from core.state.interrupt import (
+from apps.flows.src.state.interrupt import (
     InterruptData,
     InterruptKind,
     InterruptSystemContext,

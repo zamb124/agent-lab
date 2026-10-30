@@ -15,7 +15,7 @@ from apps.flows.src.models import (
     ToolReference,
 )
 from apps.flows.src.models.enums import NodeType
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 
 class TestNodeRepository:

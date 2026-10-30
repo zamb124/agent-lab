@@ -6,8 +6,8 @@
 
 import pytest
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.code_tool import CodeTool
-from core.state import ExecutionState
 
 pytestmark = [pytest.mark.usefixtures("sandbox_services")]
 

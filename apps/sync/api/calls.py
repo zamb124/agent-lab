@@ -27,6 +27,7 @@ from apps.sync.models.calls import (
     CallsSignalPayload,
     GuestJoinRequest,
     JoinResponse,
+    TurnCredentials,
 )
 from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.realtime.operations import (
@@ -57,7 +58,6 @@ from apps.sync.realtime.operations import (
     op_calls_token,
     op_calls_turn_credentials,
 )
-from core.calls.models import TurnCredentials
 from core.context import require_context
 from core.pagination import ListResponse, OffsetPage
 from core.websocket import WsCommandError

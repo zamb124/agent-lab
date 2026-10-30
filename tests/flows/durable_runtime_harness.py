@@ -12,7 +12,7 @@ from apps.flows.src.durable_execution import (
 )
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from core.types import JsonObject
 
 

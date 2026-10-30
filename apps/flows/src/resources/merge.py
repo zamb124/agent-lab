@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from apps.flows.src.models import ResourceType
+from apps.flows.src.models.rag_resource_bind import RagResourceBindParams, RagResourceBindPatch
 from apps.flows.src.models.resource import (
     LLMResourceConfig,
     ResourceMapInput,
@@ -14,7 +15,6 @@ from apps.flows.src.models.resource import (
 from apps.flows.src.resources.merge_llm import merge_llm_resource_config_with_patch
 from core.llm_context import LLMContextPatch
 from core.llm_context.merge import deep_merge_dict
-from core.rag.rag_resource_bind import RagResourceBindParams, RagResourceBindPatch
 from core.types import JsonObject, require_json_object
 
 

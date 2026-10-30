@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass
 
-from core.flow_ui.document import FlowUIConversationSettings, FlowUIPageId
 from core.models.embed_models import EmbedConfig, EmbedInterfaceLook, EmbedStatus
 from core.models.identity_models import Company
+from core.ui_document.document import FlowUIConversationSettings, FlowUIPageId
 
 
 @dataclass(frozen=True)

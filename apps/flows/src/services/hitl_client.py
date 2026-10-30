@@ -6,8 +6,8 @@ from uuid import UUID
 
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand
 from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
-from core.state import ExecutionState
-from core.state.interrupt import HandoffMode
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import HandoffMode
 
 
 class HitlClient:

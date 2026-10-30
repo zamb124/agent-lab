@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 from apps.flows.src.models import Edge, FlowVariableConfig, GraphNodeConfig, TriggerConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
-from core.flow_ui.document import FlowUIDocument
+from core.ui_document.document import FlowUIDocument
 from core.types import JsonObject
 
 _GRAPH_NODES_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(

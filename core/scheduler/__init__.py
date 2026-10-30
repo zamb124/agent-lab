@@ -9,14 +9,12 @@ RedisScheduleSource — через get_schedule_source.
 """
 
 from core.scheduler.models import (
-    ContentType,
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
     PlatformScheduledTask,
     PlatformScheduleFilter,
     PlatformScheduleType,
     PlatformScheduleUpdateStatusRequest,
-    ScheduledTaskInfo,
     ScheduledTaskStatus,
 )
 from core.scheduler.service import SchedulerService
@@ -25,9 +23,7 @@ from core.scheduler.source import get_schedule_source, reset_schedule_source
 __all__ = [
     "get_schedule_source",
     "reset_schedule_source",
-    "ContentType",
     "ScheduledTaskStatus",
-    "ScheduledTaskInfo",
     "PlatformScheduleType",
     "PlatformScheduleCreateRequest",
     "PlatformScheduleUpdateStatusRequest",

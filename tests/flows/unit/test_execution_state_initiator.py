@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.state.execution_state import ExecutionState
+from apps.flows.src.state.execution_state import ExecutionState
 
 
 def test_initiator_user_id_defaults_none():

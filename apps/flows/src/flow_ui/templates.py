@@ -10,10 +10,10 @@ from typing import Literal
 
 from pydantic import Field
 
-from core.flow_ui.document import FlowUIDocument
 from core.models.base import StrictBaseModel
 from core.models.i18n_models import Language
 from core.types import JsonObject
+from core.ui_document.document import FlowUIDocument
 
 FlowUITemplateCategory = Literal["conversation", "forms", "dashboards", "content", "utility"]
 

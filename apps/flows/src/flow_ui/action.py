@@ -12,9 +12,13 @@ from typing import final
 
 from a2a.types import Message
 
+from apps.flows.src.flow_ui.projection import template_paths
+from apps.flows.src.state.execution_state import ExecutionState
+from apps.flows.src.state.state_path import assign_state_path
 from core.a2a.codec import get_part_data, part_has_data, part_has_text
 from core.files.file_ref import FileRef
-from core.flow_ui.document import (
+from core.types import JsonValue
+from core.ui_document.document import (
     FlowUIBlockModel,
     FlowUICheckbox,
     FlowUIDateInput,
@@ -32,11 +36,7 @@ from core.flow_ui.document import (
     FlowUIVoiceInput,
     iter_blocks,
 )
-from core.flow_ui.projection import template_paths
-from core.flow_ui.protocol import FLOW_UI_ACTION_MEDIA_TYPE, FlowUIActionMessage
-from core.state.execution_state import ExecutionState
-from core.state.state_path import assign_state_path
-from core.types import JsonValue
+from core.ui_document.protocol import FLOW_UI_ACTION_MEDIA_TYPE, FlowUIActionMessage
 
 FlowUIWritableBlock = FlowUIInputBase | FlowUIHtml
 

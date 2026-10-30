@@ -95,6 +95,7 @@ from apps.flows.src.models.evaluation_lab import (
     EvaluationTraceAssertion,
 )
 from apps.flows.src.models.node_config import NodeConfig
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tasks.evaluation_tasks import (
     enqueue_pending_evaluation_runs,
     execute_evaluation_run,
@@ -114,7 +115,6 @@ from core.llm_context import LLMContextPatch
 from core.models.context_models import Context
 from core.models.identity_models import User
 from core.pagination import ListResponse
-from core.state import ExecutionState
 from core.tasks.registry import queue_broker
 from core.tracing.models import Span
 from core.types import JsonObject

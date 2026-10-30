@@ -5,8 +5,11 @@ from __future__ import annotations
 import pytest
 from httpx2 import ASGITransport, AsyncClient
 
+from apps.search.services.company_search_schema import (
+    COMPANY_SEARCH_METADATA_KEY,
+    CompanySearchProviders,
+)
 from core.ai.company_settings import decrypt_secret
-from core.company_search import COMPANY_SEARCH_METADATA_KEY, CompanySearchProviders
 from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
 from tests.fixtures.clients import _PLATFORM_ASGI_BASE_URL, _PLATFORM_ASGI_HOST_HEADERS

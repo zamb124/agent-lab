@@ -10,17 +10,17 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.problems import (
+from apps.flows.src.flow_ui.problems import (
     RESERVED_WRITE_FIELDS,
     FlowUILimits,
     FlowUIProblem,
     assert_flow_ui_publishable,
     flow_ui_problems,
 )
-from core.flow_ui.templates import flow_ui_templates
+from apps.flows.src.flow_ui.templates import flow_ui_templates
+from apps.flows.src.state.mutation_policy import FROZEN_STATE_FIELDS
+from core.ui_document.document import FlowUIDocument
 from core.models.i18n_models import Language
-from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject
 
 LIMITS = FlowUILimits()

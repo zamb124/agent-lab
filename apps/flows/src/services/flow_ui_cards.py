@@ -11,8 +11,11 @@ import re
 from hashlib import sha1
 from typing import Literal
 
+from apps.flows.src.flow_ui.runtime import render_conversation
+from apps.flows.src.state import ExecutionState
 from core.files.file_ref import FileRef
-from core.flow_ui.document import (
+from core.types import JsonObject
+from core.ui_document.document import (
     FlowUIActionPreview,
     FlowUIActionResult,
     FlowUIActionSpec,
@@ -24,10 +27,7 @@ from core.flow_ui.document import (
     FlowUIReflection,
     FlowUISkillActivity,
 )
-from core.flow_ui.protocol import FlowUIRender
-from core.flow_ui.runtime import render_conversation
-from core.state import ExecutionState
-from core.types import JsonObject
+from core.ui_document.protocol import FlowUIRender
 
 _ID_UNSAFE = re.compile(r"[^a-z0-9_-]+")
 _BLOCK_ID_MAX_LENGTH = 64

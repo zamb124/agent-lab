@@ -1,7 +1,7 @@
 """
 Поля ExecutionState - общие для всех языков.
 
-Соответствие модели: core.state.execution_state.ExecutionState.
+Соответствие модели: apps.flows.src.state.execution_state.ExecutionState.
 readonly: True — поле выставляет рантайм/граф; во inline-коде обычно только читают.
 """
 

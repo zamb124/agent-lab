@@ -10,12 +10,12 @@ from oxyde import F, Index
 from oxyde import Field as DbField
 from pydantic import Field
 
-from core.crawl.models.contracts import (
+from apps.search.models.contracts import (
     CrawlJobStatus,
     CrawlJobTrigger,
     CrawlStatusCount,
 )
-from core.crawl.models.crawl_profile import CrawlProfileWithIndex
+from apps.search.models.crawl_profile import CrawlProfileWithIndex
 from core.errors.boundary import PlatformNotFoundError
 from core.models import StrictBaseModel
 from core.models.platform_model import PlatformModel

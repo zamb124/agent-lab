@@ -14,13 +14,18 @@ from typing import cast
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from apps.flows.src.flow_ui.action import ui_action_from_message
+from apps.flows.src.flow_ui.html_bindings import (
+    HTML_BIND_ATTRIBUTE,
+    HTML_SHOW_ATTRIBUTE,
+    html_bound_paths,
+)
+from apps.flows.src.flow_ui.problems import FlowUILimits, flow_ui_problems
+from apps.flows.src.flow_ui.projection import template_paths
 from core.a2a.codec import message_from_json_dict
-from core.flow_ui.action import ui_action_from_message
-from core.flow_ui.document import FlowUIDocument
-from core.flow_ui.html_bindings import HTML_BIND_ATTRIBUTE, HTML_SHOW_ATTRIBUTE, html_bound_paths
-from core.flow_ui.problems import FlowUILimits, flow_ui_problems
-from core.flow_ui.projection import apply_json_patch, json_patch_operations, template_paths
-from core.flow_ui.protocol import (
+from core.ui_document.document import FlowUIDocument
+from core.ui_document.json_patch import apply_json_patch, json_patch_operations
+from core.ui_document.protocol import (
     FLOW_UI_ACTION_MEDIA_TYPE,
     FLOW_UI_MEDIA_TYPE,
     JSON_MEDIA_TYPE,

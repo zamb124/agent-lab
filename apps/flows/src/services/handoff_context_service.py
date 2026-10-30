@@ -9,9 +9,9 @@ from enum import StrEnum
 from pydantic import Field
 
 from apps.flows.src.models.resource import ResourceDefinition, ResourceType
+from apps.flows.src.state import ExecutionState
+from apps.flows.src.state.interrupt import HandoffInterrupt
 from core.models import StrictBaseModel
-from core.state import ExecutionState
-from core.state.interrupt import HandoffInterrupt
 
 
 class HandoffContextPolicy(StrEnum):

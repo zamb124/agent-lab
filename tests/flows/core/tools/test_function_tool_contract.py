@@ -7,12 +7,12 @@ from typing import ClassVar
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import FunctionTool, tool
 from core.authz.group_sync import sync_user_groups
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from core.state import ExecutionState
 
 
 class _EchoArgs(BaseModel):

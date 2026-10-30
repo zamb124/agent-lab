@@ -33,9 +33,9 @@ from apps.sync.realtime.livekit_sdk_boundary import (
     read_livekit_participant_identity,
     read_livekit_track_sid,
 )
+from apps.sync.services.livekit_client import LiveKitClient
+from apps.sync.services.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from apps.sync.services.message_service import SyncMessageService
-from core.calls.livekit_client import LiveKitClient
-from core.calls.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context

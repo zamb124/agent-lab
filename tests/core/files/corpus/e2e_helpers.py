@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from apps.flows.src.state import ExecutionState
 from core.capabilities import (
     CapabilityCallRequest,
     CapabilityExecutionContext,
@@ -14,7 +15,6 @@ from core.capabilities import (
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef
 from core.files.reader.models import FileReadKind, ReadLane
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.core.files.corpus.helpers import corpus_stt_company_id
 from tests.core.files.corpus.manifest import CorpusFile

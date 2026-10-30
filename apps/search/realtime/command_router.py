@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from apps.search.di import SearchDi
+from apps.search.models import CrawlJobCreateRequest, CrawlProfileCreateRequest, SeedImportRequest
 from apps.search.realtime.operations import (
     CrawlDomainCreatePayload,
     CrawlDomainRefPayload,
@@ -56,7 +57,6 @@ from apps.search.realtime.operations import (
     op_query_serp_more,
     op_query_serp_refine,
 )
-from core.crawl.models import CrawlJobCreateRequest, CrawlProfileCreateRequest, SeedImportRequest
 from core.search.index_models import SearchIndexBatchGetRequest, SearchIndexCreateRequest
 from core.search.models import (
     MetaSearchRefineRequest,

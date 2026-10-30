@@ -41,6 +41,7 @@ def disable_testing_mode():
 
 
 from apps.flows.src.runtime.execution_context import execution_context_for  # noqa: E402
+from apps.flows.src.state import ExecutionState  # noqa: E402
 from core.ai.llm_models_service import LLMModelsService  # noqa: E402
 from core.ai.task_names import TASK_SYNC_LLM_MODELS  # noqa: E402
 from core.clients.llm.client import LLMClient  # noqa: E402
@@ -62,7 +63,6 @@ from core.scheduler.models import (  # noqa: E402
     PlatformScheduleType,
     ScheduledTaskStatus,
 )
-from core.state import ExecutionState  # noqa: E402
 from core.variables import VariableResolutionError  # noqa: E402
 
 
@@ -93,7 +93,7 @@ class TestResolveVar:
             session_id="test:session",
             variables={"my_api_key": "sk-resolved-key"},
         )
-        result = _resolve_var("@var:my_api_key", state)
+        result = _resolve_var("@var:my_api_key", state.variables)
         assert result == "sk-resolved-key"
 
     def test_resolve_var_missing_key_raises_error(self, unique_id):
@@ -106,7 +106,7 @@ class TestResolveVar:
             variables={"other_key": "value"},
         )
         with pytest.raises(VariableResolutionError):
-            _resolve_var("@var:missing_key", state)
+            _resolve_var("@var:missing_key", state.variables)
 
     def test_resolve_var_no_state_raises_error(self):
         """@var: без state вызывает VariableResolutionError."""
@@ -123,7 +123,7 @@ class TestResolveVar:
             variables={},
         )
         with pytest.raises(VariableResolutionError):
-            _resolve_var("@var:my_key", state)
+            _resolve_var("@var:my_key", state.variables)
 
 
 class TestDetectProvider:
@@ -246,7 +246,7 @@ class TestLLMTransportWithCustomCredentials:
                     model_name="gpt-4",
                     api_key="@var:user_api_key",
                     base_url="@var:user_base_url",
-                    state=state,
+                    variables=state.variables,
                 )
 
                 assert isinstance(client, LLMClient)
@@ -367,7 +367,7 @@ class TestLlmNodeLLMConfig:
                 "base_url": config_arg.base_url,
                 "folder_id": config_arg.folder_id,
                 "max_tokens": config_arg.max_tokens,
-                "state": mock_create_client.call_args.kwargs["state"],
+                "variables": mock_create_client.call_args.kwargs["variables"],
                 "fallback_models": mock_create_client.call_args.kwargs["fallback_models"],
             } == {
                 "model": "gpt-4-turbo",
@@ -377,7 +377,7 @@ class TestLlmNodeLLMConfig:
                 "base_url": "https://bothub.chat/api/v2/openai/v1",
                 "folder_id": None,
                 "max_tokens": None,
-                "state": state,
+                "variables": state.variables,
                 "fallback_models": None,
             }
 
@@ -432,7 +432,7 @@ class TestLlmNodeLLMConfig:
                 "base_url": config_arg.base_url,
                 "folder_id": config_arg.folder_id,
                 "max_tokens": config_arg.max_tokens,
-                "state": mock_create_client.call_args.kwargs["state"],
+                "variables": mock_create_client.call_args.kwargs["variables"],
                 "fallback_models": mock_create_client.call_args.kwargs["fallback_models"],
             } == {
                 "model": "claude-3",
@@ -442,7 +442,7 @@ class TestLlmNodeLLMConfig:
                 "base_url": "@var:my_url",
                 "folder_id": None,
                 "max_tokens": None,
-                "state": state,
+                "variables": state.variables,
                 "fallback_models": None,
             }
 

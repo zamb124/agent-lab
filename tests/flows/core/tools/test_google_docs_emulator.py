@@ -8,6 +8,7 @@ import pytest
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
@@ -17,7 +18,6 @@ from apps.flows.tools.google_docs.google_docs import (
     gdocs_read_document,
     gdocs_share_document,
 )
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.fixtures.google_api_emulator import GoogleApiEmulatorHandle
 

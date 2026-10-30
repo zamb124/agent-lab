@@ -12,8 +12,8 @@ from apps.flows.src.durable_execution import (
     create_initial_state,
 )
 from apps.flows.src.durable_execution.models import WorkflowInstance
+from apps.flows.src.state import ExecutionState
 from core.context import require_active_company
-from core.state import ExecutionState
 
 
 def create_test_state(

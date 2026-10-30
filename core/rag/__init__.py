@@ -22,7 +22,7 @@ from core.rag_indexing_schema import (
 )
 
 from .constants import RAG_IN_PROCESS_PROVIDER_ID
-from .models import FlowRAGConfig, RAGChunk, RAGDocument, RAGNamespace, RAGSearchResult
+from .models import RAGChunk, RAGDocument, RAGNamespace, RAGSearchResult
 from .rag_http_namespace_search import (
     RAG_API_V1_PREFIX,
     SEARCH_REQUEST_OPTION_KEYS,
@@ -31,7 +31,6 @@ from .rag_http_namespace_search import (
     filter_search_request_options,
     merge_search_request_options,
 )
-from .rag_resource_bind import RagResourceBindParams, RagResourceBindPatch
 
 if TYPE_CHECKING:
     from types import FunctionType, UnionType
@@ -39,22 +38,13 @@ if TYPE_CHECKING:
     from .base_provider import BaseRAGProvider
     from .chunking import resolve_split_config, split_file_extract, split_plain_text_fixed_tokens
     from .factory import get_rag_provider
-    from .llm_context_memory_store import (
-        RAGLLMContextMemoryStore,
-        llm_context_memory_namespace_id,
-    )
-    from .llm_context_source import RAGLLMContextSource
     from .post_retrieval_rerank import (
         apply_rerank_after_retrieve_by_score_desc,
         apply_rerank_after_retrieve_grouped_by_score_desc,
     )
     from .providers import AgentsetRAGProvider, PgVectorProvider
-    from .rag_resource import RAGResource
     type _LazyExportValue = (
         type[BaseRAGProvider]
-        | type[RAGResource]
-        | type[RAGLLMContextSource]
-        | type[RAGLLMContextMemoryStore]
         | type[AgentsetRAGProvider]
         | type[PgVectorProvider]
         | FunctionType
@@ -63,20 +53,10 @@ if TYPE_CHECKING:
 
 _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "BaseRAGProvider": ("core.rag.base_provider", "BaseRAGProvider"),
-    "RAGResource": ("core.rag.rag_resource", "RAGResource"),
     "resolve_split_config": ("core.rag.chunking", "resolve_split_config"),
     "split_file_extract": ("core.rag.chunking", "split_file_extract"),
     "split_plain_text_fixed_tokens": ("core.rag.chunking", "split_plain_text_fixed_tokens"),
     "get_rag_provider": ("core.rag.factory", "get_rag_provider"),
-    "RAGLLMContextSource": ("core.rag.llm_context_source", "RAGLLMContextSource"),
-    "RAGLLMContextMemoryStore": (
-        "core.rag.llm_context_memory_store",
-        "RAGLLMContextMemoryStore",
-    ),
-    "llm_context_memory_namespace_id": (
-        "core.rag.llm_context_memory_store",
-        "llm_context_memory_namespace_id",
-    ),
     "apply_rerank_after_retrieve_by_score_desc": (
         "core.rag.post_retrieval_rerank",
         "apply_rerank_after_retrieve_by_score_desc",
@@ -95,7 +75,6 @@ __all__ = [
     "RAGDocument",
     "RAGSearchResult",
     "RAGNamespace",
-    "FlowRAGConfig",
     "IndexProfileConfig",
     "IndexProfileLexicalConfig",
     "IndexProfileSearchDefaults",
@@ -103,7 +82,6 @@ __all__ = [
     "IndexProfileSplitStrategy",
     "RerankerSearchDefaults",
     "SearchChannelsDefaults",
-    "RAGResource",
     "RAG_IN_PROCESS_PROVIDER_ID",
     "RAG_API_V1_PREFIX",
     "SEARCH_REQUEST_OPTION_KEYS",
@@ -111,15 +89,10 @@ __all__ = [
     "build_namespace_search_path",
     "filter_search_request_options",
     "merge_search_request_options",
-    "RagResourceBindParams",
-    "RagResourceBindPatch",
     "resolve_split_config",
     "split_file_extract",
     "split_plain_text_fixed_tokens",
     "get_rag_provider",
-    "RAGLLMContextSource",
-    "RAGLLMContextMemoryStore",
-    "llm_context_memory_namespace_id",
     "apply_rerank_after_retrieve_by_score_desc",
     "apply_rerank_after_retrieve_grouped_by_score_desc",
     "AgentsetRAGProvider",

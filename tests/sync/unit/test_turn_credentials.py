@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from core.calls.turn import generate_turn_credentials
+from apps.sync.services.turn import generate_turn_credentials
 
 
 def test_credentials_structure() -> None:

@@ -7,14 +7,18 @@ from apps.flows.realtime.operations import (
     require_company_member,
     require_edit_flow,
 )
+from apps.flows.src.flow_ui.schema import flow_ui_schema
+from apps.flows.src.flow_ui.templates import (
+    FlowUITemplate,
+    FlowUITemplatesPayload,
+    flow_ui_templates,
+)
 from apps.flows.src.models.flow_ui_assist import (
     FlowUIAssistOutputError,
     FlowUIAssistRequest,
     FlowUIAssistResult,
 )
 from core.context import require_context
-from core.flow_ui.schema import flow_ui_schema
-from core.flow_ui.templates import FlowUITemplate, FlowUITemplatesPayload, flow_ui_templates
 from core.models.identity_models import User
 from core.pagination import OffsetPage
 from core.types import JsonObject

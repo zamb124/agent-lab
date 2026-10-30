@@ -6,9 +6,9 @@ import json
 
 import pytest
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.viz.viz import create_viz, export_viz, update_viz, viz_open_file
 from core.clients.files_client import FilesClient
-from core.state import ExecutionState
 from core.types import require_json_object
 from core.viz.models import VIZ_CONTENT_TYPE, VizDocument, parse_viz_document_bytes
 from tests.fixtures.s3 import require_s3_configured

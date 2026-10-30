@@ -20,7 +20,7 @@ from core.errors import FlowWallClockTimeoutError
 from core.logging import get_logger
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state.execution_state import ExecutionState
 
 logger = get_logger(__name__)
 

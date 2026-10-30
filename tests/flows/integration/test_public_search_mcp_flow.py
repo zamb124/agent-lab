@@ -9,10 +9,11 @@ from apps.flows.src.models import ToolReference
 from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
+from apps.flows.src.state import ExecutionState
 from apps.flows.tools.builtin_specs import builtin_tool_ids
 from apps.flows.tools.web.index_search import web_search
-from core.flow_ui.projection import apply_json_patch
-from core.flow_ui.protocol import (
+from core.ui_document.json_patch import apply_json_patch
+from core.ui_document.protocol import (
     JSON_MEDIA_TYPE,
     JSON_PATCH_MEDIA_TYPE,
     STATE_ARTIFACT_ID,
@@ -20,7 +21,6 @@ from core.flow_ui.protocol import (
 )
 from core.integrations.mcp import mcp_tool_reference_id
 from core.search import PUBLIC_SEARCH_WALL_TIME_SECONDS
-from core.state import ExecutionState
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
 

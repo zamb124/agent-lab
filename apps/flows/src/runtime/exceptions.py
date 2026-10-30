@@ -4,12 +4,12 @@
 
 from uuid import UUID
 
-from core.clients.llm import LLMToolCall
-from core.state.interrupt import (
+from apps.flows.src.state.interrupt import (
     InterruptBody,
     UserMessageInterrupt,
     interrupt_body_public_question,
 )
+from core.clients.llm import LLMToolCall
 from core.types import JsonObject
 
 

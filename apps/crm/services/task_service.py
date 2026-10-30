@@ -27,6 +27,7 @@ from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     store_pending_import_text,
 )
+from apps.crm.services.knowledge_text_split import validate_chunk_max_chars
 from apps.crm.services.note_markdown_format_schedule import (
     ActiveTaskExistsError,
     begin_note_markdown_format,
@@ -47,7 +48,6 @@ from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.tasks import enqueue
 from core.types import JsonObject
-from core.utils.knowledge_text_split import validate_chunk_max_chars
 
 logger = get_logger(__name__)
 MAX_SOURCE_TEXT_INLINE_CHARS = 100_000

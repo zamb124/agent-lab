@@ -20,8 +20,8 @@ from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, ReactConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.code_tool import CodeTool
-from core.state import ExecutionState
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import ensure_workflow_started, run_flow, workflow_state
 

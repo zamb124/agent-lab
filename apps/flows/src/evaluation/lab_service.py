@@ -149,6 +149,7 @@ from apps.flows.src.runtime.effective_llm_config import (
 from apps.flows.src.runtime.execution_context import CodeRunnerRegistry
 from apps.flows.src.runtime.nodes import NodeConstructor, create_node
 from apps.flows.src.services.flow_factory import FlowFactory
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
 from apps.flows.src.tools.json_schema_parameters import validate_json_schema_instance
 from apps.flows.src.tools.registry import ToolRegistry
@@ -163,7 +164,6 @@ from core.events import publish_event_to_company
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
 from core.models import StrictBaseModel
-from core.state import ExecutionState
 from core.tracing.context import get_current_trace_context
 from core.tracing.models import Span, TraceSearchResult
 from core.tracing.operation_span import traced_operation
@@ -3885,7 +3885,7 @@ class EvaluationLabService:
                 effective: EffectiveLLMConfig = resolve_effective_llm_config_for_node(node_config)
                 return create_llm_client_from_call_config(
                     effective.config,
-                    state=state,
+                    variables=state.variables if state is not None else None,
                     fallback_models=effective.config.fallback_models,
                     cost_origin=effective.cost_origin,
                     billing_resource_name=effective.billing_resource_name,

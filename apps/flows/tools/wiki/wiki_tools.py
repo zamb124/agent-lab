@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.wiki_client import WikiClient
@@ -33,7 +34,6 @@ from core.clients.wiki_models import (
     WikiUpdateMarkdownArgs,
     WikiUpdatePropertiesArgs,
 )
-from core.state import ExecutionState
 from core.types import JsonObject
 
 _TAGS = ["wiki"]

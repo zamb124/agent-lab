@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.datasource_client import DatasourceClient
 from core.datasources.models import DatasourceSchemaArgs, DatasourceSqlCallArgs
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 _TAGS = ["datasources"]

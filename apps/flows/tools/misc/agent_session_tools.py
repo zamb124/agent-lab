@@ -13,13 +13,13 @@ from apps.flows.src.models.hitl_schemas import build_hitl_handoff_command
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from apps.flows.src.services.hitl_client import HitlClient
+from apps.flows.src.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.types import JsonObject
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class ReasonArgs(BaseModel):

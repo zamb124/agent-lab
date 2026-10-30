@@ -16,8 +16,8 @@ import pytest
 import pytest_asyncio
 
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.state import ExecutionState
 from core.authz.company_sync import sync_company_member_roles
-from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow
 
 _INTERRUPT_E2E_USER_ID = "test-user"

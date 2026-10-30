@@ -1,7 +1,8 @@
 """
-Параметры привязки RAG namespace к клиенту (поиск, индексация).
+Схема ресурса ``type: rag`` в ``ResourceDefinition.config`` (поиск, индексация).
 
-Используются ``BaseRAGProvider`` и ``core.rag.rag_resource.RAGResource``.
+Используется ``apps.flows.src.resources.rag_resource.RAGResource``,
+``apps.flows.src.runtime.llm_context_source`` и ``llm_context_memory_store``.
 """
 
 from __future__ import annotations

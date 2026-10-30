@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from core.flow_ui.document import FlowUIConversation, FlowUIDocument, FlowUIInputBase
-from core.flow_ui.templates import (
+from apps.flows.src.flow_ui.templates import (
     DEFAULT_CHAT_TEMPLATE_ID,
     FlowUITemplate,
     default_chat_document,
     flow_ui_templates,
 )
+from core.ui_document.document import FlowUIConversation, FlowUIDocument, FlowUIInputBase
 from core.models.i18n_models import Language
 
 ICONS_DIR = Path("core/frontend/static/assets/icons")

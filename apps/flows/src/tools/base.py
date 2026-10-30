@@ -22,11 +22,11 @@ from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.services.external_api_client import ExternalAPIClient
+from apps.flows.src.state import parse_interrupt_body_from_external_dict
 from apps.flows.src.tools.authz_gate import check_tool_permission
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.src.tools.provider_schema import compile_openai_strict_parameters
 from core.logging import get_logger
-from core.state import parse_interrupt_body_from_external_dict
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 
@@ -47,7 +47,7 @@ def sanitize_tool_name(name: str) -> str:
 
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 logger = get_logger(__name__)
 

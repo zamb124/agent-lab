@@ -10,9 +10,9 @@ import httpx2
 
 from apps.flows.src.channels.telegram_api_base import get_telegram_api_base
 from apps.flows.src.models.enums import ChannelType
+from apps.flows.src.state import ExecutionState
 from core.http.client import HttpRequestKwargs, ProxyStrategy, request_with_strategy
 from core.logging import get_logger
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object
 
 from .base import BaseChannelHandler

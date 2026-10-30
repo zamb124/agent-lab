@@ -7,8 +7,8 @@ from typing import ClassVar, Literal, Self, override
 from oxyde import Field as DbField
 from pydantic import BaseModel, Field
 
-from core.flow_ui.document import FlowUIConversationSettings, FlowUIPageId
 from core.models.platform_model import PlatformModel
+from core.ui_document.document import FlowUIConversationSettings, FlowUIPageId
 
 
 class EmbedStatus(str, Enum):

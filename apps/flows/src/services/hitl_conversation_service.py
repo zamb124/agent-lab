@@ -24,12 +24,12 @@ from apps.flows.src.models.hitl_conversation import (
     ConversationTurnRole,
 )
 from apps.flows.src.runtime.a2a_messages import build_operator_message, build_user_message
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.streaming.emitter import Emitter
 from core.a2a import mapping_from_struct
 from core.clients.redis_client import RedisClient
 from core.events import publish_event_to_company
 from core.logging import get_logger
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_array, require_json_object
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,

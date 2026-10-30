@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
 from core.ai.llm_config import LLMCallConfig
 from core.ai.providers import (
@@ -44,9 +43,6 @@ from core.config.models import (
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.types import JsonObject
 from core.variables import VariableResolutionError, VarResolver
-
-if TYPE_CHECKING:
-    from core.state import ExecutionState
 
 _YANDEX_MODEL_URI_PREFIXES = ("gpt://", "emb://")
 _OpenAICompatibleProviderConfig = (
@@ -115,15 +111,15 @@ def normalize_yandex_resource_model_uri(model: str, folder_id: str) -> str:
     return model
 
 
-def _resolve_var(value: str | None, state: ExecutionState | None) -> str | None:
-    """Резолвит @var:path из state.variables по strict-контракту."""
+def _resolve_var(value: str | None, variables: JsonObject | None) -> str | None:
+    """Резолвит @var:path по variables strict-контрактом."""
     if not value:
         return None
     if not value.startswith("@var:"):
         return value
-    if state is None:
-        raise VariableResolutionError(f"Cannot resolve '{value}' without ExecutionState")
-    resolved_value = VarResolver.resolve_ref(value, state.variables or {})
+    if variables is None:
+        raise VariableResolutionError(f"Cannot resolve '{value}' without variables")
+    resolved_value = VarResolver.resolve_ref(value, variables or {})
     if not isinstance(resolved_value, str):
         raise VariableResolutionError(f"Variable '{value}' for LLM config must resolve to string")
     if not resolved_value:
@@ -133,13 +129,13 @@ def _resolve_var(value: str | None, state: ExecutionState | None) -> str | None:
 
 def _resolve_headers_vars(
     headers: dict[str, str] | None,
-    state: ExecutionState | None,
+    variables: JsonObject | None,
 ) -> dict[str, str] | None:
     if not headers:
         return None
     resolved_headers: dict[str, str] = {}
     for key, header_value in headers.items():
-        resolved_header_value = _resolve_var(header_value, state)
+        resolved_header_value = _resolve_var(header_value, variables)
         if resolved_header_value is None:
             continue
         resolved_headers[key] = resolved_header_value
@@ -250,7 +246,7 @@ def _resolve_llm_call_config(
     config: LLMCallConfig,
     *,
     settings: BaseSettings,
-    state: ExecutionState | None = None,
+    variables: JsonObject | None = None,
     inherit_transport_from: LLMCallConfig | None = None,
     source: str | None = None,
 ) -> LLMCallConfig:
@@ -258,9 +254,9 @@ def _resolve_llm_call_config(
     if not config.model or not str(config.model).strip():
         raise ValueError("LLM model is required")
 
-    explicit_api_key = _resolve_var(config.api_key, state)
-    explicit_base_url = _resolve_var(config.base_url, state)
-    explicit_folder_id = _resolve_var(config.folder_id, state)
+    explicit_api_key = _resolve_var(config.api_key, variables)
+    explicit_base_url = _resolve_var(config.base_url, variables)
+    explicit_folder_id = _resolve_var(config.folder_id, variables)
     inherit_transport = (
         inherit_transport_from is not None
         and config.provider is None
@@ -355,7 +351,7 @@ def _resolve_llm_call_config(
                 ),
                 "extra_request_headers": _resolve_headers_vars(
                     config.extra_request_headers,
-                    state,
+                    variables,
                 ),
             }
         )
@@ -402,7 +398,7 @@ def _resolve_llm_call_config(
             ),
             "extra_request_headers": _resolve_headers_vars(
                 config.extra_request_headers,
-                state,
+                variables,
             ),
         }
     )
@@ -413,12 +409,12 @@ def _resolved_llm_configs(
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None,
     *,
     settings: BaseSettings,
-    state: ExecutionState | None,
+    variables: JsonObject | None,
 ) -> list[LLMCallConfig]:
     resolved_primary = _resolve_llm_call_config(
         primary_config,
         settings=settings,
-        state=state,
+        variables=variables,
         source=primary_config.source,
     )
     resolved_configs = [resolved_primary]
@@ -432,7 +428,7 @@ def _resolved_llm_configs(
             _resolve_llm_call_config(
                 fallback_config,
                 settings=settings,
-                state=state,
+                variables=variables,
                 inherit_transport_from=resolved_primary,
                 source="fallback",
             )

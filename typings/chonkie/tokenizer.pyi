@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from typing import Protocol, Union
 
-
 class TokenizerProtocol(Protocol):
     def encode(self, text: str) -> Sequence[int]: ...
     def decode(self, tokens: Sequence[int]) -> str: ...

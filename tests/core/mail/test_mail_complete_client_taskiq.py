@@ -28,6 +28,8 @@ from tests.core.mail.complete_client_helpers import (
 )
 from tests.core.mail.fakes import RecordingMailServerPort
 
+pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
+
 MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 
 

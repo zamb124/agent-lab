@@ -10,7 +10,7 @@ from core.types import JsonObject, require_json_object
 from core.variables import VariableResolutionError, VarResolver
 
 if TYPE_CHECKING:
-    from core.state import ExecutionState
+    from apps.flows.src.state import ExecutionState
 
 
 class LLMStreamKwargs(TypedDict, total=False):

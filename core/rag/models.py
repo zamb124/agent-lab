@@ -180,26 +180,3 @@ class RAGNamespace(StrictBaseModel):
     metadata: RAGMetadata = PydanticField(default_factory=dict)
 
 
-class FlowRAGConfig(StrictBaseModel):
-    """Конфигурация RAG для flow"""
-
-    enabled: bool = False
-
-    namespace_scope: Literal["flow", "company", "session"] = PydanticField(
-        default="flow",
-        title="Скоуп хранения",
-        description="Где хранить документы: company (общие), flow (для этого flow), session (для сессии)",
-    )
-
-    search_scopes: list[Literal["flow", "company", "session"]] = PydanticField(
-        default_factory=lambda: ["flow"],
-        title="Скоупы поиска",
-        description="Где искать документы при запросах",
-    )
-
-    auto_index_messages: bool = PydanticField(
-        default=False,
-        title="Автоматическая индексация",
-        description="Автоматически индексировать сообщения из сессии",
-    )
-

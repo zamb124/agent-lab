@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import datetime
 
+from apps.flows.src.models.scheduled_task import ContentType, ScheduledTaskInfo
 from apps.flows.src.services.schedule_service import ScheduleService
-from core.scheduler.models import ContentType, ScheduledTaskInfo, ScheduledTaskStatus
+from core.scheduler.models import ScheduledTaskStatus
 from core.types import JsonObject
 
 

@@ -5,11 +5,11 @@ from a2a.types import Message
 from apps.flows.di import Di
 from apps.flows.src.channels.factory import get_channel
 from apps.flows.src.channels.types import PreparedTaskParams
+from apps.flows.src.flow_ui.action import ui_action_from_message
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.a2a import message_from_json_dict
 from core.context import set_context
 from core.files.file_ref import FileRef
-from core.flow_ui.action import ui_action_from_message
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.tasks import platform_task

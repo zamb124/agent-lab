@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING
 
 from apps.flows.src.models import FlowConfig, NodeConfig
 from apps.flows.src.models.tool_reference import ToolReference
+from apps.flows.src.models.urn import extract_resource_id
 from apps.flows.src.runtime.nodes import NodeConstructor
 from apps.flows.src.services.flow_factory import FlowFactory
 from core.errors import ResourceNotFoundError
 from core.logging import get_logger
 from core.types import parse_json_object
-from core.urn import extract_resource_id
 
 if TYPE_CHECKING:
     from apps.flows.src.registry.nodes import NodeRegistry

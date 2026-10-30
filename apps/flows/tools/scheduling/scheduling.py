@@ -10,11 +10,11 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.models.scheduled_task import ContentType, ScheduledTaskInfo
 from apps.flows.src.services.flow_schedule_client import FlowScheduleClient
+from apps.flows.src.state import ExecutionState
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.scheduling.scheduling_ids import extract_ids_from_state
-from core.scheduler.models import ContentType, ScheduledTaskInfo
-from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 

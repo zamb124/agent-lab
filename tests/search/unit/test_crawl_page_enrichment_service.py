@@ -13,7 +13,7 @@ from core.ai.models import ResolvedAIModel
 from core.ai.providers import HUMANITEC_LLM_PROVIDER, AICapability
 from core.ai.requirements import AIRequestRequirements, AISelection
 from core.clients.llm.client import LLMClient
-from core.crawl.models import (
+from apps.search.models import (
     CrawlDomain,
     CrawlEnrichedPageLLMOutput,
     CrawlProfile,

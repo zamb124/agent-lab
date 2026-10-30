@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.reflection import CriticExit, CriticExitWhen
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
-from core.reflection import CriticExit, CriticExitWhen
 from core.types import JsonObject
 from tests.flows.fixtures.reflection import reflection_policy
 

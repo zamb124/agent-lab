@@ -7,7 +7,7 @@ In-memory реализации Emitter и Subscriber.
 from collections.abc import AsyncIterator
 from typing import override
 
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 
 from .base import BaseEmitter, BaseSubscriber, StreamEvent
 

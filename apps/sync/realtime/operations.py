@@ -53,6 +53,7 @@ from apps.sync.models.calls import (
     CallsLinksUpdatePayload,
     CallsSignalPayload,
     JoinResponse,
+    TurnCredentials,
 )
 from apps.sync.models.channels import (
     ChannelCreate,
@@ -73,7 +74,6 @@ from apps.sync.models.messages import (
     MessageRead,
 )
 from apps.sync.models.threads import ThreadCreate, ThreadRead, ThreadRow
-from core.calls.models import TurnCredentials
 from core.files.file_ref import FileRef
 from core.logging import get_logger
 from core.models.identity_models import User

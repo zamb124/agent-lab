@@ -24,7 +24,6 @@ async def test_flow_kv_is_in_flows_table_not_storage_prefix_scan(
 ) -> None:
     company_id = f"co_bf_{unique_id}"
     flow_id = f"bf_{unique_id}"
-    storage_key = f"company:{company_id}:flow:{flow_id}"
     config = FlowConfig(
         flow_id=flow_id,
         name="backfill-source",

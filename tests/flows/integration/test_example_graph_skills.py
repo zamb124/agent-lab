@@ -19,7 +19,7 @@ import pytest_asyncio
 
 from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.flow import Flow
-from core.state import ExecutionState
+from apps.flows.src.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 

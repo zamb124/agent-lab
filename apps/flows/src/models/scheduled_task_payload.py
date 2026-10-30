@@ -2,8 +2,8 @@
 
 from pydantic import Field
 
+from apps.flows.src.models.scheduled_task import ContentType
 from core.models import StrictBaseModel
-from core.scheduler.models import ContentType
 from core.types import JsonObject
 
 
