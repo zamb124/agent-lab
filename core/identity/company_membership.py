@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 
 from core.authz.company_sync import remove_company_member, sync_company_member_roles
 from core.authz.errors import AuthzUnavailable
+from core.authz.group_sync import sync_user_groups
 from core.authz.service import AuthzService
-from core.models.identity_models import Company, User
+from core.errors.boundary import PlatformNotFoundError
+from core.models.identity_models import Company, User, UserStatus
 
 
 def _normalize_roles(roles: Sequence[str]) -> list[str]:
@@ -155,4 +157,49 @@ async def sync_existing_company_member(
         company_id=company_id,
         user_id=user_id,
         roles=roles,
+    )
+
+
+SYSTEM_ACTOR_USER_ID = "system"
+_SYSTEM_ACTOR_ROLES: tuple[str, ...] = ("owner", "admin")
+_SYSTEM_ACTOR_GROUPS: tuple[str, ...] = ("admin", "developers")
+
+
+async def ensure_system_actor_membership(*, authz: AuthzService, company_id: str) -> None:
+    """Двустороннее членство ``user:system`` — roster и OpenFGA грант вместе.
+
+    Middleware создаёт ``User('system')`` как internal runtime user с roster
+    ``['guest']``: FGA-только грант при таком roster стирается первым же
+    roster-derived sync — поэтому roster здесь приводится к owner/admin.
+    """
+    company = await Company.get(company_id)
+    if company is None:
+        raise PlatformNotFoundError(f"Company {company_id} not found", error_code="not_found")
+    user = await User.get(SYSTEM_ACTOR_USER_ID)
+    if user is None:
+        user = User(
+            user_id=SYSTEM_ACTOR_USER_ID,
+            name="System",
+            status=UserStatus.ACTIVE,
+            groups=list(_SYSTEM_ACTOR_GROUPS),
+            companies={},
+            active_company_id=company_id,
+            emails=[],
+            attributes={"kind": "internal_platform_context", "runtime_identity": True},
+        )
+    merged_groups = list(dict.fromkeys([*user.groups, *_SYSTEM_ACTOR_GROUPS]))
+    if merged_groups != user.groups:
+        user.groups = merged_groups
+    _ = await set_company_member_roles(
+        authz=authz,
+        company=company,
+        user=user,
+        roles=_SYSTEM_ACTOR_ROLES,
+    )
+    await sync_user_groups(
+        authz,
+        user_id=SYSTEM_ACTOR_USER_ID,
+        groups=list(_SYSTEM_ACTOR_GROUPS),
+        company_ids=[company_id],
+        previous_groups=[],
     )

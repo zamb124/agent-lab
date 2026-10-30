@@ -20,8 +20,8 @@ from apps.flows.src.services.mcp_sync import (
 from apps.flows.src.services.platform_assistant_skills import seed_platform_assistant_skills
 from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
 from core.authz.company_sync import sync_company_member_roles
-from core.authz.group_sync import sync_user_groups
 from core.context import clear_context, set_context
+from core.identity.company_membership import ensure_system_actor_membership
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -89,18 +89,9 @@ async def init_company_resources(
     _ = set_context(company_context)
 
     try:
-        await sync_company_member_roles(
-            di.authz_service,
+        await ensure_system_actor_membership(
+            authz=di.authz_service,
             company_id=company_id,
-            user_id="system",
-            roles=["owner", "admin"],
-        )
-        await sync_user_groups(
-            di.authz_service,
-            user_id="system",
-            groups=["admin", "developers"],
-            company_ids=[company_id],
-            previous_groups=[],
         )
 
         # Путь к единому registry

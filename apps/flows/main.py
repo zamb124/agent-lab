@@ -63,8 +63,6 @@ from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_poll
 from core.api.integrations import set_flow_resume_handler  # noqa: E402
 from core.app import create_service_app  # noqa: E402
 from core.app.spa import mount_core_frontend, resolve_ui_static_dir  # noqa: E402
-from core.authz.company_sync import sync_company_member_roles  # noqa: E402
-from core.authz.group_sync import sync_user_groups  # noqa: E402
 from core.authz.service import AuthzService  # noqa: E402
 from core.clients.llm.mock import (  # noqa: E402
     configure_mock_llm_redis,
@@ -84,6 +82,7 @@ from core.files.create_spec import (  # noqa: E402
 from core.files.registry import default_retention_for_source  # noqa: E402
 from core.files.service import FilesService  # noqa: E402
 from core.files.writer import FileWriter  # noqa: E402
+from core.identity.company_membership import ensure_system_actor_membership  # noqa: E402
 from core.logging import get_logger  # noqa: E402
 from core.models.context_models import Context  # noqa: E402
 from core.models.i18n_models import Language  # noqa: E402
@@ -147,21 +146,9 @@ async def seed_testing_bundle(
             if seed_marker == "done":
                 logger.info("flows.startup.seed_already_done")
                 return
-            # Гранты системного актора — как в company_init_tasks: без них
-            # secrets/worktracker op_* отвечают 403 на user:system can_admin.
-            await sync_company_member_roles(
-                authz_service,
-                company_id="system",
-                user_id="system",
-                roles=["owner", "admin"],
-            )
-            await sync_user_groups(
-                authz_service,
-                user_id="system",
-                groups=["admin", "developers"],
-                company_ids=["system"],
-                previous_groups=[],
-            )
+            # Гранты системного актора — roster + FGA вместе: FGA-only грант
+            # стирается roster-sync'ом (middleware рождает system с ролью guest).
+            await ensure_system_actor_membership(authz=authz_service, company_id="system")
             loaded_tools = await load_tools_to_db(
                 flow_access_service=flow_access_service,
             )
