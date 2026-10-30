@@ -7,10 +7,10 @@
 См. полный гайд в [`deploy/cluster-setup.md`](mdc:deploy/cluster-setup.md). Краткая выжимка:
 
 ```bash
-# 1. DNS: setup-brand-dns.sh → 31.192.111.33 (оба apex). Whitelist Reg.ru API = этот IP.
+# 1. DNS: setup-brand-dns.sh → 77.91.94.127 (оба apex). Whitelist Reg.ru API = этот IP.
 
 # 2. На BM:
-ssh root@31.192.111.33
+ssh root@77.91.94.127
 git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 bash deploy/scripts/bootstrap-master.sh
 # exit 10 — reboot и повторить
@@ -19,7 +19,7 @@ bash deploy/scripts/bootstrap-master.sh
 export REGRU_USERNAME=... REGRU_PASSWORD=...
 bash deploy/scripts/setup-wildcard-tls.sh
 
-# 4. KUBECONFIG_B64 в GitHub (server 31.192.111.33, не 127.0.0.1; не печатать в чат):
+# 4. KUBECONFIG_B64 в GitHub (server 77.91.94.127, не 127.0.0.1; не печатать в чат):
 gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github-actions.sh)"
 
 # 5. Заполнить остальные GitHub Secrets (см. deploy/README.md)
@@ -128,7 +128,7 @@ kubectl logs -n cert-manager deployment/cert-manager-webhook-regru -f
 
 ```bash
 kubectl -n platform scale deployment provider-litserve --replicas=0
-ssh root@31.192.111.33
+ssh root@77.91.94.127
 cd /root/agent-lab-deploy
 git pull
 bash deploy/scripts/bootstrap-nvidia.sh
@@ -176,7 +176,7 @@ bash deploy/scripts/cluster-health.sh
 ```bash
 # Обновляет DNS через Reg.ru API, затем helm upgrade:
 REGRU_USERNAME=... REGRU_PASSWORD=... \
-bash deploy/scripts/rebind-public-node.sh master 31.192.111.33
+bash deploy/scripts/rebind-public-node.sh master 77.91.94.127
 # Ждёт DNS_TTL=300s, после чего helm upgrade и cluster-health.sh.
 ```
 
@@ -271,9 +271,9 @@ microk8s kubectl version --short
 # Server == Client
 
 # 3. Drain noдev (kubectl drain не работает в MicroK8s так же — лучше snap refresh с маленьким channel-bump)
-ssh root@31.192.111.33 'snap refresh microk8s --channel=1.35/stable'
+ssh root@77.91.94.127 'snap refresh microk8s --channel=1.35/stable'
 make k8s-health
-ssh root@31.192.111.33 'snap revert microk8s'
+ssh root@77.91.94.127 'snap revert microk8s'
 ```
 
 ## 13. Изменение OAuth провайдера / секрета

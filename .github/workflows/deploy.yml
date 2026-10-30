@@ -245,7 +245,7 @@ jobs:
             echo ""
             echo "Добавьте в репозитории: Settings → Secrets and variables → Actions → New repository secret"
             echo "  Name:  KUBECONFIG_B64"
-            echo "  Value: bash deploy/scripts/kubeconfig-for-github-actions.sh  (server = 31.192.111.33, не 127.0.0.1 из microk8s config)"
+            echo "  Value: bash deploy/scripts/kubeconfig-for-github-actions.sh  (server = 77.91.94.127, не 127.0.0.1 из microk8s config)"
             echo ""
             echo "Имя секрета должно совпадать посимвольно (регистр: KUBECONFIG_B64)."
             echo "Форк / чужой репозиторий: secrets недоступны — запускайте workflow только из основного repo."
@@ -338,7 +338,7 @@ jobs:
             echo "::error title=Missing Reg.ru credentials::Задайте REGRU_USERNAME и REGRU_PASSWORD в GitHub Secrets (Reg.ru → Настройки → API)."
             exit 1
           fi
-          bash deploy/scripts/setup-brand-dns-via-master-job.sh 31.192.111.33
+          bash deploy/scripts/setup-brand-dns-via-master-job.sh 77.91.94.127
 
       - name: Setup wildcard TLS (cert-manager-webhook-regru + Certificate platform-tls)
         # Идемпотентный выпуск wildcard-сертификата для всех platform brand apex (humanitec.ru, linnex.io)
@@ -527,5 +527,5 @@ jobs:
           PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
           CHECK_PUBLIC: "1"
           PLATFORM_APEX_HOSTS: "humanitec.ru linnex.io"
-          PLATFORM_PUBLIC_IP: "31.192.111.33"
+          PLATFORM_PUBLIC_IP: "77.91.94.127"
         run: bash deploy/scripts/cluster-health.sh

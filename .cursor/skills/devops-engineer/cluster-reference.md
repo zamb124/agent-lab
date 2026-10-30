@@ -4,10 +4,10 @@
 
 ## Нода и сеть
 
-- Одна нода `master` `31.192.111.33` (лейблы `kubernetes.io/hostname=master`, `accelerator=nvidia-gpu`): Postgres, Redis, Loki, Tempo, Grafana, приложения, воркеры, LiveKit, Coturn, OnlyOffice, ingress, `provider_litserve`, NVIDIA device plugin, `guest-runtime` (Docker-слоты `code_agent` через hostPath `/var/run/docker.sock`).
+- Одна нода `master` `77.91.94.127` (лейблы `kubernetes.io/hostname=master`, `accelerator=nvidia-gpu`): Postgres, Redis, Loki, Tempo, Grafana, приложения, воркеры, LiveKit, Coturn, OnlyOffice, ingress, `provider_litserve`, NVIDIA device plugin, `guest-runtime` (Docker-слоты `code_agent` через hostPath `/var/run/docker.sock`).
 - Taint `dedicated=gpu` и отдельная guest-нода не используются; executor фермы — `docker` (прод) или `inprocess` (тесты).
 - Postgres — `postgres.platform.svc.cluster.local:5432` (StatefulSet, PVC 50Gi `microk8s-hostpath`, `postgres.maxConnections`/`sharedBuffers`); Redis — `redis.platform.svc.cluster.local:6379` (PVC 10Gi, AOF).
-- DNS: `@` и `*` каждого apex (`linnex.io`, `humanitec.ru`) → `31.192.111.33`, плюс `livekit`, `onlyoffice`, `grafana`, `cdn`, `api`; скрипт — `deploy/scripts/setup-brand-dns.sh`; smoke — `deploy/docs/multi-brand-prod-smoke.md`.
+- DNS: `@` и `*` каждого apex (`linnex.io`, `humanitec.ru`) → `77.91.94.127`, плюс `livekit`, `onlyoffice`, `grafana`, `cdn`, `api`; скрипт — `deploy/scripts/setup-brand-dns.sh`; smoke — `deploy/docs/multi-brand-prod-smoke.md`.
 
 ## Чарт
 
@@ -39,9 +39,9 @@
 
 - CI: job `build` (`docker build --target full` → GHCR `<sha>`), job `deploy` (`helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace --set image.tag=<sha>` + `--set-json platformSecrets=...`), затем `kubectl get pods -n platform`.
 - Локально: `make k8s-lint`, `make k8s-template`, `make k8s-deploy IMAGE_TAG=<sha>`, `make k8s-status`, `make k8s-logs SVC=<svc>`, `make k8s-rollback`, `make k8s-uninstall` (PVC сохраняются).
-- `KUBECONFIG_B64` — `deploy/scripts/kubeconfig-for-github-actions.sh` (сервер `https://31.192.111.33:16443`).
+- `KUBECONFIG_B64` — `deploy/scripts/kubeconfig-for-github-actions.sh` (сервер `https://77.91.94.127:16443`).
 
 ## Разовая настройка ноды
 
 - `deploy/cluster-setup.md`: `bootstrap-master.sh` (NVIDIA, MicroK8s, аддоны `dns hostpath-storage ingress cert-manager`, лейбл GPU, Docker Engine через `bootstrap-host-docker.sh`, `harden-ssh.sh`), `bootstrap-nvidia.sh`.
-- Whitelist Reg.ru API — `31.192.111.33`; DNS и TLS — `setup-brand-dns.sh`, `setup-wildcard-tls.sh`.
+- Whitelist Reg.ru API — `77.91.94.127`; DNS и TLS — `setup-brand-dns.sh`, `setup-wildcard-tls.sh`.

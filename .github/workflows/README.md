@@ -26,7 +26,7 @@ GitHub Actions (Run workflow)
           bash deploy/scripts/cluster-health.sh (CHECK_PUBLIC=1)
 
 MicroK8s
-└── master (31.192.111.33)         hostname=master, accelerator=nvidia-gpu
+└── master (77.91.94.127)         hostname=master, accelerator=nvidia-gpu
     └── Postgres, Redis, apps, workers, observability, ingress, provider-litserve
 ```
 

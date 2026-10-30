@@ -7,7 +7,7 @@
 
 | Имя в GitHub (копировать как есть) | Как получить значение |
 |---|---|
-| **`KUBECONFIG_B64`** | `bash deploy/scripts/kubeconfig-for-github-actions.sh` — однострочный base64 с `server=https://31.192.111.33:16443`. Голый `microk8s config` даёт `127.0.0.1` и CI с runner не достучится до кластера. |
+| **`KUBECONFIG_B64`** | `bash deploy/scripts/kubeconfig-for-github-actions.sh` — однострочный base64 с `server=https://77.91.94.127:16443`. Голый `microk8s config` даёт `127.0.0.1` и CI с runner не достучится до кластера. |
 
 После добавления перезапустите workflow **Deploy**.
 
@@ -51,7 +51,7 @@ gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github
 
 ## 1d. Обязательно для brand DNS и wildcard TLS (Reg.ru API)
 
-Reg.ru API принимает запросы **только с whitelist IP**. Шаг **Setup brand DNS** в CI запускает `setup-brand-dns.sh` **с master-ноды** (Kubernetes Job с `nodeName=master`), egress IP = `31.192.111.33`. В whitelist Reg.ru должен быть **master** `31.192.111.33` (не GitHub Actions runner, не домашний Mac).
+Reg.ru API принимает запросы **только с whitelist IP**. Шаг **Setup brand DNS** в CI запускает `setup-brand-dns.sh` **с master-ноды** (Kubernetes Job с `nodeName=master`), egress IP = `77.91.94.127`. В whitelist Reg.ru должен быть **master** `77.91.94.127` (не GitHub Actions runner, не домашний Mac).
 
 | Имя в GitHub | Как получить |
 |---|---|

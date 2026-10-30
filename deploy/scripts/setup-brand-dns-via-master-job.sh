@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reg.ru API принимает запросы только с whitelist IP (master egress 31.192.111.33).
+# Reg.ru API принимает запросы только с whitelist IP (master egress 77.91.94.127).
 # GitHub Actions runner и локальный Mac — другие IP → ACCESS_DENIED_FROM_IP.
 #
 # CI/local deploy: выполняем setup-brand-dns.sh с egress master.
@@ -21,7 +21,7 @@ source "$SCRIPT_DIR/_common.sh"
 # shellcheck source=_regru_api.sh
 source "$SCRIPT_DIR/_regru_api.sh"
 
-PUBLIC_IP="${1:-31.192.111.33}"
+PUBLIC_IP="${1:-77.91.94.127}"
 PLATFORM_NS="${PLATFORM_NS:-platform}"
 MASTER_NODE="${MASTER_NODE_NAME:-master}"
 CM_NAME="regru-brand-dns-scripts"

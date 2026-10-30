@@ -16,7 +16,7 @@
 #   ONLYOFFICE_HOST=onlyoffice.humanitec.ru
 #   LIVEKIT_HOST=livekit.humanitec.ru
 #   CHECK_PUBLIC=1                      — проверить https://… через curl (требует DNS); 0 = только in-cluster
-#   PLATFORM_PUBLIC_IP=31.192.111.33     — ожидаемый A-record для apex/subdomain brand DNS (CHECK_PUBLIC=1)
+#   PLATFORM_PUBLIC_IP=77.91.94.127     — ожидаемый A-record для apex/subdomain brand DNS (CHECK_PUBLIC=1)
 
 set -uo pipefail
 
@@ -36,7 +36,7 @@ GRAFANA_HOST="${GRAFANA_HOST:-grafana.humanitec.ru}"
 ONLYOFFICE_HOST="${ONLYOFFICE_HOST:-onlyoffice.humanitec.ru}"
 LIVEKIT_HOST="${LIVEKIT_HOST:-livekit.humanitec.ru}"
 CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
-PLATFORM_PUBLIC_IP="${PLATFORM_PUBLIC_IP:-31.192.111.33}"
+PLATFORM_PUBLIC_IP="${PLATFORM_PUBLIC_IP:-77.91.94.127}"
 
 if [ "$CHECK_PUBLIC" = "1" ]; then
   if ! command -v curl >/dev/null 2>&1; then

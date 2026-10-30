@@ -4,7 +4,7 @@
 любого скрипта проверяет реальное состояние и пропускает уже выполненное (`[SKIP]`)
 или досогласовывает (`[DO]`). Безопасно запускать заново при любом сбое.
 
-Кластер — **одна нода** `hostname=master`, IP `31.192.111.33`: control-plane, все поды и GPU
+Кластер — **одна нода** `hostname=master`, IP `77.91.94.127`: control-plane, все поды и GPU
 (LitServe + NVIDIA device plugin). Taint `dedicated=gpu` не ставится.
 
 `ytai.tech` живёт на `84.38.184.105`, не namespace `platform`, этим гайдом не трогать.
@@ -15,18 +15,18 @@ Primary apex — **linnex.io**; legacy apex **humanitec.ru** остаётся д
 
 | Что | Где | Действие |
 |---|---|---|
-| DNS A `linnex.io` → `31.192.111.33` | `setup-brand-dns.sh` / reg.ru | один раз |
-| DNS A `*.linnex.io` → `31.192.111.33` | то же | один раз |
+| DNS A `linnex.io` → `77.91.94.127` | `setup-brand-dns.sh` / reg.ru | один раз |
+| DNS A `*.linnex.io` → `77.91.94.127` | то же | один раз |
 | DNS A `livekit` / `onlyoffice` / `grafana` / `api` / `cdn`.`linnex.io` | то же | один раз |
-| DNS A `humanitec.ru` + те же субдомены → `31.192.111.33` | то же | один раз (legacy) |
-| Ubuntu 22.04+ | BM `31.192.111.33` | один раз |
+| DNS A `humanitec.ru` + те же субдомены → `77.91.94.127` | то же | один раз (legacy) |
+| Ubuntu 22.04+ | BM `77.91.94.127` | один раз |
 | SSH ключ для root (`pubkey` в `/root/.ssh/authorized_keys`) | локально | один раз; `harden-ssh.sh` отключает пароль |
-| Whitelist IP `31.192.111.33` в Reg.ru API | Настройки → API | иначе DNS-01 и `setup-brand-dns` с master дадут ACCESS_DENIED |
+| Whitelist IP `77.91.94.127` в Reg.ru API | Настройки → API | иначе DNS-01 и `setup-brand-dns` с master дадут ACCESS_DENIED |
 
-## 1. Master + GPU (31.192.111.33)
+## 1. Master + GPU (77.91.94.127)
 
 ```bash
-ssh root@31.192.111.33
+ssh root@77.91.94.127
 git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 bash deploy/scripts/bootstrap-master.sh
 ```
@@ -68,7 +68,7 @@ bash deploy/scripts/setup-wildcard-tls.sh
 gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github-actions.sh)"
 ```
 
-Скрипт подставляет `https://31.192.111.33:16443` вместо `127.0.0.1` из `microk8s config`. Полный kubeconfig в чат не печатать. Список секретов — [`README.md`](README.md).
+Скрипт подставляет `https://77.91.94.127:16443` вместо `127.0.0.1` из `microk8s config`. Полный kubeconfig в чат не печатать. Список секретов — [`README.md`](README.md).
 
 ## 4. Первый деплой
 

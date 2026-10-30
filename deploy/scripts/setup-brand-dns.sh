@@ -15,7 +15,7 @@ source "$SCRIPT_DIR/_common.sh"
 # shellcheck source=_regru_api.sh
 source "$SCRIPT_DIR/_regru_api.sh"
 
-PUBLIC_IP="${1:-31.192.111.33}"
+PUBLIC_IP="${1:-77.91.94.127}"
 REGRU_API="https://api.reg.ru/api/regru2"
 
 require_command curl || exit 1

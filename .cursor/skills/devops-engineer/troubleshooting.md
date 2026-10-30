@@ -26,7 +26,7 @@ kubectl logs -n platform $POD --tail=200
 ```bash
 kubectl describe pod -n platform $POD | grep -A5 Events
 kubectl get pods -n platform -o wide | awk 'NR==1 || /Init|Pending|ContainerCreating/'
-ssh root@31.192.111.33 'journalctl -u snap.microk8s.daemon-containerd --since "2 hours ago" | grep PullImage'
+ssh root@77.91.94.127 'journalctl -u snap.microk8s.daemon-containerd --since "2 hours ago" | grep PullImage'
 ```
 
 **Причины:**
@@ -76,11 +76,11 @@ kubectl get events -n platform --sort-by='.lastTimestamp' | tail -30
 **Причины:**
 - PVC не Bound → проверить `kubectl get sc` (StorageClass `microk8s-hostpath` есть?).
 - nodeSelector `kubernetes.io/hostname: master` не матчится → проверить `kubectl get node` (есть ли нода с таким hostname).
-- Диск на ноде кончился → `ssh root@31.192.111.33 df -h /var/snap/microk8s/common/default-storage`.
+- Диск на ноде кончился → `ssh root@77.91.94.127 df -h /var/snap/microk8s/common/default-storage`.
 - init.sql упал → `kubectl logs postgres-0 -n platform`. Часто из-за прав на ConfigMap или дубликата в init.sql.
 
 **Решение:**
-- При нехватке места: cleanup старых snap revisions: `ssh root@31.192.111.33 'snap set system refresh.retain=2 && snap refresh'`.
+- При нехватке места: cleanup старых snap revisions: `ssh root@77.91.94.127 'snap set system refresh.retain=2 && snap refresh'`.
 - При проблемах с init.sql: правка `deploy/helm/agent-lab/files/postgres-init.sql` + `make k8s-deploy`. Если PVC уже инициализирован старой версией — init.sql НЕ перезапустится. Решение: `kubectl exec postgres-0 -- psql ...` для миграции вручную или пересоздание PVC (с потерей данных — нужен backup).
 
 ## 5. LitServe не стартует на GPU / без GPU
@@ -97,7 +97,7 @@ kubectl get pods -n kube-system -l app.kubernetes.io/name=nvidia-device-plugin
 kubectl logs -n kube-system daemonset/nvidia-device-plugin-daemonset --tail=200
 
 # На master:
-ssh root@31.192.111.33
+ssh root@77.91.94.127
 nvidia-smi
 microk8s ctr --address /var/snap/microk8s/common/run/containerd.sock plugins ls | grep cri
 ```
@@ -291,7 +291,7 @@ kubectl get events -n platform --sort-by='.lastTimestamp' | tail -50
 
 **Команды:**
 ```bash
-ssh root@31.192.111.33
+ssh root@77.91.94.127
 df -h
 du -sh /var/snap/microk8s/common/default-storage/* | sort -h | tail
 du -sh /var/lib/snapd/* | sort -h | tail

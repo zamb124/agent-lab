@@ -3,7 +3,7 @@
 #
 # Использование:
 #   REGRU_USERNAME=... REGRU_PASSWORD=... bash deploy/scripts/test-regru-api.sh
-#   REGRU_USERNAME=... REGRU_PASSWORD=... bash deploy/scripts/test-regru-api.sh --apply linnex.io @ 31.192.111.33
+#   REGRU_USERNAME=... REGRU_PASSWORD=... bash deploy/scripts/test-regru-api.sh --apply linnex.io @ 77.91.94.127
 #
 # Без --apply только читает: nop + get_resource_records, сверяет A-записи с EXPECTED_IP.
 
@@ -18,7 +18,7 @@ source "$SCRIPT_DIR/_regru_api.sh"
 REGRU_API="https://api.reg.ru/api/regru2"
 DOMAINS="${PLATFORM_BRAND_DOMAINS:-humanitec.ru linnex.io}"
 SUBDOMAINS="${PLATFORM_BRAND_DNS_SUBDOMAINS:-@ www * api cdn livekit onlyoffice grafana}"
-EXPECTED_IP="${PLATFORM_PUBLIC_IP:-31.192.111.33}"
+EXPECTED_IP="${PLATFORM_PUBLIC_IP:-77.91.94.127}"
 
 require_command curl || exit 1
 require_command python3 || exit 1

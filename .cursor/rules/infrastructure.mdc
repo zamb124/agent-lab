@@ -10,7 +10,7 @@ alwaysApply: false
 
 # Инфраструктура
 
-Прод — один Helm-чарт `deploy/helm/agent-lab/` в MicroK8s на одной ноде `master` (`31.192.111.33`, GPU, namespace `platform`). Операции, справочник кластера и runbooks — скил `.cursor/skills/devops-engineer/`.
+Прод — один Helm-чарт `deploy/helm/agent-lab/` в MicroK8s на одной ноде `master` (`77.91.94.127`, GPU, namespace `platform`). Операции, справочник кластера и runbooks — скил `.cursor/skills/devops-engineer/`.
 
 ## Канон
 

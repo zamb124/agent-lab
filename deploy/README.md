@@ -1,6 +1,6 @@
 # Деплой Платформы
 
-Платформа разворачивается единым **Helm-чартом** в **MicroK8s** на одной ноде `master` (`31.192.111.33`). GPU (LitServe) на той же машине. Всё для деплоя — [`deploy/helm/agent-lab/`](helm/agent-lab/).
+Платформа разворачивается единым **Helm-чартом** в **MicroK8s** на одной ноде `master` (`77.91.94.127`). GPU (LitServe) на той же машине. Всё для деплоя — [`deploy/helm/agent-lab/`](helm/agent-lab/).
 
 См. также:
 - [`cluster-setup.md`](cluster-setup.md) — одноразовая настройка нод кластера (MicroK8s install, GPU, лейблы).
@@ -12,7 +12,7 @@
 
 ```
 MicroK8s (одна нода)
-└── master (31.192.111.33)         hostname=master, accelerator=nvidia-gpu
+└── master (77.91.94.127)         hostname=master, accelerator=nvidia-gpu
     ├── postgres StatefulSet (PVC 50Gi)
     ├── redis StatefulSet (PVC 10Gi)
     ├── application Deployments (flows, frontend, crm, rag, sync, worktracker, scheduler-api, office, voice, browser, search)
@@ -103,7 +103,7 @@ kubectl delete secret platform-secrets -n platform
 |---|---|---|
 | [`bootstrap-master.sh`](scripts/bootstrap-master.sh) | master под root | hostname, harden-ssh, NVIDIA (`bootstrap-nvidia.sh`), MicroK8s, аддоны, лейбл GPU, Docker Engine (`bootstrap-host-docker.sh`) |
 | [`bootstrap-host-docker.sh`](scripts/bootstrap-host-docker.sh) | master под root | Docker CE рядом с MicroK8s, сокет `/var/run/docker.sock` для `guest-runtime` |
-| [`kubeconfig-for-github-actions.sh`](scripts/kubeconfig-for-github-actions.sh) | локально / master | base64 kubeconfig с `https://31.192.111.33:16443` для `KUBECONFIG_B64` |
+| [`kubeconfig-for-github-actions.sh`](scripts/kubeconfig-for-github-actions.sh) | локально / master | base64 kubeconfig с `https://77.91.94.127:16443` для `KUBECONFIG_B64` |
 | [`bootstrap-nvidia.sh`](scripts/bootstrap-nvidia.sh) | master под root | NVIDIA driver + toolkit + containerd drop-in (exit 10 = reboot) |
 | [`setup-wildcard-tls.sh`](scripts/setup-wildcard-tls.sh) | локально / master / CI | `cert-manager-webhook-regru` + ClusterIssuer `letsencrypt-prod-dns01` + Certificate `platform-tls` |
 | [`cluster-health.sh`](scripts/cluster-health.sh) | локально / master / CI | Полная проверка: ноды, GPU, поды, PVC, Ingress, Certificate, Postgres, Redis, Loki/Tempo, public health |
@@ -126,7 +126,7 @@ kubectl delete secret platform-secrets -n platform
 
 | Секрет | Что туда положить |
 |---|---|
-| `KUBECONFIG_B64` | `bash deploy/scripts/kubeconfig-for-github-actions.sh` (server `https://31.192.111.33:16443`, не `127.0.0.1` из `microk8s config`). `gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github-actions.sh)"`. Job деплоя **без** GitHub Environment, чтобы секрет не затенялся пустым Environment-secret с тем же именем. |
+| `KUBECONFIG_B64` | `bash deploy/scripts/kubeconfig-for-github-actions.sh` (server `https://77.91.94.127:16443`, не `127.0.0.1` из `microk8s config`). `gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github-actions.sh)"`. Job деплоя **без** GitHub Environment, чтобы секрет не затенялся пустым Environment-secret с тем же именем. |
 
 ### Платформа (передаются в Secret `platform-secrets`)
 

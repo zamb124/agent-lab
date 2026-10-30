@@ -198,7 +198,7 @@ GPU_NODE_NAME="${GPU_NODE_NAME:-master}"
 GPU_NODE_LABEL_KEY="${GPU_NODE_LABEL_KEY:-accelerator}"
 GPU_NODE_LABEL_VALUE="${GPU_NODE_LABEL_VALUE:-nvidia-gpu}"
 
-MASTER_HOST_IP="${MASTER_HOST_IP:-31.192.111.33}"
+MASTER_HOST_IP="${MASTER_HOST_IP:-77.91.94.127}"
 SSH_USER="${SSH_USER:-root}"
 
 # disable_host_firewall — идемпотентно отключает UFW; сетевые политики держим в CNI.

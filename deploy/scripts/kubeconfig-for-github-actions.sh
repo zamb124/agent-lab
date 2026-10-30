@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=_common.sh
 source "$SCRIPT_DIR/_common.sh"
 
-PUBLIC_IP="${MASTER_HOST_IP:-31.192.111.33}"
+PUBLIC_IP="${MASTER_HOST_IP:-77.91.94.127}"
 API_PORT="${MICROK8S_API_PORT:-16443}"
 
 raw_config=""
