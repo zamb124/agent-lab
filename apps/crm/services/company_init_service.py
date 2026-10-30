@@ -86,6 +86,19 @@ class CompanyInitService:
         personal namespace всех накопленных ``system.members`` и душит
         Postgres/OpenFGA → ERROR setup ``crm_client``.
         """
+        if not reseed:
+            # CompanyMapping пишется последним шагом под локом: строка есть —
+            # init завершён. Hot-path без pg_advisory_lock и свипа типов:
+            # иначе каждый xdist-воркер встаёт в очередь на session lock.
+            existing_mapping = await CompanyMapping.get(company_id)
+            if existing_mapping is not None:
+                return {
+                    "entity_types": 0,
+                    "relationship_types": 0,
+                    "namespace_templates": 0,
+                    "personal_namespaces": 0,
+                    "already_initialized": True,
+                }
         async with crm_company_init_lock(company_id):
             return await self._initialize_company_locked(company_id, reseed=reseed)
 

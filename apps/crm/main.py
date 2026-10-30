@@ -6,6 +6,7 @@ NetWorkle Service - FastAPI приложение для управления Net
 """
 
 import importlib
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -20,6 +21,7 @@ from apps.crm.services.task_service import TaskService
 from core.app import create_service_app
 from core.app.spa import mount_service_spa
 from core.config import get_settings
+from core.config.testing import is_testing
 from core.context import reset_context, set_context
 from core.di import recipe
 from core.integrations.models import IntegrationCredential
@@ -46,10 +48,15 @@ async def crm_http_startup(
             channel="lifespan",
         )
     )
+    # In-process lifespan xdist-воркера — клиентский вид приложения, а не
+    # сервис: reseed и reconcile — обязанность granian-процесса из test-up.
+    # Иначе каждый gw ждёт полный reseed под pg_advisory_lock (~50s сериализовано
+    # на воркера → hang_guard) и reconcile закрывает active-задачи соседей.
+    is_stack_client = is_testing() and os.environ.get("PYTEST_XDIST_WORKER") is not None
     try:
         init_result = await company_init_service.initialize_company(
             "system",
-            reseed=True,
+            reseed=not is_stack_client,
         )
         logger.info("crm.entities.system", result=init_result)
     finally:
@@ -73,13 +80,14 @@ async def crm_http_startup(
 
     set_oauth_credential_saved_hook(_on_oauth_credential_saved)
 
-    reconciled = await task_service.reconcile_stale_worker_tasks()
-    if reconciled:
-        logger.warning(
-            "crm.reconcile_stale_crm_tasks_on_api_startup",
-            service="crm",
-            reconciled=reconciled,
-        )
+    if not is_stack_client:
+        reconciled = await task_service.reconcile_stale_worker_tasks()
+        if reconciled:
+            logger.warning(
+                "crm.reconcile_stale_crm_tasks_on_api_startup",
+                service="crm",
+                reconciled=reconciled,
+            )
 
 
 def create_app() -> FastAPI:
