@@ -56,8 +56,12 @@ def shared_storage(database: DatabaseConfig) -> SharedStorage:
 
 
 @recipe
-def authz_service(openfga: OpenFGAConfig) -> AuthzService:
-    return build_authz_service(openfga)
+async def authz_service(openfga: OpenFGAConfig) -> AsyncIterator[AuthzService]:
+    # Клиент openfga-sdk держит aiohttp-сессию — без close до GC печатает
+    # "Unclosed connector" в каждом процессе.
+    service = build_authz_service(openfga)
+    yield service
+    await service.close()
 
 
 @recipe

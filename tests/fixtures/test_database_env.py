@@ -131,6 +131,9 @@ def load_openfga_test_env_overlay() -> dict[str, str]:
 TEST_DATABASE_ENV: dict[str, str] = {
     "SERVER__PLATFORM_PUBLIC_BASE_URL": "http://system.lvh.me:9004",
     "DATABASE__POOL_MAX_CONNECTIONS": "2",
+    # Параллельный старт ~30 процессов стека штормит PG accept: дефолтные 30s
+    # на слабой машине не хватает медленнейшему сервису (litserve импортирует torch).
+    "DATABASE__POOL_ACQUIRE_TIMEOUT_SECONDS": "90",
     "DATABASE__SHARED_URL": f"{_POSTGRES_TEST}/platform_shared",
     "DATABASE__FLOWS_URL": f"{_POSTGRES_TEST}/platform_agents",
     "DATABASE__CRM_URL": f"{_POSTGRES_TEST}/platform_crm",

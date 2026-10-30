@@ -847,10 +847,10 @@ def _wait_external_ready(external: ExternalReadiness, cancel: threading.Event) -
 
 
 def _terminate_process_group(pid: int, *, graceful_timeout: float = 3.0) -> None:
-    try:
-        pgid = os.getpgid(pid)
-    except OSError:
-        return
+    # Спавн с start_new_session=True: pgid == pid лидера. После смерти лидера
+    # getpgid(pid) уже не вызвать, а группа живёт без него (orphaned workers) —
+    # поэтому pgid берём как pid, а жизнь группы проверяем killpg(pgid, 0).
+    pgid = pid
     try:
         os.killpg(pgid, signal.SIGTERM)
     except OSError:
@@ -858,7 +858,7 @@ def _terminate_process_group(pid: int, *, graceful_timeout: float = 3.0) -> None
     deadline = time.monotonic() + graceful_timeout
     while time.monotonic() < deadline:
         try:
-            os.kill(pid, 0)
+            os.killpg(pgid, 0)
         except OSError:
             return
         time.sleep(0.1)
