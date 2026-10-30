@@ -37,6 +37,11 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     # Локальные сервисы тест-стека не должны идти через внешний HTTP_PROXY.
     "NO_PROXY": "localhost,127.0.0.1,::1",
     "no_proxy": "localhost,127.0.0.1,::1",
+    # HF-метаданные не нужны ни в одном тесте: иначе ленивый hf_hub_download
+    # (chonkie/transformers и т.п.) уходит в http_backoff через мёртвый прокси
+    # и воркер виснет до SIGKILL. Offline → кэш или мгновенный fallback.
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
     "SERVER__FLOWS_SERVICE_URL": "http://localhost:9001",
     "SERVER__RAG_SERVICE_URL": "http://localhost:9002",

@@ -389,6 +389,11 @@ def _is_frontend_public_search_session_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/frontend/api/test_public_search_session.py")
 
 
+def _is_demo_auth_test(nodeid: str) -> bool:
+    """Демо-провижионирование: bcrypt×2 + Company/User.set + FGA sync + HTTP в granian flows."""
+    return nodeid.startswith("tests/core/api/test_demo_auth.py")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Timeout-политика по типам тестов. Никаких xdist_group: все тесты параллельны,
@@ -462,6 +467,9 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         elif _is_frontend_public_search_session_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_demo_auth_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=False))
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_runtest_call(item) -> Generator[None, object, object]:

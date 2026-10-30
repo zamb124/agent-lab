@@ -29,6 +29,10 @@ from core.rag.models import RAGChunk
 from core.rag_indexing_schema import IndexProfileConfig, IndexProfileSplitConfig
 
 _ENCODING_NAME = "cl100k_base"
+# tiktoken-инстанс, а не имя: строковый id в chonkie сначала идёт в
+# HFTokenizer.from_pretrained → hf_hub_download (сеть), и только потом fallback
+# на tiktoken. Под мёртвым прокси это вечный backoff вместо мгновенного пути.
+_TIKTOKEN = tiktoken.get_encoding(_ENCODING_NAME)
 
 
 class _TextChunker(Protocol):
@@ -54,14 +58,13 @@ def split_plain_text_fixed_tokens(
     chunk_overlap: int,
 ) -> list[str]:
     """Нарезка по токенам cl100k_base для профиля ``fixed_tokens``."""
-    tokenizer = tiktoken.get_encoding(_ENCODING_NAME)
-    tokens = tokenizer.encode(text_content)
+    tokens = _TIKTOKEN.encode(text_content)
     chunks: list[str] = []
     start = 0
     while start < len(tokens):
         end = start + chunk_size
         chunk_tokens = tokens[start:end]
-        chunk_text = tokenizer.decode(chunk_tokens)
+        chunk_text = _TIKTOKEN.decode(chunk_tokens)
         chunks.append(chunk_text)
         start = end - chunk_overlap
     return chunks
@@ -74,14 +77,14 @@ def _chunker_to_texts(chunker: _TextChunker, text: str) -> list[str]:
 
 def _recursive_texts(text: str, split_config: IndexProfileSplitConfig) -> list[str]:
     chunker = RecursiveChunker(
-        tokenizer=_ENCODING_NAME,
+        tokenizer=_TIKTOKEN,
         chunk_size=split_config.chunk_size,
     )
     parts = chunker(text)
     if split_config.chunk_overlap <= 0:
         return [c.text for c in parts]
     refinery = OverlapRefinery(
-        tokenizer=_ENCODING_NAME,
+        tokenizer=_TIKTOKEN,
         context_size=split_config.chunk_overlap,
     )
     refined = refinery(parts)
@@ -172,13 +175,13 @@ def _texts_for_strategy(
         return _recursive_texts(raw, split_config)
     if strategy == "recursive":
         chunker = RecursiveChunker(
-            tokenizer=_ENCODING_NAME,
+            tokenizer=_TIKTOKEN,
             chunk_size=split_config.chunk_size,
         )
         return _chunker_to_texts(chunker, raw)
     if strategy == "sentence":
         chunker = SentenceChunker(
-            tokenizer=_ENCODING_NAME,
+            tokenizer=_TIKTOKEN,
             chunk_size=split_config.chunk_size,
             chunk_overlap=split_config.chunk_overlap,
         )
@@ -249,7 +252,7 @@ def _merge_files(*groups: list[FileRef]) -> list[FileRef]:
 
 def _split_structure(extract: FileExtract, split_config: IndexProfileSplitConfig) -> list[_SplitUnit]:
     chunker = TokenChunker(
-        tokenizer=_ENCODING_NAME,
+        tokenizer=_TIKTOKEN,
         chunk_size=split_config.chunk_size,
         chunk_overlap=split_config.chunk_overlap,
     )
