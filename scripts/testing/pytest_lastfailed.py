@@ -4,10 +4,13 @@ import argparse
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+from scripts.testing.pytest_with_timeout import kill_process_group
 
 DEFAULT_CACHE_FILE = Path(".pytest_cache/v/cache/lastfailed")
 XDIST_GROUP_SUFFIX_RE = re.compile(r"^(?P<nodeid>.+)@[A-Za-z0-9_]+$")
@@ -63,13 +66,24 @@ def main(argv: list[str] | None = None) -> int:
     command = ["uv", "run", "pytest", *nodeids, *pytest_args]
     child_env = dict(os.environ)
     child_env.setdefault("LOGGING__LEVEL", "WARNING")
+    # start_new_session как в pytest_with_timeout: killpg снимает uv+pytest+xdist
+    # целиком; SIGINT/SIGTERM до detached child иначе не доходят.
+    proc = subprocess.Popen(command, env=child_env, start_new_session=True)
+
+    def _on_sigterm(signum: int, _frame: object) -> None:
+        kill_process_group(proc)
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _on_sigterm)
     try:
-        completed = subprocess.run(command, timeout=args.timeout, check=False, env=child_env)
+        return proc.wait(timeout=args.timeout)
     except subprocess.TimeoutExpired:
         print(f"Strict pytest lastfailed rerun timed out after {args.timeout:g} seconds.", file=sys.stderr)
+        kill_process_group(proc)
         return 124
-
-    return completed.returncode
+    except KeyboardInterrupt:
+        kill_process_group(proc)
+        return 130
 
 
 if __name__ == "__main__":

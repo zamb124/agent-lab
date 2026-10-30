@@ -81,20 +81,23 @@ test-down:
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up
 	@echo "Запуск unit/API тестов в $(WORKERS) воркерах..."
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	uv run python -m scripts.testing.pytest_with_timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration and not network"
 
 test-observability: test-up
 	@echo "Запуск observability product-metric тестов..."
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	uv run pytest tests/unit/test_observability_dashboards.py \
 		tests/core/tracing/test_operation_log_mirror.py \
-		tests/observability/ -q --tb=short
+		tests/observability/ -q --tb=short && \
 	uv run pytest tests/observability/ -m real_taskiq -q --tb=short
 
 # Live-тесты с реальными HTTP-запросами в интернет (маркер network) — вне дефолтного прогона
 test-network: test-up
 	@echo "Запуск network-тестов (реальные HTTP-запросы в интернет)..."
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	uv run pytest tests/ -m "network" $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI)
 
@@ -105,6 +108,7 @@ UI_E2E_WORKERS ?= 5
 test-ui: test-up
 	@echo "Запуск E2E UI (pytest tests/ui/e2e, -n$(UI_E2E_WORKERS) --dist=loadfile, default 15s/test)..."
 	@rm -rf artifacts/ui-perf
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e -n$(UI_E2E_WORKERS) --dist=loadfile -v --timeout=15
 	@echo "UI perf SUMMARY: artifacts/ui-perf/SUMMARY.md"
 
@@ -112,6 +116,7 @@ test-ui: test-up
 test-ui-chat: test-up
 	@echo "Запуск chat UI E2E (pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py)..."
 	@rm -rf artifacts/ui-perf
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py -n$(UI_E2E_WORKERS) --dist=loadfile -v --timeout=15
 	@echo "UI perf SUMMARY: artifacts/ui-perf/SUMMARY.md"
 
@@ -123,6 +128,7 @@ test-ui-doc: test-ui
 # Opt-in: asyncio loop slow callbacks + FileLock waits (PLATFORM_TEST_PROFILE_RUNTIME).
 test-profile: test-up
 	@echo "Runtime profile: FileLock + event loop (отчёт /tmp/platform_test_runtime_profile_merged.json)..."
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	PLATFORM_TEST_PROFILE_RUNTIME=1 uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration and not network" -q
@@ -196,7 +202,8 @@ test-ui-kit: runtime-bootstrap
 
 test-ui-kit-playwright: test-up
 	@echo "UI Kit L2: Playwright component doc scenarios..."
-	@uv run pytest tests/ui/design-system/components/**/playwright.spec.py -v -m ui_component
+	@trap 'uv run python -m scripts.testing.stack down' EXIT; \
+	uv run pytest tests/ui/design-system/components/**/playwright.spec.py -v -m ui_component
 
 test-ui-kit-doc: test-ui-kit-playwright
 	@echo "UI Kit: regenerate docs/scenarios/platform/ui-kit/**"
@@ -211,13 +218,14 @@ test:
 	@$(MAKE) --no-print-directory runtime-bootstrap
 	@$(MAKE) --no-print-directory test-frontend-core TEST_COVERAGE=$(TEST_COVERAGE) COV_RUN_ID=$(COV_RUN_ID)
 	@$(MAKE) --no-print-directory test-up
-	@if [ "$(DB_PROFILE)" = "1" ]; then \
-		echo "=== DB profile: reset pg_stat_statements ==="; \
-		uv run python -m scripts.testing.db_profile reset; \
-	fi
 	@echo "=== 1/4 Запуск unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	export LOGGING__LEVEL=WARNING; \
+	if [ "$(DB_PROFILE)" = "1" ]; then \
+		echo "=== DB profile: reset pg_stat_statements ==="; \
+		uv run python -m scripts.testing.db_profile reset; \
+	fi; \
 	PROFILE_RUN_ID=""; \
 	if [ "$(DB_PROFILE)" = "1" ] || [ "$(PYTEST_WORKERS_PROFILE)" = "1" ]; then \
 		PROFILE_RUN_ID=$$(date +%Y%m%dT%H%M%S); \
@@ -242,6 +250,10 @@ test:
 		$(_COV_ARGS) \
 		-m "not integration and not network"; \
 	phase1_rc=$$?; \
+	if [ $$phase1_rc -eq 130 ]; then \
+		echo "Прервано SIGINT — профили, retry и coverage пропускаем"; \
+		exit 130; \
+	fi; \
 	if [ "$(DB_PROFILE)" = "1" ]; then \
 		echo ""; \
 		echo "=== DB profile: collect + report (phase 1) ==="; \
@@ -265,6 +277,9 @@ test:
 				$(_COV_ARGS_APPEND) \
 				-m "not integration and not network" -v; \
 		phase2_rc=$$?; \
+		if [ $$phase2_rc -eq 130 ]; then \
+			exit 130; \
+		fi; \
 		if [ $$phase2_rc -eq 0 ]; then \
 			phase1_rc=0; \
 		fi; \
@@ -277,6 +292,9 @@ test:
 		echo "=== 3/4 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
 		uv run pytest tests/ui/e2e -v --timeout=15 $(_COV_ARGS_APPEND); \
 		phase3_rc=$$?; \
+	if [ $$phase3_rc -eq 130 ]; then \
+		exit 130; \
+	fi; \
 	fi; \
 	if [ "$(TEST_COVERAGE)" = "1" ]; then \
 		echo ""; \
@@ -295,7 +313,8 @@ test-until-fail:
 	@$(MAKE) --no-print-directory test-up
 	@echo "=== pytest phase 1 (exit on first failure, -x) ==="
 	@rm -f /tmp/platform_test_pytest_controller.pid .pytest_cache/v/cache/lastfailed
-	@export LOGGING__LEVEL=WARNING; \
+	@trap 'uv run python -m scripts.testing.stack down' EXIT; \
+	export LOGGING__LEVEL=WARNING; \
 	uv run python -m scripts.testing.pytest_with_timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		-x -v --tb=short \
 		$(_PYTEST_IGNORE_UI) \
@@ -307,6 +326,7 @@ test-all:
 	@$(MAKE) --no-print-directory test-up
 	@echo "=== 1/4 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	export LOGGING__LEVEL=WARNING; \
 	phase1_rc=0; \
 	phase2_rc=0; \
@@ -315,12 +335,19 @@ test-all:
 	uv run python -m scripts.testing.pytest_with_timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI); \
 	phase1_rc=$$?; \
+	if [ $$phase1_rc -eq 130 ]; then \
+		echo "Прервано SIGINT — профили, retry и coverage пропускаем"; \
+		exit 130; \
+	fi; \
 	if [ $$phase1_rc -ne 0 ]; then \
 		echo ""; \
 		echo "=== 2/4 Перезапуск упавших тестов (без параллелизации) ==="; \
 			uv run python -m scripts.testing.pytest_lastfailed --timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 				$(_PYTEST_IGNORE_UI) -v; \
 		phase2_rc=$$?; \
+		if [ $$phase2_rc -eq 130 ]; then \
+			exit 130; \
+		fi; \
 		if [ $$phase2_rc -eq 0 ]; then \
 			phase1_rc=0; \
 		fi; \
@@ -332,12 +359,16 @@ test-all:
 	echo "=== 3/3 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
 	uv run pytest tests/ui/e2e -v --timeout=15; \
 	phase3_rc=$$?; \
+	if [ $$phase3_rc -eq 130 ]; then \
+		exit 130; \
+	fi; \
 	if [ $$phase1_rc -ne 0 ] || [ $$phase2_rc -ne 0 ] || [ $$phase3_rc -ne 0 ]; then \
 		exit 1; \
 	fi
 
 test-cov: test-up
 	@echo "Запуск тестов с покрытием в $(WORKERS) воркерах (без browser)..."
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	uv run python -m scripts.testing.pytest_with_timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration and not network" \
@@ -346,9 +377,10 @@ test-cov: test-up
 
 test-cov-all: test-up
 	@echo "Запуск всех тестов с покрытием..."
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	uv run python -m scripts.testing.pytest_with_timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
-		--cov=apps --cov=core --cov-report= --cov-report=html:htmlcov
+		--cov=apps --cov=core --cov-report= --cov-report=html:htmlcov && \
 	uv run pytest tests/ui/e2e -v --timeout=15 \
 		--cov=apps --cov=core --cov-append --cov-report= --cov-report=html:htmlcov
 	@uv run python -m scripts.testing.coverage_report term
@@ -362,6 +394,7 @@ test-cov-report:
 # LLM context layer: unit + adapter + flows wiring + e2e (MockLLM only)
 test-llm-context: test-up
 	@echo "Запуск LLM context layer coverage suite..."
+	trap 'uv run python -m scripts.testing.stack down' EXIT; \
 	uv run pytest \
 		tests/core/llm_context \
 		tests/core/clients/llm/test_context_layer.py \

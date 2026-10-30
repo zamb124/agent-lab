@@ -24,6 +24,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -757,12 +758,12 @@ def _spawn_taskiq(service: TaskiqWorkerService) -> tuple[subprocess.Popen[bytes]
 
 
 def _wait_granian_ready(
-    service: GranianService, process: subprocess.Popen[bytes]
+    service: GranianService, process: subprocess.Popen[bytes], cancel: threading.Event
 ) -> str | None:
     """None если сервис готов, иначе текст ошибки."""
     url = f"http://127.0.0.1:{service.port}{service.readiness_path}"
     deadline = time.monotonic() + service.readiness_timeout
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline and not cancel.is_set():
         exit_code = process.poll()
         if exit_code is not None:
             log_path, err_path = _log_paths(service.name)
@@ -774,6 +775,8 @@ def _wait_granian_ready(
         if _http_ready(url):
             return None
         time.sleep(0.25)
+    if cancel.is_set():
+        return f"{service.name}: readiness прерван"
     log_path, err_path = _log_paths(service.name)
     return (
         f"{service.name}: readiness {url} не прошёл за {service.readiness_timeout}s.\n"
@@ -783,12 +786,12 @@ def _wait_granian_ready(
 
 
 def _wait_taskiq_ready(
-    service: TaskiqWorkerService, process: subprocess.Popen[bytes]
+    service: TaskiqWorkerService, process: subprocess.Popen[bytes], cancel: threading.Event
 ) -> str | None:
     client = _redis_client(_TASKIQ_REDIS_URL)
     deadline = time.monotonic() + service.readiness_timeout
     try:
-        while time.monotonic() < deadline:
+        while time.monotonic() < deadline and not cancel.is_set():
             exit_code = process.poll()
             if exit_code is not None:
                 log_path, err_path = _log_paths(service.name)
@@ -800,6 +803,8 @@ def _wait_taskiq_ready(
             if _taskiq_stream_ready(client, service.stream_name):
                 return None
             time.sleep(0.25)
+        if cancel.is_set():
+            return f"{service.name}: readiness прерван"
         log_path, err_path = _log_paths(service.name)
         return (
             f"{service.name}: consumer taskiq не появился в стриме {service.stream_name!r} "
@@ -811,12 +816,14 @@ def _wait_taskiq_ready(
         client.close()
 
 
-def _wait_external_ready(external: ExternalReadiness) -> str | None:
+def _wait_external_ready(external: ExternalReadiness, cancel: threading.Event) -> str | None:
     deadline = time.monotonic() + external.readiness_timeout
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline and not cancel.is_set():
         if _http_ready(external.url):
             return None
         time.sleep(0.5)
+    if cancel.is_set():
+        return f"{external.name}: readiness прерван"
     return f"{external.name}: readiness {external.url} не прошёл за {external.readiness_timeout}s (docker-compose)."
 
 
@@ -922,61 +929,83 @@ def cmd_up() -> int:
     taskiq_services = build_taskiq_worker_services(pytest_workers)
     started: list[tuple[str, subprocess.Popen[bytes]]] = []
     processes: list[StackProcess] = []
+    cancel = threading.Event()
 
-    for granian_service in granian_services:
-        process, stack_process = _spawn_granian(granian_service)
-        started.append((granian_service.name, process))
-        processes.append(stack_process)
-    for taskiq_service in taskiq_services:
-        process, stack_process = _spawn_taskiq(taskiq_service)
-        started.append((taskiq_service.name, process))
-        processes.append(stack_process)
+    def _terminate_started() -> None:
+        cancel.set()
+        for _, process in started:
+            _terminate_process_group(process.pid)
 
-    process_by_name = dict(started)
-    print(
-        f"test_stack: WORKERS={pytest_workers} scale={stack_scale_factor(pytest_workers):.2f}; "
-        f"запущено {len(granian_services)} granian + "
-        f"{len(taskiq_services)} taskiq процессов, ожидание readiness..."
-    )
-
-    errors: list[str] = []
-    with ThreadPoolExecutor(max_workers=len(processes) + len(EXTERNAL_READINESS)) as pool:
-        futures = []
+    try:
         for granian_service in granian_services:
-            futures.append(
-                pool.submit(
-                    _wait_granian_ready, granian_service, process_by_name[granian_service.name]
-                )
-            )
+            process, stack_process = _spawn_granian(granian_service)
+            started.append((granian_service.name, process))
+            processes.append(stack_process)
         for taskiq_service in taskiq_services:
-            futures.append(
-                pool.submit(
-                    _wait_taskiq_ready, taskiq_service, process_by_name[taskiq_service.name]
+            process, stack_process = _spawn_taskiq(taskiq_service)
+            started.append((taskiq_service.name, process))
+            processes.append(stack_process)
+
+        process_by_name = dict(started)
+        print(
+            f"test_stack: WORKERS={pytest_workers} scale={stack_scale_factor(pytest_workers):.2f}; "
+            f"запущено {len(granian_services)} granian + "
+            f"{len(taskiq_services)} taskiq процессов, ожидание readiness..."
+        )
+
+        errors: list[str] = []
+        with ThreadPoolExecutor(max_workers=len(processes) + len(EXTERNAL_READINESS)) as pool:
+            futures = []
+            for granian_service in granian_services:
+                futures.append(
+                    pool.submit(
+                        _wait_granian_ready,
+                        granian_service,
+                        process_by_name[granian_service.name],
+                        cancel,
+                    )
                 )
-            )
-        for external in EXTERNAL_READINESS:
-            futures.append(pool.submit(_wait_external_ready, external))
-        for future in futures:
-            failure = future.result()
-            if failure is not None:
-                errors.append(failure)
+            for taskiq_service in taskiq_services:
+                futures.append(
+                    pool.submit(
+                        _wait_taskiq_ready,
+                        taskiq_service,
+                        process_by_name[taskiq_service.name],
+                        cancel,
+                    )
+                )
+            for external in EXTERNAL_READINESS:
+                futures.append(pool.submit(_wait_external_ready, external, cancel))
+            try:
+                for future in futures:
+                    failure = future.result()
+                    if failure is not None:
+                        errors.append(failure)
+            except BaseException:
+                # Убить процессы до выхода из `with`: pool.shutdown(wait=True)
+                # ждёт потоки — с cancel и мёртвыми детьми они выходят мгновенно.
+                _terminate_started()
+                raise
 
-    if errors:
-        print("test_stack: readiness FAILED, останавливаю стек:", file=sys.stderr)
-        for error_text in errors:
-            print(f"\n--- {error_text}", file=sys.stderr)
-        for _, process in started:
-            _terminate_process_group(process.pid)
-        return 1
+        if errors:
+            print("test_stack: readiness FAILED, останавливаю стек:", file=sys.stderr)
+            for error_text in errors:
+                print(f"\n--- {error_text}", file=sys.stderr)
+            _terminate_started()
+            return 1
 
-    probe_errors = _run_sandbox_execute_probes()
-    if probe_errors:
-        print("test_stack: sandbox execute probes FAILED, останавливаю стек:", file=sys.stderr)
-        for error_text in probe_errors:
-            print(f"\n--- {error_text}", file=sys.stderr)
-        for _, process in started:
-            _terminate_process_group(process.pid)
-        return 1
+        probe_errors = _run_sandbox_execute_probes()
+        if probe_errors:
+            print("test_stack: sandbox execute probes FAILED, останавливаю стек:", file=sys.stderr)
+            for error_text in probe_errors:
+                print(f"\n--- {error_text}", file=sys.stderr)
+            _terminate_started()
+            return 1
+    except BaseException:
+        # Обрыв до записи манифеста (Ctrl+C, сбой спавна): без terminate заспавненные
+        # процессы остаются сиротами — cmd_down по манифесту их уже не найдёт.
+        _terminate_started()
+        raise
 
     _write_manifest(
         processes,

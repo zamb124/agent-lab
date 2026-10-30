@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 
-def _kill_process_group(proc: subprocess.Popen[bytes]) -> None:
+def kill_process_group(proc: subprocess.Popen[bytes]) -> None:
     try:
         pgid = os.getpgid(proc.pid)
     except ProcessLookupError:
@@ -44,6 +44,13 @@ def main() -> int:
     timeout_seconds = float(sys.argv[1])
     command = sys.argv[2:]
     proc = subprocess.Popen(command, start_new_session=True)
+
+    def _on_sigterm(signum: int, _frame: object) -> None:
+        # SIGTERM сам по себе killpg не делает: detached child переживает wrapper.
+        kill_process_group(proc)
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _on_sigterm)
     try:
         return proc.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
@@ -51,8 +58,13 @@ def main() -> int:
             f"pytest timed out after {timeout_seconds:g} seconds: {' '.join(command)}",
             file=sys.stderr,
         )
-        _kill_process_group(proc)
+        kill_process_group(proc)
         return 124
+    except KeyboardInterrupt:
+        # start_new_session оторвал дочерний pytest от tty — SIGINT до него не
+        # доходит, без killpg он продолжает жить сиротой и печатать в терминал.
+        kill_process_group(proc)
+        return 130
 
 
 if __name__ == "__main__":
