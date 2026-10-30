@@ -793,7 +793,9 @@ workers:
   flows-worker:
     nodeName: master
     enabled: true
-    replicas: 2
+    # 1 реплика: single-node master (8 cpu) не вмещает вторую параллельно с
+    # provider-litserve; внутри пода и так --workers 4.
+    replicas: 1
     terminationGracePeriodSeconds: 300
     command:
       [
@@ -987,9 +989,12 @@ litserve:
   # Отключить: embeddingUseBf16: "false"
   embeddingUseBf16: "true"
   resources:
+    # requests ужаты под single-node master (8 cpu / 31Gi allocatable): фактический
+    # RSS ~3.4Gi на под, инференс GPU-bound — CPU-запрос нужен только для планирования.
+    # limits шире requests: под бёрстит до limit, когда нода свободна.
     requests:
-      cpu: "2"
-      memory: 20Gi
+      cpu: 250m
+      memory: 8Gi
     limits:
       cpu: "8"
       memory: 28Gi
