@@ -16,6 +16,7 @@ import type {
     ResourceCollectionSlice,
     ResourceItem,
 } from '@platform/lib/events/factories/resource-collection.js';
+import type { ChannelRead } from '@platform/lib/events/wire/sync.gen.js';
 
 export type SyncAction = (payload?: unknown) => void;
 
@@ -126,7 +127,7 @@ export interface SyncThreadsSlice extends ResourceCollectionSlice {
 // sync/channels (channels.resource.ts)
 // ============================================================================
 
-export interface SyncChannelsSlice extends ResourceCollectionSlice {
+export interface SyncChannelsSlice extends ResourceCollectionSlice<ChannelRead> {
     selectedChannelId: string | null;
     readByChannelUser: Readonly<Record<string, Readonly<Record<string, string>>>>;
     typingByChannel: Readonly<Record<string, Readonly<Record<string, { thread_id: string | null; ts: number }>>>>;

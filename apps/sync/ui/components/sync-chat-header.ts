@@ -489,12 +489,12 @@ export class SyncChatHeader extends PlatformElement {
     }
 
     _renderAvatar(channel: ChannelRead) {
-        const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
-        if (isDm) {
-            const member = findCompanyMember(this._members.items, channel.peer.user_id);
+        const peer = channel.peer;
+        if (channel.type === 'direct' && peer) {
+            const member = findCompanyMember(this._members.items, peer.user_id);
             const online = isOnline(member);
-            const name = resolveDisplayName(channel.peer);
-            const hueVar = syncAvatarHueVar(channel.peer.user_id);
+            const name = resolveDisplayName(peer);
+            const hueVar = syncAvatarHueVar(peer.user_id);
             if (this._headerAvatarFailed) {
                 return html`
                     <span class="avatar pastel-initials" style=${hueVar} @click=${() => this._onPeerClick(channel)}>
@@ -503,10 +503,10 @@ export class SyncChatHeader extends PlatformElement {
                     </span>
                 `;
             }
-            const peerUrl = typeof channel.peer.avatar_url === 'string' && channel.peer.avatar_url !== ''
-                ? channel.peer.avatar_url
+            const peerUrl = typeof peer.avatar_url === 'string' && peer.avatar_url !== ''
+                ? peer.avatar_url
                 : null;
-            const resolved = resolveAvatarImageSrc({ avatarUrl: peerUrl, seed: channel.peer.user_id });
+            const resolved = resolveAvatarImageSrc({ avatarUrl: peerUrl, seed: peer.user_id });
             return html`
                 <span class="avatar" @click=${() => this._onPeerClick(channel)}>
                     <img src=${resolved.src} alt="" @error=${this._onHeaderAvatarError} />

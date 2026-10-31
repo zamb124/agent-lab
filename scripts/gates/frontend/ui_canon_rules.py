@@ -17,9 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-Severity = Literal["hard", "soft"]
-
 from scripts.gates.kit import REPO_ROOT
+
+Severity = Literal["hard", "soft"]
 
 UI_SCOPES: dict[str, tuple[str, ...]] = {
     "apps": ("apps",),

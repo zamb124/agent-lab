@@ -8,7 +8,9 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpControllerOf } from '@platform/lib/base/use-resource.js';
+import type { PlatformFactoryRegistry } from '@platform/lib/events/factory-registry.js';
+import type { CrawlProfile } from '@platform/lib/events/wire/search.gen.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function joinedLines(value: unknown, label: string): string {
@@ -62,7 +64,7 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
         _initialized: { state: true },
     }
     declare crawl_profile_id: string;
-    declare profile: Record<string, unknown> | null;
+    declare profile: CrawlProfile | null;
     declare _enabled: boolean;
     declare _refreshInterval: string;
     declare _maxUrlsPerDomain: string;
@@ -100,7 +102,7 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
         this.size = 'lg';
         this._patchOp = this.useOp('search/crawl_profile_patch');
     }
-    private _patchOp: OpController;
+    private _patchOp: OpControllerOf<PlatformFactoryRegistry['search/crawl_profile_patch']>;
 
 
     override willUpdate(changed: PropertyValues<this>): void {
@@ -109,7 +111,7 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
         if (!this._initialized && this.profile) {
             this._initialized = true;
             const p = this.profile;
-            this._enabled = p.enabled;
+            this._enabled = p.enabled ?? true;
             this._refreshInterval = String(p.refresh_interval_seconds);
             this._maxUrlsPerDomain = String(p.max_urls_per_domain_per_tick);
             this._maxDomains = String(p.max_domains_per_tick);
@@ -117,7 +119,7 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
             this._httpConcurrency = String(p.http_concurrency);
             this._sitemapStale = String(p.sitemap_stale_after_seconds);
             this._browserFallback = p.browser_fallback_enabled;
-            this._llmEnrichment = p.llm_enrichment_enabled;
+            this._llmEnrichment = p.llm_enrichment_enabled ?? false;
             this._denylistDomains = joinedLines(p.denylist_domains, 'denylist_domains');
             this._includePatterns = joinedLines(p.include_url_patterns, 'include_url_patterns');
             this._excludePatterns = joinedLines(p.exclude_url_patterns, 'exclude_url_patterns');
@@ -139,8 +141,8 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
         }
     }
 
-    override validateForm() {
-        const errors: Record<string, unknown> = {};
+    override validateForm(): Record<string, string> {
+        const errors: Record<string, string> = {};
         this._requirePositive(this._refreshInterval, errors, 'refresh_interval_seconds', 60);
         this._requirePositive(this._maxUrlsPerDomain, errors, 'max_urls_per_domain_per_tick', 1);
         this._requirePositive(this._maxDomains, errors, 'max_domains_per_tick', 1);
