@@ -41,6 +41,7 @@ import type {
     OpController,
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
+import type { EntityResponse } from '@platform/lib/events/wire/crm.gen.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_TYPES_NAME = 'crm/entity_types';
@@ -56,6 +57,21 @@ const SCALAR_FIELDS = [
 
 function _canonical(value: unknown): string {
     return JSON.stringify(value === undefined ? null : value);
+}
+
+function isEntityResponse(value: unknown): value is EntityResponse {
+    return isPlainRecord(value)
+        && typeof value.entity_id === 'string'
+        && typeof value.company_id === 'string'
+        && typeof value.namespace === 'string'
+        && typeof value.entity_type === 'string'
+        && (typeof value.entity_subtype === 'string' || value.entity_subtype === null)
+        && typeof value.name === 'string'
+        && typeof value.status === 'string'
+        && isPlainRecord(value.attributes)
+        && Array.isArray(value.tags)
+        && Array.isArray(value.attachment_ids)
+        && typeof value.relevance === 'number';
 }
 
 function _isEmpty(value: unknown): boolean {
@@ -383,9 +399,9 @@ export class CRMEntityMergeModal extends PlatformModal {
         if (this._entityTypes.items.length === 0) this._entityTypes.load(null);
     }
 
-    _entityById(id: string): Record<string, unknown> | null {
+    _entityById(id: string): EntityResponse | null {
         const item = this._entities.byId[id];
-        return isPlainRecord(item) ? item : null;
+        return isEntityResponse(item) ? item : null;
     }
 
     _survivorId() { return this._swapped ? this.entityIdB : this.entityIdA; }
@@ -403,7 +419,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         return this._entityById(this.entityIdA) !== null && this._entityById(this.entityIdB) !== null;
     }
 
-    _validateForSubmit(survivor: Record<string, unknown>, source: Record<string, unknown>): string | null {
+    _validateForSubmit(survivor: EntityResponse, source: EntityResponse): string | null {
         if (survivor.entity_id === source.entity_id) {
             return this.t('entity_merge_modal.same_id_error');
         }
@@ -422,8 +438,8 @@ export class CRMEntityMergeModal extends PlatformModal {
                 }
             }
         }
-        const sa = survivor.attributes && typeof survivor.attributes === 'object' ? survivor.attributes : {};
-        const sb = source.attributes && typeof source.attributes === 'object' ? source.attributes : {};
+        const sa = survivor.attributes;
+        const sb = source.attributes;
         const allKeys = new Set([...Object.keys(sa), ...Object.keys(sb)]);
         for (const k of allKeys) {
             const inA = k in sa;
@@ -536,7 +552,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         `;
     }
 
-    _renderScalarRow(field: { key: string; labelKey: string }, survivor: Record<string, unknown>, source: Record<string, unknown>): TemplateResult {
+    _renderScalarRow(field: { key: string; labelKey: string }, survivor: EntityResponse, source: EntityResponse): TemplateResult {
         const av = survivor[field.key];
         const bv = source[field.key];
         const isConflict = _canonical(av) !== _canonical(bv);
@@ -579,9 +595,9 @@ export class CRMEntityMergeModal extends PlatformModal {
         `;
     }
 
-    _renderAttributeRow(key: string, survivor: Record<string, unknown>, source: Record<string, unknown>): TemplateResult {
-        const sa = survivor.attributes && typeof survivor.attributes === 'object' ? survivor.attributes : {};
-        const sb = source.attributes && typeof source.attributes === 'object' ? source.attributes : {};
+    _renderAttributeRow(key: string, survivor: EntityResponse, source: EntityResponse): TemplateResult {
+        const sa = survivor.attributes;
+        const sb = source.attributes;
         const inA = key in sa;
         const inB = key in sb;
         if (inA && !inB) {
@@ -637,9 +653,9 @@ export class CRMEntityMergeModal extends PlatformModal {
         `;
     }
 
-    _renderTags(survivor: Record<string, unknown>, source: Record<string, unknown>): TemplateResult {
-        const a = Array.isArray(survivor.tags) ? survivor.tags : [];
-        const b = Array.isArray(source.tags) ? source.tags : [];
+    _renderTags(survivor: EntityResponse, source: EntityResponse): TemplateResult {
+        const a = survivor.tags;
+        const b = source.tags;
         const merged: string[] = [];
         const seen = new Set<string>();
         for (const t of [...a, ...b]) {

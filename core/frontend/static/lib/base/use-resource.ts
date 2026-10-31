@@ -41,6 +41,9 @@ export type ResourceControllerOf<F extends AnyResourceFactory> = ResourceControl
 export type OpControllerOf<F extends AnyOpFactory> = OpController<F['slice']['initial']> & ActionMethods<F['actions']>;
 export type SliceControllerOf<F extends AnySliceFactory> = SliceController<F['slice']['initial']> & ActionMethods<F['actions']>;
 
+/** Результат `OpController.run()`: `TResult` фабрики; `unknown` для нетипизированного op. */
+export type OpRunResult<S extends AsyncOpSlice<unknown>> = S extends AsyncOpSlice<infer R> ? R : unknown;
+
 /** Элемент курсорной ленты по типу фабрики. */
 export type CursorListItemOf<F> = F extends CursorListFactory<infer I> ? I : unknown;
 export type CursorListControllerOf<F> = CursorListController<CursorListItemOf<F>>;
@@ -289,7 +292,7 @@ export class OpController<S extends AsyncOpSlice<unknown> = AsyncOpSlice> {
     get lastResult(): S['lastResult'] { return this.state.lastResult; }
     get lastRequestId(): string | null { return this.state.lastRequestId; }
 
-    run(payload?: unknown): Promise<unknown> {
+    run(payload?: unknown): Promise<OpRunResult<S> | null> {
         this._failureStatus = null;
         const okType = this.op.events.SUCCEEDED;
         const failType = this.op.events.FAILED;
@@ -318,7 +321,7 @@ export class OpController<S extends AsyncOpSlice<unknown> = AsyncOpSlice> {
                     ? pl.result
                     : null;
                 this._failureStatus = null;
-                resolve(out);
+                resolve(out as OpRunResult<S> | null);
             });
             unsubFail = this.bus.subscribeType(failType, (event) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) return;

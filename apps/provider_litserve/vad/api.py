@@ -43,7 +43,7 @@ class VADLitAPI(ls.LitAPI):
     def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         super().__init__(api_path="/v1/audio/vad")
         self._cfg: ProviderLitserveInfraConfig = cfg
-        self._catalog = catalog
+        self._catalog: ModelCatalog = catalog
         self._engine: VADEngine = LocalVADEngine(cfg, catalog)
 
     def setup(self, device: str | None) -> None:

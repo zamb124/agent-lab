@@ -2495,7 +2495,7 @@ class PlatformBrandConfig(BaseModel):
 def _default_linnex_platform_brand() -> PlatformBrandConfig:
     return PlatformBrandConfig(
         platform_name="Linnex",
-        support_email="helpme@linnex.io",
+        support_email="info@linnex.io",
         models_product_name="Linnex Models",
         voice_product_name="Linnex Voice",
         llms_display_label="Linnex LLMs",
@@ -2505,17 +2505,6 @@ def _default_linnex_platform_brand() -> PlatformBrandConfig:
             support_email="helpme@linnex.io",
             dpo_email="dpo@linnex.io",
         ),
-    )
-
-
-def _default_linnex_platform_brand() -> PlatformBrandConfig:
-    return PlatformBrandConfig(
-        platform_name="Linnex",
-        support_email="info@linnex.io",
-        models_product_name="Linnex Models",
-        voice_product_name="Linnex Voice",
-        llms_display_label="Linnex LLMs",
-        flows_product_label="Linnex Flows",
         auth_apple_client_id="app.linnex.io",
         vapid_email="admin@linnex.io",
     )

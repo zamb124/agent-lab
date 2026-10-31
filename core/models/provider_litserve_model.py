@@ -74,7 +74,7 @@ _ENTRY_MODEL_BY_KIND: dict[LitserveModelKind, type[BaseModel]] = {
 
 def litserve_entry_params(entry: LitserveCatalogEntry) -> JsonObject:
     """JSONB ``params`` строки: поля записи сверх api_model_id/hf_model_id."""
-    payload = entry.model_dump(mode="json", exclude={"api_model_id", "hf_model_id"})
+    payload: JsonObject = entry.model_dump(mode="json", exclude={"api_model_id", "hf_model_id"})
     return {key: value for key, value in payload.items() if value is not None}
 
 

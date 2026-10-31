@@ -61,7 +61,7 @@ class TTSLitAPI(ls.LitAPI):
     def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         super().__init__(api_path="/v1/audio/speech")
         self._cfg: ProviderLitserveInfraConfig = cfg
-        self._catalog = catalog
+        self._catalog: ModelCatalog = catalog
         self._engine: TTSEngine = get_local_tts_engine(cfg, catalog)
 
     def setup(self, device: str | None) -> None:

@@ -6,11 +6,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Coroutine, Iterable
+from collections.abc import Coroutine, Iterable, Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, ClassVar, Literal, Self, TypeGuard, overload, override
+from typing import ClassVar, Literal, Self, TypeGuard, overload, override
 from uuid import UUID
 
 from oxyde import F, Field, Model, QueryManager
@@ -246,7 +246,7 @@ class BoundQuery[TModel: "PlatformModel"](Query[TModel]):
     @override
     async def bulk_create(
         self,
-        objects: Iterable[TModel | dict[str, Any]],
+        objects: Iterable[TModel | Mapping[str, PersistedValue]],
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,

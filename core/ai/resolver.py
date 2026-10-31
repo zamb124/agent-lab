@@ -23,6 +23,7 @@ from core.ai.providers import LLM_CAPABILITIES, PROVIDER_LITSERVE, AICapability
 from core.ai.requirements import AIRequestRequirements, AISelection
 from core.config import get_settings
 from core.config.llm_openai_compat import resolve_provider_api_key_for_openai_compatible_calls
+from core.config.openai_v1_base_url import openai_v1_base_url
 from core.rag.embedding_runtime import resolve_rag_embedding_runtime
 from core.types import JsonObject, require_json_object
 
@@ -164,7 +165,7 @@ def _resolve_platform_embedding_default() -> CompanyResolvedEmbedding:
     runtime = resolve_rag_embedding_runtime(
         settings.rag.embedding,
         settings.llm,
-        settings.provider_litserve,
+        openai_v1_base_url(settings.server.get_service_url("provider_litserve")),
     )
     return CompanyResolvedEmbedding(
         provider=runtime.provider,

@@ -13,6 +13,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable, Sequence
+from typing import Protocol, runtime_checkable
 
 from huggingface_hub import scan_cache_dir, snapshot_download
 
@@ -25,20 +27,43 @@ logger = get_logger(__name__)
 OPS_POLL_SECONDS: float = 2.0
 
 
+class _CacheRevision(Protocol):
+    commit_hash: str
+
+
+class _CacheRepo(Protocol):
+    repo_id: str
+    revisions: Sequence[_CacheRevision]
+
+
+class _DeleteStrategy(Protocol):
+    def execute(self) -> None: ...
+
+
+@runtime_checkable
+class _HFCacheInfo(Protocol):
+    """Стабы huggingface_hub не экспонируют repos/revisions — контракт по runtime-форме."""
+
+    repos: Iterable[_CacheRepo]
+
+    def delete_revisions(self, *revisions: str) -> _DeleteStrategy: ...
+
+
 def _purge_hf_cache(hf_model_id: str) -> None:
     """Удалить все revision-ы HF-репозитория из локального кэша (blocking)."""
-    cache_info = scan_cache_dir()
+    cache = scan_cache_dir()
+    if not isinstance(cache, _HFCacheInfo):
+        raise TypeError("huggingface_hub scan_cache_dir: unexpected return shape")
     revisions = [
         revision.commit_hash
-        # huggingface_hub 2.x: pyright-стабы не экспонируют repos/revisions
-        for repo in cache_info.repos  # pyright: ignore[reportAttributeAccessIssue]
+        for repo in cache.repos
         if repo.repo_id == hf_model_id
         for revision in repo.revisions
     ]
     if not revisions:
         return
-    strategy = cache_info.delete_revisions(*revisions)
-    _ = strategy.execute()
+    strategy = cache.delete_revisions(*revisions)
+    strategy.execute()
 
 
 async def _process_download(cfg: ProviderLitserveInfraConfig, row: ProviderLitserveModel) -> None:

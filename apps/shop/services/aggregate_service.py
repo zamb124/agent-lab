@@ -15,6 +15,7 @@ from apps.shop.models import Shop, ShopStatus
 from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.storefront_service import StorefrontService
 from core.pagination import OffsetPage
+from core.types import JsonValue
 
 _SEARCH_WHERE = """
     FROM shop_products
@@ -54,6 +55,14 @@ def _like_pattern(needle: str) -> str:
         needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     )
     return f"%{escaped}%"
+
+
+def _badge_keys(row: dict[str, JsonValue]) -> list[str]:
+    """Колонка ``badges`` — JSON-массив строк; прочие формы отбрасываются."""
+    value = row.get("badges")
+    if not isinstance(value, list):
+        return []
+    return [key for key in value if isinstance(key, str)]
 
 
 class AggregateService:
@@ -126,8 +135,8 @@ class AggregateService:
                 "portion": row["portion"],
                 "badges": [
                     badge_defs[row["shop_id"]][key]
-                    for key in row["badges"] or []
-                    if isinstance(key, str) and key in badge_defs[row["shop_id"]]
+                    for key in _badge_keys(row)
+                    if key in badge_defs[row["shop_id"]]
                 ],
                 "price_minor": row["price_minor"],
                 "photo_file_id": row["photo_file_id"],

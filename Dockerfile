@@ -21,28 +21,6 @@ WORKDIR /app
 FROM base-with-core AS builder-all
 
 # ============================================
-# Этап 3: сборщик документации (статический сайт Zensical)
-# ============================================
-# Docs-builder отдельный, GIL-build cp314: статический HTML, free-threading не нужен,
-# а часть deps zensical тянет Rust-extension'ы без cp314t wheels.
-FROM python:3.14-slim AS docs-builder
-RUN pip install --no-cache-dir "zensical>=0.0.73"
-WORKDIR /app
-ENV PYTHONPATH=/app
-# esbuild — статические Go-бинари из ui-builder стейджа (без node-рантайма)
-COPY --from=ui-builder /app/node_modules/@esbuild ./node_modules/@esbuild
-COPY zensical.ru.toml zensical.en.toml ./
-COPY docs ./docs
-COPY core/frontend/static/assets/service_logos/frontend_logo.svg ./core/frontend/static/assets/service_logos/frontend_logo.svg
-COPY scripts/__init__.py ./scripts/__init__.py
-COPY scripts/docs ./scripts/docs
-RUN python -m scripts.docs.prepare && \
-    zensical build --clean --config-file zensical.ru.toml && \
-    zensical build --clean --config-file zensical.en.toml && \
-    mkdir -p documentation-dist/en && \
-    cp -a build/zensical-en-out/. documentation-dist/en/
-
-# ============================================
 # Этап 4: base-final - общий образ со всем кодом
 # ============================================
 FROM builder-all AS base-final
@@ -71,6 +49,29 @@ RUN npm run typecheck:ui \
     && npm run build:ui \
     && for d in apps/*/ui-dist; do mkdir -p "/out/$d" && cp -a "$d/." "/out/$d/"; done \
     && mkdir -p /out/core/frontend && cp -a core/frontend/embed-dist /out/core/frontend/embed-dist
+
+# ============================================
+# Сборщик документации (статический сайт Zensical), после ui-builder —
+# esbuild для docs/javascripts приезжает из его node_modules.
+# ============================================
+# Docs-builder отдельный, GIL-build cp314: статический HTML, free-threading не нужен,
+# а часть deps zensical тянет Rust-extension'ы без cp314t wheels.
+FROM python:3.14-slim AS docs-builder
+RUN pip install --no-cache-dir "zensical>=0.0.73"
+WORKDIR /app
+ENV PYTHONPATH=/app
+# esbuild — статические Go-бинари из ui-builder стейджа (без node-рантайма)
+COPY --from=ui-builder /app/node_modules/@esbuild ./node_modules/@esbuild
+COPY zensical.ru.toml zensical.en.toml ./
+COPY docs ./docs
+COPY core/frontend/static/assets/service_logos/frontend_logo.svg ./core/frontend/static/assets/service_logos/frontend_logo.svg
+COPY scripts/__init__.py ./scripts/__init__.py
+COPY scripts/docs ./scripts/docs
+RUN python -m scripts.docs.prepare && \
+    zensical build --clean --config-file zensical.ru.toml && \
+    zensical build --clean --config-file zensical.en.toml && \
+    mkdir -p documentation-dist/en && \
+    cp -a build/zensical-en-out/. documentation-dist/en/
 
 # ============================================
 # Финальные стадии - отличаются только CMD/EXPOSE

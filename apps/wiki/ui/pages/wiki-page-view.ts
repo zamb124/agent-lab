@@ -36,7 +36,9 @@ import '@platform/lib/components/platform-user-chip.js';
 import { WIKI_PANEL_TABS } from '../components/wiki-page-panel.js';
 import type { PropertyValues } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
-import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { OpControllerOf, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { PlatformFactoryRegistry } from '@platform/lib/events/factory-registry.js';
+import type { ProseMirrorNode, WikiPage } from '@platform/lib/events/wire/wiki.gen.js';
 import type { PlatformRichEditor } from '@platform/lib/components/platform-rich-editor.js';
 import type { PopoverAnchor } from '@platform/lib/components/platform-popover.js';
 
@@ -52,20 +54,7 @@ function requireText(value: unknown, label: string): string {
     return String(value);
 }
 
-interface WikiPageDoc {
-    wiki_page_id?: string;
-    title?: string;
-    content?: { content?: { type?: string; content?: unknown[] }[] } | null;
-    icon?: string;
-    cover_url?: string;
-    namespace?: string;
-    is_full_width?: boolean;
-    is_published?: boolean;
-    last_edited_by_user_id?: string;
-    updated_at?: string | number | Date;
-    parent_page_id?: string;
-    [key: string]: unknown;
-}
+type WikiPageDoc = WikiPage;
 
 interface WikiSearchHit {
     wiki_page_id?: string;
@@ -148,15 +137,15 @@ export class WikiPageView extends PlatformPage {
     declare _panelOpen: boolean;
     declare _panelTab: string;
     private _saveTimer: number | null;
-    private _pendingContent: unknown;
+    private _pendingContent: ProseMirrorNode | null;
     private _pendingTitle: string | null;
-    private _read: OpController;
-    private _save: OpController;
-    private _properties: OpController;
-    private _deletePage: OpController;
-    private _search: OpController;
-    private _markdownImport: OpController;
-    private _markdownParse: OpController;
+    private _read: OpControllerOf<PlatformFactoryRegistry['wiki/page_read']>;
+    private _save: OpControllerOf<PlatformFactoryRegistry['wiki/page_save']>;
+    private _properties: OpControllerOf<PlatformFactoryRegistry['wiki/page_properties']>;
+    private _deletePage: OpControllerOf<PlatformFactoryRegistry['wiki/page_delete']>;
+    private _search: OpControllerOf<PlatformFactoryRegistry['wiki/search']>;
+    private _markdownImport: OpControllerOf<PlatformFactoryRegistry['wiki/page_markdown_import']>;
+    private _markdownParse: OpControllerOf<PlatformFactoryRegistry['wiki/markdown_parse']>;
     private _pages: ResourceController;
     private _locale: SelectController<unknown>;
     private _routerSearchSel: SelectController<unknown>;
@@ -485,9 +474,7 @@ export class WikiPageView extends PlatformPage {
         if (this.pageId !== pageId) {
             return;
         }
-        const responseRecord = anyRecord(response);
-        const page = responseRecord === null ? undefined : responseRecord.page;
-        this._page = page === undefined || page === null ? null : page;
+        this._page = response === null ? null : response.page;
         await this.updateComplete;
         await this._refreshOutlineWhenEditorReady();
     }
@@ -595,12 +582,12 @@ export class WikiPageView extends PlatformPage {
         }
         const content = this._pendingContent === null ? this._page.content : this._pendingContent;
         const title = this._pendingTitle === null ? this._page.title : this._pendingTitle;
-        const saved = anyRecord(await this._save.run({
+        const saved = await this._save.run({
             wiki_page_id: pageId,
             content,
             title,
             create_revision: true,
-        }));
+        });
         // Неудача резолвится в null (контракт OpController).
         if (saved === null) {
             if (pageId !== this.pageId) {
@@ -656,11 +643,12 @@ export class WikiPageView extends PlatformPage {
         if (content === null || typeof content !== 'object') {
             throw new Error('wiki-page-view: editor change without document content');
         }
-        this._pendingContent = content;
+        const doc = content as ProseMirrorNode;
+        this._pendingContent = doc;
         // Страница перерисовывается от индикатора сохранения и оглавления и при
         // этом заново связывает `.value` редактора. Без синхронизации туда
         // уезжал бы документ до правки, и набранный символ терялся.
-        this._page = { ...this._page, content };
+        this._page = { ...this._page, content: doc };
         this._scheduleSave();
         this._refreshOutline();
     }
@@ -934,18 +922,13 @@ export class WikiPageView extends PlatformPage {
         if (result === null) {
             return;
         }
-        const importedResult = anyRecord(result);
-        if (importedResult === null) {
-            return;
-        }
-        const imported = importedResult.page;
-        this._page = imported === undefined || imported === null ? null : imported;
+        this._page = result.page;
         this._pendingContent = null;
         this._pendingTitle = null;
         this._saveState = SAVE_IDLE;
         void this._pages.load();
         this._refreshOutline();
-        const notices = importedResult.notices;
+        const notices = result.notices;
         if (Array.isArray(notices) && notices.length > 0) {
             this.openModal('wiki.import_report', { notices });
         }
@@ -981,8 +964,7 @@ export class WikiPageView extends PlatformPage {
     /** Разбор markdown живёт на сервере; редактор получает только эту функцию. */
     private async _parseMarkdown(markdown: string): Promise<unknown> {
         const result = await this._markdownParse.run({ markdown });
-        const parsed = anyRecord(result);
-        return parsed === null ? null : parsed.document;
+        return result === null ? null : result.document;
     }
 
     private _onMarkdownFileDrop(event: CustomEvent<{ file?: File }>) {
