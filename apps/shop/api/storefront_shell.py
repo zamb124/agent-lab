@@ -152,7 +152,11 @@ function hoursBadge(){{
   }}
   return null;
 }}
+const CART_KEY='shopcart:'+S.slug;
 const cart=new Map();
+function saveCart(){{try{{localStorage.setItem(CART_KEY,JSON.stringify([...cart.entries()].map(([k,l])=>[k,{{pid:l.pid,qty:l.qty,sel:[...l.sel.entries()]}}])))}}catch(e){{}}}}
+function loadCart(){{try{{const raw=localStorage.getItem(CART_KEY);if(!raw)return;
+  for(const[k,l]of JSON.parse(raw)){{if(l&&byId(l.pid))cart.set(k,{{pid:l.pid,qty:l.qty||1,sel:new Map(l.sel||[])}});}}}}catch(e){{}}}}
 const app=document.getElementById('app');
 const NEST=S.modifier_nested_groups||{{}};
 const byId=id=>S.products.find(x=>x.id===id);
@@ -209,7 +213,7 @@ window.addLine=(key,d)=>{{const l=cart.get(key);if(!l)return;l.qty+=d;
   if(l.qty<=0)cart.delete(key);else cart.set(key,l);refreshQty(l.pid);draw();}};
 function total(){{let t=0;for(const l of cart.values()){{const p=byId(l.pid);if(p)t+=unitPrice(p,l.sel)*l.qty;}}return t;}}
 function count(){{let n=0;for(const l of cart.values())n+=l.qty;return n;}}
-function draw(){{const b=document.getElementById('cart');const n=count();
+function draw(){{const b=document.getElementById('cart');const n=count();saveCart();
   if(n){{b.textContent=`Корзина · ${{n}} · ${{fmt(total())}} →`;b.classList.add('show');}}else b.classList.remove('show');}}
 let dtype='';
 window.openSheet=()=>{{
@@ -356,6 +360,7 @@ window.addCustom=()=>{{if(!cust)return;const p=byId(cust.pid);
   l.qty+=cust.qty;cart.set(key,l);
   cust=null;closeCust();refreshQty(p.id);draw();}};
 render();
+loadCart();for(const l of cart.values())refreshQty(l.pid);draw();
 const deeplink=new URLSearchParams(location.search).get('p');
 if(deeplink){{const el=document.querySelector('[data-pid="'+CSS.escape(deeplink)+'"]');
   if(el){{el.classList.add('flash');setTimeout(()=>el.scrollIntoView({{behavior:'smooth',block:'center'}}),200);}}}}

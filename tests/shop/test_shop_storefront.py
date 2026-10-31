@@ -193,6 +193,7 @@ class TestStorefrontPage:
         assert 'data-pid="' in html.text
         assert "flashRing" in html.text
         assert "get('p')" in html.text
+        assert "localStorage" in html.text and "shopcart:" in html.text
 
     async def test_theme_preview_params_override_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
