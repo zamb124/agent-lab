@@ -16,6 +16,7 @@ from apps.shop.models.api import (
     ShopAiParseMenuResponse,
     ShopAiSuggestOptionsRequest,
     ShopAiSuggestOptionsResponse,
+    ShopCategoriesReorderRequest,
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
@@ -55,6 +56,7 @@ from apps.shop.realtime.operations import (
     ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
     ShopAiTextResponse,
+    ShopCategoriesReorderPayload,
     ShopCategoryCreatePayload,
     ShopCategoryIdPayload,
     ShopCategoryUpdatePayload,
@@ -95,6 +97,7 @@ from apps.shop.realtime.operations import (
     op_categories_create,
     op_categories_list,
     op_categories_remove,
+    op_categories_reorder,
     op_categories_update,
     op_domains_add,
     op_domains_provision,
@@ -233,6 +236,19 @@ async def update_category(
                 "shop_category_id": category_id,
                 **payload.model_dump(exclude_unset=True),
             }
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/categories/reorder", response_model=EmptyPayload)
+async def reorder_categories(
+    shop_id: str, payload: ShopCategoriesReorderRequest, di: Di
+) -> EmptyPayload:
+    return await op_categories_reorder(
+        ShopCategoriesReorderPayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
         ),
         user=require_context().user,
         di=di,

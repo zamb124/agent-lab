@@ -8,8 +8,11 @@
 
 import { createAsyncOp, createResourceCollection, rerunLastRequest } from '@platform/lib/events/index.js';
 import type { AsyncOpFactory } from '@platform/lib/events/factories/async-op.js';
-import type { ResourceCollectionSlice, ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
+import type { ResourceCollectionSlice } from '@platform/lib/events/factories/resource-collection.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import type { ShopResponse, ShopStatus } from '@platform/lib/events/wire/shop.gen.js';
+
+const SHOP_STATUSES: readonly ShopStatus[] = ['draft', 'published', 'suspended'];
 
 export const SHOP_SHOP_EVENTS = [
     'shop/shop/created',
@@ -17,7 +20,10 @@ export const SHOP_SHOP_EVENTS = [
     'shop/shop/published',
 ];
 
-function mergeShopSummary(state: ResourceCollectionSlice, event: { payload: unknown }): ResourceCollectionSlice {
+function mergeShopSummary(
+    state: ResourceCollectionSlice<ShopResponse>,
+    event: { payload: unknown },
+): ResourceCollectionSlice<ShopResponse> {
     if (!isPlainRecord(event.payload)) {
         throw new Error('shop/shop/*: payload required');
     }
@@ -30,15 +36,15 @@ function mergeShopSummary(state: ResourceCollectionSlice, event: { payload: unkn
     if (index === -1 || current === undefined) {
         return state;
     }
-    const patch: Record<string, unknown> = {};
+    const patch: Partial<Pick<ShopResponse, 'slug' | 'status'>> = {};
     if (typeof event.payload.slug === 'string') {
         patch.slug = event.payload.slug;
     }
-    if (typeof event.payload.status === 'string') {
-        patch.status = event.payload.status;
+    if (SHOP_STATUSES.includes(event.payload.status as ShopStatus)) {
+        patch.status = event.payload.status as ShopStatus;
     }
-    const merged: ResourceItem = { ...current, ...patch };
-    const items = state.items.map((item: ResourceItem, position: number) =>
+    const merged: ShopResponse = { ...current, ...patch };
+    const items = state.items.map((item, position) =>
         position === index ? merged : item);
     return { ...state, items, byId: { ...state.byId, [shopId]: merged } };
 }
@@ -134,6 +140,15 @@ export const shopCategoryRemoveOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/categories/{shop_category_id}' },
+});
+
+export const shopCategoriesReorderOp = createAsyncOp({
+    name: 'shop/categories_reorder',
+    errorToastKey: 'shop:toast.category_reorder_failed',
+    commandType: 'shop/categories/reorder_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/categories/reorder' },
 });
 
 export const shopProductsListOp = createAsyncOp({
@@ -517,6 +532,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/category_create': typeof shopCategoryCreateOp;
         'shop/category_update': typeof shopCategoryUpdateOp;
         'shop/category_remove': typeof shopCategoryRemoveOp;
+        'shop/categories_reorder': typeof shopCategoriesReorderOp;
         'shop/products_list': typeof shopProductsListOp;
         'shop/product_create': typeof shopProductCreateOp;
         'shop/product_update': typeof shopProductUpdateOp;

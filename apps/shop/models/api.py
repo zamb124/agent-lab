@@ -153,6 +153,12 @@ class ShopProductsReorderRequest(StrictBaseModel):
     product_ids: list[str] = Field(min_length=1, max_length=1000)
 
 
+class ShopCategoriesReorderRequest(StrictBaseModel):
+    """Новый порядок категорий меню: ids в желаемой последовательности."""
+
+    category_ids: list[str] = Field(min_length=1, max_length=200)
+
+
 class ShopAiDescribeRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=300)
     category_name: str | None = Field(default=None, max_length=200)

@@ -43,6 +43,7 @@ export class ShopMenuPage extends PlatformPage {
     private _productsOp: OpController;
     private _categoryCreateOp: OpController;
     private _categoryRemoveOp: OpController;
+    private _categoryReorderOp: OpController;
     private _productCreateOp: OpController;
     private _productUpdateOp: OpController;
     private _productRemoveOp: OpController;
@@ -115,6 +116,7 @@ export class ShopMenuPage extends PlatformPage {
                 color: var(--text-inverse);
             }
             .chip .x { margin-left: var(--space-1); opacity: 0.6; }
+            .chip .mv { margin: 0 var(--space-1); opacity: 0.55; display: inline-flex; }
             .chip-add {
                 display: flex;
                 gap: var(--space-2);
@@ -211,6 +213,7 @@ export class ShopMenuPage extends PlatformPage {
         this._productsOp = this.useOp('shop/products_list');
         this._categoryCreateOp = this.useOp('shop/category_create');
         this._categoryRemoveOp = this.useOp('shop/category_remove');
+        this._categoryReorderOp = this.useOp('shop/categories_reorder');
         this._productCreateOp = this.useOp('shop/product_create');
         this._productUpdateOp = this.useOp('shop/product_update');
         this._productRemoveOp = this.useOp('shop/product_remove');
@@ -263,6 +266,19 @@ export class ShopMenuPage extends PlatformPage {
             this._newCategory = '';
             await this._reload();
         }
+    }
+
+    private async _moveCategory(categoryId: string, dir: -1 | 1) {
+        const idx = this._categories.findIndex((c) => c.shop_category_id === categoryId);
+        const swap = this._categories[idx + dir];
+        if (idx < 0 || swap === undefined) return;
+        const ids = this._categories.map((c) => c.shop_category_id);
+        const cur = ids[idx], nxt = ids[idx + dir];
+        if (cur === undefined || nxt === undefined) return;
+        ids[idx] = nxt;
+        ids[idx + dir] = cur;
+        await this._categoryReorderOp.run({ shop_id: this.shopId, category_ids: ids });
+        await this._reload();
     }
 
     private async _removeCategory(categoryId: string) {
@@ -591,12 +607,18 @@ export class ShopMenuPage extends PlatformPage {
                     </div>
                 ` : html``}
                 <div class="chips">
-                    ${this._categories.map((cat) => html`
+                    ${this._categories.map((cat, i) => html`
                         <button
                             class="chip ${this._activeCategory === cat.shop_category_id ? 'active' : ''}"
                             @click=${() => { this._activeCategory = cat.shop_category_id; }}
                         >
+                            ${this._categories.length > 1 && i > 0
+                                ? html`<span class="mv" title=${this.t('menu.move_left')} @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, -1); }}><platform-icon name="chevron-left" size="12"></platform-icon></span>`
+                                : html``}
                             ${cat.name}
+                            ${this._categories.length > 1 && i < this._categories.length - 1
+                                ? html`<span class="mv" title=${this.t('menu.move_right')} @click=${(e: Event) => { e.stopPropagation(); void this._moveCategory(cat.shop_category_id, 1); }}><platform-icon name="chevron-right" size="12"></platform-icon></span>`
+                                : html``}
                             <span class="x" @click=${(e: Event) => { e.stopPropagation(); this._removeCategory(cat.shop_category_id); }}><platform-icon name="x" size="12"></platform-icon></span>
                         </button>
                     `)}

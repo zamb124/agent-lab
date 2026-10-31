@@ -13,6 +13,7 @@ from apps.shop.realtime.operations import (
     ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
     ShopCartPricePayload,
+    ShopCategoriesReorderPayload,
     ShopCategoryCreatePayload,
     ShopCategoryIdPayload,
     ShopCategoryUpdatePayload,
@@ -55,6 +56,7 @@ from apps.shop.realtime.operations import (
     op_categories_create,
     op_categories_list,
     op_categories_remove,
+    op_categories_reorder,
     op_categories_update,
     op_domains_add,
     op_domains_provision,
@@ -110,6 +112,9 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/categories/update_requested": Operation(
         payload_model=ShopCategoryUpdatePayload, fn=op_categories_update
+    ),
+    "shop/categories/reorder_requested": Operation(
+        payload_model=ShopCategoriesReorderPayload, fn=op_categories_reorder
     ),
     "shop/categories/remove_requested": Operation(
         payload_model=ShopCategoryIdPayload, fn=op_categories_remove

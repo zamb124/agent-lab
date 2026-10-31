@@ -155,6 +155,24 @@ class ShopService:
         _ = await category.save()
         return category
 
+    async def reorder_categories(
+        self, company_id: str, shop_id: str, category_ids: list[str]
+    ) -> None:
+        """Перестановка категорий меню: ids получают отсортированные
+        sort-значения в новом порядке."""
+        _ = await self.get_shop(company_id, shop_id)
+        categories = await ShopCategory.list_by_shop_by_sort_asc(shop_id)
+        by_id = {c.shop_category_id: c for c in categories}
+        if any(cid not in by_id for cid in category_ids):
+            raise PlatformNotFoundError("Category not found", error_code="category_not_found")
+        ordered = [by_id[cid] for cid in category_ids]
+        sorts = sorted(c.sort for c in ordered)
+        for category, sort in zip(ordered, sorts, strict=True):
+            if category.sort != sort:
+                category.sort = sort
+                category.updated_at = utcnow()
+                _ = await category.save()
+
     async def delete_category(self, company_id: str, shop_id: str, category_id: str) -> None:
         _ = await self.get_shop(company_id, shop_id)
         category = await ShopCategory.get_by_id(category_id)

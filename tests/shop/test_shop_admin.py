@@ -228,6 +228,31 @@ class TestCatalog:
         )
         assert resp.status_code == 404
 
+    async def test_categories_reorder(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """categories/reorder переставляет категории — порядок табов витрины."""
+        shop = await _make_shop(shop_client, f"creo-{unique_id[:8]}")
+        a = await _make_category(shop_client, shop["shop_id"], "A")
+        b = await _make_category(shop_client, shop["shop_id"], "B")
+        c = await _make_category(shop_client, shop["shop_id"], "C")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories/reorder",
+            json={"category_ids": [c["shop_category_id"], a["shop_category_id"], b["shop_category_id"]]},
+        )
+        assert resp.status_code == 200, resp.text
+        listed = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/categories")).json()["items"]
+        assert [x["shop_category_id"] for x in listed] == [
+            c["shop_category_id"],
+            a["shop_category_id"],
+            b["shop_category_id"],
+        ]
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/categories/reorder",
+            json={"category_ids": [a["shop_category_id"], "nonexistent"]},
+        )
+        assert resp.status_code == 404
+
     async def test_product_foreign_category_rejected(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:

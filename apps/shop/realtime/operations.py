@@ -30,6 +30,7 @@ from apps.shop.models.api import (
     ShopAiSuggestOptionsResponse,
     ShopCartPriceRequest,
     ShopCartPriceResponse,
+    ShopCategoriesReorderRequest,
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
@@ -136,6 +137,10 @@ class ShopProductUpdatePayload(ShopProductUpdateRequest):
 
 
 class ShopProductsReorderPayload(ShopProductsReorderRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopCategoriesReorderPayload(ShopCategoriesReorderRequest):
     shop_id: str = Field(min_length=1)
 
 
@@ -498,6 +503,23 @@ async def op_categories_remove(
     try:
         await di.shop_service.delete_category(
             scope.company_id, payload.shop_id, payload.shop_category_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+    return EmptyPayload()
+
+
+async def op_categories_reorder(
+    payload: ShopCategoriesReorderPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    """Перестановка категорий меню — порядок табов на витрине."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.shop_service.reorder_categories(
+            scope.company_id, payload.shop_id, payload.category_ids
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
