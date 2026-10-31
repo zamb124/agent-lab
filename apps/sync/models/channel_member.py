@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import ClassVar, Self
 
 from oxyde import Field as DbField
@@ -198,7 +198,10 @@ class SyncChannelMember(PlatformModel):
         ).exclude(user_id=viewer_user_id).limit(1).all()
         if len(rows) == 0:
             return None
-        return rows[0].last_read_at
+        last_read_at = rows[0].last_read_at
+        if last_read_at is not None and last_read_at.tzinfo is None:
+            last_read_at = last_read_at.replace(tzinfo=UTC)
+        return last_read_at
 
     @classmethod
     async def list_all_by_channel_id_and_user_id_asc(cls, *, limit: int | None) -> list[Self]:
