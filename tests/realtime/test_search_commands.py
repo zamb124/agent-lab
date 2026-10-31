@@ -90,6 +90,9 @@ class OpCase:
     setup: SetupFn
     same_resource: bool
     compare: CompareMode
+    # Снапшот глобального реестра: read-only пара WS/REST переснимается до равного снапшота,
+    # иначе параллельные тесты меняют выдачу между двумя вызовами.
+    eventual: bool = False
 
 
 @dataclass
@@ -545,7 +548,8 @@ _CASES: dict[str, OpCase] = {
         RestMirror("POST", f"{_API}/search/serp/click", "body_minus_path"), _setup_query_serp_click, True, "exact"
     ),
     "search/query/providers_snapshot_requested": OpCase(
-        RestMirror("GET", f"{_API}/providers", "none"), _setup_empty, True, "exact"
+        RestMirror("GET", f"{_API}/providers", "none"), _setup_empty, True, "exact",
+        eventual=True,
     ),
     "search/providers/list_requested": OpCase(
         RestMirror("GET", f"{_API}/providers/company", "none"), _setup_empty, True, "exact"
@@ -703,6 +707,28 @@ async def test_search_op_ws_rest_identical(
         rest=case.rest,
         payload=rest_payload,
     )
+    if case.eventual:
+        def _equal(a: JsonObject, b: JsonObject) -> bool:
+            return a == b if case.compare == "exact" else _normalize(a) == _normalize(b)
+
+        attempts = 0
+        while not _equal(ws_result, rest_result) and attempts < 5:
+            attempts += 1
+            await asyncio.sleep(0.25)
+            ws_event = await _ws_command(
+                auth_token=auth_token_system,
+                realtime_session_client=realtime_session_client,
+                canonical_type=canonical_type,
+                payload=ws_payload,
+            )
+            assert str(ws_event["type"]).endswith("_succeeded")
+            ws_result = _event_payload(ws_event)
+            rest_result = await _rest_command(
+                client=search_client_http,
+                headers=auth_headers_system,
+                rest=case.rest,
+                payload=rest_payload,
+            )
     if case.compare == "exact":
         assert ws_result == rest_result, f"WS != REST для {canonical_type}\nWS: {ws_result}\nREST: {rest_result}"
     else:

@@ -62,6 +62,9 @@ class OpCase:
     setup: SetupFn
     same_resource: bool
     compare: CompareMode
+    # Снапшот глобального реестра: read-only пара WS/REST переснимается до равного снапшота,
+    # иначе параллельные тесты (другие компании/воркеры) меняют выдачу между двумя вызовами.
+    eventual: bool = False
 
 
 @dataclass
@@ -164,6 +167,20 @@ async def _index_file(ctx: LiveCtx, namespace_id: str, file_id: str) -> JsonObje
     return await _expect_json(response, ok=(202,), label="index_file")
 
 
+async def _await_document_terminal(ctx: LiveCtx, document_id: str) -> None:
+    """Ждёт терминальный статус документа — индексация асинхронная, иначе WS/REST видят разные снапшоты."""
+    deadline = asyncio.get_running_loop().time() + 30.0
+    while asyncio.get_running_loop().time() < deadline:
+        response = await ctx.client.get(
+            f"{_API}/documents/{document_id}/status", headers=ctx.headers
+        )
+        body = await _expect_json(response, ok=(200,), label="poll_status")
+        if body.get("status") in {"completed", "failed"}:
+            return
+        await asyncio.sleep(0.25)
+    raise AssertionError(f"document {document_id} не дошёл до терминального статуса за 30s")
+
+
 async def _setup_namespaces_list(ctx: LiveCtx) -> JsonObject:
     _ = await _create_namespace(ctx, "list")
     return {"limit": 200, "offset": 0}
@@ -234,14 +251,18 @@ async def _setup_documents_status(ctx: LiveCtx) -> JsonObject:
     namespace_id = await _create_namespace(ctx, "st")
     file_id = await _upload_file(ctx, namespace_id, "st")
     indexed = await _index_file(ctx, namespace_id, file_id)
-    return {"document_id": _str_field(indexed, "document_id")}
+    document_id = _str_field(indexed, "document_id")
+    await _await_document_terminal(ctx, document_id)
+    return {"document_id": document_id}
 
 
 async def _setup_documents_statuses(ctx: LiveCtx) -> JsonObject:
     namespace_id = await _create_namespace(ctx, "sts")
     file_id = await _upload_file(ctx, namespace_id, "sts")
     indexed = await _index_file(ctx, namespace_id, file_id)
-    return {"document_ids": [_str_field(indexed, "document_id")]}
+    document_id = _str_field(indexed, "document_id")
+    await _await_document_terminal(ctx, document_id)
+    return {"document_ids": [document_id]}
 
 
 async def _setup_search_defaults(ctx: LiveCtx) -> JsonObject:
@@ -280,6 +301,7 @@ _CASES: dict[str, OpCase] = {
         _setup_namespaces_list,
         True,
         "normalized",
+        eventual=True,
     ),
     "rag/namespaces/create_requested": OpCase(
         RestMirror("POST", f"{_API}/namespaces", "body_minus_path"),
@@ -528,6 +550,25 @@ async def test_rag_op_ws_rest_identical(
         rest=case.rest,
         payload=rest_payload,
     )
+    if case.eventual:
+        attempts = 0
+        while _normalize(ws_result) != _normalize(rest_result) and attempts < 5:
+            attempts += 1
+            await asyncio.sleep(0.25)
+            ws_event = await _ws_command(
+                auth_token=auth_token_system,
+                realtime_session_client=realtime_session_client,
+                canonical_type=canonical_type,
+                payload=ws_payload,
+            )
+            assert str(ws_event["type"]).endswith("_succeeded")
+            ws_result = _event_payload(ws_event)
+            rest_result = await _rest_command(
+                client=rag_client_http,
+                headers=auth_headers_system,
+                rest=case.rest,
+                payload=rest_payload,
+            )
     assert _normalize(ws_result) == _normalize(rest_result), (
         f"WS != REST для {canonical_type}\nWS: {ws_result}\nREST: {rest_result}"
     )

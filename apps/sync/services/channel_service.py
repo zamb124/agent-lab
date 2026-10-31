@@ -37,10 +37,13 @@ from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation
 from core.config import get_settings
 from core.events import publish_events
+from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.namespace import NamespaceService
 from core.pagination import ListResponse, OffsetPage
 from core.websocket import WsCommandError
+
+logger = get_logger(__name__)
 
 
 async def _channel_read_for_viewer(
@@ -584,11 +587,11 @@ class SyncChannelService:
             roles_raw = company.members[uid]
             member_user = users_by_id.get(uid)
             if member_user is None:
-                raise WsCommandError(
-                    "internal",
-                    f"Member {uid} is listed in the company, but the user was not found.",
-                    error_code="internal",
+                logger.warning(
+                    "sync.company_member.user_missing",
+                    member_uid=uid,
                 )
+                continue
             pr = presence_map[uid]
             items.append(
                 CompanyMemberRead(

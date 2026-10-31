@@ -111,6 +111,9 @@ class OpCase:
     compare: CompareMode
     expect: ExpectMode = "succeeded"
     marker_field: str = "name"
+    # Снапшот глобального реестра: read-only пара WS/REST переснимается до равного снапшота,
+    # иначе параллельные тесты меняют выдачу между двумя вызовами.
+    eventual: bool = False
 
 
 @dataclass
@@ -606,6 +609,7 @@ def _op(
     compare: CompareMode = "normalized",
     expect: ExpectMode = "succeeded",
     marker_field: str = "name",
+    eventual: bool = False,
 ) -> OpCase:
     return OpCase(
         rest=RestMirror(method=method, url=url, strategy=strategy),
@@ -614,6 +618,7 @@ def _op(
         compare=compare,
         expect=expect,
         marker_field=marker_field,
+        eventual=eventual,
     )
 
 
@@ -840,6 +845,7 @@ _CASES: dict[str, OpCase] = {
     ),
     "sync/company_members/list_requested": _op(
         "GET", f"{_API}/company/members", "query", _setup_company_members, same=True,
+        eventual=True,
     ),
     "sync/shared_channels/list_requested": _op(
         "GET",
@@ -1060,6 +1066,28 @@ async def test_sync_op_ws_rest_identical(
         payload=rest_payload,
         expect=case.expect,
     )
+    if case.eventual:
+        attempts = 0
+        while _normalize(ws_result) != _normalize(rest_result) and attempts < 5:
+            attempts += 1
+            await asyncio.sleep(0.25)
+            ws_event = await _ws_command(
+                auth_token=auth_token_system,
+                realtime_session_client=realtime_session_client,
+                canonical_type=canonical_type,
+                payload=ws_payload,
+            )
+            assert str(ws_event["type"]).endswith("_succeeded"), (
+                f"WS {canonical_type} вернул {ws_event['type']}: {ws_event.get('payload')}"
+            )
+            ws_result = _event_payload(ws_event)
+            rest_result = await _rest_command(
+                client=sync_client_http,
+                headers=headers,
+                rest=case.rest,
+                payload=rest_payload,
+                expect=case.expect,
+            )
     if case.compare == "marker_row":
         if rest_marker is None:
             raise AssertionError("marker_row compare requires marker")

@@ -1282,7 +1282,7 @@ async def _setup_code_agent(ctx: LiveCtx) -> JsonObject:
 
 async def _setup_code_agent_git(ctx: LiveCtx) -> JsonObject:
     ref = await _setup_code_agent(ctx)
-    return {**ref, "git_url": "https://example.com/missing.git", "source_sha": "0" * 40}
+    return {**ref, "git_url": "http://127.0.0.1:1/missing.git", "source_sha": "0" * 40}
 
 
 async def _setup_code_agent_archive(ctx: LiveCtx) -> JsonObject:
