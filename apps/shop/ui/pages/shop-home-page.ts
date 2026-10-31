@@ -3,7 +3,7 @@
  * быстрые действия (меню, вид, заказы, открыть витрину).
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import '@platform/lib/components/platform-button.js';
@@ -22,6 +22,7 @@ export class ShopHomePage extends PlatformPage {
 
     private _shops: ResourceController;
     private _createOp: OpController;
+    private _publishOp: OpController;
     private _newName = '';
     private _newSlug = '';
     private _slugTouched = false;
@@ -67,6 +68,21 @@ export class ShopHomePage extends PlatformPage {
             }
             .create-title { font-weight: var(--font-medium); color: var(--text-primary); }
             .hint { color: var(--text-tertiary); font-size: var(--text-xs); }
+            .checklist { display: flex; flex-direction: column; gap: var(--space-1); }
+            .check-item { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-tertiary); }
+            .check-item.done { color: var(--text-secondary); }
+            .check-item.done platform-icon { color: var(--success); }
+            .check-item platform-icon { flex-shrink: 0; }
+            .publish-cta {
+                border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+                background: color-mix(in srgb, var(--accent) 8%, transparent);
+                border-radius: var(--radius-md);
+                padding: var(--space-3);
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+            }
+            .publish-cta .hint { flex: 1; }
         `,
     ];
 
@@ -74,6 +90,7 @@ export class ShopHomePage extends PlatformPage {
         super();
         this._shops = this.useResource('shop/shops');
         this._createOp = this.useOp('shop/shop_create');
+        this._publishOp = this.useOp('shop/shop_publish');
     }
 
     async onRouteActive(): Promise<void> {
@@ -114,6 +131,11 @@ export class ShopHomePage extends PlatformPage {
         }
     }
 
+    private async _publish(shopId: string) {
+        const result = await this._publishOp.run({ shop_id: shopId });
+        if (result !== null) await this._shops.load();
+    }
+
     private _statusLabel(status: string) {
         return this.t(`status.${status}`);
     }
@@ -132,6 +154,8 @@ export class ShopHomePage extends PlatformPage {
                                 const shop = row as Record<string, unknown>;
                                 const shopId = String(shop.shop_id);
                                 const status = String(shop.status);
+                                const productsCount = typeof shop.products_count === 'number' ? shop.products_count : 0;
+                                const storefrontUrl = typeof shop.storefront_url === 'string' ? shop.storefront_url : '';
                                 return html`
                                     <div class="card">
                                         <div class="card-head">
@@ -141,6 +165,26 @@ export class ShopHomePage extends PlatformPage {
                                             </span>
                                         </div>
                                         <span class="slug">${shop.slug}.linnex.io</span>
+                                        <div class="checklist">
+                                            <span class="check-item ${productsCount > 0 ? 'done' : ''}">
+                                                <platform-icon name=${productsCount > 0 ? 'check' : 'circle-dot'} size="13"></platform-icon>
+                                                ${productsCount > 0 ? `${productsCount} ${this.t('home.menu_count')}` : this.t('home.menu_empty')}
+                                            </span>
+                                        </div>
+                                        ${status === 'draft' && productsCount > 0
+                                            ? html`
+                                                <div class="publish-cta">
+                                                    <span class="hint">${this.t('home.ready_hint')}</span>
+                                                    <platform-button size="sm" variant="primary" ?busy=${this._publishOp.busy} @click=${() => this._publish(shopId)}>
+                                                        ${this.t('home.publish')}
+                                                    </platform-button>
+                                                </div>`
+                                            : status === 'draft'
+                                            ? html`<div class="hint">${this.t('home.fill_hint')}</div>`
+                                            : nothing}
+                                        ${status === 'published' && storefrontUrl !== ''
+                                            ? html`<a class="hint" href=${storefrontUrl} target="_blank" rel="noopener">${this.t('home.published_open')} →</a>`
+                                            : nothing}
                                         <div class="actions">
                                             <platform-button size="sm" variant="primary" @click=${() => this.navigate('shop_menu', { shopId })}>
                                                 ${this.t('home.open_menu')}

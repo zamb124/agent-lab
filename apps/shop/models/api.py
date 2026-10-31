@@ -51,6 +51,7 @@ class ShopResponse(StrictBaseModel):
     telegram_connected: bool
     storefront_url: str
     plan: str
+    products_count: int = 0
 
 
 class ShopTelegramConnectRequest(StrictBaseModel):

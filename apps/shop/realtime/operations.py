@@ -168,7 +168,8 @@ class ShopAiFileResponse(StrictBaseModel):
     file_id: str
 
 
-def _shop_response(shop: Shop, di: Di) -> ShopResponse:
+async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
+    products_count = await ShopProduct.objects.filter(shop_id=shop.shop_id).count()
     return ShopResponse(
         shop_id=shop.shop_id,
         slug=shop.slug,
@@ -195,6 +196,7 @@ def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         telegram_connected=bool(shop.telegram_bot_token),
         storefront_url=f"https://{shop.slug}.{di.settings.storefront_domain_suffix}",
         plan=shop.plan,
+        products_count=products_count,
     )
 
 
@@ -248,7 +250,7 @@ async def op_shops_list(
     scope = await require_company_admin(di.authz_service)
     _ = (payload, user)
     shops = await di.shop_service.list_shops(scope.company_id)
-    return ListResponse(items=[_shop_response(s, di) for s in shops])
+    return ListResponse(items=[await _shop_response(s, di) for s in shops])
 
 
 async def op_shops_create(
@@ -263,7 +265,7 @@ async def op_shops_create(
     await publish_shop_event(
         SHOP_SHOP_CREATED, shop.shop_id, shop.slug, shop.status, scope.company_id
     )
-    return _shop_response(shop, di)
+    return await _shop_response(shop, di)
 
 
 async def op_shops_get(
@@ -275,7 +277,7 @@ async def op_shops_get(
         shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    return _shop_response(shop, di)
+    return await _shop_response(shop, di)
 
 
 async def op_shops_update(
@@ -293,7 +295,7 @@ async def op_shops_update(
         SHOP_SHOP_UPDATED, shop.shop_id, shop.slug, shop.status, scope.company_id
     )
     await _enqueue_rebuild(di, shop.shop_id, shop.slug)
-    return _shop_response(shop, di)
+    return await _shop_response(shop, di)
 
 
 async def op_shops_publish(
@@ -311,7 +313,7 @@ async def op_shops_publish(
         SHOP_SHOP_PUBLISHED, shop.shop_id, shop.slug, shop.status, scope.company_id
     )
     await _enqueue_rebuild(di, shop.shop_id, shop.slug)
-    return _shop_response(shop, di)
+    return await _shop_response(shop, di)
 
 
 async def op_shops_suspend(
@@ -327,7 +329,7 @@ async def op_shops_suspend(
         SHOP_SHOP_UPDATED, shop.shop_id, shop.slug, shop.status, scope.company_id
     )
     await _enqueue_rebuild(di, shop.shop_id, shop.slug)
-    return _shop_response(shop, di)
+    return await _shop_response(shop, di)
 
 
 async def op_shops_remove(
@@ -558,7 +560,7 @@ async def op_telegram_connect(
         raise_not_found(exc)
     except PlatformUnavailableError as exc:
         raise_unavailable(exc)
-    return _shop_response(shop, di)
+    return await _shop_response(shop, di)
 
 
 async def op_telegram_disconnect(
@@ -573,7 +575,7 @@ async def op_telegram_disconnect(
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    return _shop_response(shop, di)
+    return await _shop_response(shop, di)
 
 
 # --- Домены ---

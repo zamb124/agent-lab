@@ -37,7 +37,13 @@
         "open_menu": "Menu",
         "open_builder": "Theme",
         "open_orders": "Orders",
-        "open_settings": "Settings"
+        "open_settings": "Settings",
+        "menu_count": "menu items",
+        "menu_empty": "menu is empty — add dishes",
+        "publish": "Publish",
+        "published_open": "Open storefront",
+        "ready_hint": "Storefront is ready to publish",
+        "fill_hint": "Fill the menu, pick a design — and publish"
     },
     "menu": {
         "title": "Menu & products",
