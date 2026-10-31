@@ -285,19 +285,29 @@ class ShopService:
 
     async def list_modifier_groups_by_sort_asc(
         self, company_id: str, shop_id: str
-    ) -> list[tuple[ShopModifierGroup, list[ShopModifierOption]]]:
+    ) -> list[tuple[ShopModifierGroup, list[ShopModifierOption], list[str]]]:
         _ = await self.get_shop(company_id, shop_id)
         groups = await ShopModifierGroup.list_by_shop_by_sort_asc(shop_id)
         if not groups:
             return []
+        group_ids = [g.shop_modifier_group_id for g in groups]
         options = await ShopModifierOption.objects.filter(
-            group_id__in=[g.shop_modifier_group_id for g in groups]
+            group_id__in=group_ids
         ).order_by("sort").all()
         by_group: dict[str, list[ShopModifierOption]] = {}
         for o in options:
             by_group.setdefault(o.group_id, []).append(o)
+        links = await ShopProductModifierGroup.list_by_groups(group_ids)
+        products_by_group: dict[str, list[str]] = {}
+        for link in links:
+            products_by_group.setdefault(link.group_id, []).append(link.product_id)
         return [
-            (g, by_group.get(g.shop_modifier_group_id, [])) for g in groups
+            (
+                g,
+                by_group.get(g.shop_modifier_group_id, []),
+                products_by_group.get(g.shop_modifier_group_id, []),
+            )
+            for g in groups
         ]
 
     async def create_modifier_group(

@@ -192,11 +192,26 @@ class ShopModifierGroupResponse(StrictBaseModel):
     price_mode: str
     is_active: bool
     sort: int
+    product_ids: list[str]
     options: list["ShopModifierOptionResponse"]
 
 
 class ShopModifierGroupsResponse(StrictBaseModel):
     groups: list[ShopModifierGroupResponse]
+
+
+class ShopAiOptionSuggestion(StrictBaseModel):
+    name: str
+    price_minor: int = Field(ge=0, le=10_000_000)
+
+
+class ShopAiSuggestOptionsRequest(StrictBaseModel):
+    product_name: str = Field(min_length=1, max_length=300)
+    group_name: str | None = Field(default=None, max_length=200)
+
+
+class ShopAiSuggestOptionsResponse(StrictBaseModel):
+    items: list[ShopAiOptionSuggestion]
 
 
 class ShopModifierOptionCreateRequest(StrictBaseModel):

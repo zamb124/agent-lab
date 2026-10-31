@@ -22,8 +22,10 @@ from apps.shop.models import (
     ShopModifierGroup,
     ShopModifierOption,
     ShopProduct,
+    ShopProductModifierGroup,
 )
 from apps.shop.models.api import (
+    ShopAiSuggestOptionsResponse,
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
@@ -220,6 +222,12 @@ class ShopAiGeneratePhotoPayload(StrictBaseModel):
 
 class ShopAiDescribeBatchPayload(StrictBaseModel):
     shop_id: str = Field(min_length=1)
+
+
+class ShopAiSuggestOptionsPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    product_name: str = Field(min_length=1, max_length=300)
+    group_name: str | None = Field(default=None, max_length=200)
 
 
 class ShopAiTextResponse(StrictBaseModel):
@@ -762,6 +770,22 @@ async def op_ai_describe_product(
     return ShopAiTextResponse(text=text)
 
 
+async def op_ai_suggest_options(
+    payload: ShopAiSuggestOptionsPayload, *, user: User, di: Di
+) -> ShopAiSuggestOptionsResponse:
+    """AI-предложение опций-модификаторов по названию блюда."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        items = await di.ai_service.suggest_options(
+            product_name=payload.product_name, group_name=payload.group_name
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ShopAiSuggestOptionsResponse(items=items)
+
+
 async def op_ai_enhance_photo(
     payload: ShopAiEnhancePhotoPayload, *, user: User, di: Di
 ) -> ShopAiFileResponse:
@@ -834,7 +858,9 @@ def _option_response(option: ShopModifierOption) -> ShopModifierOptionResponse:
 
 
 def _modifier_group_response(
-    group: ShopModifierGroup, options: list[ShopModifierOption]
+    group: ShopModifierGroup,
+    options: list[ShopModifierOption],
+    product_ids: list[str] | None = None,
 ) -> ShopModifierGroupResponse:
     return ShopModifierGroupResponse(
         shop_modifier_group_id=group.shop_modifier_group_id,
@@ -848,6 +874,7 @@ def _modifier_group_response(
         price_mode=group.price_mode.value,
         is_active=group.is_active,
         sort=group.sort,
+        product_ids=product_ids or [],
         options=[_option_response(o) for o in options],
     )
 
@@ -870,8 +897,8 @@ async def op_modifier_groups_list(
         raise_not_found(exc)
     return ShopModifierGroupsResponse(
         groups=[
-            _modifier_group_response(group, options)
-            for group, options in tree
+            _modifier_group_response(group, options, product_ids)
+            for group, options, product_ids in tree
         ]
     )
 
@@ -908,8 +935,13 @@ async def op_modifier_groups_update(
     options = await ShopModifierOption.list_by_group_by_sort_asc(
         group.shop_modifier_group_id
     )
+    links = await ShopProductModifierGroup.list_by_groups(
+        [group.shop_modifier_group_id]
+    )
     await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
-    return _modifier_group_response(group, options)
+    return _modifier_group_response(
+        group, options, [link.product_id for link in links]
+    )
 
 
 async def op_modifier_groups_remove(

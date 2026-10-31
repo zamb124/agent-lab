@@ -73,7 +73,8 @@
         "import_invalid": "строк не распознано — проверьте формат",
         "import_run": "Добавить в меню",
         "import_close": "Закрыть",
-        "ai_fill": "AI-описания"
+        "ai_fill": "AI-описания",
+        "modifiers": "Опции"
     },
     "builder": {
         "title": "Внешний вид витрины",
@@ -194,6 +195,45 @@
         "products_imported": "Позиции добавлены в меню",
         "products_import_failed": "Не удалось импортировать меню",
         "ai_batch_started": "AI генерирует описания — обычно это занимает до минуты",
-        "ai_batch_failed": "Не удалось запустить генерацию описаний"
+        "ai_batch_failed": "Не удалось запустить генерацию описаний",
+        "modifiers_load_failed": "Не удалось загрузить группы опций",
+        "modifier_group_created": "Группа создана",
+        "modifier_group_failed": "Не удалось сохранить группу",
+        "modifier_option_failed": "Не удалось сохранить опцию",
+        "modifier_attach_failed": "Не удалось прикрепить группу",
+        "ai_suggest_failed": "AI не смог предложить опции"
+    },
+    "modifiers": {
+        "header": "Опции и модификаторы",
+        "hint": "Группы опций прикрепляются к товару и переиспользуются для всего меню. Товар:",
+        "new_group": "Новая группа — например «Добавки» или «Размер»",
+        "group_create": "Создать группу",
+        "loading": "Загрузка…",
+        "attached_title": "У этого товара",
+        "library_title": "Библиотека групп",
+        "library_note": "Группа в библиотеке: прикрепите её к товару, и она появится на витрине.",
+        "attach": "Прикрепить",
+        "detach": "Открепить",
+        "required": "обязательно",
+        "variant": "вариант",
+        "remove_kind": "убрать",
+        "single": "один",
+        "multi": "несколько",
+        "field_name": "Название",
+        "field_selection": "Выбор",
+        "field_min": "Мин. выбор",
+        "field_max": "Макс. выбор",
+        "field_price_mode": "Цена",
+        "price_delta": "надбавка +₽",
+        "price_abs": "цена варианта",
+        "options_title": "Опции",
+        "option_name": "Название опции",
+        "option_price": "Цена, ₽",
+        "option_add": "Добавить",
+        "is_default": "По умолчанию",
+        "is_available": "Доступна",
+        "ai_suggest": "AI-предложить опции",
+        "ai_busy": "AI думает…",
+        "group_remove": "Удалить группу"
     }
 }

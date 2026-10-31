@@ -45,6 +45,12 @@ class ShopProductModifierGroup(PlatformModel):
         return await cls.objects.filter(product_id__in=product_ids).all()
 
     @classmethod
+    async def list_by_groups(cls, group_ids: list[str]) -> list[Self]:
+        if not group_ids:
+            return []
+        return await cls.objects.filter(group_id__in=group_ids).all()
+
+    @classmethod
     async def get_link(cls, product_id: str, group_id: str) -> Self | None:
         return await cls.objects.filter(product_id=product_id, group_id=group_id).get_or_none()
 

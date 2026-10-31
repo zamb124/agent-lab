@@ -8,9 +8,13 @@
 
 from __future__ import annotations
 
+import re
+
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import Part, Role
+from pydantic import TypeAdapter
 
+from apps.shop.models.api import ShopAiOptionSuggestion
 from core.ai.providers import AICapability
 from core.ai.runtime import chat_for_capability
 from core.clients.llm.messages import build_a2a_message
@@ -23,6 +27,8 @@ from core.files.object_store.principals import SystemPrincipal
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+_JSON_ARRAY_RE = re.compile(r"\[.*\]", re.DOTALL)
 
 _DESCRIBE_PROMPT = """Ты копирайтер ресторанного меню. Напиши аппетитное описание блюда
 «{name}»{category_hint} на русском языке.
@@ -40,6 +46,20 @@ Keep the exact same dish, plating and composition. Photorealistic, menu-grade.""
 _GENERATE_PROMPT = """Professional menu photograph of «{name}»{desc_hint}:
 appetising, well-lit, shallow depth of field, restaurant-grade food styling,
 clean background, photorealistic, square composition."""
+
+_SUGGEST_OPTIONS_PROMPT = """Ты помогаешь ресторану настроить добавки к блюду
+«{name}»{group_hint}.
+
+Предложи 5-8 релевантных опций-модификаторов (добавки, топпинги или варианты),
+которые гости обычно выбирают к такому блюду.
+
+Ответь строго JSON-массивом без пояснений:
+[{{"name": "Название опции", "price_minor": цена в копейках}}]
+
+Требования:
+- name — короткое название на русском (1-3 слова)
+- price_minor — реалистичная цена в копейках (0 для бесплатных, обычно 3000-15000)
+- только валидный JSON, ничего больше"""
 
 
 class ShopAiService:
@@ -91,6 +111,33 @@ class ShopAiService:
                 "ai returned empty description", error_code="ai_empty_result"
             )
         return text[:500]
+
+    async def suggest_options(
+        self, *, product_name: str, group_name: str | None = None
+    ) -> list[ShopAiOptionSuggestion]:
+        """Опции-модификаторы к блюду: LLM предлагает добавки с ценами."""
+        group_hint = f" для группы «{group_name}»" if group_name else ""
+        prompt = _SUGGEST_OPTIONS_PROMPT.format(
+            name=product_name, group_hint=group_hint
+        )
+        response = await chat_for_capability(
+            AICapability.LLM_CHAT,
+            [build_a2a_message(role=Role.ROLE_USER, parts=[Part(text=prompt)])],
+        )
+        text = get_message_text(response).strip()
+        match = _JSON_ARRAY_RE.search(text)
+        if match is None:
+            raise PlatformNotFoundError(
+                "ai returned no options", error_code="ai_empty_result"
+            )
+        items = TypeAdapter(list[ShopAiOptionSuggestion]).validate_json(
+            match.group(0)
+        )
+        if not items:
+            raise PlatformNotFoundError(
+                "ai returned empty options", error_code="ai_empty_result"
+            )
+        return items[:20]
 
     async def enhance_product_photo(self, *, file_id: str) -> str:
         """Улучшение фото блюда через image_gen — возвращает новый file_id."""

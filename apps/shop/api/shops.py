@@ -12,6 +12,8 @@ from apps.shop.models.api import (
     ShopAiDescribeRequest,
     ShopAiEnhancePhotoRequest,
     ShopAiGeneratePhotoRequest,
+    ShopAiSuggestOptionsRequest,
+    ShopAiSuggestOptionsResponse,
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
@@ -42,6 +44,7 @@ from apps.shop.realtime.operations import (
     ShopAiEnhancePhotoPayload,
     ShopAiFileResponse,
     ShopAiGeneratePhotoPayload,
+    ShopAiSuggestOptionsPayload,
     ShopAiTextResponse,
     ShopCategoryCreatePayload,
     ShopCategoryIdPayload,
@@ -70,6 +73,7 @@ from apps.shop.realtime.operations import (
     op_ai_describe_product,
     op_ai_enhance_photo,
     op_ai_generate_photo,
+    op_ai_suggest_options,
     op_categories_create,
     op_categories_list,
     op_categories_remove,
@@ -396,6 +400,21 @@ async def ai_enhance_photo(shop_id: str, body: ShopAiEnhancePhotoRequest, di: Di
 async def ai_generate_photo(shop_id: str, body: ShopAiGeneratePhotoRequest, di: Di) -> ShopAiFileResponse:
     return await op_ai_generate_photo(
         ShopAiGeneratePhotoPayload(shop_id=shop_id, name=body.name, description=body.description),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/ai/suggest-options", response_model=ShopAiSuggestOptionsResponse)
+async def ai_suggest_options(
+    shop_id: str, body: ShopAiSuggestOptionsRequest, di: Di
+) -> ShopAiSuggestOptionsResponse:
+    return await op_ai_suggest_options(
+        ShopAiSuggestOptionsPayload(
+            shop_id=shop_id,
+            product_name=body.product_name,
+            group_name=body.group_name,
+        ),
         user=require_context().user,
         di=di,
     )

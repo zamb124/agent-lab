@@ -44,6 +44,7 @@ import '../pages/shop-menu-page.js';
 import '../pages/shop-builder-page.js';
 import '../pages/shop-orders-page.js';
 import '../pages/shop-settings-page.js';
+import '../modals/shop-modifiers-modal.js';
 
 const SHOP_ROUTES = [
     { key: 'shop_home',      path: '',                  titleKey: 'routes.shop_home' },

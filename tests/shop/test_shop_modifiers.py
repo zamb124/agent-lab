@@ -95,6 +95,7 @@ class TestModifierAdmin:
         g = listing.json()["groups"][0]
         assert g["name"] == "Добавки"
         assert g["options"][0]["name"] == "Сыр"
+        assert g["product_ids"] == [product["shop_product_id"]]
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop_id}/modifier-groups/{gid}", json={"min_selected": 1}
         )
@@ -104,6 +105,8 @@ class TestModifierAdmin:
             f"{_SHOPS}/{shop_id}/products/{product['shop_product_id']}/modifier-groups/{gid}"
         )
         assert resp.status_code == 200
+        listing = await shop_client.get(f"{_SHOPS}/{shop_id}/modifier-groups")
+        assert listing.json()["groups"][0]["product_ids"] == []
 
     async def test_isolation_other_company(
         self, shop_client: AsyncClient, shop_client_company2: AsyncClient, unique_id: str
@@ -397,3 +400,31 @@ class TestModifierSnapshot:
                 "qty": 2,
             }
         ]
+
+
+class TestAiSuggestOptions:
+    async def test_suggest_options_returns_items_or_clean_error(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """AI-предложение опций: MockLLM в TESTING или честная ошибка провайдера."""
+        shop, _ = await _shop_with_product(shop_client, f"ais-{unique_id[:8]}")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/ai/suggest-options",
+            json={"product_name": "Пицца Маргарита", "group_name": "Добавки"},
+        )
+        assert resp.status_code in (200, 400, 404, 409, 503)
+        if resp.status_code == 200:
+            items = resp.json()["items"]
+            assert items
+            assert all("name" in i and "price_minor" in i for i in items)
+        else:
+            assert resp.json().get("error_code") or resp.json().get("error")
+
+    async def test_suggest_options_requires_shop(
+        self, shop_client: AsyncClient
+    ) -> None:
+        resp = await shop_client.post(
+            f"{_SHOPS}/shop_missing/ai/suggest-options",
+            json={"product_name": "x"},
+        )
+        assert resp.status_code in (404, 400)

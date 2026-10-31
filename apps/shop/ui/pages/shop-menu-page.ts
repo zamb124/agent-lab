@@ -467,6 +467,14 @@ export class ShopMenuPage extends PlatformPage {
         }
     }
 
+    private _openModifiers(product: ProductRow) {
+        this.openModal('shop.modifiers', {
+            shopId: this.shopId,
+            productId: product.shop_product_id,
+            productName: product.name,
+        });
+    }
+
     private async _removeProduct(product: ProductRow) {
         await this._productRemoveOp.run({
             shop_id: this.shopId,
@@ -688,6 +696,9 @@ export class ShopMenuPage extends PlatformPage {
                                                         ?busy=${this._aiGenerateOp.busy}
                                                         @click=${() => this._generatePhoto(p)}
                                                     ><platform-icon name="sparkles" size="14"></platform-icon></platform-button>`}
+                                                <platform-button size="sm" title=${this.t('menu.modifiers')} @click=${() => this._openModifiers(p)}>
+                                                    <platform-icon name="list-checks" size="14"></platform-icon>
+                                                </platform-button>
                                                 <platform-button size="sm" title=${this.t('menu.edit')} @click=${() => this._startEdit(p)}>
                                                     <platform-icon name="edit" size="14"></platform-icon>
                                                 </platform-button>

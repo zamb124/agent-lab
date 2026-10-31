@@ -73,7 +73,8 @@
         "import_invalid": "lines not recognised — check the format",
         "import_run": "Add to menu",
         "import_close": "Close",
-        "ai_fill": "AI descriptions"
+        "ai_fill": "AI descriptions",
+        "modifiers": "Modifiers"
     },
     "builder": {
         "title": "Storefront appearance",
@@ -194,6 +195,45 @@
         "products_imported": "Items added to the menu",
         "products_import_failed": "Menu import failed",
         "ai_batch_started": "AI is generating descriptions — usually takes up to a minute",
-        "ai_batch_failed": "Failed to start description generation"
+        "ai_batch_failed": "Failed to start description generation",
+        "modifiers_load_failed": "Failed to load option groups",
+        "modifier_group_created": "Group created",
+        "modifier_group_failed": "Failed to save group",
+        "modifier_option_failed": "Failed to save option",
+        "modifier_attach_failed": "Failed to attach group",
+        "ai_suggest_failed": "AI could not suggest options"
+    },
+    "modifiers": {
+        "header": "Options & modifiers",
+        "hint": "Option groups attach to the product and are reusable across the menu. Product:",
+        "new_group": "New group — e.g. “Toppings” or “Size”",
+        "group_create": "Create group",
+        "loading": "Loading…",
+        "attached_title": "On this product",
+        "library_title": "Group library",
+        "library_note": "Group lives in the library: attach it to the product to show on the storefront.",
+        "attach": "Attach",
+        "detach": "Detach",
+        "required": "required",
+        "variant": "variant",
+        "remove_kind": "remove",
+        "single": "single",
+        "multi": "multiple",
+        "field_name": "Name",
+        "field_selection": "Selection",
+        "field_min": "Min select",
+        "field_max": "Max select",
+        "field_price_mode": "Price",
+        "price_delta": "add-on +₽",
+        "price_abs": "variant price",
+        "options_title": "Options",
+        "option_name": "Option name",
+        "option_price": "Price, ₽",
+        "option_add": "Add",
+        "is_default": "Default",
+        "is_available": "Available",
+        "ai_suggest": "AI suggest options",
+        "ai_busy": "AI thinking…",
+        "group_remove": "Delete group"
     }
 }

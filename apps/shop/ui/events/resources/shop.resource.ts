@@ -281,6 +281,109 @@ export const shopAiDescribeBatchOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/describe-all' },
 });
 
+export const shopModifierGroupsListOp: AsyncOpFactory = createAsyncOp({
+    name: 'shop/modifier_groups_list',
+    errorToastKey: 'shop:toast.modifiers_load_failed',
+    commandType: 'shop/modifiers/groups/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/modifier-groups' },
+    extraEffect: async (event, ctx): Promise<boolean> => {
+        if (event.type !== 'shop/catalog/changed') {
+            return false;
+        }
+        const pushedShopId = isPlainRecord(event.payload) ? event.payload.shop_id : undefined;
+        return rerunLastRequest(ctx, shopModifierGroupsListOp, {
+            when: (payload) =>
+                isPlainRecord(payload)
+                && typeof pushedShopId === 'string'
+                && payload.shop_id === pushedShopId,
+        });
+    },
+});
+
+export const shopModifierGroupCreateOp = createAsyncOp({
+    name: 'shop/modifier_group_create',
+    successToastKey: 'shop:toast.modifier_group_created',
+    errorToastKey: 'shop:toast.modifier_group_failed',
+    commandType: 'shop/modifiers/groups/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/modifier-groups' },
+});
+
+export const shopModifierGroupUpdateOp = createAsyncOp({
+    name: 'shop/modifier_group_update',
+    errorToastKey: 'shop:toast.modifier_group_failed',
+    commandType: 'shop/modifiers/groups/update_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/modifier-groups/{group_id}' },
+});
+
+export const shopModifierGroupRemoveOp = createAsyncOp({
+    name: 'shop/modifier_group_remove',
+    errorToastKey: 'shop:toast.modifier_group_failed',
+    commandType: 'shop/modifiers/groups/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/modifier-groups/{group_id}' },
+});
+
+export const shopModifierOptionCreateOp = createAsyncOp({
+    name: 'shop/modifier_option_create',
+    errorToastKey: 'shop:toast.modifier_option_failed',
+    commandType: 'shop/modifiers/options/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/modifier-groups/{group_id}/options' },
+});
+
+export const shopModifierOptionUpdateOp = createAsyncOp({
+    name: 'shop/modifier_option_update',
+    errorToastKey: 'shop:toast.modifier_option_failed',
+    commandType: 'shop/modifiers/options/update_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/modifier-options/{option_id}' },
+});
+
+export const shopModifierOptionRemoveOp = createAsyncOp({
+    name: 'shop/modifier_option_remove',
+    errorToastKey: 'shop:toast.modifier_option_failed',
+    commandType: 'shop/modifiers/options/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/modifier-options/{option_id}' },
+});
+
+export const shopProductModifierAttachOp = createAsyncOp({
+    name: 'shop/product_modifier_attach',
+    errorToastKey: 'shop:toast.modifier_attach_failed',
+    commandType: 'shop/products/modifiers/attach_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products/{product_id}/modifier-groups/{group_id}' },
+});
+
+export const shopProductModifierDetachOp = createAsyncOp({
+    name: 'shop/product_modifier_detach',
+    errorToastKey: 'shop:toast.modifier_attach_failed',
+    commandType: 'shop/products/modifiers/detach_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/products/{product_id}/modifier-groups/{group_id}' },
+});
+
+export const shopAiSuggestOptionsOp = createAsyncOp({
+    name: 'shop/ai_suggest_options',
+    errorToastKey: 'shop:toast.ai_suggest_failed',
+    commandType: 'shop/ai/suggest_options_requested',
+    transport: 'ws',
+    wsTimeoutMs: 60_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/suggest-options' },
+});
+
 export const shopTelegramConnectOp = createAsyncOp({
     name: 'shop/telegram_connect',
     errorToastKey: 'shop:toast.telegram_connect_failed',
@@ -323,6 +426,16 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/ai_enhance_photo': typeof shopAiEnhancePhotoOp;
         'shop/ai_generate_photo': typeof shopAiGeneratePhotoOp;
         'shop/ai_describe_batch': typeof shopAiDescribeBatchOp;
+        'shop/modifier_groups_list': typeof shopModifierGroupsListOp;
+        'shop/modifier_group_create': typeof shopModifierGroupCreateOp;
+        'shop/modifier_group_update': typeof shopModifierGroupUpdateOp;
+        'shop/modifier_group_remove': typeof shopModifierGroupRemoveOp;
+        'shop/modifier_option_create': typeof shopModifierOptionCreateOp;
+        'shop/modifier_option_update': typeof shopModifierOptionUpdateOp;
+        'shop/modifier_option_remove': typeof shopModifierOptionRemoveOp;
+        'shop/product_modifier_attach': typeof shopProductModifierAttachOp;
+        'shop/product_modifier_detach': typeof shopProductModifierDetachOp;
+        'shop/ai_suggest_options': typeof shopAiSuggestOptionsOp;
         'shop/telegram_connect': typeof shopTelegramConnectOp;
         'shop/telegram_disconnect': typeof shopTelegramDisconnectOp;
     }

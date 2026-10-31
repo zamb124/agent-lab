@@ -9,6 +9,7 @@ from apps.shop.realtime.operations import (
     ShopAiDescribePayload,
     ShopAiEnhancePhotoPayload,
     ShopAiGeneratePhotoPayload,
+    ShopAiSuggestOptionsPayload,
     ShopCategoryCreatePayload,
     ShopCategoryIdPayload,
     ShopCategoryUpdatePayload,
@@ -38,6 +39,7 @@ from apps.shop.realtime.operations import (
     op_ai_describe_product,
     op_ai_enhance_photo,
     op_ai_generate_photo,
+    op_ai_suggest_options,
     op_categories_create,
     op_categories_list,
     op_categories_remove,
@@ -141,6 +143,9 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/modifiers/options/remove_requested": Operation(
         payload_model=ShopModifierOptionIdPayload, fn=op_modifier_options_remove
+    ),
+    "shop/ai/suggest_options_requested": Operation(
+        payload_model=ShopAiSuggestOptionsPayload, fn=op_ai_suggest_options
     ),
     "shop/products/modifiers/attach_requested": Operation(
         payload_model=ShopProductModifierAttachPayload, fn=op_products_modifier_attach
