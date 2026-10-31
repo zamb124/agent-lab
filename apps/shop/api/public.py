@@ -69,8 +69,15 @@ async def get_storefront_page(slug: str, request: Request, di: Di) -> HTMLRespon
     etag = di.storefront_service.snapshot_etag(snapshot)
     if request.headers.get("if-none-match") == etag:
         return HTMLResponse(status_code=304, headers={"ETag": etag})
+    canonical = f"https://{slug}.{di.settings.storefront_domain_suffix}"
+    image_id = snapshot.get("cover_file_id") or snapshot.get("logo_file_id")
+    image_url = (
+        f"{canonical}/shop/api/v1/files/download/{image_id}"
+        if isinstance(image_id, str) and image_id
+        else ""
+    )
     return HTMLResponse(
-        content=storefront_html(snapshot),
+        content=storefront_html(snapshot, canonical_url=canonical, image_url=image_url),
         headers={"ETag": etag, "Cache-Control": "public, max-age=30"},
     )
 
@@ -183,6 +190,7 @@ async def get_sitemap(di: Di) -> Response:
 async def get_market_page(request: Request, di: Di) -> HTMLResponse:
     """Публичная страница агрегатора: все published-витрины + поиск по каталогу."""
     shops = await di.aggregate_service.list_shops()
+    suffix = di.settings.storefront_domain_suffix
     snapshot: JsonObject = {
         "shops": [
             {
@@ -193,13 +201,15 @@ async def get_market_page(request: Request, di: Di) -> HTMLResponse:
                 "description": s.description,
                 "logo_file_id": s.logo_file_id,
                 "cover_file_id": s.cover_file_id,
+                "url": f"https://{s.slug}.{suffix}",
             }
             for s in shops
         ],
     }
     brand = resolve_brand_or_primary(request.headers.get("host"))
+    canonical = f"https://{di.settings.aggregator_host}"
     return HTMLResponse(
-        content=market_html(snapshot, brand=brand.platform_name),
+        content=market_html(snapshot, brand=brand.platform_name, canonical_url=canonical),
         headers={"Cache-Control": "public, max-age=60"},
     )
 

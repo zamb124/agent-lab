@@ -19,6 +19,7 @@ _PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content="{description}">
+{seo_head}
 <style>
 :root{{--accent:{accent};--bg:#100e0c;--card:#1b1815;--card2:#241f1a;--text:#f6f1e8;--muted:#a89e90;--line:#2b251e;--radius:18px}}
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
@@ -142,14 +143,68 @@ async function runSearch(){{
 </html>"""
 
 
-def market_html(snapshot: JsonObject, *, brand: str) -> str:
+def _market_jsonld(snapshot: JsonObject, canonical_url: str) -> JsonObject:
+    """ItemList опубликованных витрин для rich-результатов агрегатора."""
+    raw = snapshot.get("shops")
+    shops = raw if isinstance(raw, list) else []
+    items = [
+        {
+            "@type": "ListItem",
+            "position": index + 1,
+            "url": shop.get("url", ""),
+            "name": shop.get("name", ""),
+        }
+        for index, shop in enumerate(shops)
+        if isinstance(shop, dict) and isinstance(shop.get("name"), str)
+    ]
+    doc: JsonObject = {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": snapshot.get("title", ""),
+        "url": canonical_url,
+        "mainEntity": {"@type": "ItemList", "itemListElement": items},
+    }
+    description = snapshot.get("description")
+    if isinstance(description, str) and description:
+        doc["description"] = description
+    return doc
+
+
+def market_html(snapshot: JsonObject, *, brand: str, canonical_url: str = "") -> str:
     """HTML агрегатора с inline-снапшотом магазинов."""
+    title = str(snapshot.get("title", "Витрины рядом"))
+    description = str(
+        snapshot.get(
+            "description",
+            "Единая витрина ресторанов и магазинов — заказ напрямую, без комиссий",
+        )
+    )[:200]
+    tags = [
+        '<meta property="og:type" content="website">',
+        f'<meta property="og:title" content="{escape(title)}">',
+        f'<meta property="og:description" content="{escape(description)}">',
+        '<meta property="og:locale" content="ru_RU">',
+        '<meta name="twitter:card" content="summary">',
+    ]
+    if canonical_url:
+        tags.append(f'<link rel="canonical" href="{escape(canonical_url)}">')
+        tags.append(f'<meta property="og:url" content="{escape(canonical_url)}">')
+    ld = json.dumps(_market_jsonld(snapshot, canonical_url), ensure_ascii=False).replace(
+        "</", "<\\/"
+    )
+    tags.append(f'<script type="application/ld+json">{ld}</script>')
     return _PAGE.format(
-        title=escape(str(snapshot.get("title", "Витрины рядом"))),
-        description=escape(str(snapshot.get("description", ""))[:200]),
+        title=escape(title),
+        description=escape(description),
+        seo_head="\n".join(tags),
         headline=escape(str(snapshot.get("headline", "Закажите у лучших мест рядом"))),
         subline=escape(
-            str(snapshot.get("subline", "Единая витрина ресторанов и магазинов — заказ напрямую, без комиссий"))
+            str(
+                snapshot.get(
+                    "subline",
+                    "Единая витрина ресторанов и магазинов — заказ напрямую, без комиссий",
+                )
+            )
         ),
         search_placeholder=escape(str(snapshot.get("search_placeholder", "Пицца, суши, цветы…"))),
         shops_title=escape(str(snapshot.get("shops_title", "Витрины"))),

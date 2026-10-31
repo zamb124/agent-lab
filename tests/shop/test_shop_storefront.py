@@ -160,6 +160,24 @@ class TestStorefrontPage:
         assert slug in resp.text
         assert resp.headers.get("etag")
 
+    async def test_storefront_page_seo_jsonld(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """SEO-слой витрины: OG-теги, canonical и JSON-LD LocalBusiness с меню."""
+        slug = f"seo-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={"name": "Борщ", "price_minor": 35000},
+        )
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert html.status_code == 200
+        assert 'property="og:title"' in html.text
+        assert 'rel="canonical"' in html.text
+        assert "application/ld+json" in html.text
+        assert "CafeOrCoffeeShop" in html.text
+        assert "hasMenu" in html.text and "Борщ" in html.text
+
     async def test_working_hours_in_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
@@ -270,6 +288,9 @@ class TestMarketPage:
         assert "aggregate/search" in html.text
         assert "kindChips" in html.text and "cityChips" in html.text
         assert "&kind=" in html.text and "&city=" in html.text
+        assert "application/ld+json" in html.text
+        assert "CollectionPage" in html.text and "ItemList" in html.text
+        assert 'rel="canonical"' in html.text
 
     async def test_market_page_escapes_script_breakout(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str

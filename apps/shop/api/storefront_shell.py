@@ -22,6 +22,7 @@ _PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content="{description}">
+{seo_head}
 <style>
 :root{{--accent:{accent};--bg:#100e0c;--card:#1b1815;--card2:#241f1a;--text:#f6f1e8;--muted:#a89e90;--line:#2b251e;--radius:18px}}
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
@@ -358,7 +359,124 @@ render();
 </html>"""
 
 
-def storefront_html(snapshot: JsonObject) -> str:
+_JSONLD_TYPES: dict[str, str] = {
+    "restaurant": "Restaurant",
+    "cafe": "CafeOrCoffeeShop",
+    "bakery": "Bakery",
+    "shop": "Store",
+}
+_DAYS: tuple[str, ...] = ("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
+
+
+def _opening_hours(snapshot: JsonObject) -> list[JsonObject]:
+    """working_hours {day: 'HH:MM-HH:MM'} → schema.org openingHoursSpecification."""
+    raw = snapshot.get("working_hours")
+    if not isinstance(raw, dict):
+        return []
+    specs: list[JsonObject] = []
+    for day, hours in raw.items():
+        if not isinstance(hours, str):
+            continue
+        if not day.isdigit() or not (0 <= int(day) <= 6) or "-" not in hours:
+            continue
+        opens, _, closes = hours.partition("-")
+        specs.append(
+            {
+                "@type": "OpeningHoursSpecification",
+                "dayOfWeek": _DAYS[int(day)],
+                "opens": opens.strip(),
+                "closes": closes.strip(),
+            }
+        )
+    return specs
+
+
+def _menu_items(snapshot: JsonObject) -> list[JsonObject]:
+    """Позиции каталога → hasMenu/hasMenuItem с offers для rich-результатов."""
+    raw = snapshot.get("products")
+    if not isinstance(raw, list):
+        return []
+    items: list[JsonObject] = []
+    for product in raw[:50]:
+        if not isinstance(product, dict) or not isinstance(product.get("name"), str):
+            continue
+        item: JsonObject = {"@type": "MenuItem", "name": product["name"]}
+        price = product.get("price_minor")
+        currency = snapshot.get("currency")
+        if isinstance(price, int) and price > 0 and isinstance(currency, str):
+            item["offers"] = {
+                "@type": "Offer",
+                "price": f"{price / 100:.2f}",
+                "priceCurrency": currency,
+            }
+        description = product.get("description")
+        if isinstance(description, str) and description:
+            item["description"] = description
+        items.append(item)
+    return items
+
+
+def _storefront_jsonld(snapshot: JsonObject, canonical_url: str, image_url: str) -> JsonObject:
+    """LocalBusiness-граф витрины: тип по kind, адрес, часы, меню."""
+    kind = snapshot.get("kind")
+    doc: JsonObject = {
+        "@context": "https://schema.org",
+        "@type": _JSONLD_TYPES.get(str(kind), "LocalBusiness"),
+        "name": snapshot.get("name", ""),
+        "url": canonical_url,
+    }
+    description = snapshot.get("description")
+    if isinstance(description, str) and description:
+        doc["description"] = description
+    if image_url:
+        doc["image"] = image_url
+    phone = snapshot.get("phone")
+    if isinstance(phone, str) and phone:
+        doc["telephone"] = phone
+    city = snapshot.get("city")
+    address = snapshot.get("address")
+    if (isinstance(city, str) and city) or (isinstance(address, str) and address):
+        doc["address"] = {
+            "@type": "PostalAddress",
+            **({"addressLocality": city} if isinstance(city, str) and city else {}),
+            **({"streetAddress": address} if isinstance(address, str) and address else {}),
+        }
+    specs = _opening_hours(snapshot)
+    if specs:
+        doc["openingHoursSpecification"] = specs
+    items = _menu_items(snapshot)
+    if items:
+        doc["hasMenu"] = {"@type": "Menu", "hasMenuItem": items}
+    return doc
+
+
+def _seo_head(
+    *,
+    title: str,
+    description: str,
+    canonical_url: str,
+    image_url: str,
+    jsonld: JsonObject,
+) -> str:
+    """OG/Twitter мета + canonical + JSON-LD — шаринг и rich snippets."""
+    tags = [
+        '<meta property="og:type" content="website">',
+        f'<meta property="og:title" content="{escape(title)}">',
+        f'<meta property="og:description" content="{escape(description)}">',
+        '<meta property="og:locale" content="ru_RU">',
+        '<meta name="twitter:card" content="summary_large_image">',
+    ]
+    if canonical_url:
+        tags.append(f'<link rel="canonical" href="{escape(canonical_url)}">')
+        tags.append(f'<meta property="og:url" content="{escape(canonical_url)}">')
+    if image_url:
+        tags.append(f'<meta property="og:image" content="{escape(image_url)}">')
+    ld = json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")
+    tags.append(f'<script type="application/ld+json">{ld}</script>')
+    return "\n".join(tags)
+
+
+def storefront_html(snapshot: JsonObject, *, canonical_url: str = "", image_url: str = "") -> str:
     """HTML витрины с inline-снапшотом для SSR-lite рендера."""
     accent = "#e2553f"
     preset = "menu"
@@ -376,9 +494,18 @@ def storefront_html(snapshot: JsonObject) -> str:
         )
         if part
     )
+    title = str(snapshot.get("name", "Витрина"))
+    description = str(snapshot.get("description", ""))[:200]
     return _PAGE.format(
-        title=escape(str(snapshot.get("name", "Витрина"))),
-        description=escape(str(snapshot.get("description", ""))[:200]),
+        title=escape(title),
+        description=escape(description),
+        seo_head=_seo_head(
+            title=title,
+            description=description,
+            canonical_url=canonical_url,
+            image_url=image_url,
+            jsonld=_storefront_jsonld(snapshot, canonical_url, image_url),
+        ),
         accent=escape(accent),
         body_class=escape(body_class),
         snapshot=json.dumps(snapshot, ensure_ascii=False).replace("</", "<\\/"),
