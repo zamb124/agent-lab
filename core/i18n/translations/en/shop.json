@@ -4,7 +4,8 @@
         "shop_menu": "Menu",
         "shop_builder": "Appearance",
         "shop_orders": "Orders",
-        "shop_settings": "Settings"
+        "shop_settings": "Settings",
+        "shop_promos": "Promotions"
     },
     "bottom_nav": {
         "home": "Shop",
@@ -19,7 +20,8 @@
             "shop_menu": "Menu",
             "shop_builder": "Appearance",
             "shop_orders": "Orders",
-            "shop_settings": "Settings"
+            "shop_settings": "Settings",
+            "shop_promos": "Promotions"
         }
     },
     "status": {
@@ -201,7 +203,10 @@
         "modifier_group_failed": "Failed to save group",
         "modifier_option_failed": "Failed to save option",
         "modifier_attach_failed": "Failed to attach group",
-        "ai_suggest_failed": "AI could not suggest options"
+        "ai_suggest_failed": "AI could not suggest options",
+        "promos_load_failed": "Failed to load promotions",
+        "promo_created": "Promotion created",
+        "promo_failed": "Failed to save promotion"
     },
     "modifiers": {
         "header": "Options & modifiers",
@@ -235,5 +240,66 @@
         "ai_suggest": "AI suggest options",
         "ai_busy": "AI thinking…",
         "group_remove": "Delete group"
+    },
+    "promos": {
+        "title": "Promotions",
+        "hint": "Discounts and special offers apply automatically — guests see the savings in the cart.",
+        "new": "New promotion",
+        "edit_title": "Edit promotion",
+        "empty": "No promotions yet — create one to attract guests",
+        "field_name": "Name",
+        "template": "Promotion type",
+        "tpl": {
+            "percent_order": "% off entire order",
+            "percent_items": "% off selected items",
+            "amount_order": "Fixed amount off",
+            "n_plus_m_free": "Buy N get M free",
+            "fixed_bundle_price": "Bundle for a fixed price",
+            "free_delivery": "Free delivery"
+        },
+        "field_pct": "Discount, %",
+        "field_amount": "Discount amount, ₽",
+        "field_n": "Customer buys, pcs",
+        "field_m": "Of them free, pcs",
+        "field_price": "Bundle price, ₽",
+        "bundle_items": "Bundle contents",
+        "bundle_add": "Add item",
+        "scope": "Items in promotion",
+        "scope_hint": "Nothing selected — applies to the whole menu",
+        "condition": "Condition",
+        "cond": {
+            "always": "Always",
+            "min_total": "Order total from",
+            "min_qty": "Items in order from",
+            "items_present": "Order contains items"
+        },
+        "cond_sum": "Total from, ₽",
+        "cond_n": "Items from",
+        "schedule": "On a schedule",
+        "time_from": "From",
+        "time_to": "To",
+        "priority": "Priority",
+        "stacking": "Stacking",
+        "stacking_all": "With other promos",
+        "stacking_exclusive": "Exclusive",
+        "active": "Active",
+        "save": "Save",
+        "cancel": "Cancel",
+        "edit": "Edit",
+        "off": "Off",
+        "scheduled": "Scheduled",
+        "desc": {
+            "percent_order": "{pct}% off the entire order",
+            "percent_items": "{pct}% off items",
+            "amount_order": "{sum} ₽ off the order",
+            "n_plus_m": "{n}+{m} free",
+            "bundle": "Bundle for {sum} ₽",
+            "free_delivery": "Free delivery"
+        },
+        "cond_desc": {
+            "min_total": "from {sum} ₽",
+            "min_qty": "from {n} items",
+            "items_present": "with specific items"
+        }
     }
 }

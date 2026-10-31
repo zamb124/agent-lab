@@ -18,6 +18,7 @@ from apps.shop.models import (
     ShopDomain,
     ShopDomainStatus,
     ShopProduct,
+    ShopPromo,
     ShopStatus,
 )
 from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
@@ -100,9 +101,8 @@ class StorefrontService:
         """Полный снапшот витрины из PostgreSQL — вход кэша и ответа API."""
         categories = await ShopCategory.list_by_shop_by_sort_asc(shop.shop_id)
         products = await ShopProduct.list_available_by_shop_by_sort_asc(shop.shop_id)
-        modifier_tree = await load_modifier_tree_by_sort_asc(
-            [p.shop_product_id for p in products]
-        )
+        modifier_tree = await load_modifier_tree_by_sort_asc([p.shop_product_id for p in products])
+        promos = await ShopPromo.list_active_by_shop_by_priority_desc(shop.shop_id)
         return {
             "slug": shop.slug,
             "name": shop.name,
@@ -121,6 +121,15 @@ class StorefrontService:
             "min_order_minor": shop.min_order_minor,
             "currency": shop.currency,
             "theme": shop.theme,
+            "promos": [
+                {
+                    "id": promo.shop_promo_id,
+                    "name": promo.name,
+                    "condition": promo.condition,
+                    "action": promo.action,
+                }
+                for promo in promos
+            ],
             "modifier_nested_groups": {
                 ag.group.shop_modifier_group_id: {
                     "id": ag.group.shop_modifier_group_id,

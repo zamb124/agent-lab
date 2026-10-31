@@ -384,6 +384,55 @@ export const shopAiSuggestOptionsOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/suggest-options' },
 });
 
+export const shopPromosListOp: AsyncOpFactory = createAsyncOp({
+    name: 'shop/promos_list',
+    errorToastKey: 'shop:toast.promos_load_failed',
+    commandType: 'shop/promos/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/promos' },
+    extraEffect: async (event, ctx): Promise<boolean> => {
+        if (event.type !== 'shop/catalog/changed') {
+            return false;
+        }
+        const pushedShopId = isPlainRecord(event.payload) ? event.payload.shop_id : undefined;
+        return rerunLastRequest(ctx, shopPromosListOp, {
+            when: (payload) =>
+                isPlainRecord(payload)
+                && typeof pushedShopId === 'string'
+                && payload.shop_id === pushedShopId,
+        });
+    },
+});
+
+export const shopPromoCreateOp = createAsyncOp({
+    name: 'shop/promo_create',
+    successToastKey: 'shop:toast.promo_created',
+    errorToastKey: 'shop:toast.promo_failed',
+    commandType: 'shop/promos/create_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/promos' },
+});
+
+export const shopPromoUpdateOp = createAsyncOp({
+    name: 'shop/promo_update',
+    errorToastKey: 'shop:toast.promo_failed',
+    commandType: 'shop/promos/update_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/promos/{shop_promo_id}' },
+});
+
+export const shopPromoRemoveOp = createAsyncOp({
+    name: 'shop/promo_remove',
+    errorToastKey: 'shop:toast.promo_failed',
+    commandType: 'shop/promos/remove_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'DELETE', path: '/shop/api/v1/shops/{shop_id}/promos/{shop_promo_id}' },
+});
+
 export const shopTelegramConnectOp = createAsyncOp({
     name: 'shop/telegram_connect',
     errorToastKey: 'shop:toast.telegram_connect_failed',
@@ -436,6 +485,10 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/product_modifier_attach': typeof shopProductModifierAttachOp;
         'shop/product_modifier_detach': typeof shopProductModifierDetachOp;
         'shop/ai_suggest_options': typeof shopAiSuggestOptionsOp;
+        'shop/promos_list': typeof shopPromosListOp;
+        'shop/promo_create': typeof shopPromoCreateOp;
+        'shop/promo_update': typeof shopPromoUpdateOp;
+        'shop/promo_remove': typeof shopPromoRemoveOp;
         'shop/telegram_connect': typeof shopTelegramConnectOp;
         'shop/telegram_disconnect': typeof shopTelegramDisconnectOp;
     }

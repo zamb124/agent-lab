@@ -6,6 +6,7 @@ from apps.shop.models.enums import (
     ModifierGroupKind,
     ModifierPriceMode,
     ModifierSelectionMode,
+    PromoStacking,
     ShopDeliveryType,
     ShopDomainStatus,
     ShopKind,
@@ -19,12 +20,14 @@ from apps.shop.models.order import ShopOrder
 from apps.shop.models.order_item import ShopOrderItem
 from apps.shop.models.product import ShopProduct
 from apps.shop.models.product_modifier_group import ShopProductModifierGroup
+from apps.shop.models.promo import ShopPromo
 from apps.shop.models.shop import Shop
 
 __all__ = [
     "ModifierGroupKind",
     "ModifierPriceMode",
     "ModifierSelectionMode",
+    "PromoStacking",
     "Shop",
     "ShopCategory",
     "ShopDeliveryType",
@@ -39,5 +42,6 @@ __all__ = [
     "ShopOrderStatus",
     "ShopProduct",
     "ShopProductModifierGroup",
+    "ShopPromo",
     "ShopStatus",
 ]

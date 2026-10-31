@@ -12,6 +12,7 @@ from apps.shop.models.enums import (
     ShopStatus,
 )
 from core.models import StrictBaseModel
+from core.types import JsonObject
 
 
 class ShopTheme(StrictBaseModel):
@@ -276,7 +277,14 @@ class ShopOrderItemResponse(StrictBaseModel):
     name: str
     price_minor: int
     qty: int
+    discount_minor: int = 0
     modifiers: list[ShopOrderItemModifierResponse] = []
+
+
+class ShopPromoAppliedResponse(StrictBaseModel):
+    promo_id: str
+    name: str
+    saved_minor: int
 
 
 class ShopOrderResponse(StrictBaseModel):
@@ -290,8 +298,10 @@ class ShopOrderResponse(StrictBaseModel):
     address: str
     comment: str
     items_total_minor: int
+    discount_minor: int
     delivery_fee_minor: int
     total_minor: int
+    promos: list[ShopPromoAppliedResponse] = []
     currency: str
     source: ShopOrderSource
     created_at: str
@@ -326,3 +336,68 @@ class ShopOrderStatusResponse(StrictBaseModel):
     currency: str
     delivery_type: ShopDeliveryType
     created_at: str
+
+
+class ShopCartPriceRequest(StrictBaseModel):
+    """Живой расчёт корзины без создания заказа: цены, скидки, акции."""
+
+    items: list[ShopOrderItemRequest] = Field(min_length=1, max_length=99)
+    delivery_type: ShopDeliveryType = ShopDeliveryType.PICKUP
+
+
+class ShopCartPriceLineResponse(StrictBaseModel):
+    product_id: str
+    qty: int
+    unit_minor: int
+    discount_minor: int
+
+
+class ShopCartPriceResponse(StrictBaseModel):
+    lines: list[ShopCartPriceLineResponse]
+    items_total_minor: int
+    discount_minor: int
+    delivery_fee_minor: int
+    total_minor: int
+    applied_promos: list[ShopPromoAppliedResponse]
+    below_min_order: bool
+
+
+class ShopPromoCreateRequest(StrictBaseModel):
+    """Акция: condition + action JSONB + window + политика применения."""
+
+    name: str = Field(min_length=1, max_length=200)
+    is_active: bool = True
+    sort: int | None = Field(default=None, ge=0)
+    priority: int = Field(default=0, ge=-100, le=100)
+    stacking: str = Field(default="all", pattern=r"^(all|exclusive)$")
+    window: JsonObject = Field(default_factory=dict)
+    condition: JsonObject
+    action: JsonObject
+
+
+class ShopPromoUpdateRequest(StrictBaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    is_active: bool | None = None
+    sort: int | None = Field(default=None, ge=0)
+    priority: int | None = Field(default=None, ge=-100, le=100)
+    stacking: str | None = Field(default=None, pattern=r"^(all|exclusive)$")
+    window: JsonObject | None = None
+    condition: JsonObject | None = None
+    action: JsonObject | None = None
+
+
+class ShopPromoResponse(StrictBaseModel):
+    shop_promo_id: str
+    shop_id: str
+    name: str
+    is_active: bool
+    sort: int
+    priority: int
+    stacking: str
+    window: JsonObject
+    condition: JsonObject
+    action: JsonObject
+
+
+class ShopPromosResponse(StrictBaseModel):
+    promos: list[ShopPromoResponse]

@@ -43,6 +43,7 @@ import '../pages/shop-home-page.js';
 import '../pages/shop-menu-page.js';
 import '../pages/shop-builder-page.js';
 import '../pages/shop-orders-page.js';
+import '../pages/shop-promos-page.js';
 import '../pages/shop-settings-page.js';
 import '../modals/shop-modifiers-modal.js';
 
@@ -51,6 +52,7 @@ const SHOP_ROUTES = [
     { key: 'shop_menu',      path: ':shopId/menu',      parent: 'shop_home', titleKey: 'routes.shop_menu' },
     { key: 'shop_builder',   path: ':shopId/builder',   parent: 'shop_home', titleKey: 'routes.shop_builder' },
     { key: 'shop_orders',    path: ':shopId/orders',    parent: 'shop_home', titleKey: 'routes.shop_orders' },
+    { key: 'shop_promos',    path: ':shopId/promos',    parent: 'shop_home', titleKey: 'routes.shop_promos' },
     { key: 'shop_settings',  path: ':shopId/settings',  parent: 'shop_home', titleKey: 'routes.shop_settings' },
 ];
 
@@ -175,6 +177,8 @@ export class ShopApp extends PlatformApp {
                 return html`<shop-builder-page shop-id=${shopId}></shop-builder-page>`;
             case 'shop_orders':
                 return html`<shop-orders-page shop-id=${shopId}></shop-orders-page>`;
+            case 'shop_promos':
+                return html`<shop-promos-page shop-id=${shopId}></shop-promos-page>`;
             case 'shop_settings':
                 return html`<shop-settings-page shop-id=${shopId}></shop-settings-page>`;
             case 'shop_home':

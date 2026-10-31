@@ -10,6 +10,7 @@ from apps.shop.realtime.operations import (
     ShopAiEnhancePhotoPayload,
     ShopAiGeneratePhotoPayload,
     ShopAiSuggestOptionsPayload,
+    ShopCartPricePayload,
     ShopCategoryCreatePayload,
     ShopCategoryIdPayload,
     ShopCategoryUpdatePayload,
@@ -32,6 +33,9 @@ from apps.shop.realtime.operations import (
     ShopProductModifierDetachPayload,
     ShopProductsImportPayload,
     ShopProductUpdatePayload,
+    ShopPromoCreatePayload,
+    ShopPromoIdPayload,
+    ShopPromoUpdatePayload,
     ShopPublicOrderStatusPayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
@@ -64,6 +68,11 @@ from apps.shop.realtime.operations import (
     op_products_modifier_detach,
     op_products_remove,
     op_products_update,
+    op_promos_create,
+    op_promos_list,
+    op_promos_remove,
+    op_promos_update,
+    op_public_cart_price,
     op_public_order_create,
     op_public_order_status,
     op_shops_create,
@@ -81,24 +90,12 @@ from core.websocket import EmptyPayload, Operation, RegisteredOperation
 SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/shops/list_requested": Operation(payload_model=EmptyPayload, fn=op_shops_list),
     "shop/shops/item_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_get),
-    "shop/shops/create_requested": Operation(
-        payload_model=ShopCreateRequest, fn=op_shops_create
-    ),
-    "shop/shops/update_requested": Operation(
-        payload_model=ShopUpdatePayload, fn=op_shops_update
-    ),
-    "shop/shops/publish_requested": Operation(
-        payload_model=ShopIdPayload, fn=op_shops_publish
-    ),
-    "shop/shops/suspend_requested": Operation(
-        payload_model=ShopIdPayload, fn=op_shops_suspend
-    ),
-    "shop/shops/remove_requested": Operation(
-        payload_model=ShopIdPayload, fn=op_shops_remove
-    ),
-    "shop/categories/list_requested": Operation(
-        payload_model=ShopIdPayload, fn=op_categories_list
-    ),
+    "shop/shops/create_requested": Operation(payload_model=ShopCreateRequest, fn=op_shops_create),
+    "shop/shops/update_requested": Operation(payload_model=ShopUpdatePayload, fn=op_shops_update),
+    "shop/shops/publish_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_publish),
+    "shop/shops/suspend_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_suspend),
+    "shop/shops/remove_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_remove),
+    "shop/categories/list_requested": Operation(payload_model=ShopIdPayload, fn=op_categories_list),
     "shop/categories/create_requested": Operation(
         payload_model=ShopCategoryCreatePayload, fn=op_categories_create
     ),
@@ -108,9 +105,7 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/categories/remove_requested": Operation(
         payload_model=ShopCategoryIdPayload, fn=op_categories_remove
     ),
-    "shop/products/list_requested": Operation(
-        payload_model=ShopIdPayload, fn=op_products_list
-    ),
+    "shop/products/list_requested": Operation(payload_model=ShopIdPayload, fn=op_products_list),
     "shop/products/create_requested": Operation(
         payload_model=ShopProductCreatePayload, fn=op_products_create
     ),
@@ -153,18 +148,25 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/products/modifiers/detach_requested": Operation(
         payload_model=ShopProductModifierDetachPayload, fn=op_products_modifier_detach
     ),
-    "shop/orders/list_requested": Operation(
-        payload_model=ShopOrderListPayload, fn=op_orders_list
+    "shop/promos/list_requested": Operation(payload_model=ShopIdPayload, fn=op_promos_list),
+    "shop/promos/create_requested": Operation(
+        payload_model=ShopPromoCreatePayload, fn=op_promos_create
     ),
-    "shop/orders/item_requested": Operation(
-        payload_model=ShopOrderIdPayload, fn=op_orders_get
+    "shop/promos/update_requested": Operation(
+        payload_model=ShopPromoUpdatePayload, fn=op_promos_update
     ),
+    "shop/promos/remove_requested": Operation(
+        payload_model=ShopPromoIdPayload, fn=op_promos_remove
+    ),
+    "shop/public/cart_price_requested": Operation(
+        payload_model=ShopCartPricePayload, fn=op_public_cart_price
+    ),
+    "shop/orders/list_requested": Operation(payload_model=ShopOrderListPayload, fn=op_orders_list),
+    "shop/orders/item_requested": Operation(payload_model=ShopOrderIdPayload, fn=op_orders_get),
     "shop/orders/set_status_requested": Operation(
         payload_model=ShopOrderSetStatusPayload, fn=op_orders_set_status
     ),
-    "shop/domains/add_requested": Operation(
-        payload_model=ShopDomainAddPayload, fn=op_domains_add
-    ),
+    "shop/domains/add_requested": Operation(payload_model=ShopDomainAddPayload, fn=op_domains_add),
     "shop/domains/remove_requested": Operation(
         payload_model=ShopDomainIdPayload, fn=op_domains_remove
     ),

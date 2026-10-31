@@ -14,6 +14,7 @@ from apps.shop.models import (
     ShopModifierOption,
     ShopProduct,
     ShopProductModifierGroup,
+    ShopPromo,
     ShopStatus,
 )
 from apps.shop.models.api import (
@@ -27,9 +28,12 @@ from apps.shop.models.api import (
     ShopProductCreateRequest,
     ShopProductsImportRequest,
     ShopProductUpdateRequest,
+    ShopPromoCreateRequest,
+    ShopPromoUpdateRequest,
     ShopUpdateRequest,
 )
 from apps.shop.models.common import DOMAIN_PATTERN, SLUG_PATTERN, new_id
+from apps.shop.models.enums import PromoStacking
 from core.errors.boundary import (
     PlatformBoundaryError,
     PlatformConflictError,
@@ -48,9 +52,7 @@ class ShopService:
     async def list_shops(self, company_id: str) -> list[Shop]:
         return await Shop.list_alive_by_company_by_updated_desc(company_id)
 
-    async def create_shop(
-        self, company_id: str, user_id: str, payload: ShopCreateRequest
-    ) -> Shop:
+    async def create_shop(self, company_id: str, user_id: str, payload: ShopCreateRequest) -> Shop:
         slug = self._validate_slug(payload.slug)
         if await Shop.slug_exists(slug):
             raise PlatformConflictError(
@@ -75,9 +77,7 @@ class ShopService:
             raise PlatformNotFoundError("Shop not found", error_code="shop_not_found")
         return shop
 
-    async def update_shop(
-        self, company_id: str, shop_id: str, payload: ShopUpdateRequest
-    ) -> Shop:
+    async def update_shop(self, company_id: str, shop_id: str, payload: ShopUpdateRequest) -> Shop:
         shop = await self.get_shop(company_id, shop_id)
         patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
         _ = patch.pop("shop_id", None)
@@ -155,9 +155,7 @@ class ShopService:
         _ = await category.save()
         return category
 
-    async def delete_category(
-        self, company_id: str, shop_id: str, category_id: str
-    ) -> None:
+    async def delete_category(self, company_id: str, shop_id: str, category_id: str) -> None:
         _ = await self.get_shop(company_id, shop_id)
         category = await ShopCategory.get_by_id(category_id)
         if category is None or category.shop_id != shop_id:
@@ -175,9 +173,7 @@ class ShopService:
         if payload.category_id is not None:
             category = await ShopCategory.get_by_id(payload.category_id)
             if category is None or category.shop_id != shop_id:
-                raise PlatformNotFoundError(
-                    "Category not found", error_code="category_not_found"
-                )
+                raise PlatformNotFoundError("Category not found", error_code="category_not_found")
         now = utcnow()
         product = ShopProduct(
             shop_product_id=new_id("shopprod"),
@@ -201,9 +197,7 @@ class ShopService:
         if payload.category_id is not None:
             category = await ShopCategory.get_by_id(payload.category_id)
             if category is None or category.shop_id != shop_id:
-                raise PlatformNotFoundError(
-                    "Category not found", error_code="category_not_found"
-                )
+                raise PlatformNotFoundError("Category not found", error_code="category_not_found")
         now = utcnow()
         base_sort = await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id)
         products = [
@@ -242,18 +236,14 @@ class ShopService:
                 )
             category = await ShopCategory.get_by_id(category_patch)
             if category is None or category.shop_id != shop_id:
-                raise PlatformNotFoundError(
-                    "Category not found", error_code="category_not_found"
-                )
+                raise PlatformNotFoundError("Category not found", error_code="category_not_found")
         for field, value in patch.items():
             setattr(product, field, value)
         product.updated_at = utcnow()
         _ = await product.save()
         return product
 
-    async def delete_product(
-        self, company_id: str, shop_id: str, product_id: str
-    ) -> None:
+    async def delete_product(self, company_id: str, shop_id: str, product_id: str) -> None:
         _ = await self.get_shop(company_id, shop_id)
         product = await ShopProduct.get_by_id(product_id)
         if product is None or product.shop_id != shop_id:
@@ -262,9 +252,7 @@ class ShopService:
 
     # --- Модификаторы ---
 
-    async def _get_modifier_group(
-        self, shop_id: str, group_id: str
-    ) -> ShopModifierGroup:
+    async def _get_modifier_group(self, shop_id: str, group_id: str) -> ShopModifierGroup:
         group = await ShopModifierGroup.get_by_id(group_id)
         if group is None or group.shop_id != shop_id:
             raise PlatformNotFoundError(
@@ -272,9 +260,7 @@ class ShopService:
             )
         return group
 
-    async def _get_modifier_option(
-        self, shop_id: str, option_id: str
-    ) -> ShopModifierOption:
+    async def _get_modifier_option(self, shop_id: str, option_id: str) -> ShopModifierOption:
         option = await ShopModifierOption.get_by_id(option_id)
         if option is None:
             raise PlatformNotFoundError(
@@ -291,9 +277,9 @@ class ShopService:
         if not groups:
             return []
         group_ids = [g.shop_modifier_group_id for g in groups]
-        options = await ShopModifierOption.objects.filter(
-            group_id__in=group_ids
-        ).order_by("sort").all()
+        options = (
+            await ShopModifierOption.objects.filter(group_id__in=group_ids).order_by("sort").all()
+        )
         by_group: dict[str, list[ShopModifierOption]] = {}
         for o in options:
             by_group.setdefault(o.group_id, []).append(o)
@@ -350,14 +336,10 @@ class ShopService:
         _ = await group.save()
         return group
 
-    async def delete_modifier_group(
-        self, company_id: str, shop_id: str, group_id: str
-    ) -> None:
+    async def delete_modifier_group(self, company_id: str, shop_id: str, group_id: str) -> None:
         _ = await self.get_shop(company_id, shop_id)
         group = await self._get_modifier_group(shop_id, group_id)
-        links = await ShopProductModifierGroup.objects.filter(
-            group_id=group_id
-        ).all()
+        links = await ShopProductModifierGroup.objects.filter(group_id=group_id).all()
         for link in links:
             _ = await link.delete()
         options = await ShopModifierOption.list_by_group_by_sort_asc(group_id)
@@ -415,9 +397,7 @@ class ShopService:
         _ = await option.save()
         return option
 
-    async def delete_modifier_option(
-        self, company_id: str, shop_id: str, option_id: str
-    ) -> None:
+    async def delete_modifier_option(self, company_id: str, shop_id: str, option_id: str) -> None:
         _ = await self.get_shop(company_id, shop_id)
         option = await self._get_modifier_option(shop_id, option_id)
         _ = await option.delete()
@@ -434,9 +414,7 @@ class ShopService:
         _ = await self.get_shop(company_id, shop_id)
         product = await ShopProduct.get_by_id(product_id)
         if product is None or product.shop_id != shop_id:
-            raise PlatformNotFoundError(
-                "Product not found", error_code="product_not_found"
-            )
+            raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         _ = await self._get_modifier_group(shop_id, group_id)
         existing = await ShopProductModifierGroup.get_link(product_id, group_id)
         if existing is not None:
@@ -472,17 +450,74 @@ class ShopService:
         _ = await self._get_modifier_group(shop_id, group_id)
         _ = await link.delete()
 
+    # --- Акции ---
+
+    async def _get_promo(self, shop_id: str, promo_id: str) -> ShopPromo:
+        promo = await ShopPromo.get_by_id(promo_id)
+        if promo is None or promo.shop_id != shop_id:
+            raise PlatformNotFoundError("Promo not found", error_code="promo_not_found")
+        return promo
+
+    async def list_promos_by_sort_asc(self, company_id: str, shop_id: str) -> list[ShopPromo]:
+        _ = await self.get_shop(company_id, shop_id)
+        return await ShopPromo.list_by_shop_by_sort_asc(shop_id)
+
+    async def create_promo(
+        self, company_id: str, shop_id: str, payload: ShopPromoCreateRequest
+    ) -> ShopPromo:
+        _ = await self.get_shop(company_id, shop_id)
+        now = utcnow()
+        sort = payload.sort
+        if sort is None:
+            sort = await ShopPromo.next_sort(shop_id)
+        promo = ShopPromo(
+            shop_promo_id=new_id("shoppromo"),
+            shop_id=shop_id,
+            name=payload.name,
+            is_active=payload.is_active,
+            sort=sort,
+            priority=payload.priority,
+            stacking=PromoStacking(payload.stacking),
+            window=payload.window,
+            condition=payload.condition,
+            action=payload.action,
+            created_at=now,
+            updated_at=now,
+        )
+        return await ShopPromo.create(promo)
+
+    async def update_promo(
+        self,
+        company_id: str,
+        shop_id: str,
+        promo_id: str,
+        payload: ShopPromoUpdateRequest,
+    ) -> ShopPromo:
+        _ = await self.get_shop(company_id, shop_id)
+        promo = await self._get_promo(shop_id, promo_id)
+        patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
+        _ = patch.pop("shop_id", None)
+        _ = patch.pop("shop_promo_id", None)
+        if "stacking" in patch and patch["stacking"] is not None:
+            patch["stacking"] = PromoStacking(patch["stacking"])
+        for field, value in patch.items():
+            setattr(promo, field, value)
+        promo.updated_at = utcnow()
+        _ = await promo.save()
+        return promo
+
+    async def delete_promo(self, company_id: str, shop_id: str, promo_id: str) -> None:
+        _ = await self.get_shop(company_id, shop_id)
+        promo = await self._get_promo(shop_id, promo_id)
+        _ = await promo.delete()
+
     # --- Домены ---
 
-    async def add_domain(
-        self, company_id: str, shop_id: str, domain: str
-    ) -> ShopDomain:
+    async def add_domain(self, company_id: str, shop_id: str, domain: str) -> ShopDomain:
         shop = await self.get_shop(company_id, shop_id)
         normalized = domain.strip().lower()
         if not DOMAIN_PATTERN.match(normalized):
-            raise PlatformConflictError(
-                "Invalid domain name", error_code="domain_invalid"
-            )
+            raise PlatformConflictError("Invalid domain name", error_code="domain_invalid")
         if normalized.endswith(self._settings.storefront_domain_suffix):
             raise PlatformConflictError(
                 "Platform subdomains are connected automatically by slug",
@@ -490,9 +525,7 @@ class ShopService:
             )
         existing = await ShopDomain.get_by_domain(normalized)
         if existing is not None:
-            raise PlatformConflictError(
-                "Domain is already connected", error_code="domain_taken"
-            )
+            raise PlatformConflictError("Domain is already connected", error_code="domain_taken")
         existing_for_shop = await ShopDomain.get_by_shop(shop.shop_id)
         if existing_for_shop is not None:
             raise PlatformConflictError(
@@ -510,9 +543,7 @@ class ShopService:
         )
         return await ShopDomain.create(record)
 
-    async def remove_domain(
-        self, company_id: str, shop_id: str, domain_id: str
-    ) -> None:
+    async def remove_domain(self, company_id: str, shop_id: str, domain_id: str) -> None:
         _ = await self.get_shop(company_id, shop_id)
         record = await ShopDomain.objects.filter(shop_domain_id=domain_id).get_or_none()
         if record is None or record.shop_id != shop_id:

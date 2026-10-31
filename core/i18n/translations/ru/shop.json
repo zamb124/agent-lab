@@ -4,7 +4,8 @@
         "shop_menu": "Меню",
         "shop_builder": "Внешний вид",
         "shop_orders": "Заказы",
-        "shop_settings": "Настройки"
+        "shop_settings": "Настройки",
+        "shop_promos": "Акции"
     },
     "bottom_nav": {
         "home": "Магазин",
@@ -19,7 +20,8 @@
             "shop_menu": "Меню",
             "shop_builder": "Внешний вид",
             "shop_orders": "Заказы",
-            "shop_settings": "Настройки"
+            "shop_settings": "Настройки",
+            "shop_promos": "Акции"
         }
     },
     "status": {
@@ -201,7 +203,10 @@
         "modifier_group_failed": "Не удалось сохранить группу",
         "modifier_option_failed": "Не удалось сохранить опцию",
         "modifier_attach_failed": "Не удалось прикрепить группу",
-        "ai_suggest_failed": "AI не смог предложить опции"
+        "ai_suggest_failed": "AI не смог предложить опции",
+        "promos_load_failed": "Не удалось загрузить акции",
+        "promo_created": "Акция создана",
+        "promo_failed": "Не удалось сохранить акцию"
     },
     "modifiers": {
         "header": "Опции и модификаторы",
@@ -235,5 +240,66 @@
         "ai_suggest": "AI-предложить опции",
         "ai_busy": "AI думает…",
         "group_remove": "Удалить группу"
+    },
+    "promos": {
+        "title": "Акции",
+        "hint": "Скидки и спецпредложения применяются к заказу автоматически — гость видит выгоду в корзине.",
+        "new": "Новая акция",
+        "edit_title": "Редактировать акцию",
+        "empty": "Акций пока нет — создайте первую, чтобы привлечь гостей",
+        "field_name": "Название",
+        "template": "Тип акции",
+        "tpl": {
+            "percent_order": "Скидка % на весь заказ",
+            "percent_items": "Скидка % на позиции",
+            "amount_order": "Скидка суммой",
+            "n_plus_m_free": "N + M бесплатно",
+            "fixed_bundle_price": "Комбо за фикс. цену",
+            "free_delivery": "Бесплатная доставка"
+        },
+        "field_pct": "Размер скидки, %",
+        "field_amount": "Сумма скидки, ₽",
+        "field_n": "Гость берёт, шт.",
+        "field_m": "Из них бесплатно, шт.",
+        "field_price": "Цена комбо, ₽",
+        "bundle_items": "Состав комбо",
+        "bundle_add": "Добавить позицию",
+        "scope": "Позиции в акции",
+        "scope_hint": "Ничего не выбрано — акция действует на всё меню",
+        "condition": "Условие",
+        "cond": {
+            "always": "Всегда",
+            "min_total": "Сумма заказа от",
+            "min_qty": "Позиций в заказе от",
+            "items_present": "В заказе есть позиции"
+        },
+        "cond_sum": "Сумма от, ₽",
+        "cond_n": "Позиций от",
+        "schedule": "По расписанию",
+        "time_from": "С",
+        "time_to": "До",
+        "priority": "Приоритет",
+        "stacking": "Совмещение",
+        "stacking_all": "С другими акциями",
+        "stacking_exclusive": "Не совмещать",
+        "active": "Активна",
+        "save": "Сохранить",
+        "cancel": "Отмена",
+        "edit": "Изменить",
+        "off": "Выключена",
+        "scheduled": "По расписанию",
+        "desc": {
+            "percent_order": "Скидка {pct}% на весь заказ",
+            "percent_items": "Скидка {pct}% на позиции",
+            "amount_order": "Скидка {sum} ₽ на заказ",
+            "n_plus_m": "{n}+{m} бесплатно",
+            "bundle": "Комбо за {sum} ₽",
+            "free_delivery": "Бесплатная доставка"
+        },
+        "cond_desc": {
+            "min_total": "от {sum} ₽",
+            "min_qty": "от {n} позиций",
+            "items_present": "при наличии позиций"
+        }
     }
 }

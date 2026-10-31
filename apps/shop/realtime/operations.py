@@ -23,9 +23,12 @@ from apps.shop.models import (
     ShopModifierOption,
     ShopProduct,
     ShopProductModifierGroup,
+    ShopPromo,
 )
 from apps.shop.models.api import (
     ShopAiSuggestOptionsResponse,
+    ShopCartPriceRequest,
+    ShopCartPriceResponse,
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
@@ -46,6 +49,10 @@ from apps.shop.models.api import (
     ShopProductsImportRequest,
     ShopProductsImportResponse,
     ShopProductUpdateRequest,
+    ShopPromoCreateRequest,
+    ShopPromoResponse,
+    ShopPromosResponse,
+    ShopPromoUpdateRequest,
     ShopResponse,
     ShopTheme,
     ShopUpdateRequest,
@@ -169,6 +176,24 @@ class ShopProductModifierDetachPayload(StrictBaseModel):
     group_id: str = Field(min_length=1)
 
 
+class ShopPromoCreatePayload(ShopPromoCreateRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopPromoUpdatePayload(ShopPromoUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_promo_id: str = Field(min_length=1)
+
+
+class ShopPromoIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_promo_id: str = Field(min_length=1)
+
+
+class ShopCartPricePayload(ShopCartPriceRequest):
+    slug: str = Field(min_length=1)
+
+
 class ShopOrderListPayload(StrictBaseModel):
     shop_id: str = Field(min_length=1)
     status: ShopOrderStatus | None = None
@@ -256,9 +281,7 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         city=shop.city,
         address=shop.address,
         timezone=shop.timezone,
-        working_hours={
-            str(day): str(hours) for day, hours in shop.working_hours.items()
-        },
+        working_hours={str(day): str(hours) for day, hours in shop.working_hours.items()},
         delivery_enabled=shop.delivery_enabled,
         pickup_enabled=shop.pickup_enabled,
         delivery_fee_minor=shop.delivery_fee_minor,
@@ -309,27 +332,21 @@ async def _enqueue_rebuild(
     if catalog_changed:
         shop = await Shop.get_by_id(shop_id)
         if shop is not None:
-            await publish_shop_catalog_changed(
-                shop_id, slug, str(shop.company_id)
-            )
+            await publish_shop_catalog_changed(shop_id, slug, str(shop.company_id))
     _ = await enqueue(SHOP_REBUILD_STOREFRONT, slug=slug)
 
 
 # --- Витрины (админ) ---
 
 
-async def op_shops_list(
-    payload: EmptyPayload, *, user: User, di: Di
-) -> ListResponse[ShopResponse]:
+async def op_shops_list(payload: EmptyPayload, *, user: User, di: Di) -> ListResponse[ShopResponse]:
     scope = await require_company_admin(di.authz_service)
     _ = (payload, user)
     shops = await di.shop_service.list_shops(scope.company_id)
     return ListResponse(items=[await _shop_response(s, di) for s in shops])
 
 
-async def op_shops_create(
-    payload: ShopCreateRequest, *, user: User, di: Di
-) -> ShopResponse:
+async def op_shops_create(payload: ShopCreateRequest, *, user: User, di: Di) -> ShopResponse:
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
@@ -342,9 +359,7 @@ async def op_shops_create(
     return await _shop_response(shop, di)
 
 
-async def op_shops_get(
-    payload: ShopIdPayload, *, user: User, di: Di
-) -> ShopResponse:
+async def op_shops_get(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:
     scope = await require_company_viewer(di.authz_service)
     _ = user
     try:
@@ -354,9 +369,7 @@ async def op_shops_get(
     return await _shop_response(shop, di)
 
 
-async def op_shops_update(
-    payload: ShopUpdatePayload, *, user: User, di: Di
-) -> ShopResponse:
+async def op_shops_update(payload: ShopUpdatePayload, *, user: User, di: Di) -> ShopResponse:
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
@@ -372,9 +385,7 @@ async def op_shops_update(
     return await _shop_response(shop, di)
 
 
-async def op_shops_publish(
-    payload: ShopIdPayload, *, user: User, di: Di
-) -> ShopResponse:
+async def op_shops_publish(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
@@ -390,9 +401,7 @@ async def op_shops_publish(
     return await _shop_response(shop, di)
 
 
-async def op_shops_suspend(
-    payload: ShopIdPayload, *, user: User, di: Di
-) -> ShopResponse:
+async def op_shops_suspend(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
@@ -406,9 +415,7 @@ async def op_shops_suspend(
     return await _shop_response(shop, di)
 
 
-async def op_shops_remove(
-    payload: ShopIdPayload, *, user: User, di: Di
-) -> EmptyPayload:
+async def op_shops_remove(payload: ShopIdPayload, *, user: User, di: Di) -> EmptyPayload:
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
@@ -532,9 +539,7 @@ async def op_products_import(
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
-        created = await di.shop_service.import_products(
-            scope.company_id, payload.shop_id, payload
-        )
+        created = await di.shop_service.import_products(scope.company_id, payload.shop_id, payload)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
@@ -542,9 +547,7 @@ async def op_products_import(
     return ShopProductsImportResponse(created=created)
 
 
-async def op_products_remove(
-    payload: ShopProductIdPayload, *, user: User, di: Di
-) -> EmptyPayload:
+async def op_products_remove(payload: ShopProductIdPayload, *, user: User, di: Di) -> EmptyPayload:
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
@@ -581,9 +584,7 @@ async def op_orders_list(
     )
 
 
-async def op_orders_get(
-    payload: ShopOrderIdPayload, *, user: User, di: Di
-) -> ShopOrderResponse:
+async def op_orders_get(payload: ShopOrderIdPayload, *, user: User, di: Di) -> ShopOrderResponse:
     scope = await require_company_viewer(di.authz_service)
     _ = user
     try:
@@ -637,16 +638,12 @@ async def op_telegram_connect(
     return await _shop_response(shop, di)
 
 
-async def op_telegram_disconnect(
-    payload: ShopIdPayload, *, user: User, di: Di
-) -> ShopResponse:
+async def op_telegram_disconnect(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:
     """Отключить бота: deleteWebhook, чат и токен стираются."""
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
-        shop = await di.notification_service.disconnect_telegram(
-            scope.company_id, payload.shop_id
-        )
+        shop = await di.notification_service.disconnect_telegram(scope.company_id, payload.shop_id)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     return await _shop_response(shop, di)
@@ -666,29 +663,25 @@ async def op_domains_add(payload: ShopDomainAddPayload, *, user: User, di: Di) -
         raise_conflict(exc)
 
 
-async def op_domains_remove(
-    payload: ShopDomainIdPayload, *, user: User, di: Di
-) -> EmptyPayload:
+async def op_domains_remove(payload: ShopDomainIdPayload, *, user: User, di: Di) -> EmptyPayload:
     scope = await require_company_admin(di.authz_service)
     _ = user
     try:
-        await di.shop_service.remove_domain(scope.company_id, payload.shop_id, payload.shop_domain_id)
+        await di.shop_service.remove_domain(
+            scope.company_id, payload.shop_id, payload.shop_domain_id
+        )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     return EmptyPayload()
 
 
-async def op_domains_provision(
-    payload: ShopDomainIdPayload, *, user: User, di: Di
-) -> ShopDomain:
+async def op_domains_provision(payload: ShopDomainIdPayload, *, user: User, di: Di) -> ShopDomain:
     """DNS-проверка и провиженинг через воркер: HTTP ждёт wait_result."""
     _ = await require_company_admin(di.authz_service)
     _ = user
     task = await enqueue(SHOP_PROVISION_DOMAIN, shop_domain_id=payload.shop_domain_id)
     _ = await task.wait_result(timeout=di.settings.taskiq_wait_timeout)
-    record = await ShopDomain.objects.filter(
-        shop_domain_id=payload.shop_domain_id
-    ).get_or_none()
+    record = await ShopDomain.objects.filter(shop_domain_id=payload.shop_domain_id).get_or_none()
     if record is None:
         raise_not_found(PlatformNotFoundError("Domain not found", error_code="domain_not_found"))
     return record
@@ -932,16 +925,10 @@ async def op_modifier_groups_update(
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    options = await ShopModifierOption.list_by_group_by_sort_asc(
-        group.shop_modifier_group_id
-    )
-    links = await ShopProductModifierGroup.list_by_groups(
-        [group.shop_modifier_group_id]
-    )
+    options = await ShopModifierOption.list_by_group_by_sort_asc(group.shop_modifier_group_id)
+    links = await ShopProductModifierGroup.list_by_groups([group.shop_modifier_group_id])
     await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
-    return _modifier_group_response(
-        group, options, [link.product_id for link in links]
-    )
+    return _modifier_group_response(group, options, [link.product_id for link in links])
 
 
 async def op_modifier_groups_remove(
@@ -1045,3 +1032,81 @@ async def op_products_modifier_detach(
         raise_not_found(exc)
     await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
     return EmptyPayload()
+
+
+def _promo_response(promo: ShopPromo) -> ShopPromoResponse:
+    return ShopPromoResponse(
+        shop_promo_id=promo.shop_promo_id,
+        shop_id=promo.shop_id,
+        name=promo.name,
+        is_active=promo.is_active,
+        sort=promo.sort,
+        priority=promo.priority,
+        stacking=str(promo.stacking),
+        window=promo.window,
+        condition=promo.condition,
+        action=promo.action,
+    )
+
+
+async def op_promos_list(payload: ShopIdPayload, *, user: User, di: Di) -> ShopPromosResponse:
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    promos = await di.shop_service.list_promos_by_sort_asc(scope.company_id, payload.shop_id)
+    return ShopPromosResponse(promos=[_promo_response(p) for p in promos])
+
+
+async def op_promos_create(
+    payload: ShopPromoCreatePayload, *, user: User, di: Di
+) -> ShopPromoResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        promo = await di.shop_service.create_promo(scope.company_id, payload.shop_id, payload)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _promo_response(promo)
+
+
+async def op_promos_update(
+    payload: ShopPromoUpdatePayload, *, user: User, di: Di
+) -> ShopPromoResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        promo = await di.shop_service.update_promo(
+            scope.company_id, payload.shop_id, payload.shop_promo_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _promo_response(promo)
+
+
+async def op_promos_remove(payload: ShopPromoIdPayload, *, user: User, di: Di) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.shop_service.delete_promo(scope.company_id, payload.shop_id, payload.shop_promo_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return EmptyPayload()
+
+
+async def op_public_cart_price(
+    payload: ShopCartPricePayload, *, user: User, di: Di
+) -> ShopCartPriceResponse:
+    """Живой расчёт корзины витрины: цены + скидки, анонимный путь."""
+    _ = user
+    try:
+        shop = await di.order_service.resolve_published_shop(payload.slug)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    try:
+        return await di.order_service.price_cart(shop, payload)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)

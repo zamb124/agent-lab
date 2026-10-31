@@ -17,13 +17,17 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from apps.shop.api.storefront_shell import storefront_html
 from apps.shop.di import Di
 from apps.shop.models.api import (
+    ShopCartPriceRequest,
+    ShopCartPriceResponse,
     ShopOrderCreatedResponse,
     ShopOrderCreateRequest,
     ShopOrderStatusResponse,
 )
 from apps.shop.realtime.operations import (
+    ShopCartPricePayload,
     ShopOrderCreatePayload,
     ShopPublicOrderStatusPayload,
+    op_public_cart_price,
     op_public_order_create,
     op_public_order_status,
 )
@@ -39,9 +43,7 @@ router = APIRouter(prefix="/public", tags=["shop-public"])
 async def _snapshot_or_404(di: Di, slug: str) -> JsonObject:
     snapshot = await di.storefront_service.get_snapshot(slug)
     if snapshot is None:
-        raise WsCommandError(
-            "not_found", "Storefront not found", error_code="storefront_not_found"
-        )
+        raise WsCommandError("not_found", "Storefront not found", error_code="storefront_not_found")
     return snapshot
 
 
@@ -83,10 +85,15 @@ async def create_order(
             "Too many orders",
             error_code="order_rate_limited",
         )
-    op_payload = ShopOrderCreatePayload.model_validate(
-        {"slug": slug, **payload.model_dump()}
-    )
+    op_payload = ShopOrderCreatePayload.model_validate({"slug": slug, **payload.model_dump()})
     return await op_public_order_create(op_payload, user=require_context().user, di=di)
+
+
+@router.post("/storefront/{slug}/cart/price", response_model=ShopCartPriceResponse)
+async def price_cart(slug: str, payload: ShopCartPriceRequest, di: Di) -> ShopCartPriceResponse:
+    """Живой расчёт корзины: сервер считает цены и акции до оформления."""
+    op_payload = ShopCartPricePayload.model_validate({"slug": slug, **payload.model_dump()})
+    return await op_public_cart_price(op_payload, user=require_context().user, di=di)
 
 
 @router.get("/orders/{public_code}", response_model=ShopOrderStatusResponse)
@@ -119,9 +126,7 @@ async def get_storefront_qr(slug: str, request: Request, di: Di) -> Response:
 
 
 @router.post("/telegram/webhook/{shop_id}", response_model=None)
-async def telegram_webhook(
-    shop_id: str, request: Request, di: Di
-) -> Response:
+async def telegram_webhook(shop_id: str, request: Request, di: Di) -> Response:
     """Входящий update бота магазина: wire-спек Telegram, не op_*.
 
     Секрет в заголовке ``X-Telegram-Bot-Api-Secret-Token`` проверяется
@@ -173,9 +178,7 @@ async def get_sitemap(di: Di) -> Response:
 
 
 @router.get("/aggregate/shops")
-async def list_aggregate_shops(
-    di: Di, city: str | None = None
-) -> dict[str, object]:
+async def list_aggregate_shops(di: Di, city: str | None = None) -> dict[str, object]:
     shops = await di.aggregate_service.list_shops(city=city)
     return {
         "items": [
@@ -212,7 +215,5 @@ async def resolve_host(request: Request, di: Di) -> dict[str, object]:
     host = request.headers.get("host", "")
     shop = await di.storefront_service.resolve_shop_by_host(host)
     if shop is None:
-        raise WsCommandError(
-            "not_found", "Storefront not found", error_code="storefront_not_found"
-        )
+        raise WsCommandError("not_found", "Storefront not found", error_code="storefront_not_found")
     return {"slug": shop.slug, "name": shop.name}

@@ -21,6 +21,7 @@ const NAV_ITEMS = [
     { route: 'shop_menu',     icon: 'tag',     label_key: 'sidebar.nav.shop_menu' },
     { route: 'shop_builder',  icon: 'brush',   label_key: 'sidebar.nav.shop_builder' },
     { route: 'shop_orders',   icon: 'receipt', label_key: 'sidebar.nav.shop_orders' },
+    { route: 'shop_promos',   icon: 'gift',    label_key: 'sidebar.nav.shop_promos' },
     { route: 'shop_settings', icon: 'settings', label_key: 'sidebar.nav.shop_settings' },
 ];
 

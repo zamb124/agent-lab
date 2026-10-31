@@ -106,6 +106,9 @@ button.big:disabled{{opacity:.45;cursor:default}}
 .done .code{{font-size:36px;font-weight:750;color:var(--accent);margin:16px 0;letter-spacing:.02em}}
 .done .st{{font-size:14px;font-weight:650;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);display:inline-block;padding:6px 16px;border-radius:99px;margin-bottom:14px}}
 .done p{{color:var(--muted);font-size:14.5px;line-height:1.6}}
+.pbadge{{display:inline-block;margin-left:8px;padding:3px 10px;border-radius:99px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;vertical-align:middle;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.save{{color:#2e9e5b}}
+.save b{{color:#2e9e5b}}
 .empty{{text-align:center;color:var(--muted);padding:60px 20px;font-size:15px}}
 @media(max-width:520px){{.hero{{height:210px}}.hero h1{{font-size:26px}}.grid{{grid-template-columns:1fr 1fr;gap:10px}}}}
 </style>
@@ -165,6 +168,12 @@ function modsText(p,sel){{const names=[];
     if(o.nested_group_id&&NEST[o.nested_group_id])walk([NEST[o.nested_group_id]]);}}}};
   walk(p.modifier_groups||[]);return names.join(', ');}}
 function priceLabel(p){{return (p.modifier_groups&&p.modifier_groups.length)?'от '+fmt(p.price_from_minor!=null?p.price_from_minor:p.price_minor):fmt(p.price_minor);}}
+function promoApplies(a,pid){{if(!a)return false;
+  const ids=a.product_ids;if(Array.isArray(ids)&&ids.length)return ids.includes(pid);
+  if(a.type==='fixed_bundle_price'&&Array.isArray(a.items))return a.items.some(i=>i.product_id===pid);
+  return a.type==='n_plus_m_free'||a.type==='percent_items';}}
+function badge(pid){{const pr=(S.promos||[]).find(x=>promoApplies(x.action,pid));
+  return pr?`<span class="pbadge">${{esc(pr.name)}}</span>`:'';}}
 function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;
   const q=cartQty(p.id);
   if(hasMod)return `<button class="add" onclick="customize('${{p.id}}')">${{q?'Выбрать · '+q:'Выбрать'}}</button>`;
@@ -172,9 +181,9 @@ function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;
   if(!n)return `<button class="add" onclick="addPlain('${{p.id}}',1)">В корзину</button>`;
   return `<span class="stepper"><button class="ghost" onclick="addPlain('${{p.id}}',-1)">−</button><span>${{n}}</span><button onclick="addPlain('${{p.id}}',1)">+</button></span>`;}}
 function refreshQty(pid){{document.querySelectorAll(`[data-qty="${{pid}}"]`).forEach(el=>{{el.innerHTML=qtyCtl(byId(pid));}});}}
-function rowList(ps){{return ps.map(p=>`<div class="item">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
-function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
-function rowCompact(ps){{return ps.map(p=>`<div class="item"><div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
+function rowList(ps){{return ps.map(p=>`<div class="item">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
+function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
+function rowCompact(ps){{return ps.map(p=>`<div class="item"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
   const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
@@ -216,13 +225,36 @@ function renderSheet(){{
     const mods=modsText(x,l.sel);const u=unitPrice(x,l.sel);
     return `<div class="cl"><span class="n">${{esc(x.name)}}${{mods?`<span class="mods">${{esc(mods)}}</span>`:''}}</span><span class="stepper"><button class="ghost" onclick="addLine('${{key}}',-1);renderSheet()">−</button><span>${{l.qty}}</span><button onclick="addLine('${{key}}',1);renderSheet()">+</button></span><b class="s">${{fmt(u*l.qty)}}</b></div>`;}}).join('')+
   seg+
-  (dtype==='delivery'?`<div class="cl"><span>Доставка</span><b class="s">${{fmt(fee)}}</b></div>`:'')+
-  `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" style="font-size:18px">${{fmt(sub+fee)}}</b></div>
+  `<div id="savings"></div>`+
+  (dtype==='delivery'?`<div class="cl"><span>Доставка</span><b class="s" id="feeVal">${{fmt(fee)}}</b></div>`:'')+
+  `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" id="cartTotal" style="font-size:18px">${{fmt(sub+fee)}}</b></div>
   <input class="f" id="cn" placeholder="Ваше имя"><input class="f" id="cp" type="tel" placeholder="Телефон">
   ${{dtype==='delivery'?'<input class="f" id="ca" placeholder="Адрес доставки">':''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
   ${{below?`<div class="minwarn">Минимальный заказ — ${{fmt(S.min_order_minor)}}</div>`:''}}
-  <button class="big" ${{below?'disabled':''}} onclick="submit()">Оформить заказ · ${{fmt(sub+fee)}}</button>`;
+  <button class="big" id="payBtn" ${{below?'disabled':''}} onclick="submit()">Оформить заказ · ${{fmt(sub+fee)}}</button>`;
+  refreshSavings();
 }};
+let priceReq=0;
+async function refreshSavings(){{
+  const my=++priceReq;
+  try{{
+    const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,
+      selections:[...l.sel.entries()].map(([option_id,qty])=>({{option_id,qty}}))}})),
+      delivery_type:dtype}};
+    const r=await fetch(`/shop/api/v1/public/storefront/${{S.slug}}/cart/price`,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});
+    if(my!==priceReq||!r.ok)return;
+    const d=await r.json();
+    const el=document.getElementById('savings');
+    if(el)el.innerHTML=d.discount_minor>0
+      ?`<div class="cl save"><span>Выгода${{d.applied_promos.length?' · '+esc(d.applied_promos.map(a=>a.name).join(', ')):''}}</span><b class="s">−${{fmt(d.discount_minor)}}</b></div>`:'';
+    const fv=document.getElementById('feeVal');
+    if(fv&&dtype==='delivery')fv.textContent=fmt(d.delivery_fee_minor);
+    const tot=document.getElementById('cartTotal');
+    if(tot)tot.textContent=fmt(d.total_minor);
+    const btn=document.getElementById('payBtn');
+    if(btn&&!btn.disabled)btn.textContent='Оформить заказ · '+fmt(d.total_minor);
+  }}catch(e){{}}
+}}
 window.closeSheet=()=>document.getElementById('sheet').classList.remove('show');
 window.submit=async()=>{{
   const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,

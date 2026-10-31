@@ -32,6 +32,10 @@ from apps.shop.models.api import (
     ShopProductsImportRequest,
     ShopProductsImportResponse,
     ShopProductUpdateRequest,
+    ShopPromoCreateRequest,
+    ShopPromoResponse,
+    ShopPromosResponse,
+    ShopPromoUpdateRequest,
     ShopResponse,
     ShopTelegramConnectRequest,
     ShopUpdateRequest,
@@ -67,6 +71,9 @@ from apps.shop.realtime.operations import (
     ShopProductModifierDetachPayload,
     ShopProductsImportPayload,
     ShopProductUpdatePayload,
+    ShopPromoCreatePayload,
+    ShopPromoIdPayload,
+    ShopPromoUpdatePayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
     op_ai_describe_batch,
@@ -98,6 +105,10 @@ from apps.shop.realtime.operations import (
     op_products_modifier_detach,
     op_products_remove,
     op_products_update,
+    op_promos_create,
+    op_promos_list,
+    op_promos_remove,
+    op_promos_update,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -127,9 +138,7 @@ async def create_shop(payload: ShopCreateRequest, di: Di) -> ShopResponse:
 
 @router.get("/{shop_id}", response_model=ShopResponse)
 async def get_shop(shop_id: str, di: Di) -> ShopResponse:
-    return await op_shops_get(
-        ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di
-    )
+    return await op_shops_get(ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di)
 
 
 @router.patch("/{shop_id}", response_model=ShopResponse)
@@ -159,9 +168,7 @@ async def suspend_shop(shop_id: str, di: Di) -> ShopResponse:
 
 @router.delete("/{shop_id}", response_model=EmptyPayload)
 async def remove_shop(shop_id: str, di: Di) -> EmptyPayload:
-    return await op_shops_remove(
-        ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di
-    )
+    return await op_shops_remove(ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di)
 
 
 @router.post("/{shop_id}/telegram/connect", response_model=ShopResponse)
@@ -323,9 +330,7 @@ async def set_order_status(
     shop_id: str, order_id: str, status: ShopOrderStatus, di: Di
 ) -> ShopOrderResponse:
     return await op_orders_set_status(
-        ShopOrderSetStatusPayload(
-            shop_id=shop_id, shop_order_id=order_id, status=status
-        ),
+        ShopOrderSetStatusPayload(shop_id=shop_id, shop_order_id=order_id, status=status),
         user=require_context().user,
         di=di,
     )
@@ -388,7 +393,9 @@ async def ai_describe_all(shop_id: str, di: Di) -> ShopAiBatchResponse:
 
 
 @router.post("/{shop_id}/ai/enhance-photo", response_model=ShopAiFileResponse)
-async def ai_enhance_photo(shop_id: str, body: ShopAiEnhancePhotoRequest, di: Di) -> ShopAiFileResponse:
+async def ai_enhance_photo(
+    shop_id: str, body: ShopAiEnhancePhotoRequest, di: Di
+) -> ShopAiFileResponse:
     return await op_ai_enhance_photo(
         ShopAiEnhancePhotoPayload(shop_id=shop_id, file_id=body.file_id),
         user=require_context().user,
@@ -397,7 +404,9 @@ async def ai_enhance_photo(shop_id: str, body: ShopAiEnhancePhotoRequest, di: Di
 
 
 @router.post("/{shop_id}/ai/generate-photo", response_model=ShopAiFileResponse)
-async def ai_generate_photo(shop_id: str, body: ShopAiGeneratePhotoRequest, di: Di) -> ShopAiFileResponse:
+async def ai_generate_photo(
+    shop_id: str, body: ShopAiGeneratePhotoRequest, di: Di
+) -> ShopAiFileResponse:
     return await op_ai_generate_photo(
         ShopAiGeneratePhotoPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
@@ -464,13 +473,9 @@ async def update_modifier_group(
 
 
 @router.delete("/{shop_id}/modifier-groups/{group_id}", response_model=EmptyPayload)
-async def remove_modifier_group(
-    shop_id: str, group_id: str, di: Di
-) -> EmptyPayload:
+async def remove_modifier_group(shop_id: str, group_id: str, di: Di) -> EmptyPayload:
     return await op_modifier_groups_remove(
-        ShopModifierGroupIdPayload(
-            shop_id=shop_id, shop_modifier_group_id=group_id
-        ),
+        ShopModifierGroupIdPayload(shop_id=shop_id, shop_modifier_group_id=group_id),
         user=require_context().user,
         di=di,
     )
@@ -517,13 +522,9 @@ async def update_modifier_option(
 
 
 @router.delete("/{shop_id}/modifier-options/{option_id}", response_model=EmptyPayload)
-async def remove_modifier_option(
-    shop_id: str, option_id: str, di: Di
-) -> EmptyPayload:
+async def remove_modifier_option(shop_id: str, option_id: str, di: Di) -> EmptyPayload:
     return await op_modifier_options_remove(
-        ShopModifierOptionIdPayload(
-            shop_id=shop_id, shop_modifier_option_id=option_id
-        ),
+        ShopModifierOptionIdPayload(shop_id=shop_id, shop_modifier_option_id=option_id),
         user=require_context().user,
         di=di,
     )
@@ -561,9 +562,49 @@ async def detach_modifier_group(
     shop_id: str, product_id: str, group_id: str, di: Di
 ) -> EmptyPayload:
     return await op_products_modifier_detach(
-        ShopProductModifierDetachPayload(
-            shop_id=shop_id, product_id=product_id, group_id=group_id
+        ShopProductModifierDetachPayload(shop_id=shop_id, product_id=product_id, group_id=group_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.get("/{shop_id}/promos", response_model=ShopPromosResponse)
+async def list_promos(shop_id: str, di: Di) -> ShopPromosResponse:
+    return await op_promos_list(ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di)
+
+
+@router.post("/{shop_id}/promos", response_model=ShopPromoResponse)
+async def create_promo(shop_id: str, payload: ShopPromoCreateRequest, di: Di) -> ShopPromoResponse:
+    return await op_promos_create(
+        ShopPromoCreatePayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
         ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.patch("/{shop_id}/promos/{promo_id}", response_model=ShopPromoResponse)
+async def update_promo(
+    shop_id: str, promo_id: str, payload: ShopPromoUpdateRequest, di: Di
+) -> ShopPromoResponse:
+    return await op_promos_update(
+        ShopPromoUpdatePayload.model_validate(
+            {
+                "shop_id": shop_id,
+                "shop_promo_id": promo_id,
+                **payload.model_dump(exclude_unset=True),
+            }
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.delete("/{shop_id}/promos/{promo_id}", response_model=EmptyPayload)
+async def remove_promo(shop_id: str, promo_id: str, di: Di) -> EmptyPayload:
+    return await op_promos_remove(
+        ShopPromoIdPayload(shop_id=shop_id, shop_promo_id=promo_id),
         user=require_context().user,
         di=di,
     )

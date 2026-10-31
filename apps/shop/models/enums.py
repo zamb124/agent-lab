@@ -77,3 +77,14 @@ class ModifierPriceMode(StrEnum):
 
     DELTA = "delta"
     ABSOLUTE = "absolute"
+
+
+class PromoStacking(StrEnum):
+    """Может ли акция суммироваться с другими.
+
+    ``all`` — применяется вместе с остальными подходящими акциями;
+    ``exclusive`` — первой сработавшей закрывает остальные.
+    """
+
+    ALL = "all"
+    EXCLUSIVE = "exclusive"
