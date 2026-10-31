@@ -32,8 +32,13 @@ interface ProductRow {
     photo_file_id: string | null;
     is_available: boolean;
     portion: string;
+    badges: string[];
     sort: number;
 }
+
+const BADGE_KEYS = ['hit', 'new', 'spicy', 'vegan', 'chef'] as const;
+type BadgeKey = (typeof BADGE_KEYS)[number];
+const BADGE_ICONS: Record<BadgeKey, string> = { hit: '🔥', new: '✨', spicy: '🌶', vegan: '🌿', chef: '👨‍🍳' };
 
 export class ShopMenuPage extends PlatformPage {
     static i18nNamespace = 'shop';
@@ -65,6 +70,7 @@ export class ShopMenuPage extends PlatformPage {
     private _newName = '';
     private _newPrice = '';
     private _newPortion = '';
+    private _newBadges: BadgeKey[] = [];
     private _newDescription = '';
     private _newPhotoFileId = '';
     private _newPhotoPreview = '';
@@ -72,6 +78,7 @@ export class ShopMenuPage extends PlatformPage {
     private _editName = '';
     private _editPrice = '';
     private _editPortion = '';
+    private _editBadges: BadgeKey[] = [];
     private _editDescription = '';
     private _importOpen = false;
     private _importText = '';
@@ -86,6 +93,7 @@ export class ShopMenuPage extends PlatformPage {
         _newName: { state: true },
         _newPrice: { state: true },
         _newPortion: { state: true },
+        _newBadges: { state: true },
         _newDescription: { state: true },
         _newPhotoFileId: { state: true },
         _newPhotoPreview: { state: true },
@@ -93,6 +101,7 @@ export class ShopMenuPage extends PlatformPage {
         _editName: { state: true },
         _editPrice: { state: true },
         _editPortion: { state: true },
+        _editBadges: { state: true },
         _editDescription: { state: true },
         _importOpen: { state: true },
         _importText: { state: true },
@@ -150,6 +159,19 @@ export class ShopMenuPage extends PlatformPage {
             .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
             .desc { color: var(--text-tertiary); font-size: var(--text-xs); max-width: 320px; }
             .portion { color: var(--text-tertiary); font-size: var(--text-xs); margin-left: var(--space-1); white-space: nowrap; }
+            .badges { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+            .bchip {
+                padding: var(--space-1) var(--space-2); border-radius: var(--radius-full);
+                border: 1px solid var(--border-default); background: var(--surface-secondary);
+                color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600;
+                cursor: pointer; user-select: none; white-space: nowrap;
+            }
+            .bchip.on { border-color: var(--accent-primary); background: var(--accent-primary-subtle); color: var(--accent-primary); }
+            .ptag {
+                display: inline-block; margin-left: var(--space-1); padding: 1px var(--space-2);
+                border-radius: var(--radius-full); background: var(--accent-primary-subtle);
+                color: var(--accent-primary); font-size: 10px; font-weight: 700; vertical-align: middle;
+            }
             .desc-cell { display: flex; gap: var(--space-2); align-items: end; }
             .desc-cell > platform-field { flex: 1; }
             .photo-pick {
@@ -316,11 +338,23 @@ export class ShopMenuPage extends PlatformPage {
         input.value = '';
     }
 
+    private _badgeChips(selected: BadgeKey[], onToggle: (badge: BadgeKey) => void) {
+        return html`<span class="badges">${BADGE_KEYS.map(
+            (key) => html`<button type="button" class="bchip ${selected.includes(key) ? 'on' : ''}"
+                @click=${() => onToggle(key)}>${BADGE_ICONS[key]} ${this.t(`menu.badge_${key}`)}</button>`,
+        )}</span>`;
+    }
+
+    private _toggleBadge(list: BadgeKey[], badge: BadgeKey): BadgeKey[] {
+        return list.includes(badge) ? list.filter((b) => b !== badge) : [...list, badge];
+    }
+
     private _startEdit(p: ProductRow) {
         this._editingId = p.shop_product_id;
         this._editName = p.name;
         this._editPrice = (p.price_minor / 100).toString();
         this._editPortion = p.portion;
+        this._editBadges = p.badges.filter((b): b is BadgeKey => BADGE_KEYS.includes(b as BadgeKey));
         this._editDescription = p.description;
     }
 
@@ -338,6 +372,7 @@ export class ShopMenuPage extends PlatformPage {
         if (name !== '' && name !== p.name) payload.name = name;
         if (Number.isFinite(price) && price >= 0 && price !== p.price_minor) payload.price_minor = price;
         if (this._editPortion !== p.portion) payload.portion = this._editPortion;
+        if (JSON.stringify(this._editBadges) !== JSON.stringify(p.badges)) payload.badges = this._editBadges;
         if (this._editDescription !== p.description) payload.description = this._editDescription;
         if (Object.keys(payload).length > 2) {
             await this._productUpdateOp.run(payload);
@@ -437,6 +472,7 @@ export class ShopMenuPage extends PlatformPage {
             name,
             description: this._newDescription.trim(),
             portion: this._newPortion.trim(),
+            badges: this._newBadges,
             price_minor: price,
             photo_file_id: this._newPhotoFileId === '' ? null : this._newPhotoFileId,
         });
@@ -444,6 +480,7 @@ export class ShopMenuPage extends PlatformPage {
             this._newName = '';
             this._newPrice = '';
             this._newPortion = '';
+            this._newBadges = [];
             this._newDescription = '';
             this._newPhotoFileId = '';
             this._newPhotoPreview = '';
@@ -709,6 +746,7 @@ export class ShopMenuPage extends PlatformPage {
                             @click=${() => this._describeWithAi()}
                         ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('menu.ai_describe')}</platform-button>
                     </span>
+                    ${this._badgeChips(this._newBadges, (b) => { this._newBadges = this._toggleBadge(this._newBadges, b); })}
                     <platform-button
                         variant="primary"
                         ?busy=${this._productCreateOp.busy}
@@ -748,6 +786,7 @@ export class ShopMenuPage extends PlatformPage {
                                                 <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._editDescription}
                                                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editDescription = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                                                 ></platform-field>
+                                                ${this._badgeChips(this._editBadges, (b) => { this._editBadges = this._toggleBadge(this._editBadges, b); })}
                                                 <span class="row-actions">
                                                     <platform-button size="sm" variant="primary" ?busy=${this._productUpdateOp.busy} @click=${() => this._saveEdit(p)}>${this.t('menu.save')}</platform-button>
                                                     <platform-button size="sm" @click=${() => this._cancelEdit()}>${this.t('menu.cancel')}</platform-button>
@@ -762,7 +801,7 @@ export class ShopMenuPage extends PlatformPage {
                                                 ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}" alt="" loading="lazy">`
                                                 : html`<span class="thumb-empty"></span>`}
                                         </td>
-                                        <td>${p.name}${p.portion !== '' ? html`<span class="portion">${p.portion}</span>` : html``}</td>
+                                        <td>${p.name}${p.badges.map((b) => BADGE_ICONS[b as BadgeKey] !== undefined ? html`<span class="ptag">${BADGE_ICONS[b as BadgeKey]}</span>` : html``)}${p.portion !== '' ? html`<span class="portion">${p.portion}</span>` : html``}</td>
                                         <td class="desc">${p.description}</td>
                                         <td class="num">${this._money(p.price_minor)}</td>
                                         <td class="num">

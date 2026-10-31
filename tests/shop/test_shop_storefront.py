@@ -102,6 +102,21 @@ class TestStorefrontSnapshot:
         names = [p["name"] for p in snap.json()["products"]]
         assert "Скрытый" not in names
 
+    async def test_badges_in_snapshot(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"bdg-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={"name": "Хитовая", "price_minor": 100, "badges": ["hit", "spicy"]},
+        )
+        assert resp.status_code == 200, resp.text
+        snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert snap.status_code == 200
+        product = next(p for p in snap.json()["products"] if p["name"] == "Хитовая")
+        assert product["badges"] == ["hit", "spicy"]
+
 
 class TestHostMiddleware:
     async def test_slug_host_root_rewrites_to_storefront(

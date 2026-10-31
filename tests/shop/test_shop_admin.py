@@ -187,17 +187,30 @@ class TestCatalog:
             category_id=cat["shop_category_id"],
             description="Томат, моцарелла, базилик",
             portion="450 г",
+            badges=["hit", "vegan"],
         )
         assert product["category_id"] == cat["shop_category_id"]
         assert product["portion"] == "450 г"
+        assert product["badges"] == ["hit", "vegan"]
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
-            json={"price_minor": 59000, "is_available": False, "portion": "32 см"},
+            json={
+                "price_minor": 59000,
+                "is_available": False,
+                "portion": "32 см",
+                "badges": ["spicy"],
+            },
         )
         body = resp.json()
         assert body["price_minor"] == 59000
         assert body["portion"] == "32 см"
+        assert body["badges"] == ["spicy"]
         assert body["is_available"] is False
+        bad = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
+            json={"badges": ["bogus"]},
+        )
+        assert bad.status_code == 422
         resp = await shop_client.delete(
             f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}"
         )

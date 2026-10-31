@@ -200,6 +200,7 @@ class ShopService:
             name=payload.name,
             description=payload.description,
             portion=payload.portion,
+            badges=list(payload.badges),
             price_minor=payload.price_minor,
             photo_file_id=payload.photo_file_id,
             sort=await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id),

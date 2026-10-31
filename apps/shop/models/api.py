@@ -9,6 +9,7 @@ from apps.shop.models.enums import (
     ShopKind,
     ShopOrderSource,
     ShopOrderStatus,
+    ShopProductBadge,
     ShopStatus,
 )
 from core.models import StrictBaseModel
@@ -109,6 +110,7 @@ class ShopProductResponse(StrictBaseModel):
     name: str
     description: str
     portion: str
+    badges: list[str]
     price_minor: int
     photo_file_id: str | None
     is_available: bool
@@ -120,6 +122,7 @@ class ShopProductCreateRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=300)
     description: str = ""
     portion: str = Field(default="", max_length=50)
+    badges: list[ShopProductBadge] = Field(default_factory=list, max_length=5)
     price_minor: int = Field(ge=0)
     photo_file_id: str | None = None
 
@@ -129,6 +132,7 @@ class ShopProductUpdateRequest(StrictBaseModel):
     name: str | None = Field(default=None, max_length=300)
     description: str | None = None
     portion: str | None = Field(default=None, max_length=50)
+    badges: list[ShopProductBadge] | None = Field(default=None, max_length=5)
     price_minor: int | None = Field(default=None, ge=0)
     photo_file_id: str | None = None
     is_available: bool | None = None

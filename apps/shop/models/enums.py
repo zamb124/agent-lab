@@ -88,3 +88,13 @@ class PromoStacking(StrEnum):
 
     ALL = "all"
     EXCLUSIVE = "exclusive"
+
+
+class ShopProductBadge(StrEnum):
+    """Метка позиции на витрине: фиксированный набор, как у агрегаторов."""
+
+    HIT = "hit"
+    NEW = "new"
+    SPICY = "spicy"
+    VEGAN = "vegan"
+    CHEF = "chef"
