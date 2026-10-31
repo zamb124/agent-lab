@@ -16,10 +16,11 @@ from core.types import JsonObject
 
 
 class ShopTheme(StrictBaseModel):
-    """Визуальная тема витрины: акцентный цвет и пресет раскладки."""
+    """Визуальная тема витрины: акцентный цвет, пресет раскладки и режим."""
 
     accent_color: str = Field(default="#e2553f", max_length=16)
     preset: str = Field(default="menu", max_length=32)
+    mode: str = Field(default="dark", pattern=r"^(dark|light)$")
 
 
 class ShopWorkingHours(StrictBaseModel):

@@ -97,7 +97,7 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .seg{{display:flex;background:var(--card2);border-radius:14px;padding:4px;margin:14px 0}}
 .seg button{{flex:1;font:inherit;font-size:14.5px;font-weight:600;padding:11px;border:0;border-radius:11px;background:transparent;color:var(--muted);cursor:pointer}}
 .seg button.on{{background:var(--accent);color:#fff}}
-input.f{{width:100%;font:inherit;font-size:15px;padding:14px;margin:6px 0;border-radius:14px;border:1px solid var(--line);background:#12100d;color:var(--text)}}
+input.f{{width:100%;font:inherit;font-size:15px;padding:14px;margin:6px 0;border-radius:14px;border:1px solid var(--line);background:var(--card2);color:var(--text)}}
 input.f:focus{{outline:none;border-color:var(--accent)}}
 button.big{{width:100%;font:inherit;font-size:16px;font-weight:650;padding:16px;border-radius:16px;border:0;background:var(--accent);color:#fff;cursor:pointer;margin-top:14px;letter-spacing:.01em}}
 button.big:disabled{{opacity:.45;cursor:default}}
@@ -110,6 +110,8 @@ button.big:disabled{{opacity:.45;cursor:default}}
 .save{{color:#2e9e5b}}
 .save b{{color:#2e9e5b}}
 .empty{{text-align:center;color:var(--muted);padding:60px 20px;font-size:15px}}
+body.light{{--bg:#f7f4ee;--card:#ffffff;--card2:#efe9de;--text:#29221a;--muted:#7d7264;--line:#e4dbcc;color-scheme:light}}
+body.light .hero .veil{{background:linear-gradient(180deg,rgba(16,14,12,.1) 20%,rgba(16,14,12,.88) 100%)}}
 @media(max-width:520px){{.hero{{height:210px}}.hero h1{{font-size:26px}}.grid{{grid-template-columns:1fr 1fr;gap:10px}}}}
 </style>
 </head>
@@ -360,11 +362,20 @@ def storefront_html(snapshot: JsonObject) -> str:
     """HTML витрины с inline-снапшотом для SSR-lite рендера."""
     accent = "#e2553f"
     preset = "menu"
+    mode = "dark"
     theme = snapshot.get("theme")
     if isinstance(theme, dict):
         accent = str(theme.get("accent_color", accent))
         preset = str(theme.get("preset", preset))
-    body_class = "compact" if preset == "compact" else ""
+        mode = str(theme.get("mode", mode))
+    body_class = " ".join(
+        part
+        for part in (
+            "compact" if preset == "compact" else "",
+            "light" if mode == "light" else "",
+        )
+        if part
+    )
     return _PAGE.format(
         title=escape(str(snapshot.get("name", "Витрина"))),
         description=escape(str(snapshot.get("description", ""))[:200]),

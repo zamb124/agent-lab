@@ -87,7 +87,10 @@
         "accent_label": "Brand accent",
         "save": "Apply",
         "reset": "Reset",
-        "preview_unavailable": "Storefront is not published yet"
+        "preview_unavailable": "Storefront is not published yet",
+        "mode_label": "Appearance",
+        "mode_dark": "Dark",
+        "mode_light": "Light"
     },
     "orders": {
         "title": "Orders",

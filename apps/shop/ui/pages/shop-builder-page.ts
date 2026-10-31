@@ -8,8 +8,11 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-empty-state.js';
+import '@platform/lib/components/platform-icon.js';
 
 const PRESETS = ['menu', 'grid', 'compact'] as const;
+
+const MODES = ['dark', 'light'] as const;
 
 const ACCENTS = ['#e2553f', '#f2a33c', '#34c47c', '#3f8cff', '#9b5de5', '#ef476f', '#111827', '#0f766e'];
 
@@ -22,13 +25,16 @@ export class ShopBuilderPage extends PlatformPage {
     private _updateOp: OpController;
     private _preset = 'menu';
     private _accent = '#e2553f';
+    private _mode = 'dark';
     private _savedPreset = 'menu';
     private _savedAccent = '#e2553f';
+    private _savedMode = 'dark';
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
         _preset: { state: true },
         _accent: { state: true },
+        _mode: { state: true },
     };
 
     static override styles = [
@@ -90,6 +96,24 @@ export class ShopBuilderPage extends PlatformPage {
                 cursor: pointer;
             }
             .swatch.active { border-color: var(--text-primary); }
+            .modes { display: flex; background: var(--bg-inset); border-radius: var(--radius-md); padding: 4px; gap: 4px; }
+            .mode {
+                flex: 1;
+                border: 0;
+                border-radius: var(--radius-sm);
+                padding: var(--space-2) var(--space-3);
+                font: inherit;
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+            }
+            .mode.active { background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
             .actions { display: flex; gap: var(--space-2); }
             .preview {
                 position: relative;
@@ -141,12 +165,14 @@ export class ShopBuilderPage extends PlatformPage {
         const theme = (shop.theme ?? {}) as Record<string, unknown>;
         this._preset = typeof theme.preset === 'string' ? theme.preset : 'menu';
         this._accent = typeof theme.accent_color === 'string' ? theme.accent_color : '#e2553f';
+        this._mode = theme.mode === 'light' ? 'light' : 'dark';
         this._savedPreset = this._preset;
         this._savedAccent = this._accent;
+        this._savedMode = this._mode;
     }
 
     private get _dirty(): boolean {
-        return this._preset !== this._savedPreset || this._accent !== this._savedAccent;
+        return this._preset !== this._savedPreset || this._accent !== this._savedAccent || this._mode !== this._savedMode;
     }
 
     private _wireframe(preset: string) {
@@ -162,11 +188,12 @@ export class ShopBuilderPage extends PlatformPage {
     private async _save() {
         const result = await this._updateOp.run({
             shop_id: this.shopId,
-            theme: { preset: this._preset, accent_color: this._accent },
+            theme: { preset: this._preset, accent_color: this._accent, mode: this._mode },
         });
         if (result !== null) {
             this._savedPreset = this._preset;
             this._savedAccent = this._accent;
+            this._savedMode = this._mode;
             await this._shops.load();
         }
     }
@@ -192,6 +219,17 @@ export class ShopBuilderPage extends PlatformPage {
                                     ${this._wireframe(key)}
                                     <span class="name">${this.t(`builder.preset_${key}`)}</span>
                                 </button>
+                            `)}
+                        </div>
+                    </div>
+                    <div class="section">
+                        <div class="label">${this.t('builder.mode_label')}</div>
+                        <div class="modes">
+                            ${MODES.map((key) => html`
+                                <button
+                                    class="mode ${this._mode === key ? 'active' : ''}"
+                                    @click=${() => { this._mode = key; }}
+                                ><platform-icon name=${key === 'dark' ? 'moon' : 'sun'} size="14"></platform-icon> ${this.t(`builder.mode_${key}`)}</button>
                             `)}
                         </div>
                     </div>

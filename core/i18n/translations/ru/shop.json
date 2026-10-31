@@ -87,7 +87,10 @@
         "accent_label": "Фирменный цвет",
         "save": "Применить",
         "reset": "Отменить",
-        "preview_unavailable": "Витрина ещё не опубликована"
+        "preview_unavailable": "Витрина ещё не опубликована",
+        "mode_label": "Оформление",
+        "mode_dark": "Тёмная",
+        "mode_light": "Светлая"
     },
     "orders": {
         "title": "Заказы",

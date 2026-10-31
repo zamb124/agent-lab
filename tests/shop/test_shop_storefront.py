@@ -179,6 +179,36 @@ class TestStorefrontPage:
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert "hoursBadge" in html.text
 
+    async def test_light_theme_renders_light_palette(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """theme.mode=light → body.light и светлая палитра в HTML витрины."""
+        slug = f"light-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}",
+            json={"theme": {"preset": "menu", "accent_color": "#3f8cff", "mode": "light"}},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["theme"]["mode"] == "light"
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert html.status_code == 200
+        assert 'body class="light"' in html.text
+        assert "--bg:#f7f4ee" in html.text
+        assert "--accent:#3f8cff" in html.text
+
+    async def test_theme_mode_invalid_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Невалидный theme.mode отклоняется схемой — fail-closed."""
+        slug = f"badmode-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}",
+            json={"theme": {"mode": "neon"}},
+        )
+        assert resp.status_code in (400, 422), resp.text
+
     async def test_modifier_tree_renders_customize_sheet(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
