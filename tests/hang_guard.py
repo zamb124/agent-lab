@@ -19,10 +19,12 @@ from typing import TypedDict
 
 import pytest
 
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, parse_json_object, parse_json_value
 
 _HEARTBEAT_DIR = Path("/tmp")
 _HUNG_WORKER_DUMP = Path("/tmp/pytest-hung-worker.txt")
+_KILLS_LOG = Path("/tmp/platform_test_hang_guard_kills.jsonl")
+_EVENTS_LOG = Path("/tmp/platform_test_hang_guard_events.jsonl")
 _SETUP_TEARDOWN_FLOOR_SECONDS = 60.0
 _SLACK_SECONDS = 15.0
 _MONITOR_PERIOD_SECONDS = 2.0
@@ -30,6 +32,7 @@ _MONITOR_PERIOD_SECONDS = 2.0
 _stop_event = threading.Event()
 _monitor_thread: threading.Thread | None = None
 _killed_pids: set[int] = set()
+_monitor_started_wall = 0.0
 
 
 class WorkerHeartbeat(TypedDict):
@@ -76,20 +79,57 @@ def _heartbeat_path(worker: str | None = None) -> Path:
     return _HEARTBEAT_DIR / f"platform_test_hang_guard_{label}.json"
 
 
+def _append_jsonl(path: Path, payload: JsonObject) -> None:
+    try:
+        with path.open("a", encoding="utf-8") as stream:
+            _ = stream.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except OSError:
+        return
+
+
+def _append_session_event(kind: str) -> None:
+    _append_jsonl(
+        _EVENTS_LOG,
+        {
+            "kind": kind,
+            "worker": _worker_label(),
+            "pid": os.getpid(),
+            "time": time.time(),
+            "monotonic": time.monotonic(),
+        },
+    )
+
+
+def _cleanup_stale_run_files() -> None:
+    for path in _HEARTBEAT_DIR.glob("platform_test_hang_guard_*.json"):
+        try:
+            path.unlink()
+        except OSError:
+            continue
+    for log_path in (_KILLS_LOG, _EVENTS_LOG):
+        try:
+            log_path.unlink()
+        except OSError:
+            continue
+
+
 def _timeout_seconds_for_item(item: pytest.Item) -> float:
     marker = item.get_closest_marker("timeout")
-    if marker is not None and marker.args:
-        return float(marker.args[0])
-    raw: object = item.config.getini("timeout")
-    if isinstance(raw, bool) or raw is None:
-        raise ValueError("pytest timeout ini is required")
+    raw = parse_json_value(
+        json.dumps(
+            marker.args[0]
+            if marker is not None and marker.args
+            else item.config.getini("timeout")
+        ),
+        "pytest timeout",
+    )
     if isinstance(raw, str):
         if not raw.strip():
-            raise ValueError("pytest timeout ini is empty")
+            raise ValueError("pytest timeout is empty")
         return float(raw)
-    if isinstance(raw, int | float):
-        return float(raw)
-    raise ValueError(f"pytest timeout ini has unexpected type: {type(raw)}")
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        raise ValueError(f"pytest timeout has unexpected type: {type(raw)}")
+    return float(raw)
 
 
 def write_worker_heartbeat(
@@ -108,7 +148,7 @@ def write_worker_heartbeat(
         "time": time.time(),
     }
     path = _heartbeat_path()
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    _ = path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def _parse_heartbeat(raw: JsonObject) -> WorkerHeartbeat | None:
@@ -146,9 +186,8 @@ def _parse_heartbeat(raw: JsonObject) -> WorkerHeartbeat | None:
 
 def _read_heartbeat(path: Path) -> WorkerHeartbeat | None:
     try:
-        loaded: object = json.loads(path.read_text(encoding="utf-8"))
-        return _parse_heartbeat(require_json_object(loaded, path.name))
-    except (OSError, json.JSONDecodeError, ValueError):
+        return _parse_heartbeat(parse_json_object(path.read_text(encoding="utf-8"), path.name))
+    except (OSError, ValueError):
         return None
 
 
@@ -170,6 +209,10 @@ def _kill_hung_worker(heartbeat: WorkerHeartbeat, *, age: float) -> None:
         return
     if heartbeat["worker"] == "master":
         return
+    # Heartbeat из прошлого прогона: в этой сессии монитор стартовал позже
+    # записи файла — убивать нельзя (pid уже мог быть переиспользован ОС).
+    if heartbeat["time"] < _monitor_started_wall - 1.0:
+        return
     if not _pid_alive(pid):
         return
     line = (
@@ -178,12 +221,31 @@ def _kill_hung_worker(heartbeat: WorkerHeartbeat, *, age: float) -> None:
         f"test={heartbeat['nodeid']}\n"
     )
     print(f"\n=== {line.strip()} ===\n", flush=True)
-    _HUNG_WORKER_DUMP.write_text(line, encoding="utf-8")
+    _ = _HUNG_WORKER_DUMP.write_text(line, encoding="utf-8")
+    _append_jsonl(
+        _KILLS_LOG,
+        {
+            "worker": heartbeat["worker"],
+            "pid": pid,
+            "nodeid": heartbeat["nodeid"],
+            "phase": heartbeat["phase"],
+            "timeout_sec": heartbeat["timeout_sec"],
+            "age_seconds": round(age, 3),
+            "time": time.time(),
+        },
+    )
     try:
         os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
         return
     _killed_pids.add(pid)
+
+
+def _is_collect_only(session: pytest.Session) -> bool:
+    return any(
+        arg in {"--collect-only", "--co"}
+        for arg in session.config.invocation_params.args
+    )
 
 
 def _monitor_loop() -> None:
@@ -199,13 +261,23 @@ def _monitor_loop() -> None:
             _kill_hung_worker(heartbeat, age=age)
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session: pytest.Session) -> None:
+    if _is_collect_only(session):
+        # Discovery IDE (`pytest --collect-only`) не участвует в прогоне:
+        # чистка снесла бы артефакты реального запуска.
+        return
+    if not hasattr(session.config, "workerinput"):
+        # Мастер стартует до spawn воркеров: файлы прошлых прогонов — мусор.
+        _cleanup_stale_run_files()
     write_worker_heartbeat("session", "session_start", timeout_sec=0)
+    _append_session_event("session_start")
     if hasattr(session.config, "workerinput"):
         return
-    global _monitor_thread
+    global _monitor_thread, _monitor_started_wall
     _stop_event.clear()
     _killed_pids.clear()
+    _monitor_started_wall = time.time()
     _monitor_thread = threading.Thread(
         target=_monitor_loop,
         name="platform-test-hang-guard",
@@ -216,7 +288,10 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     _ = exitstatus
+    if _is_collect_only(session):
+        return
     write_worker_heartbeat("session", "session_finish", timeout_sec=0)
+    _append_session_event("session_finish")
     if hasattr(session.config, "workerinput"):
         return
     _stop_event.set()

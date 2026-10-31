@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import AsyncIterator, Sequence
 
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.group_sync import sync_user_groups
+from core.authz.models import AuthzObject
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -55,6 +58,23 @@ async def bind_flow_tool_authz_context(
             company_ids=[_TOOL_TEST_COMPANY_ID],
             previous_groups=[],
         )
+    # MINIMIZE_LATENCY: свежая запись видна check с суб-секундным лагом —
+    # ждём, пока та же консистентность начнёт возвращать can_admin, иначе
+    # первый op_* после сида ловит устаревший deny.
+    company = AuthzObject.company(_TOOL_TEST_COMPANY_ID)
+    deadline = time.monotonic() + 10.0
+    pending = set(user_ids)
+    while pending:
+        for user_id in tuple(pending):
+            if await di.authz_service.can_admin(company, user_id=user_id):
+                pending.discard(user_id)
+        if not pending:
+            break
+        if time.monotonic() >= deadline:
+            raise TimeoutError(
+                f"openfga can_admin visibility timeout: {sorted(pending)} on {company.fga_id}"
+            )
+        await asyncio.sleep(0.05)
     try:
         yield
     finally:

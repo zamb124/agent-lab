@@ -226,4 +226,3 @@ async def test_registry_providers_values_linnex_llms_label(client) -> None:
         if isinstance(item, dict) and item.get("value") == LINNEX_LLM_PROVIDER
     )
     assert linnex_llm["label"] == "Linnex LLMs"
-    assert "Linnex" not in linnex_llm["label"]

@@ -36,7 +36,7 @@ const tsSiblingMiddleware: Middleware = async (ctx, next) => {
 // `delete` на инстансе не срабатывает — метод объявлен на прототипе класса;
 // own-property undefined перекрывает вызов хука.
 const tsEsbuildPlugin = esbuildPlugin({ ts: true });
-tsEsbuildPlugin.resolveImport = undefined;
+(tsEsbuildPlugin as { resolveImport?: unknown }).resolveImport = undefined;
 
 // node-resolve с .ts в extensions тоже переписывает specifier `./x.js` → `./x.ts`
 // для отсутствующего на диске .js — оборачиваем и возвращаем исходный specifier.

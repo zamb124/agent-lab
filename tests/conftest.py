@@ -394,6 +394,21 @@ def _is_demo_auth_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/core/api/test_demo_auth.py")
 
 
+def _is_flows_api_heavy_test(nodeid: str) -> bool:
+    """In-process A2A flow exec / bundle reload / company init: >5s под xdist — иначе
+    pytest-timeout флагает, а hang_guard убивает воркер на +15s (каскад рестартов)."""
+    if nodeid.startswith("tests/flows/api/test_flow_ui_shares.py"):
+        return True
+    if nodeid.startswith("tests/flows/api/test_reload_flow_from_bundle.py"):
+        return True
+    return nodeid.startswith("tests/flows/api/test_company_init_commands.py")
+
+
+def _is_sync_client_test(nodeid: str) -> bool:
+    """Реальный HTTP в granian sync + ensure_flow_employee (FGA provision): >5s под xdist."""
+    return nodeid.startswith("tests/core/clients/test_sync_client.py")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Timeout-политика по типам тестов. Никаких xdist_group: все тесты параллельны,
@@ -470,6 +485,12 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         elif _is_demo_auth_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(60, func_only=False))
+        elif _is_flows_api_heavy_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_sync_client_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_runtest_call(item) -> Generator[None, object, object]:
@@ -1573,9 +1594,9 @@ async def auth_token(frontend_di):
         )
         await Company.set(system_company)
     else:
-        if user_id not in system_company.members:
-            system_company.members[user_id] = ["admin"]
-            await Company.set(system_company)
+        # Атомарный merge членства: read-modify-write всей строки `system`
+        # теряет параллельные добавления и сериализует xdist-воркеров.
+        await Company.put_member_roles("system", user_id, ["admin"])
 
     await sync_company_member_roles(
         frontend_di.authz_service,
@@ -1622,6 +1643,7 @@ async def rag_provider_pgvector():
     from apps.rag.main import app as rag_application
     from core.config import get_settings
     from core.config.models import RAGProviderConfig
+    from core.config.openai_v1_base_url import openai_v1_base_url
     from core.di import require_di
     from core.files.reader.service import FileReader
     from core.rag.embedding_runtime import resolve_rag_embedding_runtime
@@ -1635,7 +1657,9 @@ async def rag_provider_pgvector():
         ),
     )
     embedding_runtime = resolve_rag_embedding_runtime(
-        settings.rag.embedding, settings.llm, settings.provider_litserve
+        settings.rag.embedding,
+        settings.llm,
+        openai_v1_base_url(settings.server.get_service_url("provider_litserve")),
     )
     provider = PgVectorProvider(config, embedding_runtime)
     async with rag_application.router.lifespan_context(rag_application):

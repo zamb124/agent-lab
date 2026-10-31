@@ -29,7 +29,6 @@ from core.config.llm_openai_compat import resolve_provider_openai_v1_base_url
 from core.config.openai_v1_base_url import (
     PROVIDER_LITSERVE_PLACEHOLDER_BEARER,
     openai_v1_base_url,
-    provider_litserve_rerank_http_url,
 )
 from core.http import ProxyStrategy
 from core.http.client import request_with_strategy
@@ -37,6 +36,7 @@ from core.http.egress_route_preference import (
     egress_prefer_proxy_delete,
     normalized_http_origin,
 )
+from core.rag.openai_http_contracts import provider_litserve_rerank_http_url
 from core.types import JsonValue, require_json_object
 from tests.core.clients.live_llm_provider_helpers import (
     EXPECTED_CHAT_MARKER,

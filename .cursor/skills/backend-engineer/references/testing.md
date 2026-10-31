@@ -57,7 +57,7 @@ Postgres теста: `max_connections=800`, `shm_size: 1g`, данные в name
 | `WORKERS` | `10` | pytest-воркеры этапа 1; `auto` = 10; стек масштабируется от baseline 10 |
 | `DB_PROFILE` | `1` | `pg_stat_statements` reset после `test-up`, collect и отчёт после этапа 1: `reports/db_test_profile/latest/report.html`; пороги `DB_PROFILE_SLOW_MS`, `DB_PROFILE_SLOW_TOTAL_MS`, `DB_PROFILE_TOP_N`, `DB_PROFILE_TERMINAL_TOP_N`; `NO_COLOR=1` |
 | `PYTEST_WORKERS_PROFILE` | `1` | отчёт параллелизма после этапа 1 (`reports/pytest_workers_profile/latest/report.html`); issues `stack_undersized`, `phase1_failed`, `likely_parallelism_failure`, `xdist_bottleneck`, `worker_restart_risk` |
-| `TEST_COVERAGE` | `1` | Python `apps`+`core` этапов 1, 2, 4 и Vitest → `reports/coverage/latest/report.html`; печатается и при exit 1 |
+| `TEST_COVERAGE` | `1` | Python `apps`+`core` этапов 1, 2, 4 и Vitest → `reports/coverage/latest/report.html`; печатается и при exit 1. ~30% CPU надбавка на процесс — при диагностике таймаутов/параллелизма гоняйте `TEST_COVERAGE=0` |
 | `PYTEST_COMMAND_TIMEOUT_SECONDS` | `5400` | wall-clock `scripts/testing/pytest_with_timeout.py` (убивает process group) |
 | `PYTEST_MAX_WORKER_RESTART` | `2` | `--max-worker-restart` xdist |
 | `RUN_UI_IN_TEST` | `0` | этап 3 UI E2E |
@@ -110,6 +110,7 @@ DB_PROFILE=0 PYTEST_WORKERS_PROFILE=0 TEST_COVERAGE=0 make test   # без пр�
 | `tests/core/websocket/test_notification_e2e.py` | 120 с | `False` |
 | `tests/sync/db/**`, `tests/files/**`, `file_retention_purge` в `tests/idle/test_idle_worker_tasks.py` | 60 с | `True` |
 | `tests/flows/api/test_a2a.py`, `tests/flows/api/test_flows_variables.py`, `tests/flows/api/test_sessions_api.py`, `tests/flows/core/db/test_session_repository_search.py`, `tests/frontend/api/test_public_search_session.py` | 60 с | `True` |
+| `tests/flows/api/test_flow_ui_shares.py`, `tests/flows/api/test_reload_flow_from_bundle.py`, `tests/flows/api/test_company_init_commands.py`, `tests/core/clients/test_sync_client.py` | 60 с | `True`; in-process A2A flow exec / bundle reload / реальный HTTP под xdist — без бюджета pytest-timeout флагает на 5 с, hang_guard убивает воркер на +15 с (каскад рестартов) |
 | `tests/core/integrations/test_google_workspace_emulator_auth.py`, `tests/frontend/test_team_act_as.py` | 30 с | `True` |
 | `tests/realtime/**` | 20 с | — |
 | `tests/ui/e2e/**` | 15 с, до 360 с по `scenario(timeout_seconds=N)` или маркеру | `True` |
@@ -129,9 +130,9 @@ DB_PROFILE=0 PYTEST_WORKERS_PROFILE=0 TEST_COVERAGE=0 make test   # без пр�
 
 ## Триаж падения
 
-1. Первый fail — `/tmp/pytest-first-fail.txt` (xdist `-x` печатает traceback только после drain); зависший воркер — `/tmp/pytest-hung-worker.txt` (hang-guard SIGKILL gw, чей heartbeat setup/call/teardown старше timeout + 15 с; setup/teardown — не меньше 60 с; `idle` не трогается); xdist поднимает убитый gw до `--max-worker-restart`.
+1. Первый fail — `/tmp/pytest-first-fail.txt` (xdist `-x` печатает traceback только после drain); зависший воркер — `/tmp/pytest-hung-worker.txt` (hang-guard SIGKILL gw, чей heartbeat setup/call/teardown старше timeout + 15 с; setup/teardown — не меньше 60 с; `idle` не трогается); xdist поднимает убитый gw до `--max-worker-restart`. Журнал убийств прогона — `/tmp/platform_test_hang_guard_kills.jsonl`, lifecycle сессий — `/tmp/platform_test_hang_guard_events.jsonl` (старт/финиш gw с pid; heartbeat прошлых прогонов чистится на старте мастера и heartbeat до старта монитора не убивается — защита от pid-reuse).
 2. Логи процессов стека — `/tmp/platform_test_stack/<name>.err`; readiness и ёмкость — `uv run python -m scripts.testing.stack status`, `/tmp/platform_test_stack.json`.
-3. Отчёты этапа 1 — `reports/pytest_workers_profile/latest/report.html` (`stack_undersized`, `likely_parallelism_failure`, `xdist_bottleneck`) и `reports/db_test_profile/latest/report.html` (медленные запросы).
+3. Отчёты этапа 1 — `reports/pytest_workers_profile/latest/report.html` (`stack_undersized`, `likely_parallelism_failure`, `xdist_bottleneck`, `hang_guard_kills`, `worker_restarts`, `low_worker_utilization`; метрики `worker_utilization` = сумма времени junit / (workers × wall), wall из events.jsonl) и `reports/db_test_profile/latest/report.html` (медленные запросы).
 4. Повтор изолированно: `uv run pytest <nodeid> -q -n 0`. Зелёный изолированно и красный под `-n10` — shared state или ёмкость: уникальные id и scope, single-owner глобального ключа, сходимость batch-операции, ёмкость стека. Красный изолированно — контракт или инфраструктура теста.
 5. `ReadTimeout`, `TaskiqResultTimeoutError`, задача `running` до конца poll — очередь воркера, HOL granian, лишний запрос или Check OpenFGA (§ Таймауты пакетов), а не лимит.
 6. 403 на secrets, files, RAG или namespace — нет tuples OpenFGA у субъекта: членство через `set_test_company_member_roles`, namespace через `NamespaceService`, пользователь `ExecutionState.user_id` — JWT-пользователь `auth_headers_system` (синтетический `user-{context_id}` без tuples получает deny).

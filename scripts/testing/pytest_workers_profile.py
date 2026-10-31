@@ -21,10 +21,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict, cast
 
+from core.types import JsonObject, parse_json_object
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _REPORTS_ROOT = _REPO_ROOT / "reports" / "pytest_workers_profile"
 _LASTFAILED_PATH = _REPO_ROOT / ".pytest_cache" / "v" / "cache" / "lastfailed"
 _TESTS_ROOT = _REPO_ROOT / "tests"
+_HANG_GUARD_DIR = Path("/tmp")
+_HANG_GUARD_EVENTS = _HANG_GUARD_DIR / "platform_test_hang_guard_events.jsonl"
+_HANG_GUARD_KILLS = _HANG_GUARD_DIR / "platform_test_hang_guard_kills.jsonl"
+_HANG_GUARD_HEARTBEAT_GLOB = "platform_test_hang_guard_*.json"
 
 _BASELINE_PYTEST_WORKERS = 10
 
@@ -78,6 +84,35 @@ class FailureRow(TypedDict):
     suspect_pattern: str | None
 
 
+class KillRow(TypedDict):
+    worker: str
+    pid: int
+    nodeid: str
+    phase: str
+    timeout_sec: float
+    age_seconds: float
+    time: float
+
+
+class WorkerTimelineRow(TypedDict):
+    worker: str
+    pids: list[int]
+    spawned: int
+    finished: bool
+    final_phase: str
+    final_nodeid: str
+
+
+class HangGuardSnapshot(TypedDict):
+    kills: list[KillRow]
+    workers: list[WorkerTimelineRow]
+    worker_spawn_count: int
+    worker_restart_count: int
+    session_start_time: float | None
+    session_finish_time: float | None
+    wall_time_seconds: float | None
+
+
 class CollectPayload(TypedDict):
     run_id: str
     collected_at: str
@@ -86,10 +121,12 @@ class CollectPayload(TypedDict):
     phase1_exit_code: int
     max_worker_restart: int
     phase1_wall_time_seconds: float | None
+    junit_time_sum_seconds: float | None
     failed_nodeids: list[str]
     junit_failures: list[FailureRow]
     stack_manifest: dict[str, object] | None
     xdist_counts: dict[str, int]
+    hang_guard: HangGuardSnapshot | None
 
 
 def _require_int(value: object) -> int:
@@ -100,6 +137,12 @@ def _require_int(value: object) -> int:
     if isinstance(value, float):
         return int(value)
     raise ValueError(f"expected integer, got {type(value)!r}")
+
+
+def _require_float(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"expected number, got {type(value)!r}")
+    return float(value)
 
 
 def _parse_pytest_workers(raw: str) -> tuple[str, int | None]:
@@ -187,16 +230,20 @@ def _classify_failure_message(message: str) -> tuple[bool, str | None]:
     return False, None
 
 
-def _parse_junit(path: Path) -> tuple[float | None, list[FailureRow]]:
+def _parse_junit(path: Path) -> tuple[float | None, float | None, list[FailureRow]]:
     if not path.is_file():
-        return None, []
+        return None, None, []
     root = ET.parse(path).getroot()
     wall_time_raw = root.attrib.get("time")
     wall_time = float(wall_time_raw) if wall_time_raw else None
+    time_sum = 0.0
     failures: list[FailureRow] = []
     for testcase in root.iter("testcase"):
         classname = testcase.attrib.get("classname", "")
         name = testcase.attrib.get("name", "")
+        time_raw = testcase.attrib.get("time")
+        if time_raw:
+            time_sum += float(time_raw)
         nodeid = f"{classname}::{name}" if classname else name
         for child in testcase:
             if child.tag not in {"failure", "error"}:
@@ -211,7 +258,107 @@ def _parse_junit(path: Path) -> tuple[float | None, list[FailureRow]]:
                     suspect_pattern=pattern,
                 )
             )
-    return wall_time, failures
+    return wall_time, time_sum, failures
+
+
+def _read_jsonl(path: Path) -> list[JsonObject]:
+    if not path.is_file():
+        return []
+    rows: list[JsonObject] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            rows.append(parse_json_object(stripped, path.name))
+        except ValueError:
+            continue
+    return rows
+
+
+def _collect_hang_guard() -> HangGuardSnapshot | None:
+    events = _read_jsonl(_HANG_GUARD_EVENTS)
+    kills_raw = _read_jsonl(_HANG_GUARD_KILLS)
+    heartbeat_files = list(_HANG_GUARD_DIR.glob(_HANG_GUARD_HEARTBEAT_GLOB))
+    if not events and not kills_raw and not heartbeat_files:
+        return None
+    kills: list[KillRow] = []
+    for row in kills_raw:
+        kills.append(
+            KillRow(
+                worker=str(row.get("worker", "")),
+                pid=_require_int(row.get("pid", 0)),
+                nodeid=str(row.get("nodeid", "")),
+                phase=str(row.get("phase", "")),
+                timeout_sec=_require_float(row.get("timeout_sec", 0.0)),
+                age_seconds=_require_float(row.get("age_seconds", 0.0)),
+                time=_require_float(row.get("time", 0.0)),
+            )
+        )
+    spawn_pids: dict[str, list[int]] = {}
+    finished_workers: set[str] = set()
+    session_start_time: float | None = None
+    session_finish_time: float | None = None
+    for event in events:
+        worker = str(event.get("worker", ""))
+        pid_raw = event.get("pid")
+        kind = str(event.get("kind", ""))
+        stamp_raw = event.get("time")
+        stamp = float(stamp_raw) if isinstance(stamp_raw, (int, float)) else None
+        if kind == "session_start":
+            if worker != "master" and isinstance(pid_raw, int):
+                spawn_pids.setdefault(worker, []).append(pid_raw)
+            if stamp is not None and (session_start_time is None or stamp < session_start_time):
+                session_start_time = stamp
+        elif kind == "session_finish":
+            if worker != "master":
+                finished_workers.add(worker)
+            if stamp is not None and (session_finish_time is None or stamp > session_finish_time):
+                session_finish_time = stamp
+    final_by_worker: dict[str, WorkerTimelineRow] = {}
+    for path in heartbeat_files:
+        try:
+            loaded = parse_json_object(path.read_text(encoding="utf-8"), path.name)
+        except (OSError, ValueError):
+            continue
+        worker_raw = loaded.get("worker")
+        if not isinstance(worker_raw, str) or not worker_raw or worker_raw == "master":
+            continue
+        worker = worker_raw
+        final_by_worker[worker] = WorkerTimelineRow(
+            worker=worker,
+            pids=spawn_pids.get(worker, []),
+            spawned=len(spawn_pids.get(worker, [])),
+            finished=worker in finished_workers,
+            final_phase=str(loaded.get("phase", "")),
+            final_nodeid=str(loaded.get("nodeid", "")),
+        )
+    for worker, pids in spawn_pids.items():
+        if worker in final_by_worker:
+            continue
+        final_by_worker[worker] = WorkerTimelineRow(
+            worker=worker,
+            pids=pids,
+            spawned=len(pids),
+            finished=worker in finished_workers,
+            final_phase="",
+            final_nodeid="",
+        )
+    workers = sorted(final_by_worker.values(), key=lambda item: item["worker"])
+    worker_spawn_count = sum(len(pids) for pids in spawn_pids.values())
+    worker_restart_count = sum(max(0, len(pids) - 1) for pids in spawn_pids.values())
+    wall_time: float | None = None
+    if session_start_time is not None and session_finish_time is not None:
+        wall_time = session_finish_time - session_start_time
+    return HangGuardSnapshot(
+        kills=kills,
+        workers=workers,
+        worker_spawn_count=worker_spawn_count,
+        worker_restart_count=worker_restart_count,
+        session_start_time=session_start_time,
+        session_finish_time=session_finish_time,
+        wall_time_seconds=wall_time,
+    )
 
 
 def cmd_collect(
@@ -226,7 +373,13 @@ def cmd_collect(
     raw_dir.mkdir(parents=True, exist_ok=True)
     workers_label, workers_numeric = _parse_pytest_workers(workers)
     junit_path = run_dir / "junit.xml"
-    wall_time, junit_failures = _parse_junit(junit_path)
+    junit_wall_time, junit_time_sum, junit_failures = _parse_junit(junit_path)
+    hang_guard = _collect_hang_guard()
+    wall_time = (
+        hang_guard["wall_time_seconds"]
+        if hang_guard is not None and hang_guard["wall_time_seconds"] is not None
+        else junit_wall_time
+    )
     payload: CollectPayload = {
         "run_id": run_id,
         "collected_at": datetime.now(UTC).isoformat(),
@@ -235,10 +388,12 @@ def cmd_collect(
         "phase1_exit_code": exit_code,
         "max_worker_restart": max_worker_restart,
         "phase1_wall_time_seconds": wall_time,
+        "junit_time_sum_seconds": junit_time_sum,
         "failed_nodeids": _load_lastfailed(),
         "junit_failures": junit_failures,
         "stack_manifest": _load_stack_manifest(),
         "xdist_counts": _count_xdist_groups(),
+        "hang_guard": hang_guard,
     }
     raw_path = raw_dir / "phase1.json"
     _ = raw_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -300,6 +455,53 @@ def _build_issues(payload: CollectPayload) -> list[IssueRow]:
                     pattern=None,
                 )
             )
+    hang_guard = payload.get("hang_guard")
+    if isinstance(hang_guard, dict):
+        kills = hang_guard["kills"]
+        if kills:
+            killed_tests = ", ".join(
+                kill["nodeid"].split("::")[-1][:40] for kill in kills[:5]
+            )
+            issues.append(
+                IssueRow(
+                    severity="error",
+                    code="hang_guard_kills",
+                    message=(
+                        f"hang_guard SIGKILL: {len(kills)} воркеров убито "
+                        f"(зависли > timeout+slack в call/setup/teardown): {killed_tests}"
+                    ),
+                    nodeid=None,
+                    pattern=None,
+                )
+            )
+        restart_count = hang_guard["worker_restart_count"]
+        if restart_count > 0:
+            issues.append(
+                IssueRow(
+                    severity="warn",
+                    code="worker_restarts",
+                    message=(
+                        f"{restart_count} перезапусков воркеров — каждый платит "
+                        "полную session-инициализацию и перераспределяет очередь"
+                    ),
+                    nodeid=None,
+                    pattern=None,
+                )
+            )
+    utilization = _worker_utilization(payload)
+    if utilization is not None and utilization < 0.5:
+        issues.append(
+            IssueRow(
+                severity="warn",
+                code="low_worker_utilization",
+                message=(
+                    f"utilization={utilization:.0%}: суммарное время тестов / (workers × wall) "
+                    "< 50% — воркеры простаивают (краши, session setup, shared-ресурсы)"
+                ),
+                nodeid=None,
+                pattern=None,
+            )
+        )
     if payload["phase1_exit_code"] != 0:
         issues.append(
             IssueRow(
@@ -359,6 +561,17 @@ def _build_issues(payload: CollectPayload) -> list[IssueRow]:
     return issues
 
 
+def _worker_utilization(payload: CollectPayload) -> float | None:
+    time_sum = payload.get("junit_time_sum_seconds")
+    wall = payload.get("phase1_wall_time_seconds")
+    workers_numeric = payload.get("pytest_workers_numeric")
+    if not isinstance(time_sum, (int, float)) or not isinstance(wall, (int, float)):
+        return None
+    if not isinstance(workers_numeric, int) or workers_numeric <= 0 or wall <= 0:
+        return None
+    return float(time_sum) / (workers_numeric * float(wall))
+
+
 def _build_recommendations(payload: CollectPayload, issues: list[IssueRow]) -> list[str]:
     recs: list[str] = []
     codes = {issue["code"] for issue in issues}
@@ -413,6 +626,9 @@ def _build_summary(payload: CollectPayload) -> dict[str, object]:
             else None
         ),
         "xdist_counts": payload["xdist_counts"],
+        "junit_time_sum_seconds": payload.get("junit_time_sum_seconds"),
+        "worker_utilization": _worker_utilization(payload),
+        "hang_guard": payload.get("hang_guard"),
         "failed_nodeids": payload["failed_nodeids"],
         "issues": issues,
         "recommendations": _build_recommendations(payload, issues),
@@ -489,6 +705,22 @@ def _render_terminal(summary: dict[str, object]) -> str:
         parallel = xdist.get("parallelizable_estimate", 0)
         serial = xdist.get("code_sandbox_estimate", 0) + xdist.get("real_taskiq_estimate", 0)
         lines.append(_box_line(f"xdist: parallel~{parallel} serial~{serial}", width, unicode_box=unicode_box))
+    utilization = summary.get("worker_utilization")
+    if isinstance(utilization, (int, float)):
+        lines.append(_box_line(f"worker_utilization={float(utilization):.0%}", width, unicode_box=unicode_box))
+    hang_guard = summary.get("hang_guard")
+    if isinstance(hang_guard, dict):
+        kills = hang_guard.get("kills")
+        restarts = hang_guard.get("worker_restart_count")
+        kills_count = len(kills) if isinstance(kills, list) else 0
+        if kills_count or (isinstance(restarts, (int, float)) and restarts > 0):
+            lines.append(
+                _box_line(
+                    f"hang_guard: kills={kills_count} restarts={int(restarts or 0)}",
+                    width,
+                    unicode_box=unicode_box,
+                )
+            )
     issues = summary.get("issues")
     if isinstance(issues, list) and issues:
         lines.append(mid)
@@ -537,8 +769,57 @@ def _render_html(summary: dict[str, object], run_id: str) -> str:
         f"<li>parallelism_suspect_count: {esc(summary.get('parallelism_suspect_count'))}</li>",
         f"<li>phase1_wall_time_seconds: {esc(summary.get('phase1_wall_time_seconds'))}</li>",
         f"<li>stack_scale_factor: {esc(summary.get('stack_scale_factor'))}</li>",
+        f"<li>junit_time_sum_seconds: {esc(summary.get('junit_time_sum_seconds'))}</li>",
+        f"<li>worker_utilization: {esc(summary.get('worker_utilization'))}</li>",
         "</ul>",
     ]
+    hang_guard = summary.get("hang_guard")
+    if isinstance(hang_guard, dict):
+        kills = hang_guard.get("kills")
+        workers = hang_guard.get("workers")
+        sections.append("<h2>Hang guard</h2><ul>")
+        sections.append(f"<li>worker_spawn_count: {esc(hang_guard.get('worker_spawn_count'))}</li>")
+        sections.append(f"<li>worker_restart_count: {esc(hang_guard.get('worker_restart_count'))}</li>")
+        sections.append(f"<li>wall_time_seconds: {esc(hang_guard.get('wall_time_seconds'))}</li>")
+        sections.append("</ul>")
+        if isinstance(kills, list) and kills:
+            sections.append("<h3>SIGKILLs</h3><table border='1' cellpadding='4'>")
+            sections.append(
+                "<tr><th>worker</th><th>pid</th><th>phase</th><th>age_s</th><th>timeout_s</th><th>nodeid</th></tr>"
+            )
+            for kill in kills:
+                if not isinstance(kill, dict):
+                    continue
+                sections.append(
+                    "<tr>"
+                    + f"<td>{esc(kill.get('worker'))}</td>"
+                    + f"<td>{esc(kill.get('pid'))}</td>"
+                    + f"<td>{esc(kill.get('phase'))}</td>"
+                    + f"<td>{esc(kill.get('age_seconds'))}</td>"
+                    + f"<td>{esc(kill.get('timeout_sec'))}</td>"
+                    + f"<td><code>{esc(kill.get('nodeid'))}</code></td>"
+                    + "</tr>"
+                )
+            sections.append("</table>")
+        if isinstance(workers, list) and workers:
+            sections.append("<h3>Workers</h3><table border='1' cellpadding='4'>")
+            sections.append(
+                "<tr><th>worker</th><th>pids</th><th>spawned</th><th>finished</th><th>final_phase</th><th>final_nodeid</th></tr>"
+            )
+            for row in workers:
+                if not isinstance(row, dict):
+                    continue
+                sections.append(
+                    "<tr>"
+                    + f"<td>{esc(row.get('worker'))}</td>"
+                    + f"<td>{esc(row.get('pids'))}</td>"
+                    + f"<td>{esc(row.get('spawned'))}</td>"
+                    + f"<td>{esc(row.get('finished'))}</td>"
+                    + f"<td>{esc(row.get('final_phase'))}</td>"
+                    + f"<td><code>{esc(row.get('final_nodeid'))}</code></td>"
+                    + "</tr>"
+                )
+            sections.append("</table>")
     issues = summary.get("issues")
     if isinstance(issues, list) and issues:
         sections.append("<h2>Issues</h2><table border='1' cellpadding='4'>")
