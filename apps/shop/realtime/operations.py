@@ -26,6 +26,7 @@ from apps.shop.models import (
     ShopPromo,
 )
 from apps.shop.models.api import (
+    ShopAiParseMenuResponse,
     ShopAiSuggestOptionsResponse,
     ShopCartPriceRequest,
     ShopCartPriceResponse,
@@ -253,6 +254,11 @@ class ShopAiSuggestOptionsPayload(StrictBaseModel):
     shop_id: str = Field(min_length=1)
     product_name: str = Field(min_length=1, max_length=300)
     group_name: str | None = Field(default=None, max_length=200)
+
+
+class ShopAiParseMenuPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    text: str = Field(min_length=3, max_length=50_000)
 
 
 class ShopAiShopPayload(StrictBaseModel):
@@ -832,6 +838,20 @@ async def op_ai_describe_batch(
         company_id=scope.company_id,
     )
     return ShopAiBatchResponse(enqueued=max(pending, 0))
+
+
+async def op_ai_parse_menu(
+    payload: ShopAiParseMenuPayload, *, user: User, di: Di
+) -> ShopAiParseMenuResponse:
+    """AI-разбор свободного текста меню в позиции каталога (импорт-превью)."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        items = await di.ai_service.parse_menu(text=payload.text)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ShopAiParseMenuResponse(items=items)
 
 
 async def op_ai_describe_shop(

@@ -76,7 +76,10 @@
         "import_run": "Add to menu",
         "import_close": "Close",
         "ai_fill": "AI descriptions",
-        "modifiers": "Modifiers"
+        "modifiers": "Modifiers",
+        "import_ai": "AI parse",
+        "import_ai_hint": "AI will extract items from free-form menu text — sections, prices, descriptions",
+        "import_ai_ready": "parsed by AI"
     },
     "builder": {
         "title": "Storefront appearance",
@@ -215,7 +218,8 @@
         "ai_suggest_failed": "AI could not suggest options",
         "promos_load_failed": "Failed to load promotions",
         "promo_created": "Promotion created",
-        "promo_failed": "Failed to save promotion"
+        "promo_failed": "Failed to save promotion",
+        "ai_parse_failed": "AI could not parse the menu text"
     },
     "modifiers": {
         "header": "Options & modifiers",

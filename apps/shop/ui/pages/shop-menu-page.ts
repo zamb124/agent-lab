@@ -46,6 +46,7 @@ export class ShopMenuPage extends PlatformPage {
     private _productUpdateOp: OpController;
     private _productRemoveOp: OpController;
     private _importOp: OpController;
+    private _aiParseOp: OpController;
     private _aiDescribeOp: OpController;
     private _aiDescribeBatchOp: OpController;
     private _aiEnhanceOp: OpController;
@@ -68,6 +69,7 @@ export class ShopMenuPage extends PlatformPage {
     private _editDescription = '';
     private _importOpen = false;
     private _importText = '';
+    private _aiItems: Array<{ name: string; description: string; price_minor: number }> | null = null;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -86,6 +88,7 @@ export class ShopMenuPage extends PlatformPage {
         _editDescription: { state: true },
         _importOpen: { state: true },
         _importText: { state: true },
+        _aiItems: { state: true },
     };
 
     static override styles = [
@@ -210,6 +213,7 @@ export class ShopMenuPage extends PlatformPage {
         this._productUpdateOp = this.useOp('shop/product_update');
         this._productRemoveOp = this.useOp('shop/product_remove');
         this._importOp = this.useOp('shop/products_import');
+        this._aiParseOp = this.useOp('shop/ai_parse_menu');
         this._aiDescribeOp = this.useOp('shop/ai_describe');
         this._aiDescribeBatchOp = this.useOp('shop/ai_describe_batch');
         this._aiEnhanceOp = this.useOp('shop/ai_enhance_photo');
@@ -452,8 +456,27 @@ export class ShopMenuPage extends PlatformPage {
         await this._aiDescribeBatchOp.run({ shop_id: this.shopId });
     }
 
+    private async _runAiParse() {
+        const text = this._importText.trim();
+        if (text.length < 3) return;
+        const result = await this._aiParseOp.run({ shop_id: this.shopId, text });
+        if (result !== null && typeof result === 'object' && 'items' in (result as Record<string, unknown>)) {
+            const items = (result as { items?: unknown }).items;
+            if (Array.isArray(items)) {
+                this._aiItems = items
+                    .filter((item): item is { name: string; description: string; price_minor: number; category?: string } =>
+                        typeof item === 'object' && item !== null && 'name' in item && 'price_minor' in item)
+                    .map((item) => ({
+                        name: String(item.name),
+                        description: typeof item.description === 'string' ? item.description : '',
+                        price_minor: Number(item.price_minor),
+                    }));
+            }
+        }
+    }
+
     private async _runImport() {
-        const { items } = this._parseImport();
+        const items = this._aiItems ?? this._parseImport().items;
         if (items.length === 0) return;
         const result = await this._importOp.run({
             shop_id: this.shopId,
@@ -462,6 +485,7 @@ export class ShopMenuPage extends PlatformPage {
         });
         if (result !== null) {
             this._importText = '';
+            this._aiItems = null;
             this._importOpen = false;
             await this._reload();
         }
@@ -489,6 +513,7 @@ export class ShopMenuPage extends PlatformPage {
             : this._products.filter((p) => p.category_id === this._activeCategory);
         const busy = this._categoriesOp.busy || this._productsOp.busy;
         const parsed = this._importOpen ? this._parseImport() : { items: [], invalid: 0 };
+        const importItems = this._aiItems ?? parsed.items;
         return html`
             <div class="wrap">
                 <div class="page-head">
@@ -519,21 +544,29 @@ export class ShopMenuPage extends PlatformPage {
                             .value=${this._importText}
                             @change=${(event: CustomEvent<{ value?: unknown }>) => {
                                 this._importText = typeof event.detail.value === 'string' ? event.detail.value : '';
+                                this._aiItems = null;
                             }}
                         ></platform-field>
                         <div class="import-stats">
-                            <span class="ok">${this.t('menu.import_preview')} ${parsed.items.length}</span>
-                            ${parsed.invalid > 0 ? html`<span class="bad">${parsed.invalid} ${this.t('menu.import_invalid')}</span>` : html``}
+                            <span class="ok">${this.t('menu.import_preview')} ${importItems.length}${this._aiItems !== null ? html` · ${this.t('menu.import_ai_ready')}` : ''}</span>
+                            ${parsed.invalid > 0 && this._aiItems === null ? html`<span class="bad">${parsed.invalid} ${this.t('menu.import_invalid')}</span>` : html``}
                         </div>
                         <div class="import-actions">
-                            <platform-button size="sm" @click=${() => { this._importOpen = false; }}>${this.t('menu.import_close')}</platform-button>
+                            <platform-button
+                                size="sm"
+                                ?busy=${this._aiParseOp.busy}
+                                ?disabled=${this._importText.trim().length < 3}
+                                title=${this.t('menu.import_ai_hint')}
+                                @click=${() => this._runAiParse()}
+                            ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('menu.import_ai')}</platform-button>
+                            <platform-button size="sm" @click=${() => { this._importOpen = false; this._aiItems = null; }}>${this.t('menu.import_close')}</platform-button>
                             <platform-button
                                 size="sm"
                                 variant="primary"
                                 ?busy=${this._importOp.busy}
-                                ?disabled=${parsed.items.length === 0}
+                                ?disabled=${importItems.length === 0}
                                 @click=${() => this._runImport()}
-                            >${this.t('menu.import_run')} · ${parsed.items.length}</platform-button>
+                            >${this.t('menu.import_run')} · ${importItems.length}</platform-button>
                         </div>
                     </div>
                 ` : html``}

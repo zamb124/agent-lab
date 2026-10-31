@@ -409,6 +409,51 @@ class TestAiOperations:
         assert "локального бизнеса" in rendered
         assert "Пицца Парк" in rendered
 
+    async def test_ai_parse_menu_flow_branch(
+        self,
+        shop_client: AsyncClient,
+        mock_llm_redis,
+        unique_id: str,
+    ) -> None:
+        """parse-menu: ветка parse_menu flow — structured output разбирается в позиции."""
+        await _reset_shop_flow()
+        shop = await _published_shop(shop_client, f"aip-{unique_id[:8]}")
+        await mock_llm_redis(
+            [
+                {
+                    "type": "text",
+                    "content": (
+                        '{"items": ['
+                        '{"name": "Маргарита", "price_minor": 45000, "description": "Томатный соус, моцарелла", "category": "Пицца"},'
+                        '{"name": "Латте", "price_minor": 22000, "description": "", "category": "Напитки"}'
+                        ']}'
+                    ),
+                }
+            ]
+        )
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/ai/parse-menu",
+            json={"text": "Пицца\nМаргарита — 450\nНапитки\nЛатте 220"},
+        )
+        assert resp.status_code == 200, resp.text
+        items = resp.json()["items"]
+        assert [item["name"] for item in items] == ["Маргарита", "Латте"]
+        assert items[0]["price_minor"] == 45000
+        assert items[0]["category"] == "Пицца"
+
+    async def test_ai_parse_menu_empty_fails_closed(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """parse-menu без позиций в ответе LLM — честный ai_empty_result."""
+        await _reset_shop_flow()
+        shop = await _published_shop(shop_client, f"aiq-{unique_id[:8]}")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/ai/parse-menu",
+            json={"text": "просто текст без меню"},
+        )
+        assert resp.status_code == 404
+        assert resp.json().get("error_code") == "ai_empty_result"
+
     async def test_ai_generate_cover_image_gen_branch(
         self,
         shop_client: AsyncClient,

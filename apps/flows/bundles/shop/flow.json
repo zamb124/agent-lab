@@ -116,6 +116,26 @@
       },
       "edges": []
     },
+    "parse_menu": {
+      "name": "Parse menu text",
+      "description": "Разбор произвольного текста меню в позиции каталога. Вход: текст меню в сообщении, variables — не нужны. Выход: {items: [{name, price_minor, description, category}]}.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/parse_menu.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.2,
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/parse_menu.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
     "describe_shop": {
       "name": "Shop description",
       "description": "Продающее описание магазина/ресторана для витрины. Вход: variables.shop_name, variables.description (опц., текущий черновик для улучшения), variables.city (опц.). Выход: текст описания.",

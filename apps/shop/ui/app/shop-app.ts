@@ -35,6 +35,7 @@ import {
     shopAiEnhancePhotoOp,
     shopAiGenerateCoverOp,
     shopAiGeneratePhotoOp,
+    shopAiParseMenuOp,
     shopTelegramConnectOp,
     shopTelegramDisconnectOp,
 } from '../events/resources/shop.resource.js';
@@ -99,6 +100,7 @@ export class ShopApp extends PlatformApp {
         shopAiEnhancePhotoOp,
         shopAiGenerateCoverOp,
         shopAiGeneratePhotoOp,
+        shopAiParseMenuOp,
         shopTelegramConnectOp,
         shopTelegramDisconnectOp,
         platformFileCreateOp,

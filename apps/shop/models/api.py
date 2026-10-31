@@ -218,6 +218,23 @@ class ShopAiSuggestOptionsResponse(StrictBaseModel):
     items: list[ShopAiOptionSuggestion]
 
 
+class ShopAiMenuItem(StrictBaseModel):
+    """Позиция, извлечённая AI из свободного текста меню."""
+
+    name: str
+    price_minor: int = Field(ge=0, le=10_000_000)
+    description: str = ""
+    category: str = ""
+
+
+class ShopAiParseMenuRequest(StrictBaseModel):
+    text: str = Field(min_length=3, max_length=50_000)
+
+
+class ShopAiParseMenuResponse(StrictBaseModel):
+    items: list[ShopAiMenuItem]
+
+
 class ShopModifierOptionCreateRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=200)
     price_minor: int = Field(default=0, ge=0, le=10_000_000)

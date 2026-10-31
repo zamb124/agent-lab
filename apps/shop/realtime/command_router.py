@@ -9,6 +9,7 @@ from apps.shop.realtime.operations import (
     ShopAiDescribePayload,
     ShopAiEnhancePhotoPayload,
     ShopAiGeneratePhotoPayload,
+    ShopAiParseMenuPayload,
     ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
     ShopCartPricePayload,
@@ -46,6 +47,7 @@ from apps.shop.realtime.operations import (
     op_ai_enhance_photo,
     op_ai_generate_cover,
     op_ai_generate_photo,
+    op_ai_parse_menu,
     op_ai_suggest_options,
     op_categories_create,
     op_categories_list,
@@ -205,5 +207,8 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/ai/generate_cover_requested": Operation(
         payload_model=ShopAiShopPayload, fn=op_ai_generate_cover
+    ),
+    "shop/ai/parse_menu_requested": Operation(
+        payload_model=ShopAiParseMenuPayload, fn=op_ai_parse_menu
     ),
 }

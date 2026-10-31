@@ -12,6 +12,8 @@ from apps.shop.models.api import (
     ShopAiBriefRequest,
     ShopAiDescribeRequest,
     ShopAiEnhancePhotoRequest,
+    ShopAiParseMenuRequest,
+    ShopAiParseMenuResponse,
     ShopAiSuggestOptionsRequest,
     ShopAiSuggestOptionsResponse,
     ShopCategoryCreateRequest,
@@ -48,6 +50,7 @@ from apps.shop.realtime.operations import (
     ShopAiEnhancePhotoPayload,
     ShopAiFileResponse,
     ShopAiGeneratePhotoPayload,
+    ShopAiParseMenuPayload,
     ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
     ShopAiTextResponse,
@@ -83,6 +86,7 @@ from apps.shop.realtime.operations import (
     op_ai_enhance_photo,
     op_ai_generate_cover,
     op_ai_generate_photo,
+    op_ai_parse_menu,
     op_ai_suggest_options,
     op_categories_create,
     op_categories_list,
@@ -434,6 +438,17 @@ async def ai_generate_cover(
 ) -> ShopAiFileResponse:
     return await op_ai_generate_cover(
         ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/ai/parse-menu", response_model=ShopAiParseMenuResponse)
+async def ai_parse_menu(
+    shop_id: str, body: ShopAiParseMenuRequest, di: Di
+) -> ShopAiParseMenuResponse:
+    return await op_ai_parse_menu(
+        ShopAiParseMenuPayload(shop_id=shop_id, text=body.text),
         user=require_context().user,
         di=di,
     )

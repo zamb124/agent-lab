@@ -76,7 +76,10 @@
         "import_run": "Добавить в меню",
         "import_close": "Закрыть",
         "ai_fill": "AI-описания",
-        "modifiers": "Опции"
+        "modifiers": "Опции",
+        "import_ai": "AI-разбор",
+        "import_ai_hint": "AI извлечёт позиции из произвольного текста меню — разделы, цены, описания",
+        "import_ai_ready": "разобрано AI"
     },
     "builder": {
         "title": "Внешний вид витрины",
@@ -215,7 +218,8 @@
         "ai_suggest_failed": "AI не смог предложить опции",
         "promos_load_failed": "Не удалось загрузить акции",
         "promo_created": "Акция создана",
-        "promo_failed": "Не удалось сохранить акцию"
+        "promo_failed": "Не удалось сохранить акцию",
+        "ai_parse_failed": "AI не смог разобрать текст меню"
     },
     "modifiers": {
         "header": "Опции и модификаторы",
