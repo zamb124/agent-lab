@@ -34,6 +34,7 @@ from apps.shop.realtime.operations import (
     ShopProductModifierAttachPayload,
     ShopProductModifierDetachPayload,
     ShopProductsImportPayload,
+    ShopProductsReorderPayload,
     ShopProductUpdatePayload,
     ShopPromoCreatePayload,
     ShopPromoIdPayload,
@@ -74,6 +75,7 @@ from apps.shop.realtime.operations import (
     op_products_modifier_attach,
     op_products_modifier_detach,
     op_products_remove,
+    op_products_reorder,
     op_products_update,
     op_promos_create,
     op_promos_list,
@@ -121,6 +123,9 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/products/update_requested": Operation(
         payload_model=ShopProductUpdatePayload, fn=op_products_update
+    ),
+    "shop/products/reorder_requested": Operation(
+        payload_model=ShopProductsReorderPayload, fn=op_products_reorder
     ),
     "shop/products/remove_requested": Operation(
         payload_model=ShopProductIdPayload, fn=op_products_remove

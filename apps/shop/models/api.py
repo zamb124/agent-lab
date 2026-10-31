@@ -147,6 +147,12 @@ class ShopProductsImportResponse(StrictBaseModel):
     created: int
 
 
+class ShopProductsReorderRequest(StrictBaseModel):
+    """Новый порядок позиций: ids в желаемой последовательности."""
+
+    product_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
 class ShopAiDescribeRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=300)
     category_name: str | None = Field(default=None, max_length=200)

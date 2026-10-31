@@ -31,6 +31,7 @@ interface ProductRow {
     price_minor: number;
     photo_file_id: string | null;
     is_available: boolean;
+    sort: number;
 }
 
 export class ShopMenuPage extends PlatformPage {
@@ -45,6 +46,7 @@ export class ShopMenuPage extends PlatformPage {
     private _productCreateOp: OpController;
     private _productUpdateOp: OpController;
     private _productRemoveOp: OpController;
+    private _productReorderOp: OpController;
     private _importOp: OpController;
     private _aiParseOp: OpController;
     private _aiDescribeOp: OpController;
@@ -212,6 +214,7 @@ export class ShopMenuPage extends PlatformPage {
         this._productCreateOp = this.useOp('shop/product_create');
         this._productUpdateOp = this.useOp('shop/product_update');
         this._productRemoveOp = this.useOp('shop/product_remove');
+        this._productReorderOp = this.useOp('shop/products_reorder');
         this._importOp = this.useOp('shop/products_import');
         this._aiParseOp = this.useOp('shop/ai_parse_menu');
         this._aiDescribeOp = this.useOp('shop/ai_describe');
@@ -499,6 +502,23 @@ export class ShopMenuPage extends PlatformPage {
         });
     }
 
+    private async _move(product: ProductRow, dir: -1 | 1) {
+        const list = this._activeCategory === null
+            ? this._products
+            : this._products.filter((p) => p.category_id === this._activeCategory);
+        const idx = list.findIndex((p) => p.shop_product_id === product.shop_product_id);
+        const swap = list[idx + dir];
+        if (idx < 0 || swap === undefined) return;
+        const ids = list.map((p) => p.shop_product_id);
+        const idA = ids[idx];
+        const idB = ids[idx + dir];
+        if (idA === undefined || idB === undefined) return;
+        ids[idx] = idB;
+        ids[idx + dir] = idA;
+        await this._productReorderOp.run({ shop_id: this.shopId, product_ids: ids });
+        await this._reload();
+    }
+
     private async _removeProduct(product: ProductRow) {
         await this._productRemoveOp.run({
             shop_id: this.shopId,
@@ -708,6 +728,14 @@ export class ShopMenuPage extends PlatformPage {
                                         </td>
                                         <td>
                                             <div class="row-actions">
+                                                <platform-button size="sm" title=${this.t('menu.move_up')}
+                                                    ?busy=${this._productReorderOp.busy}
+                                                    @click=${() => this._move(p, -1)}
+                                                ><platform-icon name="chevron-up" size="14"></platform-icon></platform-button>
+                                                <platform-button size="sm" title=${this.t('menu.move_down')}
+                                                    ?busy=${this._productReorderOp.busy}
+                                                    @click=${() => this._move(p, 1)}
+                                                ><platform-icon name="chevron-down" size="14"></platform-icon></platform-button>
                                                 <input type="file" accept="image/*" style="display:none" data-photo-input=${p.shop_product_id}
                                                     @change=${(e: Event) => this._uploadProductPhoto(p, e)}>
                                                 <platform-button

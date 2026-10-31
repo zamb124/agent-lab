@@ -200,6 +200,34 @@ class TestCatalog:
         )
         assert resp.status_code == 200
 
+    async def test_products_reorder_within_list(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """products/reorder переставляет позиции: ids получают сорт. значения
+        в новом порядке, посторонние товары не затрагиваются."""
+        shop = await _make_shop(shop_client, f"reo-{unique_id[:8]}")
+        cat = await _make_category(shop_client, shop["shop_id"], "Пицца")
+        other_cat = await _make_category(shop_client, shop["shop_id"], "Напитки")
+        a = await _make_product(shop_client, shop["shop_id"], "A", 100, category_id=cat["shop_category_id"])
+        b = await _make_product(shop_client, shop["shop_id"], "B", 200, category_id=cat["shop_category_id"])
+        c = await _make_product(shop_client, shop["shop_id"], "C", 300, category_id=cat["shop_category_id"])
+        other = await _make_product(shop_client, shop["shop_id"], "Z", 400, category_id=other_cat["shop_category_id"])
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products/reorder",
+            json={"product_ids": [c["shop_product_id"], a["shop_product_id"], b["shop_product_id"]]},
+        )
+        assert resp.status_code == 200, resp.text
+        listed = (await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")).json()["items"]
+        ids = [p["shop_product_id"] for p in listed]
+        assert ids.index(c["shop_product_id"]) < ids.index(a["shop_product_id"]) < ids.index(b["shop_product_id"])
+        sorts = {p["shop_product_id"]: p["sort"] for p in listed}
+        assert sorts[other["shop_product_id"]] == other["sort"]
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products/reorder",
+            json={"product_ids": [a["shop_product_id"], "nonexistent"]},
+        )
+        assert resp.status_code == 404
+
     async def test_product_foreign_category_rejected(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:

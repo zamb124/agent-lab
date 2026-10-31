@@ -33,6 +33,7 @@ from apps.shop.models.api import (
     ShopProductResponse,
     ShopProductsImportRequest,
     ShopProductsImportResponse,
+    ShopProductsReorderRequest,
     ShopProductUpdateRequest,
     ShopPromoCreateRequest,
     ShopPromoResponse,
@@ -74,6 +75,7 @@ from apps.shop.realtime.operations import (
     ShopProductModifierAttachPayload,
     ShopProductModifierDetachPayload,
     ShopProductsImportPayload,
+    ShopProductsReorderPayload,
     ShopProductUpdatePayload,
     ShopPromoCreatePayload,
     ShopPromoIdPayload,
@@ -113,6 +115,7 @@ from apps.shop.realtime.operations import (
     op_products_modifier_attach,
     op_products_modifier_detach,
     op_products_remove,
+    op_products_reorder,
     op_products_update,
     op_promos_create,
     op_promos_list,
@@ -281,6 +284,19 @@ async def import_products(
     )
 
 
+@router.post("/{shop_id}/products/reorder", response_model=EmptyPayload)
+async def reorder_products(
+    shop_id: str, payload: ShopProductsReorderRequest, di: Di
+) -> EmptyPayload:
+    return await op_products_reorder(
+        ShopProductsReorderPayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
 @router.patch("/{shop_id}/products/{product_id}", response_model=ShopProductResponse)
 async def update_product(
     shop_id: str, product_id: str, payload: ShopProductUpdateRequest, di: Di
@@ -440,9 +456,7 @@ async def ai_generate_cover(shop_id: str, body: ShopAiBriefRequest, di: Di) -> S
 
 
 @router.post("/{shop_id}/ai/generate-logo", response_model=ShopAiFileResponse)
-async def ai_generate_logo(
-    shop_id: str, body: ShopAiBriefRequest, di: Di
-) -> ShopAiFileResponse:
+async def ai_generate_logo(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiFileResponse:
     return await op_ai_generate_logo(
         ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,

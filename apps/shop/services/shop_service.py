@@ -243,6 +243,22 @@ class ShopService:
         _ = await product.save()
         return product
 
+    async def reorder_products(self, company_id: str, shop_id: str, product_ids: list[str]) -> None:
+        """Перестановка позиций внутри списка: ids получают отсортированные
+        sort-значения в новом порядке — позиции вне списка не трогаем."""
+        _ = await self.get_shop(company_id, shop_id)
+        products = await ShopProduct.list_by_shop_by_sort_asc(shop_id)
+        by_id = {p.shop_product_id: p for p in products}
+        if any(pid not in by_id for pid in product_ids):
+            raise PlatformNotFoundError("Product not found", error_code="product_not_found")
+        ordered = [by_id[pid] for pid in product_ids]
+        sorts = sorted(p.sort for p in ordered)
+        for product, sort in zip(ordered, sorts, strict=True):
+            if product.sort != sort:
+                product.sort = sort
+                product.updated_at = utcnow()
+                _ = await product.save()
+
     async def delete_product(self, company_id: str, shop_id: str, product_id: str) -> None:
         _ = await self.get_shop(company_id, shop_id)
         product = await ShopProduct.get_by_id(product_id)

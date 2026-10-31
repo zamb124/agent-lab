@@ -49,6 +49,7 @@ from apps.shop.models.api import (
     ShopProductResponse,
     ShopProductsImportRequest,
     ShopProductsImportResponse,
+    ShopProductsReorderRequest,
     ShopProductUpdateRequest,
     ShopPromoCreateRequest,
     ShopPromoResponse,
@@ -132,6 +133,10 @@ class ShopProductsImportPayload(ShopProductsImportRequest):
 class ShopProductUpdatePayload(ShopProductUpdateRequest):
     shop_id: str = Field(min_length=1)
     shop_product_id: str = Field(min_length=1)
+
+
+class ShopProductsReorderPayload(ShopProductsReorderRequest):
+    shop_id: str = Field(min_length=1)
 
 
 class ShopModifierGroupCreatePayload(ShopModifierGroupCreateRequest):
@@ -544,6 +549,23 @@ async def op_products_update(
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
     return _product_response(product)
+
+
+async def op_products_reorder(
+    payload: ShopProductsReorderPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    """Перестановка позиций меню — стрелки в конструкторе и порядок на витрине."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.shop_service.reorder_products(
+            scope.company_id, payload.shop_id, payload.product_ids
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+    return EmptyPayload()
 
 
 async def op_products_import(
