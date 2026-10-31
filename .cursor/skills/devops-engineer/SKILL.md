@@ -87,7 +87,7 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 | coturn | DaemonSet | master (hostNetwork) | `coturn.nodeName` | — | TURN-сервер для WebRTC; при смене → `rebind-public-node.sh` |
 | onlyoffice | Deployment | master | `onlyoffice.nodeName` | — | OnlyOffice DocumentServer (CE) |
 | provider-litserve | Deployment | **master** | `litserve.nodeName` | 100Gi (`litserve.modelCacheSize`) | Эмбеддинги, rerank и audio (STT/TTS/VAD); `nodeName` в `gpuNodeNames` → `nvidia.com/gpu: 1` |
-| nvidia-device-plugin | DaemonSet | master | — (label `accelerator=nvidia-gpu`) | — | NVIDIA k8s-device-plugin v0.19.1 — публикует `nvidia.com/gpu` в Allocatable |
+| nvidia-device-plugin | DaemonSet | master | — (label `accelerator=nvidia-gpu`) | — | NVIDIA k8s-device-plugin v0.20.1 — публикует `nvidia.com/gpu` в Allocatable (nvcr anonymous pull закрыт → образ собран локально, см. troubleshooting §5) |
 | portainer | Deployment (community-аддон, если `microk8s enable portainer` прошёл) | master | — (вне Helm-чарта) | — | UI кластера на NodePort `30777` / `30779`; сейчас на BM аддон disabled |
 | 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | — | TLS через wildcard Secret `platform-tls` (выпускается `setup-wildcard-tls.sh`) |
 | Init-containers `wait-postgres` + `db-migrate` | в каждом app/worker pod | — | — | — | `db_migrate upgrade`: неприменённые `NNNN_<name>.py` и запись в `oxyde_migrations`, ожидание advisory lock |

@@ -40,12 +40,9 @@ regru_add_a() {
   local ip="$3"
   log_do "Reg.ru: ${subdomain}.${domain} → $ip"
   local response
-  if [ "$subdomain" = "www" ]; then
-    # Reg.ru parking: add_alias не перезаписывает существующую A www → remove + add.
-    response=$(regru_set_a_record "$domain" "$subdomain" "$ip")
-  else
-    response=$(regru_add_alias "$domain" "$subdomain" "$ip")
-  fi
+  # add_alias аддитивна и оставляет старые A (мёртвый IP продолжает резолвиться
+  # в round-robin). set_a_record = remove_record + add_alias — единственный IP.
+  response=$(regru_set_a_record "$domain" "$subdomain" "$ip")
   regru_assert_success "${domain}/${subdomain}" "$response"
   log_ok "${subdomain}.${domain} → $ip"
 }

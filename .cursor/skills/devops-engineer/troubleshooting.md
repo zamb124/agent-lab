@@ -113,6 +113,20 @@ microk8s ctr --address /var/snap/microk8s/common/run/containerd.sock plugins ls 
 - `bash deploy/scripts/bootstrap-nvidia.sh` (восстановит containerd drop-in и imports в template).
 - При полном провале driver: runbook 7.
 
+**nvcr.io 403 (anonymous pull закрыт):** если `nvidia-device-plugin` в `ImagePullBackOff` с `failed to authorize: unexpected status 403` от `nvcr.io` — NVIDIA отключила анонимный pull (`/v2/` ping и token-endpoint тоже 403). Зеркал `k8s-device-plugin:v0.20.x` на Docker Hub/GHCR нет. Обход — собрать образ из исходников и импортировать под тем же именем (`imagePullPolicy: IfNotPresent` подхватит локальный):
+
+```bash
+git clone --depth 1 --branch v0.20.1 https://github.com/NVIDIA/k8s-device-plugin /tmp/k8s-dp
+# Финальная стадия deployments/container/Dockerfile тоже на nvcr (distroless) —
+# заменить FROM на debian:trixie-slim и `ln -s /busybox/sh /bin/sh` → `ln -sf`.
+docker buildx build --platform linux/amd64 \
+  -f deployments/container/Dockerfile -t nvcr.io/nvidia/k8s-device-plugin:v0.20.1 \
+  -o type=oci,dest=/tmp/k8s-device-plugin.tar /tmp/k8s-dp
+scp /tmp/k8s-device-plugin.tar root@77.91.94.127:/tmp/
+ssh root@77.91.94.127 'microk8s ctr images import /tmp/k8s-device-plugin.tar && \
+  kubectl -n kube-system delete pod -l app.kubernetes.io/name=nvidia-device-plugin'
+```
+
 ## 6. Ingress отдаёт 502 / 503 / 504
 
 **Команды:**
