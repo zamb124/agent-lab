@@ -4,16 +4,26 @@ from __future__ import annotations
 
 from apps.shop.config import ShopSettings
 from apps.shop.models import (
+    ModifierGroupKind,
+    ModifierPriceMode,
+    ModifierSelectionMode,
     Shop,
     ShopCategory,
     ShopDomain,
+    ShopModifierGroup,
+    ShopModifierOption,
     ShopProduct,
+    ShopProductModifierGroup,
     ShopStatus,
 )
 from apps.shop.models.api import (
     ShopCategoryCreateRequest,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopModifierGroupCreateRequest,
+    ShopModifierGroupUpdateRequest,
+    ShopModifierOptionCreateRequest,
+    ShopModifierOptionUpdateRequest,
     ShopProductCreateRequest,
     ShopProductsImportRequest,
     ShopProductUpdateRequest,
@@ -36,7 +46,7 @@ class ShopService:
         self._settings: ShopSettings = settings
 
     async def list_shops(self, company_id: str) -> list[Shop]:
-        return await Shop.list_alive_by_company(company_id)
+        return await Shop.list_alive_by_company_by_updated_desc(company_id)
 
     async def create_shop(
         self, company_id: str, user_id: str, payload: ShopCreateRequest
@@ -112,7 +122,7 @@ class ShopService:
 
     async def list_categories(self, company_id: str, shop_id: str) -> list[ShopCategory]:
         _ = await self.get_shop(company_id, shop_id)
-        return await ShopCategory.list_by_shop(shop_id)
+        return await ShopCategory.list_by_shop_by_sort_asc(shop_id)
 
     async def create_category(
         self, company_id: str, shop_id: str, payload: ShopCategoryCreateRequest
@@ -123,7 +133,7 @@ class ShopService:
             shop_category_id=new_id("shopcat"),
             shop_id=shop_id,
             name=payload.name,
-            sort=await ShopCategory.next_sort(shop_id),
+            sort=await ShopCategory.next_sort_by_sort_desc(shop_id),
             created_at=now,
             updated_at=now,
         )
@@ -156,7 +166,7 @@ class ShopService:
 
     async def list_products(self, company_id: str, shop_id: str) -> list[ShopProduct]:
         _ = await self.get_shop(company_id, shop_id)
-        return await ShopProduct.list_by_shop(shop_id)
+        return await ShopProduct.list_by_shop_by_sort_asc(shop_id)
 
     async def create_product(
         self, company_id: str, shop_id: str, payload: ShopProductCreateRequest
@@ -177,7 +187,7 @@ class ShopService:
             description=payload.description,
             price_minor=payload.price_minor,
             photo_file_id=payload.photo_file_id,
-            sort=await ShopProduct.next_sort(shop_id, payload.category_id),
+            sort=await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id),
             created_at=now,
             updated_at=now,
         )
@@ -195,7 +205,7 @@ class ShopService:
                     "Category not found", error_code="category_not_found"
                 )
         now = utcnow()
-        base_sort = await ShopProduct.next_sort(shop_id, payload.category_id)
+        base_sort = await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id)
         products = [
             ShopProduct(
                 shop_product_id=new_id("shopprod"),
@@ -249,6 +259,208 @@ class ShopService:
         if product is None or product.shop_id != shop_id:
             raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         _ = await product.delete()
+
+    # --- Модификаторы ---
+
+    async def _get_modifier_group(
+        self, shop_id: str, group_id: str
+    ) -> ShopModifierGroup:
+        group = await ShopModifierGroup.get_by_id(group_id)
+        if group is None or group.shop_id != shop_id:
+            raise PlatformNotFoundError(
+                "Modifier group not found", error_code="modifier_group_not_found"
+            )
+        return group
+
+    async def _get_modifier_option(
+        self, shop_id: str, option_id: str
+    ) -> ShopModifierOption:
+        option = await ShopModifierOption.get_by_id(option_id)
+        if option is None:
+            raise PlatformNotFoundError(
+                "Modifier option not found", error_code="modifier_not_found"
+            )
+        _ = await self._get_modifier_group(shop_id, option.group_id)
+        return option
+
+    async def list_modifier_groups_by_sort_asc(
+        self, company_id: str, shop_id: str
+    ) -> list[tuple[ShopModifierGroup, list[ShopModifierOption]]]:
+        _ = await self.get_shop(company_id, shop_id)
+        groups = await ShopModifierGroup.list_by_shop_by_sort_asc(shop_id)
+        if not groups:
+            return []
+        options = await ShopModifierOption.objects.filter(
+            group_id__in=[g.shop_modifier_group_id for g in groups]
+        ).order_by("sort").all()
+        by_group: dict[str, list[ShopModifierOption]] = {}
+        for o in options:
+            by_group.setdefault(o.group_id, []).append(o)
+        return [
+            (g, by_group.get(g.shop_modifier_group_id, [])) for g in groups
+        ]
+
+    async def create_modifier_group(
+        self, company_id: str, shop_id: str, payload: ShopModifierGroupCreateRequest
+    ) -> ShopModifierGroup:
+        _ = await self.get_shop(company_id, shop_id)
+        now = utcnow()
+        group = ShopModifierGroup(
+            shop_modifier_group_id=new_id("shopmodgrp"),
+            shop_id=shop_id,
+            name=payload.name,
+            description=payload.description,
+            kind=ModifierGroupKind(payload.kind),
+            selection_mode=ModifierSelectionMode(payload.selection_mode),
+            min_selected=payload.min_selected,
+            max_selected=payload.max_selected,
+            price_mode=ModifierPriceMode(payload.price_mode),
+            created_at=now,
+            updated_at=now,
+        )
+        return await ShopModifierGroup.create(group)
+
+    async def update_modifier_group(
+        self,
+        company_id: str,
+        shop_id: str,
+        group_id: str,
+        payload: ShopModifierGroupUpdateRequest,
+    ) -> ShopModifierGroup:
+        _ = await self.get_shop(company_id, shop_id)
+        group = await self._get_modifier_group(shop_id, group_id)
+        patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
+        _ = patch.pop("shop_id", None)
+        _ = patch.pop("shop_modifier_group_id", None)
+        if "selection_mode" in patch and patch["selection_mode"] is not None:
+            patch["selection_mode"] = ModifierSelectionMode(patch["selection_mode"])
+        for field, value in patch.items():
+            setattr(group, field, value)
+        group.updated_at = utcnow()
+        _ = await group.save()
+        return group
+
+    async def delete_modifier_group(
+        self, company_id: str, shop_id: str, group_id: str
+    ) -> None:
+        _ = await self.get_shop(company_id, shop_id)
+        group = await self._get_modifier_group(shop_id, group_id)
+        links = await ShopProductModifierGroup.objects.filter(
+            group_id=group_id
+        ).all()
+        for link in links:
+            _ = await link.delete()
+        options = await ShopModifierOption.list_by_group_by_sort_asc(group_id)
+        for option in options:
+            _ = await option.delete()
+        _ = await group.delete()
+
+    async def create_modifier_option(
+        self,
+        company_id: str,
+        shop_id: str,
+        group_id: str,
+        payload: ShopModifierOptionCreateRequest,
+    ) -> ShopModifierOption:
+        _ = await self.get_shop(company_id, shop_id)
+        _ = await self._get_modifier_group(shop_id, group_id)
+        if payload.nested_group_id:
+            _ = await self._get_modifier_group(shop_id, payload.nested_group_id)
+            if payload.nested_group_id == group_id:
+                raise PlatformConflictError(
+                    "Group cannot nest itself", error_code="modifiers_invalid"
+                )
+        existing = await ShopModifierOption.list_by_group_by_sort_asc(group_id)
+        now = utcnow()
+        option = ShopModifierOption(
+            shop_modifier_option_id=new_id("shopmodopt"),
+            group_id=group_id,
+            name=payload.name,
+            price_minor=payload.price_minor,
+            is_default=payload.is_default,
+            max_per_option=payload.max_per_option,
+            nested_group_id=payload.nested_group_id,
+            external_id=payload.external_id,
+            sort=(max((o.sort for o in existing), default=-1) + 1),
+            created_at=now,
+            updated_at=now,
+        )
+        return await ShopModifierOption.create(option)
+
+    async def update_modifier_option(
+        self,
+        company_id: str,
+        shop_id: str,
+        option_id: str,
+        payload: ShopModifierOptionUpdateRequest,
+    ) -> ShopModifierOption:
+        _ = await self.get_shop(company_id, shop_id)
+        option = await self._get_modifier_option(shop_id, option_id)
+        patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
+        _ = patch.pop("shop_id", None)
+        _ = patch.pop("shop_modifier_option_id", None)
+        for field, value in patch.items():
+            setattr(option, field, value)
+        option.updated_at = utcnow()
+        _ = await option.save()
+        return option
+
+    async def delete_modifier_option(
+        self, company_id: str, shop_id: str, option_id: str
+    ) -> None:
+        _ = await self.get_shop(company_id, shop_id)
+        option = await self._get_modifier_option(shop_id, option_id)
+        _ = await option.delete()
+
+    async def attach_modifier_group(
+        self,
+        company_id: str,
+        shop_id: str,
+        product_id: str,
+        group_id: str,
+        min_selected: int | None,
+        max_selected: int | None,
+    ) -> None:
+        _ = await self.get_shop(company_id, shop_id)
+        product = await ShopProduct.get_by_id(product_id)
+        if product is None or product.shop_id != shop_id:
+            raise PlatformNotFoundError(
+                "Product not found", error_code="product_not_found"
+            )
+        _ = await self._get_modifier_group(shop_id, group_id)
+        existing = await ShopProductModifierGroup.get_link(product_id, group_id)
+        if existing is not None:
+            existing.min_selected = min_selected
+            existing.max_selected = max_selected
+            _ = await existing.save()
+            return
+        links = await ShopProductModifierGroup.list_by_product_by_sort_asc(product_id)
+        _ = await ShopProductModifierGroup.create(
+            ShopProductModifierGroup(
+                product_id=product_id,
+                group_id=group_id,
+                sort=(max((link.sort for link in links), default=-1) + 1),
+                min_selected=min_selected,
+                max_selected=max_selected,
+            )
+        )
+
+    async def detach_modifier_group(
+        self,
+        company_id: str,
+        shop_id: str,
+        product_id: str,
+        group_id: str,
+    ) -> None:
+        _ = await self.get_shop(company_id, shop_id)
+        link = await ShopProductModifierGroup.get_link(product_id, group_id)
+        if link is None:
+            raise PlatformNotFoundError(
+                "Modifier group is not attached",
+                error_code="modifier_link_not_found",
+            )
+        _ = await self._get_modifier_group(shop_id, group_id)
+        _ = await link.delete()
 
     # --- Домены ---
 

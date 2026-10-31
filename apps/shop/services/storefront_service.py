@@ -20,6 +20,7 @@ from apps.shop.models import (
     ShopProduct,
     ShopStatus,
 )
+from apps.shop.services.modifier_pricing import load_modifier_tree_by_sort_asc, min_price_minor
 from apps.shop.services.shop_service import ShopService
 from core.clients.redis_client import RedisClient
 from core.types import JsonObject, parse_json_object
@@ -97,8 +98,11 @@ class StorefrontService:
 
     async def build_snapshot(self, shop: Shop) -> JsonObject:
         """Полный снапшот витрины из PostgreSQL — вход кэша и ответа API."""
-        categories = await ShopCategory.list_by_shop(shop.shop_id)
-        products = await ShopProduct.list_available_by_shop(shop.shop_id)
+        categories = await ShopCategory.list_by_shop_by_sort_asc(shop.shop_id)
+        products = await ShopProduct.list_available_by_shop_by_sort_asc(shop.shop_id)
+        modifier_tree = await load_modifier_tree_by_sort_asc(
+            [p.shop_product_id for p in products]
+        )
         return {
             "slug": shop.slug,
             "name": shop.name,
@@ -117,6 +121,30 @@ class StorefrontService:
             "min_order_minor": shop.min_order_minor,
             "currency": shop.currency,
             "theme": shop.theme,
+            "modifier_nested_groups": {
+                ag.group.shop_modifier_group_id: {
+                    "id": ag.group.shop_modifier_group_id,
+                    "name": ag.group.name,
+                    "kind": ag.group.kind.value,
+                    "selection_mode": ag.group.selection_mode.value,
+                    "min_selected": ag.min_selected,
+                    "max_selected": ag.max_selected,
+                    "price_mode": ag.group.price_mode.value,
+                    "options": [
+                        {
+                            "id": o.shop_modifier_option_id,
+                            "name": o.name,
+                            "price_minor": o.price_minor,
+                            "is_default": o.is_default,
+                            "max_per_option": o.max_per_option,
+                            "nested_group_id": o.nested_group_id,
+                        }
+                        for o in ag.options
+                        if o.is_available
+                    ],
+                }
+                for ag in modifier_tree.get("__nested__", [])
+            },
             "categories": [
                 {
                     "id": c.shop_category_id,
@@ -133,7 +161,34 @@ class StorefrontService:
                     "name": p.name,
                     "description": p.description,
                     "price_minor": p.price_minor,
+                    "price_from_minor": min_price_minor(
+                        p, modifier_tree.get(p.shop_product_id, [])
+                    ),
                     "photo_file_id": p.photo_file_id,
+                    "modifier_groups": [
+                        {
+                            "id": ag.group.shop_modifier_group_id,
+                            "name": ag.group.name,
+                            "kind": ag.group.kind.value,
+                            "selection_mode": ag.group.selection_mode.value,
+                            "min_selected": ag.min_selected,
+                            "max_selected": ag.max_selected,
+                            "price_mode": ag.group.price_mode.value,
+                            "options": [
+                                {
+                                    "id": o.shop_modifier_option_id,
+                                    "name": o.name,
+                                    "price_minor": o.price_minor,
+                                    "is_default": o.is_default,
+                                    "max_per_option": o.max_per_option,
+                                    "nested_group_id": o.nested_group_id,
+                                }
+                                for o in ag.options
+                                if o.is_available
+                            ],
+                        }
+                        for ag in modifier_tree.get(p.shop_product_id, [])
+                    ],
                 }
                 for p in products
             ],

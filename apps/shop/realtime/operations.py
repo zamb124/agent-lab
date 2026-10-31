@@ -15,12 +15,26 @@ from apps.shop.events import (
     publish_shop_event,
     publish_shop_order_event,
 )
-from apps.shop.models import Shop, ShopCategory, ShopDomain, ShopProduct
+from apps.shop.models import (
+    Shop,
+    ShopCategory,
+    ShopDomain,
+    ShopModifierGroup,
+    ShopModifierOption,
+    ShopProduct,
+)
 from apps.shop.models.api import (
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopModifierGroupCreateRequest,
+    ShopModifierGroupResponse,
+    ShopModifierGroupsResponse,
+    ShopModifierGroupUpdateRequest,
+    ShopModifierOptionCreateRequest,
+    ShopModifierOptionResponse,
+    ShopModifierOptionUpdateRequest,
     ShopOrderCreatedResponse,
     ShopOrderCreateRequest,
     ShopOrderResponse,
@@ -108,6 +122,49 @@ class ShopProductsImportPayload(ShopProductsImportRequest):
 class ShopProductUpdatePayload(ShopProductUpdateRequest):
     shop_id: str = Field(min_length=1)
     shop_product_id: str = Field(min_length=1)
+
+
+class ShopModifierGroupCreatePayload(ShopModifierGroupCreateRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopModifierGroupUpdatePayload(ShopModifierGroupUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_modifier_group_id: str = Field(min_length=1)
+
+
+class ShopModifierGroupIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_modifier_group_id: str = Field(min_length=1)
+
+
+class ShopModifierOptionCreatePayload(ShopModifierOptionCreateRequest):
+    shop_id: str = Field(min_length=1)
+    group_id: str = Field(min_length=1)
+
+
+class ShopModifierOptionUpdatePayload(ShopModifierOptionUpdateRequest):
+    shop_id: str = Field(min_length=1)
+    shop_modifier_option_id: str = Field(min_length=1)
+
+
+class ShopModifierOptionIdPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    shop_modifier_option_id: str = Field(min_length=1)
+
+
+class ShopProductModifierAttachPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    product_id: str = Field(min_length=1)
+    group_id: str = Field(min_length=1)
+    min_selected: int | None = Field(default=None, ge=0, le=50)
+    max_selected: int | None = Field(default=None, ge=1, le=99)
+
+
+class ShopProductModifierDetachPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+    product_id: str = Field(min_length=1)
+    group_id: str = Field(min_length=1)
 
 
 class ShopOrderListPayload(StrictBaseModel):
@@ -671,7 +728,7 @@ async def op_public_order_status(
     """Статус заказа по публичному коду: анонимный путь."""
     _ = user
     try:
-        order = await di.order_service.get_order_by_code(payload.public_code)
+        order = await di.order_service.get_by_public_code(payload.public_code)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     return ShopOrderStatusResponse(
@@ -742,7 +799,7 @@ async def op_ai_describe_batch(
     scope = await require_company_admin(di.authz_service)
     _ = user
     await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
-    products = await ShopProduct.list_by_shop(payload.shop_id)
+    products = await ShopProduct.list_by_shop_by_sort_asc(payload.shop_id)
     pending = sum(1 for p in products if not p.description.strip())
     _ = await enqueue(
         SHOP_AI_DESCRIBE_BATCH,
@@ -757,3 +814,202 @@ async def _assert_shop_in_scope(di: Di, company_id: str, shop_id: str) -> None:
         _ = await di.shop_service.get_shop(company_id, shop_id)
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
+
+
+# --- Модификаторы ---
+
+
+def _option_response(option: ShopModifierOption) -> ShopModifierOptionResponse:
+    return ShopModifierOptionResponse(
+        shop_modifier_option_id=option.shop_modifier_option_id,
+        group_id=option.group_id,
+        name=option.name,
+        price_minor=option.price_minor,
+        is_default=option.is_default,
+        is_available=option.is_available,
+        max_per_option=option.max_per_option,
+        nested_group_id=option.nested_group_id,
+        sort=option.sort,
+    )
+
+
+def _modifier_group_response(
+    group: ShopModifierGroup, options: list[ShopModifierOption]
+) -> ShopModifierGroupResponse:
+    return ShopModifierGroupResponse(
+        shop_modifier_group_id=group.shop_modifier_group_id,
+        shop_id=group.shop_id,
+        name=group.name,
+        description=group.description,
+        kind=group.kind.value,
+        selection_mode=group.selection_mode.value,
+        min_selected=group.min_selected,
+        max_selected=group.max_selected,
+        price_mode=group.price_mode.value,
+        is_active=group.is_active,
+        sort=group.sort,
+        options=[_option_response(o) for o in options],
+    )
+
+
+async def _rebuild_for_shop(di: Di, company_id: str, shop_id: str) -> None:
+    shop = await di.shop_service.get_shop(company_id, shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+
+
+async def op_modifier_groups_list(
+    payload: ShopIdPayload, *, user: User, di: Di
+) -> ShopModifierGroupsResponse:
+    scope = await require_company_viewer(di.authz_service)
+    _ = user
+    try:
+        tree = await di.shop_service.list_modifier_groups_by_sort_asc(
+            scope.company_id, payload.shop_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ShopModifierGroupsResponse(
+        groups=[
+            _modifier_group_response(group, options)
+            for group, options in tree
+        ]
+    )
+
+
+async def op_modifier_groups_create(
+    payload: ShopModifierGroupCreatePayload, *, user: User, di: Di
+) -> ShopModifierGroupResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        group = await di.shop_service.create_modifier_group(
+            scope.company_id, payload.shop_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _modifier_group_response(group, [])
+
+
+async def op_modifier_groups_update(
+    payload: ShopModifierGroupUpdatePayload, *, user: User, di: Di
+) -> ShopModifierGroupResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        group = await di.shop_service.update_modifier_group(
+            scope.company_id,
+            payload.shop_id,
+            payload.shop_modifier_group_id,
+            payload,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    options = await ShopModifierOption.list_by_group_by_sort_asc(
+        group.shop_modifier_group_id
+    )
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _modifier_group_response(group, options)
+
+
+async def op_modifier_groups_remove(
+    payload: ShopModifierGroupIdPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.shop_service.delete_modifier_group(
+            scope.company_id, payload.shop_id, payload.shop_modifier_group_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return EmptyPayload()
+
+
+async def op_modifier_options_create(
+    payload: ShopModifierOptionCreatePayload, *, user: User, di: Di
+) -> ShopModifierOptionResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        option = await di.shop_service.create_modifier_option(
+            scope.company_id, payload.shop_id, payload.group_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _option_response(option)
+
+
+async def op_modifier_options_update(
+    payload: ShopModifierOptionUpdatePayload, *, user: User, di: Di
+) -> ShopModifierOptionResponse:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        option = await di.shop_service.update_modifier_option(
+            scope.company_id,
+            payload.shop_id,
+            payload.shop_modifier_option_id,
+            payload,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return _option_response(option)
+
+
+async def op_modifier_options_remove(
+    payload: ShopModifierOptionIdPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.shop_service.delete_modifier_option(
+            scope.company_id, payload.shop_id, payload.shop_modifier_option_id
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return EmptyPayload()
+
+
+async def op_products_modifier_attach(
+    payload: ShopProductModifierAttachPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.shop_service.attach_modifier_group(
+            scope.company_id,
+            payload.shop_id,
+            payload.product_id,
+            payload.group_id,
+            payload.min_selected,
+            payload.max_selected,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    except PlatformConflictError as exc:
+        raise_conflict(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return EmptyPayload()
+
+
+async def op_products_modifier_detach(
+    payload: ShopProductModifierDetachPayload, *, user: User, di: Di
+) -> EmptyPayload:
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        await di.shop_service.detach_modifier_group(
+            scope.company_id,
+            payload.shop_id,
+            payload.product_id,
+            payload.group_id,
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    await _rebuild_for_shop(di, scope.company_id, payload.shop_id)
+    return EmptyPayload()

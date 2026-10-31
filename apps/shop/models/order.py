@@ -71,16 +71,19 @@ class ShopOrder(PlatformModel):
         return await cls.objects.filter(public_code=public_code).get_or_none()
 
     @classmethod
-    async def get_by_idempotency_key(
-        cls, shop_id: str, idempotency_key: str
-    ) -> Self | None:
+    async def get_by_idempotency_key(cls, shop_id: str, idempotency_key: str) -> Self | None:
         return await cls.objects.filter(
             shop_id=shop_id, idempotency_key=idempotency_key
         ).get_or_none()
 
     @classmethod
-    async def list_by_shop(
-        cls, shop_id: str, *, status: ShopOrderStatus | None = None, limit: int = 50, offset: int = 0
+    async def list_by_shop_by_created_desc(
+        cls,
+        shop_id: str,
+        *,
+        status: ShopOrderStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[Self]:
         """Заказы магазина по created_at DESC."""
         qs = cls.objects.filter(shop_id=shop_id)

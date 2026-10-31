@@ -33,6 +33,7 @@ class ShopOrderItem(PlatformModel):
     name_snapshot: str = DbField(max_length=300)
     price_minor: int = DbField(ge=0)
     qty: int = DbField(ge=1)
+    modifiers: list[dict[str, object]] = DbField(default_factory=list, db_type="JSONB")
 
     @classmethod
     async def list_by_order(cls, order_id: str) -> list[Self]:

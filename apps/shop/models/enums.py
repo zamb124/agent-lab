@@ -56,3 +56,24 @@ class ShopOrderSource(StrEnum):
 
     WEB = "web"
     EMBED = "embed"
+
+
+class ModifierGroupKind(StrEnum):
+    """Назначение группы модификаторов: добавки/варианты или исключение."""
+
+    ADDON = "addon"
+    REMOVE = "remove"
+
+
+class ModifierSelectionMode(StrEnum):
+    """Сколько опций можно выбрать в группе модификаторов."""
+
+    SINGLE = "single"
+    MULTI = "multi"
+
+
+class ModifierPriceMode(StrEnum):
+    """Как цена опции участвует в итоге позиции."""
+
+    DELTA = "delta"
+    ABSOLUTE = "absolute"

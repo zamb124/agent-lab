@@ -157,11 +157,11 @@ async def shop_ai_describe_batch(
     try:
         categories = {
             c.shop_category_id: c.name
-            for c in await ShopCategory.list_by_shop(shop_id)
+            for c in await ShopCategory.list_by_shop_by_sort_asc(shop_id)
         }
         products = [
             p
-            for p in await ShopProduct.list_by_shop(shop_id)
+            for p in await ShopProduct.list_by_shop_by_sort_asc(shop_id)
             if not p.description.strip()
         ]
         updated = 0

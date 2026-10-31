@@ -37,7 +37,7 @@ class ShopCategory(PlatformModel):
         return await cls.objects.filter(shop_category_id=shop_category_id).get_or_none()
 
     @classmethod
-    async def list_by_shop(cls, shop_id: str) -> list[Self]:
+    async def list_by_shop_by_sort_asc(cls, shop_id: str) -> list[Self]:
         """Категории магазина по sort ASC. Предела нет."""
         return await cls.objects.filter(shop_id=shop_id).order_by("sort").all()
 
@@ -46,11 +46,7 @@ class ShopCategory(PlatformModel):
         return await cls.objects.create(instance=category)
 
     @classmethod
-    async def next_sort(cls, shop_id: str) -> int:
+    async def next_sort_by_sort_desc(cls, shop_id: str) -> int:
         """Позиция для новой категории — за максимальной текущей."""
-        row = (
-            await cls.objects.filter(shop_id=shop_id)
-            .order_by("-sort")
-            .first()
-        )
+        row = await cls.objects.filter(shop_id=shop_id).order_by("-sort").first()
         return row.sort + 1 if row is not None else 0

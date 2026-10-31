@@ -20,7 +20,7 @@ from scripts.gates.kit import REPO_ROOT
 
 APPS_ROOT = REPO_ROOT / "apps"
 COMMAND_WS_SERVICES: tuple[str, ...] = (
-    "sync", "worktracker", "wiki", "rag", "office", "crm", "flows", "search", "secrets", "scheduler", "frontend", "stock"
+    "sync", "worktracker", "wiki", "rag", "office", "crm", "flows", "search", "secrets", "scheduler", "frontend", "stock", "shop"
 )
 HTTP_METHODS: frozenset[str] = frozenset({"get", "post", "put", "patch", "delete", "websocket", "api_route"})
 
@@ -51,6 +51,16 @@ PROTOCOL_HANDLERS: frozenset[str] = frozenset(
         # входящие webhooks и OnlyOffice callback
         "apps/flows/src/api/v1/triggers.py::generic_webhook",
         "apps/flows/src/api/v1/triggers.py::telegram_webhook",
+        "apps/shop/api/public.py::telegram_webhook",
+        "apps/shop/api/public.py::get_storefront_qr",
+        "apps/shop/api/public.py::get_sitemap",
+        # анонимная витрина и агрегатор: HTML/JSON снапшоты без сессии
+        "apps/shop/api/public.py::get_storefront",
+        "apps/shop/api/public.py::get_storefront_page",
+        "apps/shop/api/public.py::list_aggregate_shops",
+        "apps/shop/api/public.py::search_aggregate",
+        # внутренний резолв Host → slug для прокси/shell слоя
+        "apps/shop/api/public.py::resolve_host",
         "apps/office/api/bff.py::onlyoffice_callback",
         # анонимные публичные ссылки Documents и Wiki
         "apps/office/api/bff.py::public_catalog_binding_open",

@@ -16,8 +16,16 @@ from apps.shop.models.api import (
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
+    ShopModifierGroupCreateRequest,
+    ShopModifierGroupResponse,
+    ShopModifierGroupsResponse,
+    ShopModifierGroupUpdateRequest,
+    ShopModifierOptionCreateRequest,
+    ShopModifierOptionResponse,
+    ShopModifierOptionUpdateRequest,
     ShopOrderResponse,
     ShopProductCreateRequest,
+    ShopProductModifierGroupAttachRequest,
     ShopProductResponse,
     ShopProductsImportRequest,
     ShopProductsImportResponse,
@@ -41,11 +49,19 @@ from apps.shop.realtime.operations import (
     ShopDomainAddPayload,
     ShopDomainIdPayload,
     ShopIdPayload,
+    ShopModifierGroupCreatePayload,
+    ShopModifierGroupIdPayload,
+    ShopModifierGroupUpdatePayload,
+    ShopModifierOptionCreatePayload,
+    ShopModifierOptionIdPayload,
+    ShopModifierOptionUpdatePayload,
     ShopOrderIdPayload,
     ShopOrderListPayload,
     ShopOrderSetStatusPayload,
     ShopProductCreatePayload,
     ShopProductIdPayload,
+    ShopProductModifierAttachPayload,
+    ShopProductModifierDetachPayload,
     ShopProductsImportPayload,
     ShopProductUpdatePayload,
     ShopTelegramConnectPayload,
@@ -61,12 +77,21 @@ from apps.shop.realtime.operations import (
     op_domains_add,
     op_domains_provision,
     op_domains_remove,
+    op_modifier_groups_create,
+    op_modifier_groups_list,
+    op_modifier_groups_remove,
+    op_modifier_groups_update,
+    op_modifier_options_create,
+    op_modifier_options_remove,
+    op_modifier_options_update,
     op_orders_get,
     op_orders_list,
     op_orders_set_status,
     op_products_create,
     op_products_import,
     op_products_list,
+    op_products_modifier_attach,
+    op_products_modifier_detach,
     op_products_remove,
     op_products_update,
     op_shops_create,
@@ -371,6 +396,155 @@ async def ai_enhance_photo(shop_id: str, body: ShopAiEnhancePhotoRequest, di: Di
 async def ai_generate_photo(shop_id: str, body: ShopAiGeneratePhotoRequest, di: Di) -> ShopAiFileResponse:
     return await op_ai_generate_photo(
         ShopAiGeneratePhotoPayload(shop_id=shop_id, name=body.name, description=body.description),
+        user=require_context().user,
+        di=di,
+    )
+
+
+# --- Модификаторы ---
+
+
+@router.get("/{shop_id}/modifier-groups", response_model=ShopModifierGroupsResponse)
+async def list_modifier_groups_by_sort_asc(shop_id: str, di: Di) -> ShopModifierGroupsResponse:
+    return await op_modifier_groups_list(
+        ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di
+    )
+
+
+@router.post("/{shop_id}/modifier-groups", response_model=ShopModifierGroupResponse)
+async def create_modifier_group(
+    shop_id: str, payload: ShopModifierGroupCreateRequest, di: Di
+) -> ShopModifierGroupResponse:
+    return await op_modifier_groups_create(
+        ShopModifierGroupCreatePayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.patch(
+    "/{shop_id}/modifier-groups/{group_id}",
+    response_model=ShopModifierGroupResponse,
+)
+async def update_modifier_group(
+    shop_id: str, group_id: str, payload: ShopModifierGroupUpdateRequest, di: Di
+) -> ShopModifierGroupResponse:
+    return await op_modifier_groups_update(
+        ShopModifierGroupUpdatePayload.model_validate(
+            {
+                "shop_id": shop_id,
+                "shop_modifier_group_id": group_id,
+                **payload.model_dump(exclude_unset=True),
+            }
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.delete("/{shop_id}/modifier-groups/{group_id}", response_model=EmptyPayload)
+async def remove_modifier_group(
+    shop_id: str, group_id: str, di: Di
+) -> EmptyPayload:
+    return await op_modifier_groups_remove(
+        ShopModifierGroupIdPayload(
+            shop_id=shop_id, shop_modifier_group_id=group_id
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post(
+    "/{shop_id}/modifier-groups/{group_id}/options",
+    response_model=ShopModifierOptionResponse,
+)
+async def create_modifier_option(
+    shop_id: str, group_id: str, payload: ShopModifierOptionCreateRequest, di: Di
+) -> ShopModifierOptionResponse:
+    return await op_modifier_options_create(
+        ShopModifierOptionCreatePayload.model_validate(
+            {
+                "shop_id": shop_id,
+                "group_id": group_id,
+                **payload.model_dump(exclude_unset=True),
+            }
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.patch(
+    "/{shop_id}/modifier-options/{option_id}",
+    response_model=ShopModifierOptionResponse,
+)
+async def update_modifier_option(
+    shop_id: str, option_id: str, payload: ShopModifierOptionUpdateRequest, di: Di
+) -> ShopModifierOptionResponse:
+    return await op_modifier_options_update(
+        ShopModifierOptionUpdatePayload.model_validate(
+            {
+                "shop_id": shop_id,
+                "shop_modifier_option_id": option_id,
+                **payload.model_dump(exclude_unset=True),
+            }
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.delete("/{shop_id}/modifier-options/{option_id}", response_model=EmptyPayload)
+async def remove_modifier_option(
+    shop_id: str, option_id: str, di: Di
+) -> EmptyPayload:
+    return await op_modifier_options_remove(
+        ShopModifierOptionIdPayload(
+            shop_id=shop_id, shop_modifier_option_id=option_id
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post(
+    "/{shop_id}/products/{product_id}/modifier-groups/{group_id}",
+    response_model=EmptyPayload,
+)
+async def attach_modifier_group(
+    shop_id: str,
+    product_id: str,
+    group_id: str,
+    payload: ShopProductModifierGroupAttachRequest,
+    di: Di,
+) -> EmptyPayload:
+    return await op_products_modifier_attach(
+        ShopProductModifierAttachPayload(
+            shop_id=shop_id,
+            product_id=product_id,
+            group_id=group_id,
+            min_selected=payload.min_selected,
+            max_selected=payload.max_selected,
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.delete(
+    "/{shop_id}/products/{product_id}/modifier-groups/{group_id}",
+    response_model=EmptyPayload,
+)
+async def detach_modifier_group(
+    shop_id: str, product_id: str, group_id: str, di: Di
+) -> EmptyPayload:
+    return await op_products_modifier_detach(
+        ShopProductModifierDetachPayload(
+            shop_id=shop_id, product_id=product_id, group_id=group_id
+        ),
         user=require_context().user,
         di=di,
     )

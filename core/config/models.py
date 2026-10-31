@@ -19,8 +19,8 @@ from pydantic import (
 
 from core.ai.providers import (
     GITHUB_MODELS_API_VERSION,
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
+    LINNEX_LLM_AUTO_MODEL,
+    LINNEX_LLM_PROVIDER,
     LLM_PROVIDER_DEFAULT_BASE_URLS,
     LLM_PROVIDER_DEFAULT_MODELS_URLS,
     LLM_PROVIDER_SMOKE_MODELS,
@@ -35,8 +35,8 @@ from core.types import JsonObject, JsonValue, SpeechProvider, VadProvider
 from core.utils.tts_input_steps import TTS_INPUT_STEP_IDS
 
 __all__ = [
-    "HUMANITEC_LLM_AUTO_MODEL",
-    "HUMANITEC_LLM_PROVIDER",
+    "LINNEX_LLM_AUTO_MODEL",
+    "LINNEX_LLM_PROVIDER",
 ]
 
 
@@ -259,7 +259,7 @@ class LoggingConfig(BaseModel):
         default=None,
         description=(
             "Публичный origin Grafana без завершающего слэша (ссылки Explore для company_id system). "
-            "Пример: https://grafana.humanitec.ru."
+            "Пример: https://grafana.linnex.io."
         ),
     )
     grafana_loki_datasource_uid: str | None = Field(
@@ -342,6 +342,7 @@ class ServerConfig(BaseModel):
     search_service_url: str | None = None
     wiki_service_url: str | None = None
     stock_service_url: str | None = None
+    shop_service_url: str | None = None
     guest_runtime_service_url: str | None = None
     realtime_service_url: str | None = None
     provider_litserve_service_url: str | None = None
@@ -841,7 +842,7 @@ class NanoBananaConfig(BaseModel):
     """Конфигурация image generation."""
 
     enabled: bool = False
-    model: str = HUMANITEC_LLM_AUTO_MODEL
+    model: str = LINNEX_LLM_AUTO_MODEL
     timeout: int = 60
 
 
@@ -2087,16 +2088,16 @@ class LLMConfig(BaseModel):
     """Конфигурация LLM с поддержкой нескольких провайдеров"""
 
     provider: str = Field(
-        default=HUMANITEC_LLM_PROVIDER,
+        default=LINNEX_LLM_PROVIDER,
         description=(
-            "Провайдер: humanitec_llm, openai, openrouter, bothub, "
+            "Провайдер: linnex_llm, openai, openrouter, bothub, "
             "yandex, groq, cerebras, google, github, huggingface, nvidia, mistral, "
             "zai, sambanova, deepinfra, caila"
         ),
     )
-    default_model: str = Field(default=HUMANITEC_LLM_AUTO_MODEL)
+    default_model: str = Field(default=LINNEX_LLM_AUTO_MODEL)
     vision_model: str = Field(
-        default=HUMANITEC_LLM_AUTO_MODEL,
+        default=LINNEX_LLM_AUTO_MODEL,
         description="Модель для multimodal/vision запросов",
     )
     temperature: float = Field(default=0.2)
@@ -2414,7 +2415,7 @@ class PushConfig(BaseModel):
     enabled: bool = False
     vapid_public_key: str | None = None
     vapid_private_key: str | None = None
-    vapid_email: str = "admin@humanitec.ru"
+    vapid_email: str = "admin@linnex.io"
     apns_team_id: str | None = None
     apns_key_id: str | None = None
     apns_private_key: str | None = None
@@ -2473,7 +2474,7 @@ class LegalConfig(BaseModel):
 
 
 class PlatformBrandConfig(BaseModel):
-    """Бренд платформы на одном registrable apex-домене (humanitec.ru, linnex.io, …)."""
+    """Бренд платформы на одном registrable apex-домене (linnex.io, linnex.io, …)."""
 
     platform_name: str
     support_email: str
@@ -2491,18 +2492,18 @@ class PlatformBrandConfig(BaseModel):
     vapid_email: str | None = None
 
 
-def _default_humanitec_platform_brand() -> PlatformBrandConfig:
+def _default_linnex_platform_brand() -> PlatformBrandConfig:
     return PlatformBrandConfig(
-        platform_name="Humanitec",
-        support_email="helpme@humanitec.ru",
-        models_product_name="Humanitec Models",
-        voice_product_name="Humanitec Voice",
-        llms_display_label="Humanitec LLMs",
-        flows_product_label="Humanitec Flows",
+        platform_name="Linnex",
+        support_email="helpme@linnex.io",
+        models_product_name="Linnex Models",
+        voice_product_name="Linnex Voice",
+        llms_display_label="Linnex LLMs",
+        flows_product_label="Linnex Flows",
         legal=LegalConfig(
-            contact_email="legal@humanitec.ru",
-            support_email="helpme@humanitec.ru",
-            dpo_email="dpo@humanitec.ru",
+            contact_email="legal@linnex.io",
+            support_email="helpme@linnex.io",
+            dpo_email="dpo@linnex.io",
         ),
     )
 
@@ -2521,14 +2522,12 @@ def _default_linnex_platform_brand() -> PlatformBrandConfig:
 
 
 def default_platform_brands() -> dict[str, PlatformBrandConfig]:
-    humanitec_brand = _default_humanitec_platform_brand()
     linnex_brand = _default_linnex_platform_brand()
     return {
         "linnex.io": linnex_brand.model_copy(deep=True),
         "localhost": linnex_brand.model_copy(deep=True),
         "lvh.me": linnex_brand.model_copy(deep=True),
-        "humanitec.ru": humanitec_brand.model_copy(deep=True),
-        "agents-lab.ru": humanitec_brand.model_copy(deep=True),
+        "agents-lab.ru": linnex_brand.model_copy(deep=True),
     }
 
 

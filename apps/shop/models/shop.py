@@ -85,18 +85,18 @@ class Shop(PlatformModel):
         return await cls.objects.filter(slug=slug, deleted_at=None).exists()
 
     @classmethod
-    async def list_alive_by_company(cls, company_id: str) -> list[Self]:
+    async def list_alive_by_company_by_updated_desc(cls, company_id: str) -> list[Self]:
         """Все магазины компании по updated_at DESC. Предела нет."""
-        return await cls.objects.filter(
-            company_id=company_id, deleted_at=None
-        ).order_by("-updated_at").all()
+        return (
+            await cls.objects.filter(company_id=company_id, deleted_at=None)
+            .order_by("-updated_at")
+            .all()
+        )
 
     @classmethod
     async def list_published(cls) -> list[Self]:
         """Все опубликованные витрины — источник каталога агрегатора."""
-        return await cls.objects.filter(
-            status=ShopStatus.PUBLISHED, deleted_at=None
-        ).all()
+        return await cls.objects.filter(status=ShopStatus.PUBLISHED, deleted_at=None).all()
 
     @classmethod
     async def create(cls, shop: Self) -> Self:

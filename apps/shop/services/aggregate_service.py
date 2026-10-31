@@ -9,8 +9,6 @@ pg_trgm-индексами по name/description; пересборка зада�
 
 from __future__ import annotations
 
-from typing import cast
-
 from oxyde import execute_raw
 
 from apps.shop.models import Shop, ShopStatus
@@ -111,7 +109,7 @@ class AggregateService:
             [needle, like, *shop_ids],
             using="shop",
         )
-        total = cast(int, count_rows[0]["total"]) if count_rows else 0
+        total: int = count_rows[0]["total"] if count_rows else 0
         items: list[dict[str, object]] = [
             {
                 "product_id": row["shop_product_id"],

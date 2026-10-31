@@ -46,18 +46,18 @@ class ShopProduct(PlatformModel):
         return await cls.objects.filter(shop_product_id=shop_product_id).get_or_none()
 
     @classmethod
-    async def list_by_shop(cls, shop_id: str) -> list[Self]:
+    async def list_by_shop_by_sort_asc(cls, shop_id: str) -> list[Self]:
         """Товары магазина по (category_id, sort). Предела нет."""
-        return await cls.objects.filter(shop_id=shop_id).order_by(
-            "category_id", "sort"
-        ).all()
+        return await cls.objects.filter(shop_id=shop_id).order_by("category_id", "sort").all()
 
     @classmethod
-    async def list_available_by_shop(cls, shop_id: str) -> list[Self]:
+    async def list_available_by_shop_by_sort_asc(cls, shop_id: str) -> list[Self]:
         """Доступные к заказу товары — вход снапшота витрины."""
-        return await cls.objects.filter(
-            shop_id=shop_id, is_available=True
-        ).order_by("category_id", "sort").all()
+        return (
+            await cls.objects.filter(shop_id=shop_id, is_available=True)
+            .order_by("category_id", "sort")
+            .all()
+        )
 
     @classmethod
     async def list_many_by_ids(cls, product_ids: list[str]) -> list[Self]:
@@ -68,7 +68,7 @@ class ShopProduct(PlatformModel):
         return await cls.objects.create(instance=product)
 
     @classmethod
-    async def next_sort(cls, shop_id: str, category_id: str | None) -> int:
+    async def next_sort_by_sort_desc(cls, shop_id: str, category_id: str | None) -> int:
         row = (
             await cls.objects.filter(shop_id=shop_id, category_id=category_id)
             .order_by("-sort")

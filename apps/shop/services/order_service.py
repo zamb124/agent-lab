@@ -18,11 +18,17 @@ from apps.shop.models import (
 )
 from apps.shop.models.api import (
     ShopOrderCreateRequest,
+    ShopOrderItemModifierResponse,
     ShopOrderItemResponse,
     ShopOrderResponse,
 )
 from apps.shop.models.common import new_id
 from apps.shop.models.order import new_public_code
+from apps.shop.services.modifier_pricing import (
+    load_modifier_tree_by_sort_asc,
+    nested_lookup,
+    validate_and_price,
+)
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.utils.time import utcnow
 
@@ -83,6 +89,8 @@ class ShopOrderService:
         product_ids = [item.product_id for item in payload.items]
         products = await ShopProduct.list_many_by_ids(product_ids)
         by_id = {p.shop_product_id: p for p in products}
+        modifier_tree = await load_modifier_tree_by_sort_asc(product_ids)
+        nested = nested_lookup(modifier_tree.get("__nested__", []))
         items_total = 0
         order_items: list[ShopOrderItem] = []
         order_id = new_id("shoporder")
@@ -97,15 +105,22 @@ class ShopOrderService:
                     f"Item {product.name} is unavailable",
                     error_code="product_unavailable",
                 )
-            items_total += product.price_minor * item.qty
+            unit_minor, modifiers_snapshot = validate_and_price(
+                product,
+                item.selections,
+                modifier_tree.get(product.shop_product_id, []),
+                nested,
+            )
+            items_total += unit_minor * item.qty
             order_items.append(
                 ShopOrderItem(
                     shop_order_item_id=new_id("shoporderitem"),
                     order_id=order_id,
                     product_id=product.shop_product_id,
                     name_snapshot=product.name,
-                    price_minor=product.price_minor,
+                    price_minor=unit_minor,
                     qty=item.qty,
+                    modifiers=modifiers_snapshot,
                 )
             )
         delivery_fee = (
@@ -141,7 +156,7 @@ class ShopOrderService:
         _ = await ShopOrderItem.create_many(order_items)
         return order
 
-    async def get_order_by_code(self, public_code: str) -> ShopOrder:
+    async def get_by_public_code(self, public_code: str) -> ShopOrder:
         order = await ShopOrder.get_by_public_code(public_code)
         if order is None:
             raise PlatformNotFoundError("Order not found", error_code="order_not_found")
@@ -155,7 +170,7 @@ class ShopOrderService:
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[ShopOrder], int]:
-        orders = await ShopOrder.list_by_shop(
+        orders = await ShopOrder.list_by_shop_by_created_desc(
             company_shop.shop_id, status=status, limit=limit, offset=offset
         )
         total = await ShopOrder.count_by_shop(company_shop.shop_id, status=status)
@@ -209,6 +224,10 @@ class ShopOrderService:
                     name=i.name_snapshot,
                     price_minor=i.price_minor,
                     qty=i.qty,
+                    modifiers=[
+                        ShopOrderItemModifierResponse.model_validate(m)
+                        for m in i.modifiers
+                    ],
                 )
                 for i in items
             ],

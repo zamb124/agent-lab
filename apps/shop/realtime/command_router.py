@@ -15,12 +15,20 @@ from apps.shop.realtime.operations import (
     ShopDomainAddPayload,
     ShopDomainIdPayload,
     ShopIdPayload,
+    ShopModifierGroupCreatePayload,
+    ShopModifierGroupIdPayload,
+    ShopModifierGroupUpdatePayload,
+    ShopModifierOptionCreatePayload,
+    ShopModifierOptionIdPayload,
+    ShopModifierOptionUpdatePayload,
     ShopOrderCreatePayload,
     ShopOrderIdPayload,
     ShopOrderListPayload,
     ShopOrderSetStatusPayload,
     ShopProductCreatePayload,
     ShopProductIdPayload,
+    ShopProductModifierAttachPayload,
+    ShopProductModifierDetachPayload,
     ShopProductsImportPayload,
     ShopProductUpdatePayload,
     ShopPublicOrderStatusPayload,
@@ -37,12 +45,21 @@ from apps.shop.realtime.operations import (
     op_domains_add,
     op_domains_provision,
     op_domains_remove,
+    op_modifier_groups_create,
+    op_modifier_groups_list,
+    op_modifier_groups_remove,
+    op_modifier_groups_update,
+    op_modifier_options_create,
+    op_modifier_options_remove,
+    op_modifier_options_update,
     op_orders_get,
     op_orders_list,
     op_orders_set_status,
     op_products_create,
     op_products_import,
     op_products_list,
+    op_products_modifier_attach,
+    op_products_modifier_detach,
     op_products_remove,
     op_products_update,
     op_public_order_create,
@@ -103,6 +120,33 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/products/remove_requested": Operation(
         payload_model=ShopProductIdPayload, fn=op_products_remove
+    ),
+    "shop/modifiers/groups/list_requested": Operation(
+        payload_model=ShopIdPayload, fn=op_modifier_groups_list
+    ),
+    "shop/modifiers/groups/create_requested": Operation(
+        payload_model=ShopModifierGroupCreatePayload, fn=op_modifier_groups_create
+    ),
+    "shop/modifiers/groups/update_requested": Operation(
+        payload_model=ShopModifierGroupUpdatePayload, fn=op_modifier_groups_update
+    ),
+    "shop/modifiers/groups/remove_requested": Operation(
+        payload_model=ShopModifierGroupIdPayload, fn=op_modifier_groups_remove
+    ),
+    "shop/modifiers/options/create_requested": Operation(
+        payload_model=ShopModifierOptionCreatePayload, fn=op_modifier_options_create
+    ),
+    "shop/modifiers/options/update_requested": Operation(
+        payload_model=ShopModifierOptionUpdatePayload, fn=op_modifier_options_update
+    ),
+    "shop/modifiers/options/remove_requested": Operation(
+        payload_model=ShopModifierOptionIdPayload, fn=op_modifier_options_remove
+    ),
+    "shop/products/modifiers/attach_requested": Operation(
+        payload_model=ShopProductModifierAttachPayload, fn=op_products_modifier_attach
+    ),
+    "shop/products/modifiers/detach_requested": Operation(
+        payload_model=ShopProductModifierDetachPayload, fn=op_products_modifier_detach
     ),
     "shop/orders/list_requested": Operation(
         payload_model=ShopOrderListPayload, fn=op_orders_list

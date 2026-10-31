@@ -160,9 +160,100 @@ class ShopAiGeneratePhotoRequest(StrictBaseModel):
     description: str = Field(default="", max_length=1000)
 
 
+class ShopModifierGroupCreateRequest(StrictBaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=500)
+    kind: str = Field(default="addon", pattern=r"^(addon|remove)$")
+    selection_mode: str = Field(default="multi", pattern=r"^(single|multi)$")
+    min_selected: int = Field(default=0, ge=0, le=50)
+    max_selected: int | None = Field(default=None, ge=1, le=99)
+    price_mode: str = Field(default="delta", pattern=r"^(delta|absolute)$")
+
+
+class ShopModifierGroupUpdateRequest(StrictBaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
+    selection_mode: str | None = Field(default=None, pattern=r"^(single|multi)$")
+    min_selected: int | None = Field(default=None, ge=0, le=50)
+    max_selected: int | None = Field(default=None, ge=1, le=99)
+    is_active: bool | None = None
+    sort: int | None = None
+
+
+class ShopModifierGroupResponse(StrictBaseModel):
+    shop_modifier_group_id: str
+    shop_id: str
+    name: str
+    description: str
+    kind: str
+    selection_mode: str
+    min_selected: int
+    max_selected: int | None
+    price_mode: str
+    is_active: bool
+    sort: int
+    options: list["ShopModifierOptionResponse"]
+
+
+class ShopModifierGroupsResponse(StrictBaseModel):
+    groups: list[ShopModifierGroupResponse]
+
+
+class ShopModifierOptionCreateRequest(StrictBaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    price_minor: int = Field(default=0, ge=0, le=10_000_000)
+    is_default: bool = False
+    max_per_option: int = Field(default=1, ge=1, le=20)
+    nested_group_id: str | None = Field(default=None, max_length=64)
+    external_id: str | None = Field(default=None, max_length=128)
+
+
+class ShopModifierOptionUpdateRequest(StrictBaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    price_minor: int | None = Field(default=None, ge=0, le=10_000_000)
+    is_default: bool | None = None
+    is_available: bool | None = None
+    max_per_option: int | None = Field(default=None, ge=1, le=20)
+    sort: int | None = None
+
+
+class ShopModifierOptionResponse(StrictBaseModel):
+    shop_modifier_option_id: str
+    group_id: str
+    name: str
+    price_minor: int
+    is_default: bool
+    is_available: bool
+    max_per_option: int
+    nested_group_id: str | None
+    sort: int
+
+
+class ShopProductModifierGroupAttachRequest(StrictBaseModel):
+    """Тело REST attach: контекстные лимиты группы для конкретного товара."""
+
+    min_selected: int | None = Field(default=None, ge=0, le=50)
+    max_selected: int | None = Field(default=None, ge=1, le=99)
+
+
+class ShopOrderItemSelection(StrictBaseModel):
+    """Выбранная опция модификатора: без цены — сервер считает сам."""
+
+    option_id: str = Field(min_length=1)
+    qty: int = Field(default=1, ge=1, le=20)
+
+
 class ShopOrderItemRequest(StrictBaseModel):
     product_id: str = Field(min_length=1)
     qty: int = Field(ge=1, le=99)
+    selections: list[ShopOrderItemSelection] = Field(default_factory=list, max_length=50)
+
+
+class ShopOrderItemModifierResponse(StrictBaseModel):
+    group_name: str
+    option_name: str
+    price_minor: int
+    qty: int
 
 
 class ShopOrderItemResponse(StrictBaseModel):
@@ -170,6 +261,7 @@ class ShopOrderItemResponse(StrictBaseModel):
     name: str
     price_minor: int
     qty: int
+    modifiers: list[ShopOrderItemModifierResponse] = []
 
 
 class ShopOrderResponse(StrictBaseModel):
