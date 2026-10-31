@@ -48,8 +48,13 @@ class ShopResponse(StrictBaseModel):
     theme: ShopTheme
     status: ShopStatus
     telegram_chat_id: str | None
+    telegram_connected: bool
     storefront_url: str
     plan: str
+
+
+class ShopTelegramConnectRequest(StrictBaseModel):
+    bot_token: str = Field(min_length=20, max_length=128)
 
 
 class ShopCreateRequest(StrictBaseModel):
@@ -122,6 +127,21 @@ class ShopProductUpdateRequest(StrictBaseModel):
     photo_file_id: str | None = None
     is_available: bool | None = None
     sort: int | None = None
+
+
+class ShopAiDescribeRequest(StrictBaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    category_name: str | None = Field(default=None, max_length=200)
+    photo_file_id: str | None = None
+
+
+class ShopAiEnhancePhotoRequest(StrictBaseModel):
+    file_id: str = Field(min_length=1)
+
+
+class ShopAiGeneratePhotoRequest(StrictBaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    description: str = Field(default="", max_length=1000)
 
 
 class ShopOrderItemRequest(StrictBaseModel):

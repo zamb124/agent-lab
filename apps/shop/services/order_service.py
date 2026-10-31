@@ -48,7 +48,7 @@ class ShopOrderService:
         shop = await Shop.get_by_slug(slug)
         if shop is None or shop.status != ShopStatus.PUBLISHED:
             raise PlatformNotFoundError(
-                "Витрина не найдена", error_code="storefront_not_found"
+                "Storefront not found", error_code="storefront_not_found"
             )
         return shop
 
@@ -58,21 +58,21 @@ class ShopOrderService:
         """Новый заказ: идемпотентность, расчёт суммы по живым ценам каталога."""
         if shop.status != ShopStatus.PUBLISHED:
             raise PlatformNotFoundError(
-                "Витрина недоступна", error_code="storefront_unavailable"
+                "Storefront unavailable", error_code="storefront_unavailable"
             )
         if payload.honeypot:
             raise PlatformConflictError(
-                "Заказ отклонён", error_code="order_rejected"
+                "Order rejected", error_code="order_rejected"
             )
         if payload.delivery_type == ShopDeliveryType.DELIVERY:
             if not shop.delivery_enabled:
                 raise PlatformConflictError(
-                    "Доставка не поддерживается магазином",
+                    "Delivery is not supported by the shop",
                     error_code="delivery_disabled",
                 )
             if not payload.address:
                 raise PlatformConflictError(
-                    "Укажите адрес доставки", error_code="address_required"
+                    "Delivery address is required", error_code="address_required"
                 )
         if payload.idempotency_key:
             existing = await ShopOrder.get_by_idempotency_key(
@@ -90,11 +90,11 @@ class ShopOrderService:
             product = by_id.get(item.product_id)
             if product is None or product.shop_id != shop.shop_id:
                 raise PlatformNotFoundError(
-                    "Позиция не найдена в каталоге", error_code="product_not_found"
+                    "Item not found in catalog", error_code="product_not_found"
                 )
             if not product.is_available:
                 raise PlatformConflictError(
-                    f"Позиция «{product.name}» недоступна",
+                    f"Item {product.name} is unavailable",
                     error_code="product_unavailable",
                 )
             items_total += product.price_minor * item.qty
@@ -115,7 +115,7 @@ class ShopOrderService:
         )
         if shop.min_order_minor and items_total < shop.min_order_minor:
             raise PlatformConflictError(
-                "Сумма заказа меньше минимальной", error_code="below_min_order"
+                "Order total is below the minimum", error_code="below_min_order"
             )
         now = utcnow()
         order = ShopOrder(
@@ -137,14 +137,14 @@ class ShopOrderService:
             updated_at=now,
             status_changed_at=now,
         )
-        await ShopOrder.create(order)
-        await ShopOrderItem.create_many(order_items)
+        _ = await ShopOrder.create(order)
+        _ = await ShopOrderItem.create_many(order_items)
         return order
 
     async def get_order_by_code(self, public_code: str) -> ShopOrder:
         order = await ShopOrder.get_by_public_code(public_code)
         if order is None:
-            raise PlatformNotFoundError("Заказ не найден", error_code="order_not_found")
+            raise PlatformNotFoundError("Order not found", error_code="order_not_found")
         return order
 
     async def list_orders(
@@ -164,7 +164,7 @@ class ShopOrderService:
     async def get_order(self, company_shop: Shop, order_id: str) -> ShopOrder:
         order = await ShopOrder.get_by_id(order_id)
         if order is None or order.shop_id != company_shop.shop_id:
-            raise PlatformNotFoundError("Заказ не найден", error_code="order_not_found")
+            raise PlatformNotFoundError("Order not found", error_code="order_not_found")
         return order
 
     async def set_status(
@@ -175,14 +175,14 @@ class ShopOrderService:
         allowed_from = _ALLOWED_TRANSITIONS.get(status, frozenset())
         if order.status not in allowed_from:
             raise PlatformConflictError(
-                f"Переход {order.status} → {status} недопустим",
+                f"Transition {order.status} -> {status} is not allowed",
                 error_code="order_transition_invalid",
             )
         now = utcnow()
-        order.status = status
+        order.status = ShopOrderStatus(status)
         order.status_changed_at = now
         order.updated_at = now
-        await order.save()
+        _ = await order.save()
         return order
 
     async def order_response(self, order: ShopOrder) -> ShopOrderResponse:
@@ -191,7 +191,7 @@ class ShopOrderService:
             shop_order_id=order.shop_order_id,
             shop_id=order.shop_id,
             public_code=order.public_code,
-            status=order.status,
+            status=ShopOrderStatus(order.status),
             customer_name=order.customer_name,
             customer_phone=order.customer_phone,
             delivery_type=order.delivery_type,
@@ -220,5 +220,5 @@ class ShopOrderService:
             if await ShopOrder.get_by_public_code(code) is None:
                 return code
         raise PlatformConflictError(
-            "Не удалось выделить код заказа", error_code="order_code_exhausted"
+            "Failed to allocate order code", error_code="order_code_exhausted"
         )

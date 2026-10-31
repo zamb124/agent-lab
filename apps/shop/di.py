@@ -4,6 +4,7 @@ from typing import Annotated
 
 from apps.shop.config import ShopSettings
 from apps.shop.services.aggregate_service import AggregateService
+from apps.shop.services.ai_service import ShopAiService
 from apps.shop.services.domain_service import DomainService
 from apps.shop.services.notification_service import NotificationService
 from apps.shop.services.order_service import ShopOrderService
@@ -21,6 +22,7 @@ class ShopDi(PlatformDi):
     notification_service: NotificationService
     domain_service: DomainService
     aggregate_service: AggregateService
+    ai_service: ShopAiService
 
 
 Di = Annotated[ShopDi, http_di(ShopDi), task_di(ShopDi)]

@@ -22,7 +22,7 @@ class DomainService:
     """Кастомные домены: DNS-проверка и провиженинг ingress-слоя."""
 
     def __init__(self, settings: ShopSettings) -> None:
-        self._settings = settings
+        self._settings: ShopSettings = settings
 
     async def provision_domain(self, shop_domain_id: str) -> ShopDomain:
         """Проверить DNS и довести запись до ``active``; без DNS — ``awaiting_dns``."""
@@ -30,7 +30,7 @@ class DomainService:
             shop_domain_id=shop_domain_id
         ).get_or_none()
         if record is None:
-            raise PlatformNotFoundError("Домен не найден", error_code="domain_not_found")
+            raise PlatformNotFoundError("Domain not found", error_code="domain_not_found")
         if record.status == ShopDomainStatus.ACTIVE:
             return record
         if await self._dns_points_to_platform(record.domain):
@@ -44,7 +44,7 @@ class DomainService:
             )
         record.verify_attempts += 1
         record.updated_at = utcnow()
-        await record.save()
+        _ = await record.save()
         return record
 
     async def reconcile_domain(self, record: ShopDomain) -> ShopDomain:
@@ -58,7 +58,7 @@ class DomainService:
         except Exception as exc:  # noqa: BLE001 — внешний DNS/IO
             record.last_error = str(exc)[:500]
             record.updated_at = utcnow()
-            await record.save()
+            _ = await record.save()
             logger.warning(
                 "shop_domain_reconcile_failed",
                 extra={"domain": record.domain, "error": str(exc)},
@@ -68,7 +68,7 @@ class DomainService:
     async def _dns_points_to_platform(self, domain: str) -> bool:
         """CNAME/A домена резолвится — проверка делегирования на платформу."""
         try:
-            socket.getaddrinfo(domain, None)
+            _ = socket.getaddrinfo(domain, None)
         except socket.gaierror:
             return False
         return True

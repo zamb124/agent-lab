@@ -17,22 +17,21 @@ class StorefrontHostMiddleware:
     """Рерайт корня slug-поддомена на страницу витрины."""
 
     def __init__(self, app: ASGIApp, *, domain_suffix: str, reserved: frozenset[str]) -> None:
-        self._app = app
-        self._suffix = f".{domain_suffix}" if domain_suffix else ""
-        self._reserved = reserved
+        self._app: ASGIApp = app
+        self._suffix: str = f".{domain_suffix}" if domain_suffix else ""
+        self._reserved: frozenset[str] = reserved
 
     async def __call__(self, scope: ASGIScope, receive: ASGIReceive, send: ASGISend) -> None:
         if scope["type"] != "http" or not self._suffix:
             await self._app(scope, receive, send)
             return
         host = ""
-        for name, value in scope["headers"]:
+        for name, value in scope.get("headers", []):
             if name == b"host":
                 host = value.decode("latin-1").split(":")[0].strip().lower()
                 break
         slug = self._slug_for(host)
-        if slug is not None and scope["method"] in ("GET", "HEAD") and scope["path"] == "/":
-            scope = dict(scope)
+        if slug is not None and scope.get("method") in ("GET", "HEAD") and scope.get("path") == "/":
             scope["path"] = f"{_STOREFRONT_PAGE}{slug}"
         await self._app(scope, receive, send)
 

@@ -22,7 +22,7 @@ from apps.shop.models import (
 )
 from apps.shop.services.shop_service import ShopService
 from core.clients.redis_client import RedisClient
-from core.types import JsonObject
+from core.types import JsonObject, parse_json_object
 
 _SNAPSHOT_KEY_PREFIX = "shop:sf:"
 _TENANT_KEY_PREFIX = "shop:tenant:"
@@ -39,9 +39,9 @@ class StorefrontService:
         redis: RedisClient,
         shop_service: ShopService,
     ) -> None:
-        self._settings = settings
-        self._redis = redis
-        self._shops = shop_service
+        self._settings: ShopSettings = settings
+        self._redis: RedisClient = redis
+        self._shops: ShopService = shop_service
 
     async def resolve_shop_by_host(self, host: str) -> Shop | None:
         """Магазин по Host заголовка: slug-витрина или активный кастомный домен."""
@@ -56,6 +56,23 @@ class StorefrontService:
             return None
         return shop
 
+    async def check_order_rate_limit(self, client_key: str) -> bool:
+        """Лимит заказов с одного IP: скользящее минутное окно в Redis."""
+        limit = self._settings.order_rate_limit_per_minute
+        if limit <= 0:
+            return True
+        key = f"shop:rl:order:{client_key}"
+        count = await self._redis.eval(
+            """
+            local n = redis.call('INCR', KEYS[1])
+            if n == 1 then redis.call('EXPIRE', KEYS[1], 60) end
+            return n
+            """,
+            1,
+            key,
+        )
+        return isinstance(count, int) and count <= limit
+
     async def get_snapshot(self, slug: str) -> JsonObject | None:
         """Снапшот витрины: Redis → БД → сборка; None если витрины нет."""
         key = f"{_SNAPSHOT_KEY_PREFIX}{slug}"
@@ -63,15 +80,15 @@ class StorefrontService:
         if cached is not None:
             if cached == _NEGATIVE_MARKER:
                 return None
-            return json.loads(cached)
+            return parse_json_object(cached, "storefront snapshot")
         shop = await Shop.get_by_slug(slug)
         if shop is None or shop.status != ShopStatus.PUBLISHED:
-            await self._redis.set(
+            _ = await self._redis.set(
                 key, _NEGATIVE_MARKER, ttl=self._settings.storefront_negative_ttl_seconds
             )
             return None
         snapshot = await self.build_snapshot(shop)
-        await self._redis.set(
+        _ = await self._redis.set(
             key,
             json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
             ttl=self._settings.storefront_snapshot_ttl_seconds,
@@ -126,12 +143,12 @@ class StorefrontService:
         shop = await Shop.get_by_slug(slug)
         key = f"{_SNAPSHOT_KEY_PREFIX}{slug}"
         if shop is None or shop.status != ShopStatus.PUBLISHED:
-            await self._redis.set(
+            _ = await self._redis.set(
                 key, _NEGATIVE_MARKER, ttl=self._settings.storefront_negative_ttl_seconds
             )
             return None
         snapshot = await self.build_snapshot(shop)
-        await self._redis.set(
+        _ = await self._redis.set(
             key,
             json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
             ttl=self._settings.storefront_snapshot_ttl_seconds,
@@ -143,7 +160,7 @@ class StorefrontService:
         shop = await Shop.get_by_id(shop_id)
         if shop is None:
             return
-        await self._redis.delete(f"{_SNAPSHOT_KEY_PREFIX}{shop.slug}")
+        _ = await self._redis.delete(f"{_SNAPSHOT_KEY_PREFIX}{shop.slug}")
 
     def snapshot_etag(self, snapshot: JsonObject) -> str:
         """ETag снапшота — условные запросы анонимных читателей."""
@@ -159,7 +176,7 @@ class StorefrontService:
         if cached is not None:
             return None if cached == _NEGATIVE_MARKER else cached
         slug = await self._resolve_slug_db(hostname)
-        await self._redis.set(
+        _ = await self._redis.set(
             key,
             slug if slug is not None else _NEGATIVE_MARKER,
             ttl=self._settings.storefront_negative_ttl_seconds

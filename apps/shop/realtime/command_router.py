@@ -5,6 +5,9 @@ from __future__ import annotations
 from apps.shop.di import ShopDi
 from apps.shop.models.api import ShopCreateRequest
 from apps.shop.realtime.operations import (
+    ShopAiDescribePayload,
+    ShopAiEnhancePhotoPayload,
+    ShopAiGeneratePhotoPayload,
     ShopCategoryCreatePayload,
     ShopCategoryIdPayload,
     ShopCategoryUpdatePayload,
@@ -19,7 +22,11 @@ from apps.shop.realtime.operations import (
     ShopProductIdPayload,
     ShopProductUpdatePayload,
     ShopPublicOrderStatusPayload,
+    ShopTelegramConnectPayload,
     ShopUpdatePayload,
+    op_ai_describe_product,
+    op_ai_enhance_photo,
+    op_ai_generate_photo,
     op_categories_create,
     op_categories_list,
     op_categories_remove,
@@ -43,6 +50,8 @@ from apps.shop.realtime.operations import (
     op_shops_remove,
     op_shops_suspend,
     op_shops_update,
+    op_telegram_connect,
+    op_telegram_disconnect,
 )
 from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
@@ -106,10 +115,25 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/domains/provision_requested": Operation(
         payload_model=ShopDomainIdPayload, fn=op_domains_provision
     ),
+    "shop/telegram/connect_requested": Operation(
+        payload_model=ShopTelegramConnectPayload, fn=op_telegram_connect
+    ),
+    "shop/telegram/disconnect_requested": Operation(
+        payload_model=ShopIdPayload, fn=op_telegram_disconnect
+    ),
     "shop/public/order_create_requested": Operation(
         payload_model=ShopOrderCreatePayload, fn=op_public_order_create
     ),
     "shop/public/order_status_requested": Operation(
         payload_model=ShopPublicOrderStatusPayload, fn=op_public_order_status
+    ),
+    "shop/ai/describe_requested": Operation(
+        payload_model=ShopAiDescribePayload, fn=op_ai_describe_product
+    ),
+    "shop/ai/enhance_photo_requested": Operation(
+        payload_model=ShopAiEnhancePhotoPayload, fn=op_ai_enhance_photo
+    ),
+    "shop/ai/generate_photo_requested": Operation(
+        payload_model=ShopAiGeneratePhotoPayload, fn=op_ai_generate_photo
     ),
 }

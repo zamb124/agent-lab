@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Query
 
 from apps.shop.di import Di
 from apps.shop.models import ShopDomain
 from apps.shop.models.api import (
+    ShopAiDescribeRequest,
+    ShopAiEnhancePhotoRequest,
+    ShopAiGeneratePhotoRequest,
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
     ShopCategoryUpdateRequest,
@@ -16,10 +21,16 @@ from apps.shop.models.api import (
     ShopProductResponse,
     ShopProductUpdateRequest,
     ShopResponse,
+    ShopTelegramConnectRequest,
     ShopUpdateRequest,
 )
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
+    ShopAiDescribePayload,
+    ShopAiEnhancePhotoPayload,
+    ShopAiFileResponse,
+    ShopAiGeneratePhotoPayload,
+    ShopAiTextResponse,
     ShopCategoryCreatePayload,
     ShopCategoryIdPayload,
     ShopCategoryUpdatePayload,
@@ -32,7 +43,11 @@ from apps.shop.realtime.operations import (
     ShopProductCreatePayload,
     ShopProductIdPayload,
     ShopProductUpdatePayload,
+    ShopTelegramConnectPayload,
     ShopUpdatePayload,
+    op_ai_describe_product,
+    op_ai_enhance_photo,
+    op_ai_generate_photo,
     op_categories_create,
     op_categories_list,
     op_categories_remove,
@@ -54,6 +69,8 @@ from apps.shop.realtime.operations import (
     op_shops_remove,
     op_shops_suspend,
     op_shops_update,
+    op_telegram_connect,
+    op_telegram_disconnect,
 )
 from core.context import require_context
 from core.pagination import ListResponse, OffsetPage
@@ -82,7 +99,9 @@ async def get_shop(shop_id: str, di: Di) -> ShopResponse:
 @router.patch("/{shop_id}", response_model=ShopResponse)
 async def update_shop(shop_id: str, payload: ShopUpdateRequest, di: Di) -> ShopResponse:
     return await op_shops_update(
-        ShopUpdatePayload(shop_id=shop_id, **payload.model_dump(exclude_unset=True)),
+        ShopUpdatePayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
+        ),
         user=require_context().user,
         di=di,
     )
@@ -105,6 +124,24 @@ async def suspend_shop(shop_id: str, di: Di) -> ShopResponse:
 @router.delete("/{shop_id}", response_model=EmptyPayload)
 async def remove_shop(shop_id: str, di: Di) -> EmptyPayload:
     return await op_shops_remove(
+        ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di
+    )
+
+
+@router.post("/{shop_id}/telegram/connect", response_model=ShopResponse)
+async def telegram_connect(
+    shop_id: str, payload: ShopTelegramConnectRequest, di: Di
+) -> ShopResponse:
+    return await op_telegram_connect(
+        ShopTelegramConnectPayload(shop_id=shop_id, bot_token=payload.bot_token),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/telegram/disconnect", response_model=ShopResponse)
+async def telegram_disconnect(shop_id: str, di: Di) -> ShopResponse:
+    return await op_telegram_disconnect(
         ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di
     )
 
@@ -135,10 +172,12 @@ async def update_category(
     shop_id: str, category_id: str, payload: ShopCategoryUpdateRequest, di: Di
 ) -> ShopCategoryResponse:
     return await op_categories_update(
-        ShopCategoryUpdatePayload(
-            shop_id=shop_id,
-            shop_category_id=category_id,
-            **payload.model_dump(exclude_unset=True),
+        ShopCategoryUpdatePayload.model_validate(
+            {
+                "shop_id": shop_id,
+                "shop_category_id": category_id,
+                **payload.model_dump(exclude_unset=True),
+            }
         ),
         user=require_context().user,
         di=di,
@@ -169,8 +208,8 @@ async def create_product(
     shop_id: str, payload: ShopProductCreateRequest, di: Di
 ) -> ShopProductResponse:
     return await op_products_create(
-        ShopProductCreatePayload(
-            shop_id=shop_id, **payload.model_dump(exclude_unset=True)
+        ShopProductCreatePayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
         ),
         user=require_context().user,
         di=di,
@@ -182,10 +221,12 @@ async def update_product(
     shop_id: str, product_id: str, payload: ShopProductUpdateRequest, di: Di
 ) -> ShopProductResponse:
     return await op_products_update(
-        ShopProductUpdatePayload(
-            shop_id=shop_id,
-            shop_product_id=product_id,
-            **payload.model_dump(exclude_unset=True),
+        ShopProductUpdatePayload.model_validate(
+            {
+                "shop_id": shop_id,
+                "shop_product_id": product_id,
+                **payload.model_dump(exclude_unset=True),
+            }
         ),
         user=require_context().user,
         di=di,
@@ -208,9 +249,9 @@ async def remove_product(shop_id: str, product_id: str, di: Di) -> EmptyPayload:
 async def list_orders(
     shop_id: str,
     di: Di,
-    status: ShopOrderStatus | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    status: Annotated[ShopOrderStatus | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[ShopOrderResponse]:
     return await op_orders_list(
         ShopOrderListPayload(shop_id=shop_id, status=status, limit=limit, offset=offset),
@@ -266,6 +307,41 @@ async def remove_domain(shop_id: str, domain_id: str, di: Di) -> EmptyPayload:
 async def provision_domain(shop_id: str, domain_id: str, di: Di) -> ShopDomain:
     return await op_domains_provision(
         ShopDomainIdPayload(shop_id=shop_id, shop_domain_id=domain_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+# --- AI ---
+
+
+@router.post("/{shop_id}/ai/describe", response_model=ShopAiTextResponse)
+async def ai_describe(shop_id: str, body: ShopAiDescribeRequest, di: Di) -> ShopAiTextResponse:
+    return await op_ai_describe_product(
+        ShopAiDescribePayload(
+            shop_id=shop_id,
+            name=body.name,
+            category_name=body.category_name,
+            photo_file_id=body.photo_file_id,
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/ai/enhance-photo", response_model=ShopAiFileResponse)
+async def ai_enhance_photo(shop_id: str, body: ShopAiEnhancePhotoRequest, di: Di) -> ShopAiFileResponse:
+    return await op_ai_enhance_photo(
+        ShopAiEnhancePhotoPayload(shop_id=shop_id, file_id=body.file_id),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/ai/generate-photo", response_model=ShopAiFileResponse)
+async def ai_generate_photo(shop_id: str, body: ShopAiGeneratePhotoRequest, di: Di) -> ShopAiFileResponse:
+    return await op_ai_generate_photo(
+        ShopAiGeneratePhotoPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
         di=di,
     )

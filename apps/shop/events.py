@@ -10,7 +10,11 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from apps.shop.models.enums import ShopOrderStatus, ShopStatus
-from core.events import publish_event_to_company, register_platform_event
+from core.events import (
+    publish_domain_event,
+    publish_event_to_company,
+    register_platform_event,
+)
 
 SHOP_SHOP_CREATED = "shop/shop/created"
 SHOP_SHOP_UPDATED = "shop/shop/updated"
@@ -92,10 +96,11 @@ async def publish_shop_event(
 async def publish_shop_catalog_changed(
     shop_id: str, slug: str, company_id: str
 ) -> None:
+    """Доменный факт для flows-триггеров; UI меню и так знает свои мутации."""
     payload = ShopCatalogChangedEventPayload(shop_id=shop_id, slug=slug)
-    await publish_event_to_company(
-        company_id=company_id,
+    await publish_domain_event(
         type=SHOP_CATALOG_CHANGED,
+        company_id=company_id,
         payload=payload.model_dump(mode="json"),
     )
 

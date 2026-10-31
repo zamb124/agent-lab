@@ -7,6 +7,10 @@ Read-path идёт в Redis-снапшот с ETag/304 — PostgreSQL не тр�
 
 from __future__ import annotations
 
+import hashlib
+import io
+
+import segno
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
@@ -14,6 +18,7 @@ from apps.shop.api.storefront_shell import storefront_html
 from apps.shop.di import Di
 from apps.shop.models.api import (
     ShopOrderCreatedResponse,
+    ShopOrderCreateRequest,
     ShopOrderStatusResponse,
 )
 from apps.shop.realtime.operations import (
@@ -23,13 +28,15 @@ from apps.shop.realtime.operations import (
     op_public_order_status,
 )
 from core.context import require_context
+from core.errors.boundary import PlatformNotFoundError
 from core.pagination import OffsetPage
+from core.types import JsonObject, parse_json_object
 from core.websocket import WsCommandError
 
 router = APIRouter(prefix="/public", tags=["shop-public"])
 
 
-async def _snapshot_or_404(di: Di, slug: str) -> dict[str, object]:
+async def _snapshot_or_404(di: Di, slug: str) -> JsonObject:
     snapshot = await di.storefront_service.get_snapshot(slug)
     if snapshot is None:
         raise WsCommandError(
@@ -66,11 +73,20 @@ async def get_storefront_page(slug: str, request: Request, di: Di) -> HTMLRespon
 
 @router.post("/storefront/{slug}/orders", response_model=ShopOrderCreatedResponse)
 async def create_order(
-    slug: str, payload: ShopOrderCreatePayload, di: Di
+    slug: str, payload: ShopOrderCreateRequest, request: Request, di: Di
 ) -> ShopOrderCreatedResponse:
-    """Приём заказа: тот же `op_*`, что и у WS-команды."""
-    payload.slug = slug
-    return await op_public_order_create(payload, user=require_context().user, di=di)
+    """Приём заказа: тот же `op_*`, что и у WS-команды; лимит по IP до работы."""
+    client_key = request.client.host if request.client else "unknown"
+    if not await di.storefront_service.check_order_rate_limit(client_key):
+        raise WsCommandError(
+            "rate_limited",
+            "Too many orders",
+            error_code="order_rate_limited",
+        )
+    op_payload = ShopOrderCreatePayload.model_validate(
+        {"slug": slug, **payload.model_dump()}
+    )
+    return await op_public_order_create(op_payload, user=require_context().user, di=di)
 
 
 @router.get("/orders/{public_code}", response_model=ShopOrderStatusResponse)
@@ -79,6 +95,77 @@ async def get_order_status(public_code: str, di: Di) -> ShopOrderStatusResponse:
         ShopPublicOrderStatusPayload(public_code=public_code),
         user=require_context().user,
         di=di,
+    )
+
+
+@router.get("/storefront/{slug}/qr.svg", response_model=None)
+async def get_storefront_qr(slug: str, request: Request, di: Di) -> Response:
+    """QR-код витрины (SVG): владелец печатает его на столах и витрине.
+
+    Протокольный хендлер — байты наружу; ETag стабилен на slug+host.
+    """
+    _ = await _snapshot_or_404(di, slug)
+    url = f"https://{slug}.{di.settings.storefront_domain_suffix}"
+    etag = f'W/"shop-qr-{hashlib.sha256(url.encode()).hexdigest()[:16]}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    buf = io.BytesIO()
+    segno.make(url, error="m").save(buf, kind="svg", border=2, dark="#181310")
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/svg+xml",
+        headers={"ETag": etag, "Cache-Control": "public, max-age=86400"},
+    )
+
+
+@router.post("/telegram/webhook/{shop_id}", response_model=None)
+async def telegram_webhook(
+    shop_id: str, request: Request, di: Di
+) -> Response:
+    """Входящий update бота магазина: wire-спек Telegram, не op_*.
+
+    Секрет в заголовке ``X-Telegram-Bot-Api-Secret-Token`` проверяется
+    внутри сервиса до любой работы; невалидный update — 404.
+    """
+    try:
+        update = parse_json_object(await request.body(), "Telegram update")
+    except ValueError as exc:
+        raise WsCommandError(
+            "bad_request", "Invalid update", error_code="telegram_update_invalid"
+        ) from exc
+    try:
+        await di.notification_service.handle_telegram_update(
+            shop_id,
+            request.headers.get("x-telegram-bot-api-secret-token"),
+            update,
+        )
+    except PlatformNotFoundError as exc:
+        raise WsCommandError(
+            "not_found", "Webhook not found", error_code="telegram_webhook_not_found"
+        ) from exc
+    return Response(status_code=200)
+
+
+@router.get("/sitemap.xml", response_model=None)
+async def get_sitemap(di: Di) -> Response:
+    """Sitemap агрегатора: опубликованные витрины для поисковых роботов."""
+    shops = await di.aggregate_service.list_shops()
+    suffix = di.settings.storefront_domain_suffix
+    urls = "".join(
+        f"<url><loc>https://{s.slug}.{suffix}</loc>"
+        + "<changefreq>hourly</changefreq><priority>0.8</priority></url>"
+        for s in shops
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        + urls
+        + "</urlset>"
+    )
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=300"},
     )
 
 
