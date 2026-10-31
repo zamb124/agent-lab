@@ -12,6 +12,7 @@ import hashlib
 import json
 
 from apps.shop.config import ShopSettings
+from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models import (
     Shop,
     ShopCategory,
@@ -121,6 +122,10 @@ class StorefrontService:
             "min_order_minor": shop.min_order_minor,
             "currency": shop.currency,
             "theme": shop.theme,
+            "badge_defs": {
+                b["key"]: {"label": b["label"], "icon_path": BADGE_ICONS.get(b["icon"], "")}
+                for b in shop.badges
+            },
             "promos": [
                 {
                     "id": promo.shop_promo_id,

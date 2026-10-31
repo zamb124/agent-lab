@@ -28,6 +28,8 @@ from apps.shop.models import (
 from apps.shop.models.api import (
     ShopAiParseMenuResponse,
     ShopAiSuggestOptionsResponse,
+    ShopBadgeIconsResponse,
+    ShopBadgeResponse,
     ShopCartPriceRequest,
     ShopCartPriceResponse,
     ShopCategoriesReorderRequest,
@@ -60,6 +62,7 @@ from apps.shop.models.api import (
     ShopTheme,
     ShopUpdateRequest,
 )
+from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.tasks.task_names import (
     SHOP_AI_DESCRIBE_BATCH,
@@ -312,6 +315,15 @@ async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
         min_order_minor=shop.min_order_minor,
         currency=shop.currency,
         theme=ShopTheme.model_validate(shop.theme or {}),
+        badges=[
+            ShopBadgeResponse(
+                key=b["key"],
+                label=b["label"],
+                icon=b["icon"],
+                icon_path=BADGE_ICONS.get(b["icon"], ""),
+            )
+            for b in shop.badges
+        ],
         status=shop.status,
         telegram_chat_id=shop.telegram_chat_id,
         telegram_connected=bool(shop.telegram_bot_token),
@@ -383,6 +395,14 @@ async def op_shops_create(payload: ShopCreateRequest, *, user: User, di: Di) -> 
         SHOP_SHOP_CREATED, shop.shop_id, shop.slug, shop.status, scope.company_id
     )
     return await _shop_response(shop, di)
+
+
+async def op_badge_icons_list(
+    payload: EmptyPayload, *, user: User, di: Di
+) -> ShopBadgeIconsResponse:
+    scope = await require_company_viewer(di.authz_service)
+    _ = (payload, user, scope)
+    return ShopBadgeIconsResponse(icons=dict(BADGE_ICONS))
 
 
 async def op_shops_get(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:

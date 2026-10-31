@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from apps.shop.config import ShopSettings
+from apps.shop.models.badge_icons import BADGE_ICONS, DEFAULT_SHOP_BADGES
 from apps.shop.models import (
     ModifierGroupKind,
     ModifierPriceMode,
@@ -18,6 +19,7 @@ from apps.shop.models import (
     ShopStatus,
 )
 from apps.shop.models.api import (
+    ShopBadge,
     ShopCategoryCreateRequest,
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
@@ -65,6 +67,7 @@ class ShopService:
             slug=slug,
             kind=payload.kind,
             name=payload.name,
+            badges=[dict(b) for b in DEFAULT_SHOP_BADGES],
             created_by_user_id=user_id,
             created_at=now,
             updated_at=now,
@@ -81,11 +84,50 @@ class ShopService:
         shop = await self.get_shop(company_id, shop_id)
         patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
         _ = patch.pop("shop_id", None)
+        if "badges" in patch:
+            _ = patch.pop("badges")
+            shop.badges = self._normalize_badges(payload.badges or [])
+            await self._check_badge_references(shop)
         for field, value in patch.items():
             setattr(shop, field, value)
         shop.updated_at = utcnow()
         _ = await shop.save()
         return shop
+
+    @staticmethod
+    def _normalize_badges(badges: list[ShopBadge]) -> list[dict[str, str]]:
+        """Приводит набор меток к канону: уникальные ключи, иконка из каталога.
+
+        Пустой ``key`` получает автогенерацию ``badge_N``.
+        """
+        normalized: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for badge in badges:
+            label = badge.label.strip()
+            icon = badge.icon
+            if icon not in BADGE_ICONS or not label:
+                raise PlatformNotFoundError("Badge icon not found", error_code="badge_icon_not_found")
+            key = badge.key
+            if not key:
+                n = len(seen) + 1
+                while f"badge_{n}" in seen:
+                    n += 1
+                key = f"badge_{n}"
+            if key in seen:
+                raise PlatformConflictError("Badge key is duplicated", error_code="badge_key_duplicated")
+            seen.add(key)
+            normalized.append({"key": key, "label": label, "icon": icon})
+        return normalized
+
+    async def _check_badge_references(self, shop: Shop) -> None:
+        keys = {b["key"] for b in shop.badges}
+        products = await ShopProduct.objects.filter(shop_id=shop.shop_id).all()
+        orphans = [p.name for p in products if any(b not in keys for b in p.badges)]
+        if orphans:
+            raise PlatformConflictError(
+                f"Badges still referenced by products: {', '.join(orphans[:3])}",
+                error_code="badge_in_use",
+            )
 
     async def publish_shop(self, company_id: str, shop_id: str) -> Shop:
         """Публикация: витрина появляется в снапшотах и агрегаторе."""
@@ -187,7 +229,7 @@ class ShopService:
     async def create_product(
         self, company_id: str, shop_id: str, payload: ShopProductCreateRequest
     ) -> ShopProduct:
-        _ = await self.get_shop(company_id, shop_id)
+        shop = await self.get_shop(company_id, shop_id)
         if payload.category_id is not None:
             category = await ShopCategory.get_by_id(payload.category_id)
             if category is None or category.shop_id != shop_id:
@@ -200,7 +242,7 @@ class ShopService:
             name=payload.name,
             description=payload.description,
             portion=payload.portion,
-            badges=list(payload.badges),
+            badges=self._validate_product_badges(shop, payload.badges),
             price_minor=payload.price_minor,
             photo_file_id=payload.photo_file_id,
             sort=await ShopProduct.next_sort_by_sort_desc(shop_id, payload.category_id),
@@ -242,13 +284,15 @@ class ShopService:
     async def update_product(
         self, company_id: str, shop_id: str, product_id: str, payload: ShopProductUpdateRequest
     ) -> ShopProduct:
-        _ = await self.get_shop(company_id, shop_id)
+        shop = await self.get_shop(company_id, shop_id)
         product = await ShopProduct.get_by_id(product_id)
         if product is None or product.shop_id != shop_id:
             raise PlatformNotFoundError("Product not found", error_code="product_not_found")
         patch: dict[str, JsonValue] = payload.model_dump(exclude_unset=True)
         _ = patch.pop("shop_id", None)
         _ = patch.pop("shop_product_id", None)
+        if "badges" in patch:
+            patch["badges"] = self._validate_product_badges(shop, payload.badges or [])
         category_patch = patch.get("category_id")
         if category_patch is not None:
             if not isinstance(category_patch, str):
@@ -263,6 +307,14 @@ class ShopService:
         product.updated_at = utcnow()
         _ = await product.save()
         return product
+
+    @staticmethod
+    def _validate_product_badges(shop: Shop, badges: list[str]) -> list[str]:
+        """Ключи меток позиции должны существовать в наборе магазина."""
+        keys = {b["key"] for b in shop.badges}
+        if any(b not in keys for b in badges):
+            raise PlatformNotFoundError("Badge not found", error_code="badge_not_found")
+        return list(badges)
 
     async def reorder_products(self, company_id: str, shop_id: str, product_ids: list[str]) -> None:
         """Перестановка позиций внутри списка: ids получают отсортированные

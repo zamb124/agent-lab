@@ -86,6 +86,7 @@ from apps.shop.realtime.operations import (
     op_public_cart_price,
     op_public_order_create,
     op_public_order_status,
+    op_badge_icons_list,
     op_shops_create,
     op_shops_get,
     op_shops_list,
@@ -100,6 +101,9 @@ from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
 SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/shops/list_requested": Operation(payload_model=EmptyPayload, fn=op_shops_list),
+    "shop/badge_icons/list_requested": Operation(
+        payload_model=EmptyPayload, fn=op_badge_icons_list
+    ),
     "shop/shops/item_requested": Operation(payload_model=ShopIdPayload, fn=op_shops_get),
     "shop/shops/create_requested": Operation(payload_model=ShopCreateRequest, fn=op_shops_create),
     "shop/shops/update_requested": Operation(payload_model=ShopUpdatePayload, fn=op_shops_update),

@@ -56,7 +56,8 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .pcard .b{{padding:11px 13px 13px}}
 .pcard h3{{font-size:14.5px;font-weight:600}}
 .pcard .portion{{font-size:12px;font-weight:500;color:var(--muted);margin-left:6px;white-space:nowrap}}
-.pcard .ptag{{display:inline-block;margin-left:5px;padding:1px 7px;border-radius:99px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:10px;font-weight:700;vertical-align:middle}}
+.pcard .ptag{{display:inline-flex;align-items:center;gap:3px;margin-left:5px;padding:2px 8px;border-radius:99px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:10px;font-weight:700;vertical-align:middle;white-space:nowrap}}
+.pcard .ptag svg{{width:11px;height:11px;fill:currentColor;flex-shrink:0}}
 .pcard .price{{margin-top:6px;font-size:15px;font-weight:650;font-variant-numeric:tabular-nums}}
 .pcard .from{{margin-top:6px;font-size:12px;color:var(--muted);display:inline-block;background:var(--card2);border-radius:99px;padding:3px 10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .empty{{text-align:center;color:var(--muted);padding:56px 20px;font-size:15px}}
@@ -121,10 +122,10 @@ renderChips();renderShops();
 let timer=0,req=0;
 function debounced(){{clearTimeout(timer);timer=setTimeout(runSearch,350);}}
 let lastQ='';
-const PTAGS={{hit:'🔥',new:'✨',spicy:'🌶',vegan:'🌿',chef:'👨‍🍳'}};
+const PTAGS=b=>`<span class="ptag">${{b.icon_path?`<svg viewBox="0 -960 960 960"><path d="${{b.icon_path}}"/></svg>`:''}}${{esc(b.label)}}</span>`;
 const pcardHtml=p=>`<a class="pcard" href="${{LINK(p.shop_slug)}}?p=${{esc(p.product_id)}}">
   ${{p.photo_file_id?`<img src="${{IMG(p.photo_file_id)}}" loading="lazy" alt="">`:''}}
-  <span class="b"><h3>${{esc(p.name)}}${{(p.badges||[]).map(b=>PTAGS[b]?`<span class="ptag">${{PTAGS[b]}}</span>`:'').join('')}}${{p.portion?`<span class="portion">${{esc(p.portion)}}</span>`:''}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`;
+  <span class="b"><h3>${{esc(p.name)}}${{(p.badges||[]).map(PTAGS).join('')}}${{p.portion?`<span class="portion">${{esc(p.portion)}}</span>`:''}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`;
 function searchUrl(q,offset){{let url=`/shop/api/v1/public/aggregate/search?q=${{encodeURIComponent(q)}}&limit=24&offset=${{offset}}`;
   if(fKind)url+=`&kind=${{fKind}}`;if(fCity)url+=`&city=${{encodeURIComponent(fCity)}}`;return url;}}
 function syncMore(total){{const g=document.getElementById('hitsGrid');

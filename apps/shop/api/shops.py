@@ -16,6 +16,7 @@ from apps.shop.models.api import (
     ShopAiParseMenuResponse,
     ShopAiSuggestOptionsRequest,
     ShopAiSuggestOptionsResponse,
+    ShopBadgeIconsResponse,
     ShopCategoriesReorderRequest,
     ShopCategoryCreateRequest,
     ShopCategoryResponse,
@@ -94,6 +95,7 @@ from apps.shop.realtime.operations import (
     op_ai_generate_photo,
     op_ai_parse_menu,
     op_ai_suggest_options,
+    op_badge_icons_list,
     op_categories_create,
     op_categories_list,
     op_categories_remove,
@@ -144,6 +146,11 @@ router = APIRouter(prefix="/shops", tags=["shop-admin"])
 @router.get("", response_model=ListResponse[ShopResponse])
 async def list_shops(di: Di) -> ListResponse[ShopResponse]:
     return await op_shops_list(EmptyPayload(), user=require_context().user, di=di)
+
+
+@router.get("/badge-icons", response_model=ShopBadgeIconsResponse)
+async def list_badge_icons(di: Di) -> ShopBadgeIconsResponse:
+    return await op_badge_icons_list(EmptyPayload(), user=require_context().user, di=di)
 
 
 @router.post("", response_model=ShopResponse)

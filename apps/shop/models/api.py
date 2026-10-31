@@ -9,7 +9,6 @@ from apps.shop.models.enums import (
     ShopKind,
     ShopOrderSource,
     ShopOrderStatus,
-    ShopProductBadge,
     ShopStatus,
 )
 from core.models import StrictBaseModel
@@ -28,6 +27,31 @@ class ShopWorkingHours(StrictBaseModel):
     """Часы работы на каждый день недели (0=пн) в формате HH:MM-HH:MM."""
 
     days: dict[str, str] = Field(default_factory=dict)
+
+
+class ShopBadge(StrictBaseModel):
+    """Метка из собственного набора магазина.
+
+    ``key`` можно не передавать — сервер сгенерирует уникальный;
+    ``icon`` — имя иконки из серверного каталога ``BADGE_ICONS``.
+    """
+
+    key: str = Field(default="", pattern=r"^[a-z0-9_]{0,30}$")
+    label: str = Field(min_length=1, max_length=60)
+    icon: str = Field(min_length=1, max_length=60)
+
+
+class ShopBadgeResponse(StrictBaseModel):
+    key: str
+    label: str
+    icon: str
+    icon_path: str
+
+
+class ShopBadgeIconsResponse(StrictBaseModel):
+    """Каталог иконок меток: имя → SVG path (viewBox 0 -960 960 960)."""
+
+    icons: dict[str, str]
 
 
 class ShopResponse(StrictBaseModel):
@@ -49,6 +73,7 @@ class ShopResponse(StrictBaseModel):
     min_order_minor: int
     currency: str
     theme: ShopTheme
+    badges: list[ShopBadgeResponse]
     status: ShopStatus
     telegram_chat_id: str | None
     telegram_connected: bool
@@ -83,6 +108,7 @@ class ShopUpdateRequest(StrictBaseModel):
     delivery_fee_minor: int | None = Field(default=None, ge=0)
     min_order_minor: int | None = Field(default=None, ge=0)
     theme: ShopTheme | None = None
+    badges: list[ShopBadge] | None = Field(default=None, max_length=20)
 
 
 class ShopCategoryResponse(StrictBaseModel):
@@ -122,7 +148,7 @@ class ShopProductCreateRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=300)
     description: str = ""
     portion: str = Field(default="", max_length=50)
-    badges: list[ShopProductBadge] = Field(default_factory=list, max_length=5)
+    badges: list[str] = Field(default_factory=list, max_length=5)
     price_minor: int = Field(ge=0)
     photo_file_id: str | None = None
 
@@ -132,7 +158,7 @@ class ShopProductUpdateRequest(StrictBaseModel):
     name: str | None = Field(default=None, max_length=300)
     description: str | None = None
     portion: str | None = Field(default=None, max_length=50)
-    badges: list[ShopProductBadge] | None = Field(default=None, max_length=5)
+    badges: list[str] | None = Field(default=None, max_length=5)
     price_minor: int | None = Field(default=None, ge=0)
     photo_file_id: str | None = None
     is_available: bool | None = None

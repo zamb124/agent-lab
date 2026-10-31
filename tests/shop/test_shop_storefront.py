@@ -116,6 +116,9 @@ class TestStorefrontSnapshot:
         assert snap.status_code == 200
         product = next(p for p in snap.json()["products"] if p["name"] == "Хитовая")
         assert product["badges"] == ["hit", "spicy"]
+        defs = snap.json()["badge_defs"]
+        assert defs["hit"]["label"] == "Хит"
+        assert defs["hit"]["icon_path"].startswith("M")
 
 
 class TestHostMiddleware:

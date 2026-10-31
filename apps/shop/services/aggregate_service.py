@@ -9,9 +9,12 @@ pg_trgm-индексами по name/description; пересборка зада�
 
 from __future__ import annotations
 
+from typing import cast
+
 from oxyde import execute_raw
 
 from apps.shop.models import Shop, ShopStatus
+from apps.shop.models.badge_icons import BADGE_ICONS
 from apps.shop.services.storefront_service import StorefrontService
 from core.pagination import OffsetPage
 
@@ -110,13 +113,24 @@ class AggregateService:
             using="shop",
         )
         total: int = count_rows[0]["total"] if count_rows else 0
+        badge_defs = {
+            sid: {
+                b["key"]: {"label": b["label"], "icon_path": BADGE_ICONS.get(b["icon"], "")}
+                for b in s.badges
+            }
+            for sid, s in by_shop.items()
+        }
         items: list[dict[str, object]] = [
             {
                 "product_id": row["shop_product_id"],
                 "name": row["name"],
                 "description": row["description"],
                 "portion": row["portion"],
-                "badges": row["badges"] or [],
+                "badges": [
+                    badge_defs[row["shop_id"]][key]
+                    for key in cast(list[str], row["badges"] or [])
+                    if key in badge_defs[row["shop_id"]]
+                ],
                 "price_minor": row["price_minor"],
                 "photo_file_id": row["photo_file_id"],
                 "shop_slug": by_shop[row["shop_id"]].slug,

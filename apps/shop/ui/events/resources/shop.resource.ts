@@ -9,8 +9,8 @@
 import { createAsyncOp, createResourceCollection, rerunLastRequest } from '@platform/lib/events/index.js';
 import type { AsyncOpFactory } from '@platform/lib/events/factories/async-op.js';
 import type { ResourceCollectionSlice } from '@platform/lib/events/factories/resource-collection.js';
-import { isPlainRecord } from '@platform/lib/events/payload.js';
-import type { ShopResponse, ShopStatus } from '@platform/lib/events/wire/shop.gen.js';
+import { isPlatformEventType, isPlainRecord } from '@platform/lib/events/payload.js';
+import type { ShopResponse, ShopShopEventPayload, ShopStatus } from '@platform/lib/events/wire/shop.gen.js';
 
 const SHOP_STATUSES: readonly ShopStatus[] = ['draft', 'published', 'suspended'];
 
@@ -18,16 +18,13 @@ export const SHOP_SHOP_EVENTS = [
     'shop/shop/created',
     'shop/shop/updated',
     'shop/shop/published',
-];
+] as const;
 
 function mergeShopSummary(
     state: ResourceCollectionSlice<ShopResponse>,
-    event: { payload: unknown },
+    payload: ShopShopEventPayload,
 ): ResourceCollectionSlice<ShopResponse> {
-    if (!isPlainRecord(event.payload)) {
-        throw new Error('shop/shop/*: payload required');
-    }
-    const shopId = event.payload.shop_id;
+    const shopId = payload.shop_id;
     if (typeof shopId !== 'string') {
         throw new Error('shop/shop/*: payload.shop_id required');
     }
@@ -37,11 +34,11 @@ function mergeShopSummary(
         return state;
     }
     const patch: Partial<Pick<ShopResponse, 'slug' | 'status'>> = {};
-    if (typeof event.payload.slug === 'string') {
-        patch.slug = event.payload.slug;
+    if (typeof payload.slug === 'string') {
+        patch.slug = payload.slug;
     }
-    if (SHOP_STATUSES.includes(event.payload.status as ShopStatus)) {
-        patch.status = event.payload.status as ShopStatus;
+    if (SHOP_STATUSES.includes(payload.status)) {
+        patch.status = payload.status;
     }
     const merged: ShopResponse = { ...current, ...patch };
     const items = state.items.map((item, position) =>
@@ -58,8 +55,8 @@ export const shopShopsResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     listQuery: () => ({}),
     extraReducer: (state, event) => {
-        if (SHOP_SHOP_EVENTS.includes(event.type)) {
-            return mergeShopSummary(state, event);
+        if (isPlatformEventType(event, SHOP_SHOP_EVENTS)) {
+            return mergeShopSummary(state, event.payload);
         }
         return state;
     },
@@ -93,6 +90,15 @@ export const shopPublishOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/publish' },
+});
+
+export const shopBadgeIconsListOp = createAsyncOp({
+    name: 'shop/badge_icons_list',
+    errorToastKey: 'shop:toast.badge_icons_load_failed',
+    commandType: 'shop/badge_icons/list_requested',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    restMirror: { method: 'GET', path: '/shop/api/v1/shops/badge-icons' },
 });
 
 export const shopSuspendOp = createAsyncOp({
@@ -159,14 +165,13 @@ export const shopProductsListOp = createAsyncOp({
     wsTimeoutMs: 8_000,
     restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/products' },
     extraEffect: async (event, ctx): Promise<boolean> => {
-        if (event.type !== 'shop/catalog/changed') {
+        if (!isPlatformEventType(event, 'shop/catalog/changed')) {
             return false;
         }
-        const pushedShopId = isPlainRecord(event.payload) ? event.payload.shop_id : undefined;
+        const pushedShopId = event.payload.shop_id;
         return rerunLastRequest(ctx, shopProductsListOp, {
             when: (payload) =>
                 isPlainRecord(payload)
-                && typeof pushedShopId === 'string'
                 && payload.shop_id === pushedShopId,
         });
     },
@@ -227,14 +232,13 @@ export const shopOrdersListOp: AsyncOpFactory = createAsyncOp({
     wsTimeoutMs: 8_000,
     restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/orders' },
     extraEffect: async (event, ctx): Promise<boolean> => {
-        if (event.type !== 'shop/order/created' && event.type !== 'shop/order/status_changed') {
+        if (!isPlatformEventType(event, ['shop/order/created', 'shop/order/status_changed'])) {
             return false;
         }
-        const pushedShopId = isPlainRecord(event.payload) ? event.payload.shop_id : undefined;
+        const pushedShopId = event.payload.shop_id;
         return rerunLastRequest(ctx, shopOrdersListOp, {
             when: (payload) =>
                 isPlainRecord(payload)
-                && typeof pushedShopId === 'string'
                 && payload.shop_id === pushedShopId,
         });
     },
@@ -359,14 +363,13 @@ export const shopModifierGroupsListOp: AsyncOpFactory = createAsyncOp({
     wsTimeoutMs: 8_000,
     restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/modifier-groups' },
     extraEffect: async (event, ctx): Promise<boolean> => {
-        if (event.type !== 'shop/catalog/changed') {
+        if (!isPlatformEventType(event, 'shop/catalog/changed')) {
             return false;
         }
-        const pushedShopId = isPlainRecord(event.payload) ? event.payload.shop_id : undefined;
+        const pushedShopId = event.payload.shop_id;
         return rerunLastRequest(ctx, shopModifierGroupsListOp, {
             when: (payload) =>
                 isPlainRecord(payload)
-                && typeof pushedShopId === 'string'
                 && payload.shop_id === pushedShopId,
         });
     },
@@ -462,14 +465,13 @@ export const shopPromosListOp: AsyncOpFactory = createAsyncOp({
     wsTimeoutMs: 8_000,
     restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/promos' },
     extraEffect: async (event, ctx): Promise<boolean> => {
-        if (event.type !== 'shop/catalog/changed') {
+        if (!isPlatformEventType(event, 'shop/catalog/changed')) {
             return false;
         }
-        const pushedShopId = isPlainRecord(event.payload) ? event.payload.shop_id : undefined;
+        const pushedShopId = event.payload.shop_id;
         return rerunLastRequest(ctx, shopPromosListOp, {
             when: (payload) =>
                 isPlainRecord(payload)
-                && typeof pushedShopId === 'string'
                 && payload.shop_id === pushedShopId,
         });
     },
@@ -528,6 +530,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/shop_update': typeof shopUpdateOp;
         'shop/shop_publish': typeof shopPublishOp;
         'shop/shop_suspend': typeof shopSuspendOp;
+        'shop/badge_icons_list': typeof shopBadgeIconsListOp;
         'shop/categories_list': typeof shopCategoriesListOp;
         'shop/category_create': typeof shopCategoryCreateOp;
         'shop/category_update': typeof shopCategoryUpdateOp;

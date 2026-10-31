@@ -115,7 +115,8 @@ button.big:disabled{{opacity:.45;cursor:default}}
 .done .st{{font-size:14px;font-weight:650;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);display:inline-block;padding:6px 16px;border-radius:99px;margin-bottom:14px}}
 .done p{{color:var(--muted);font-size:14.5px;line-height:1.6}}
 .pbadge{{display:inline-block;margin-left:8px;padding:3px 10px;border-radius:99px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;vertical-align:middle;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
-.ptag{{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:99px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:10.5px;font-weight:700;vertical-align:middle;white-space:nowrap}}
+.ptag{{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:3px 9px;border-radius:99px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:10.5px;font-weight:700;vertical-align:middle;white-space:nowrap}}
+.ptag svg{{width:12px;height:12px;fill:currentColor;flex-shrink:0}}
 .save{{color:#2e9e5b}}
 .save b{{color:#2e9e5b}}
 .empty{{text-align:center;color:var(--muted);padding:60px 20px;font-size:15px}}
@@ -190,8 +191,9 @@ function promoApplies(a,pid){{if(!a)return false;
   if(a.type==='fixed_bundle_price'&&Array.isArray(a.items))return a.items.some(i=>i.product_id===pid);
   return a.type==='n_plus_m_free'||a.type==='percent_items';}}
 function portionOf(p){{return p.portion?`<span class="portion">${{esc(p.portion)}}</span>`:'';}}
-const TAGS={{hit:'🔥 Хит',new:'✨ Новинка',spicy:'🌶 Острое',vegan:'🌿 Веган',chef:'👨‍🍳 От шефа'}};
-function tags(p){{return (p.badges||[]).map(b=>TAGS[b]?`<span class="ptag">${{TAGS[b]}}</span>`:'').join('');}}
+const DEFS=S.badge_defs||{{}};
+function tags(p){{return (p.badges||[]).map(b=>{{const d=DEFS[b];
+  return d?`<span class="ptag">${{d.icon_path?`<svg viewBox="0 -960 960 960"><path d="${{d.icon_path}}"/></svg>`:''}}${{esc(d.label)}}</span>`:'';}}).join('');}}
 function badge(pid){{const pr=(S.promos||[]).find(x=>promoApplies(x.action,pid));
   return pr?`<span class="pbadge">${{esc(pr.name)}}</span>`:'';}}
 function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;

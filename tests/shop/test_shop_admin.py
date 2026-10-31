@@ -210,7 +210,37 @@ class TestCatalog:
             f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
             json={"badges": ["bogus"]},
         )
-        assert bad.status_code == 422
+        assert bad.status_code == 404
+
+    async def test_custom_badges_dictionary(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Собственный набор меток: новая метка через shop/update, применение
+        к товару, удаление используемой метки запрещено конфликтом."""
+        shop = await _make_shop(shop_client, f"bdgd-{unique_id[:8]}")
+        defaults = [b["key"] for b in shop["badges"]]
+        assert defaults == ["hit", "new", "spicy", "vegan", "chef"]
+        assert shop["badges"][0]["icon_path"].startswith("M")
+        def wire(badges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            return [{"key": b["key"], "label": b["label"], "icon": b["icon"]} for b in badges]
+
+        custom = wire(shop["badges"]) + [{"label": "Без лактозы", "icon": "eco"}]
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}", json={"badges": custom}
+        )
+        assert resp.status_code == 200, resp.text
+        updated = resp.json()["badges"]
+        assert updated[-1]["label"] == "Без лактозы"
+        lactose_free = updated[-1]["key"]
+        product = await _make_product(
+            shop_client, shop["shop_id"], "Салат", 30000, badges=[lactose_free]
+        )
+        assert product["badges"] == [lactose_free]
+        conflict = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}",
+            json={"badges": [b for b in custom if b["label"] != "Без лактозы"]},
+        )
+        assert conflict.status_code == 409
         resp = await shop_client.delete(
             f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}"
         )

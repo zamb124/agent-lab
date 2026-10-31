@@ -5,8 +5,9 @@
  */
 
 import { html, css } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { buildShopProductFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
@@ -36,15 +37,26 @@ interface ProductRow {
     sort: number;
 }
 
-const BADGE_KEYS = ['hit', 'new', 'spicy', 'vegan', 'chef'] as const;
-type BadgeKey = (typeof BADGE_KEYS)[number];
-const BADGE_ICONS: Record<BadgeKey, string> = { hit: '🔥', new: '✨', spicy: '🌶', vegan: '🌿', chef: '👨‍🍳' };
+interface ShopBadgeDef {
+    key: string;
+    label: string;
+    icon: string;
+    icon_path: string;
+}
+
+interface ShopRow {
+    shop_id: string;
+    badges: ShopBadgeDef[];
+}
 
 export class ShopMenuPage extends PlatformPage {
     static i18nNamespace = 'shop';
 
     declare shopId: string;
 
+    private _shops: ResourceController;
+    private _shopUpdateOp: OpController;
+    private _badgeIconsOp: OpController;
     private _categoriesOp: OpController;
     private _productsOp: OpController;
     private _categoryCreateOp: OpController;
@@ -65,12 +77,16 @@ export class ShopMenuPage extends PlatformPage {
 
     private _categories: CategoryRow[] = [];
     private _products: ProductRow[] = [];
+    private _badgeIcons: Record<string, string> = {};
+    private _badgeEditorOpen = false;
+    private _newBadgeLabel = '';
+    private _newBadgeIcon = '';
     private _activeCategory: string | null = null;
     private _newCategory = '';
     private _newName = '';
     private _newPrice = '';
     private _newPortion = '';
-    private _newBadges: BadgeKey[] = [];
+    private _newBadges: string[] = [];
     private _newDescription = '';
     private _newPhotoFileId = '';
     private _newPhotoPreview = '';
@@ -78,7 +94,7 @@ export class ShopMenuPage extends PlatformPage {
     private _editName = '';
     private _editPrice = '';
     private _editPortion = '';
-    private _editBadges: BadgeKey[] = [];
+    private _editBadges: string[] = [];
     private _editDescription = '';
     private _importOpen = false;
     private _importText = '';
@@ -88,6 +104,10 @@ export class ShopMenuPage extends PlatformPage {
         shopId: { type: String, attribute: 'shop-id' },
         _categories: { state: true },
         _products: { state: true },
+        _badgeIcons: { state: true },
+        _badgeEditorOpen: { state: true },
+        _newBadgeLabel: { state: true },
+        _newBadgeIcon: { state: true },
         _activeCategory: { state: true },
         _newCategory: { state: true },
         _newName: { state: true },
@@ -167,6 +187,23 @@ export class ShopMenuPage extends PlatformPage {
                 cursor: pointer; user-select: none; white-space: nowrap;
             }
             .bchip.on { border-color: var(--accent-primary); background: var(--accent-primary-subtle); color: var(--accent-primary); }
+            .bchip svg, .ptag svg, .icon-pick svg { width: 13px; height: 13px; fill: currentColor; }
+            .badge-panel {
+                border: 1px solid var(--border-default); border-radius: var(--radius-lg);
+                padding: var(--space-4); margin-bottom: var(--space-4);
+                background: var(--surface-secondary); display: flex; flex-direction: column; gap: var(--space-3);
+            }
+            .badge-add { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
+            .badge-add platform-field { min-width: 200px; }
+            .icon-grid { display: flex; flex-wrap: wrap; gap: var(--space-1); max-width: 340px; }
+            .icon-pick {
+                width: 30px; height: 30px; border-radius: var(--radius-md);
+                border: 1px solid var(--border-default); background: var(--bg-surface);
+                color: var(--text-secondary); cursor: pointer; display: inline-flex;
+                align-items: center; justify-content: center;
+            }
+            .icon-pick.on { border-color: var(--accent-primary); color: var(--accent-primary); background: var(--accent-primary-subtle); }
+            .bchip .x { cursor: pointer; margin-left: var(--space-1); display: inline-flex; }
             .ptag {
                 display: inline-block; margin-left: var(--space-1); padding: 1px var(--space-2);
                 border-radius: var(--radius-full); background: var(--accent-primary-subtle);
@@ -237,6 +274,9 @@ export class ShopMenuPage extends PlatformPage {
 
     constructor() {
         super();
+        this._shops = this.useResource('shop/shops');
+        this._shopUpdateOp = this.useOp('shop/shop_update');
+        this._badgeIconsOp = this.useOp('shop/badge_icons_list');
         this._categoriesOp = this.useOp('shop/categories_list');
         this._productsOp = this.useOp('shop/products_list');
         this._categoryCreateOp = this.useOp('shop/category_create');
@@ -265,6 +305,7 @@ export class ShopMenuPage extends PlatformPage {
         const [cats, products] = await Promise.all([
             this._categoriesOp.run({ shop_id: this.shopId }),
             this._productsOp.run({ shop_id: this.shopId }),
+            this._shops.load(),
         ]);
         this._categories = this._rows<CategoryRow>(cats);
         this._products = this._rows<ProductRow>(products);
@@ -272,6 +313,51 @@ export class ShopMenuPage extends PlatformPage {
         if (this._activeCategory === null && first !== undefined) {
             this._activeCategory = first.shop_category_id;
         }
+    }
+
+    private _shop(): ShopRow | null {
+        const row = this._shops.items.find((s) => (s as { shop_id?: string }).shop_id === this.shopId);
+        return row === undefined ? null : (row as unknown as ShopRow);
+    }
+
+    private _shopBadges(): ShopBadgeDef[] {
+        return this._shop()?.badges ?? [];
+    }
+
+    private async _openBadgeEditor() {
+        this._badgeEditorOpen = !this._badgeEditorOpen;
+        if (this._badgeEditorOpen && Object.keys(this._badgeIcons).length === 0) {
+            const result = await this._badgeIconsOp.run({});
+            if (result !== null && typeof result === 'object' && 'icons' in (result as Record<string, unknown>)) {
+                this._badgeIcons = (result as { icons?: Record<string, string> }).icons ?? {};
+            }
+        }
+    }
+
+    private _iconSvg(path: string) {
+        return unsafeHTML(`<svg viewBox="0 -960 960 960"><path d="${path}"/></svg>`);
+    }
+
+    private async _saveBadgeDefs(badges: Array<{ key?: string; label: string; icon: string }>) {
+        await this._shopUpdateOp.run({ shop_id: this.shopId, badges });
+        await this._shops.load();
+    }
+
+    private async _addBadgeDef() {
+        const label = this._newBadgeLabel.trim();
+        if (label === '' || this._newBadgeIcon === '') return;
+        const current = this._shopBadges().map((b) => ({ key: b.key, label: b.label, icon: b.icon }));
+        await this._saveBadgeDefs([...current, { label, icon: this._newBadgeIcon }]);
+        this._newBadgeLabel = '';
+        this._newBadgeIcon = '';
+    }
+
+    private async _removeBadgeDef(key: string) {
+        await this._saveBadgeDefs(
+            this._shopBadges()
+                .filter((b) => b.key !== key)
+                .map((b) => ({ key: b.key, label: b.label, icon: b.icon })),
+        );
     }
 
     private _rows<T>(result: unknown): T[] {
@@ -338,23 +424,24 @@ export class ShopMenuPage extends PlatformPage {
         input.value = '';
     }
 
-    private _badgeChips(selected: BadgeKey[], onToggle: (badge: BadgeKey) => void) {
-        return html`<span class="badges">${BADGE_KEYS.map(
-            (key) => html`<button type="button" class="bchip ${selected.includes(key) ? 'on' : ''}"
-                @click=${() => onToggle(key)}>${BADGE_ICONS[key]} ${this.t(`menu.badge_${key}`)}</button>`,
+    private _badgeChips(selected: string[], onToggle: (badge: string) => void) {
+        return html`<span class="badges">${this._shopBadges().map(
+            (b) => html`<button type="button" class="bchip ${selected.includes(b.key) ? 'on' : ''}"
+                @click=${() => onToggle(b.key)}>${this._iconSvg(b.icon_path)} ${b.label}</button>`,
         )}</span>`;
     }
 
-    private _toggleBadge(list: BadgeKey[], badge: BadgeKey): BadgeKey[] {
+    private _toggleBadge(list: string[], badge: string): string[] {
         return list.includes(badge) ? list.filter((b) => b !== badge) : [...list, badge];
     }
 
     private _startEdit(p: ProductRow) {
+        const known = new Set(this._shopBadges().map((b) => b.key));
         this._editingId = p.shop_product_id;
         this._editName = p.name;
         this._editPrice = (p.price_minor / 100).toString();
         this._editPortion = p.portion;
-        this._editBadges = p.badges.filter((b): b is BadgeKey => BADGE_KEYS.includes(b as BadgeKey));
+        this._editBadges = p.badges.filter((b) => known.has(b));
         this._editDescription = p.description;
     }
 
@@ -612,6 +699,9 @@ export class ShopMenuPage extends PlatformPage {
                                 </platform-button>
                             ` : html``;
                         })()}
+                        <platform-button size="sm" @click=${() => this._openBadgeEditor()}>
+                            <platform-icon name="tag" size="14"></platform-icon> ${this.t('menu.badges_title')}
+                        </platform-button>
                         <platform-button size="sm" @click=${() => { this._importOpen = !this._importOpen; }}>
                             <platform-icon name="upload" size="14"></platform-icon> ${this.t('menu.import_button')}
                         </platform-button>
@@ -685,6 +775,42 @@ export class ShopMenuPage extends PlatformPage {
                         </platform-button>
                     </span>
                 </div>
+                ${this._badgeEditorOpen ? html`
+                    <div class="badge-panel">
+                        <div class="import-title">${this.t('menu.badges_title')}</div>
+                        <div class="import-hint">${this.t('menu.badges_hint')}</div>
+                        <div class="badges">
+                            ${this._shopBadges().map((b) => html`
+                                <span class="bchip on">${this._iconSvg(b.icon_path)} ${b.label}
+                                    <span class="x" title=${this.t('menu.badge_remove')} @click=${() => this._removeBadgeDef(b.key)}><platform-icon name="x" size="11"></platform-icon></span>
+                                </span>`)}
+                        </div>
+                        <div class="badge-add">
+                            <platform-field
+                                type="text"
+                                mode="edit"
+                                label=${this.t('menu.badge_label')}
+                                .value=${this._newBadgeLabel}
+                                @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                                    this._newBadgeLabel = typeof event.detail.value === 'string' ? event.detail.value : '';
+                                }}
+                            ></platform-field>
+                            <span class="icon-grid">
+                                ${Object.entries(this._badgeIcons).map(([name, path]) => html`
+                                    <button type="button" class="icon-pick ${this._newBadgeIcon === name ? 'on' : ''}"
+                                        title=${name} @click=${() => { this._newBadgeIcon = name; }}
+                                    >${this._iconSvg(path)}</button>`)}
+                            </span>
+                            <platform-button
+                                size="sm"
+                                variant="primary"
+                                ?busy=${this._shopUpdateOp.busy}
+                                ?disabled=${this._newBadgeLabel.trim() === '' || this._newBadgeIcon === ''}
+                                @click=${() => this._addBadgeDef()}
+                            >${this.t('menu.badge_add')}</platform-button>
+                        </div>
+                    </div>
+                ` : html``}
                 <div class="add-row">
                     <input id="new-photo-input" type="file" accept="image/*" style="display:none" @change=${(e: Event) => this._uploadPhoto(e)}>
                     <span class="photo-stack">
@@ -801,7 +927,7 @@ export class ShopMenuPage extends PlatformPage {
                                                 ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}" alt="" loading="lazy">`
                                                 : html`<span class="thumb-empty"></span>`}
                                         </td>
-                                        <td>${p.name}${p.badges.map((b) => BADGE_ICONS[b as BadgeKey] !== undefined ? html`<span class="ptag">${BADGE_ICONS[b as BadgeKey]}</span>` : html``)}${p.portion !== '' ? html`<span class="portion">${p.portion}</span>` : html``}</td>
+                                        <td>${p.name}${p.badges.map((b) => { const d = this._shopBadges().find((x) => x.key === b); return d !== undefined ? html`<span class="ptag" title=${d.label}>${this._iconSvg(d.icon_path)}</span>` : html``; })}${p.portion !== '' ? html`<span class="portion">${p.portion}</span>` : html``}</td>
                                         <td class="desc">${p.description}</td>
                                         <td class="num">${this._money(p.price_minor)}</td>
                                         <td class="num">
