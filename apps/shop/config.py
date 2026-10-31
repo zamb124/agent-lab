@@ -55,6 +55,12 @@ class ShopSettings(BaseSettings):
         default=30.0,
         description="Таймаут ожидания результата taskiq (provisioning домена и т.п.).",
     )
+    ai_a2a_timeout_seconds: float = Field(
+        default=90.0,
+        ge=15.0,
+        le=600.0,
+        description="Бюджет ожидания A2A при вызове веток системного flow ``shop`` (describe/suggest_options), сек.",
+    )
     order_rate_limit_per_minute: int = Field(
         default=10,
         description="Заказов в минуту с одного IP на витрину (Redis-счётчик).",

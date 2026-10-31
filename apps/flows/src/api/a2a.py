@@ -7,6 +7,7 @@ Hard cut: только PascalCase методы из core.a2a.methods; 0.3 names 
 import hashlib
 import json
 from collections.abc import AsyncGenerator, Mapping
+from pathlib import Path
 from typing import TypeVar, cast
 
 from a2a.types import (
@@ -37,7 +38,9 @@ from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.channels.factory import get_channel
 from apps.flows.src.durable_execution.models import WorkflowProjectionMismatchError
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
+from apps.flows.src.services.flows_loader import FlowsLoader
 from core.a2a import (
     A2A_ERROR_CODE_NAMES,
     A2A_METHODS,
@@ -67,7 +70,13 @@ from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.context_models import Context
 from core.models.identity_models import User
-from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from core.types import (
+    JsonObject,
+    JsonValue,
+    parse_json_object,
+    parse_yaml_value,
+    require_json_object,
+)
 from core.ui_document.interface import (
     FlowInterfaceCapabilities,
     FlowInterfaceIdentity,
@@ -122,6 +131,10 @@ def _a2a_channel(
 
 
 async def _require_view_flow(di: Di, flow_id: str) -> None:
+    """View-право на flow; отсутствующий public-bundle сначала лениво материализуется,
+    чтобы Check шёл по реальным FGA-туплам (403 — только про права, не про «ещё не досеяно»)."""
+    if await FlowConfig.current_for_flow(flow_id) is None:
+        _ = await _materialize_public_bundle(di, flow_id)
     await di.authz_service.require_can_view(
         AuthzObject.flow(flow_id, company_id=_actor_company_id()), user_id=_actor_user_id()
     )
@@ -187,6 +200,7 @@ def _get_user_groups(request: Request) -> list[str]:
     if groups is None:
         groups = user.get("groups")
     return _string_list(groups)
+
 
 router = APIRouter(tags=["public", "a2a"])
 
@@ -291,10 +305,9 @@ def _validate_flow_ui_share_claims(
         return "Flow UI share token is not allowed for this flow"
     if branch_id is not None and metadata["flow_ui_share_branch_id"] != branch_id:
         return "Flow UI share token is not allowed for this branch"
-    request_origin = (
-        request.headers.get("origin", "").strip()
-        or build_service_base_url(request).rstrip("/")
-    )
+    request_origin = request.headers.get("origin", "").strip() or build_service_base_url(
+        request
+    ).rstrip("/")
     if request_origin != metadata["flow_ui_share_origin"]:
         return "Origin is not allowed for this Flow UI share token"
     return None
@@ -326,9 +339,7 @@ def _validate_flow_ui_share_request(
             return {"code": -32000, "message": "Flow UI share context mismatch"}
         metadata_raw = params_dict.get("metadata")
         if metadata_raw is None:
-            params_dict["metadata"] = {
-                "branch": token_data.metadata["flow_ui_share_branch_id"]
-            }
+            params_dict["metadata"] = {"branch": token_data.metadata["flow_ui_share_branch_id"]}
         elif isinstance(metadata_raw, dict):
             requested = _metadata_effective_branch(metadata_raw)
             expected_branch = token_data.metadata["flow_ui_share_branch_id"]
@@ -438,7 +449,7 @@ async def _embed_session_guest_turn_limit_error(
         if isinstance(count_raw, bool) or not isinstance(count_raw, (int, float, str)):
             raise ValueError("unexpected Redis EVAL response")
         n_turn = int(count_raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         logger.error(
             "embed_guest_turn_limit_bad_redis_reply",
             embed_id=embed_target.embed_id,
@@ -488,10 +499,9 @@ def _validate_embed_session_claims(
     allowed_origin = metadata.get("allowed_origin")
     if isinstance(allowed_origin, str) and allowed_origin.strip():
         # Браузер не шлёт Origin на same-origin GET: тогда origin запроса — сам сервис.
-        request_origin = (
-            request.headers.get("origin", "").strip()
-            or build_service_base_url(request).rstrip("/")
-        )
+        request_origin = request.headers.get("origin", "").strip() or build_service_base_url(
+            request
+        ).rstrip("/")
         if request_origin != allowed_origin.strip():
             return "Origin is not allowed for this embed session token"
 
@@ -542,7 +552,11 @@ def _validate_embed_session_request(
             }
 
     allowed_branch_id = _embed_session_branch_from_token_metadata(metadata)
-    if method in _EMBED_MESSAGE_METHODS and isinstance(allowed_branch_id, str) and allowed_branch_id.strip():
+    if (
+        method in _EMBED_MESSAGE_METHODS
+        and isinstance(allowed_branch_id, str)
+        and allowed_branch_id.strip()
+    ):
         effective_branch_id = allowed_branch_id.strip()
         metadata_dict = params_dict.get("metadata")
         if metadata_dict is None:
@@ -552,17 +566,20 @@ def _validate_embed_session_request(
             if request_branch is None:
                 metadata_dict["branch"] = effective_branch_id
             elif request_branch != effective_branch_id:
-                return {"code": -32000, "message": "Embed session token is not allowed for this branch"}
+                return {
+                    "code": -32000,
+                    "message": "Embed session token is not allowed for this branch",
+                }
         else:
             return {"code": -32602, "message": "Invalid params: metadata must be object"}
 
     logger.info(
         "flows.embed_session_validated",
         flow_id=flow_id,
-        branch_id=_embed_session_branch_from_token_metadata(metadata) or 'default',
+        branch_id=_embed_session_branch_from_token_metadata(metadata) or "default",
         company_id=token_data.company_id,
-        origin=request.headers.get('origin', ''),
-        issuer=metadata.get('issued_by', 'unknown'),
+        origin=request.headers.get("origin", ""),
+        issuer=metadata.get("issued_by", "unknown"),
     )
     return None
 
@@ -581,7 +598,9 @@ def _sse_error_response(rpc_id: JsonRpcId | None, code: int, message: str) -> St
 
 
 async def _get_flow_config(
-    flow_id: str, version: str | None = None,
+    flow_id: str,
+    version: str | None = None,
+    di: Di | None = None,
 ) -> FlowConfig | None:
     """
     Получает конфигурацию агента.
@@ -589,9 +608,45 @@ async def _get_flow_config(
     Аргументы:
         flow_id: ID агента
         version: Версия агента (опционально). Если не указана - возвращает latest.
+        di: DI для ленивой материализации public-bundle при промахе.
     """
     if version:
         return await FlowConfig.by_flow_id_and_version(flow_id, version)
+    config = await FlowConfig.current_for_flow(flow_id)
+    if config is None and di is not None:
+        return await _materialize_public_bundle(di, flow_id)
+    return config
+
+
+async def _materialize_public_bundle(di: Di, flow_id: str) -> FlowConfig | None:
+    """Загрузить public-bundle из registry в активную компанию при первом обращении.
+
+    Публичные bundle копируются компаниям в company_init; агент, добавленный
+    позже, доезжает до уже существующих компаний здесь — по первому запросу
+    к его flow_id. Возвращает None, если flow_id не является public-bundle
+    (дальше обычный 404).
+    """
+    flows_src_dir = Path(__file__).resolve().parents[2]
+    registry_path = flows_src_dir / "registry.yaml"
+    if not registry_path.exists():
+        return None
+    loaded = parse_yaml_value(registry_path.read_text(encoding="utf-8"), "registry.yaml")
+    registry = FlowBundleRegistry.model_validate(
+        require_json_object(loaded, "registry.yaml") if loaded is not None else {}
+    )
+    entry = next((item for item in registry.flows if item.id == flow_id), None)
+    if entry is None or not entry.public:
+        return None
+    loader = FlowsLoader(
+        bundles_dir=flows_src_dir / "bundles",
+        registry_path=registry_path,
+        flow_access_service=di.flow_access_service,
+        files_service=di.files_service,
+    )
+    try:
+        _ = await loader.reload_flow_bundle(flow_id)
+    except ValueError:
+        return None
     return await FlowConfig.current_for_flow(flow_id)
 
 
@@ -613,7 +668,7 @@ async def get_agent_card_well_known(
         v: версия агента (опционально)
     """
     await _require_view_flow(di, flow_id)
-    config = await _get_flow_config(flow_id, version=v)
+    config = await _get_flow_config(flow_id, version=v, di=di)
     if not config:
         raise WsCommandError("not_found", f"Flow '{flow_id}' not found", error_code="not_found")
 
@@ -640,7 +695,7 @@ async def get_agent_card(
         v: версия агента (опционально)
     """
     await _require_view_flow(di, flow_id)
-    config = await _get_flow_config(flow_id, version=v)
+    config = await _get_flow_config(flow_id, version=v, di=di)
     if not config:
         raise WsCommandError("not_found", f"Flow '{flow_id}' not found", error_code="not_found")
 
@@ -841,7 +896,7 @@ async def _json_rpc_handler_internal(
 
     if embed_target is None and not _is_flow_ui_share_token(token_data):
         await _require_view_flow(di, flow_id)
-    config = await _get_flow_config(flow_id, version=version)
+    config = await _get_flow_config(flow_id, version=version, di=di)
     if not config:
         version_info = f" version '{version}'" if version else ""
         return JSONResponse(
@@ -863,13 +918,18 @@ async def _json_rpc_handler_internal(
     user_groups_raw = metadata.get("__user_groups__")
     if user_groups_raw is None:
         user_groups = _get_user_groups(request)
-    elif isinstance(user_groups_raw, list) and all(isinstance(item, str) for item in user_groups_raw):
+    elif isinstance(user_groups_raw, list) and all(
+        isinstance(item, str) for item in user_groups_raw
+    ):
         user_groups = user_groups_raw
     else:
         return {
             "jsonrpc": "2.0",
             "id": rpc_id,
-            "error": {"code": -32602, "message": "Invalid params: metadata.__user_groups__ must be string array"},
+            "error": {
+                "code": -32602,
+                "message": "Invalid params: metadata.__user_groups__ must be string array",
+            },
         }
     channel_context: JsonObject = {"user_groups": user_groups}
 
@@ -941,9 +1001,7 @@ async def _json_rpc_handler_internal(
             )
 
         if method == GET_TASK_PUSH_NOTIFICATION_CONFIG:
-            params = _parse_proto_params(
-                params_dict, GetTaskPushNotificationConfigRequest
-            )
+            params = _parse_proto_params(params_dict, GetTaskPushNotificationConfigRequest)
             result = await handler.on_get_task_push_notification_config(params)
             if result is None:
                 return {"jsonrpc": "2.0", "id": rpc_id, "result": None}
@@ -955,16 +1013,12 @@ async def _json_rpc_handler_internal(
             return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
         if method == DELETE_TASK_PUSH_NOTIFICATION_CONFIG:
-            params = _parse_proto_params(
-                params_dict, DeleteTaskPushNotificationConfigRequest
-            )
+            params = _parse_proto_params(params_dict, DeleteTaskPushNotificationConfigRequest)
             await handler.on_delete_task_push_notification_config(params)
             return {"jsonrpc": "2.0", "id": rpc_id, "result": None}
 
         if method == LIST_TASK_PUSH_NOTIFICATION_CONFIGS:
-            params = _parse_proto_params(
-                params_dict, ListTaskPushNotificationConfigsRequest
-            )
+            params = _parse_proto_params(params_dict, ListTaskPushNotificationConfigsRequest)
             result = await handler.on_list_task_push_notification_configs(params)
             return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
@@ -1097,12 +1151,14 @@ async def _flow_interface_internal(
     is_share_session = _is_flow_ui_share_token(token_data)
     if embed_target is None and not is_share_session and not is_embed_session:
         await _require_view_flow(di, flow_id)
-    config = await _get_flow_config(flow_id)
+    config = await _get_flow_config(flow_id, di=di)
     if config is None:
         raise WsCommandError("not_found", f"Flow '{flow_id}' not found", error_code="not_found")
     if embed_target is None and config.branches and branch_id != "default":
         if branch_id not in config.branches:
-            raise WsCommandError("not_found", f"Branch '{branch_id}' not found", error_code="not_found")
+            raise WsCommandError(
+                "not_found", f"Branch '{branch_id}' not found", error_code="not_found"
+            )
     if is_embed_session and isinstance(token_data, TokenData):
         claims_error = _validate_embed_session_claims(
             request=request,
@@ -1154,17 +1210,10 @@ async def _flow_interface_internal(
             can_interact=share_permission != "viewer",
             can_share=(
                 not is_share_session
-                and (
-                    not is_embed_session
-                    or (look is not None and look.session_share_enabled)
-                )
+                and (not is_embed_session or (look is not None and look.session_share_enabled))
             ),
             auth_mode=(
-                "share"
-                if is_share_session
-                else "embed"
-                if is_embed_session
-                else "platform"
+                "share" if is_share_session else "embed" if is_embed_session else "platform"
             ),
         ),
         look=look,

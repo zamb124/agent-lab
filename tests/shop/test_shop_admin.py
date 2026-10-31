@@ -73,7 +73,7 @@ class TestShopCrud:
             assert resp.status_code == 409, slug
 
     async def test_slug_invalid_rejected(self, shop_client: AsyncClient) -> None:
-        for slug in ("AB", "up-case", "-lead", "trail-", "a" * 41, "с луг"):
+        for slug in ("AB", "UP Case", "up_case", "-lead", "trail-", "a" * 41, "с луг"):
             resp = await shop_client.post(
                 _SHOPS, json={"slug": slug, "name": "Bad"}
             )

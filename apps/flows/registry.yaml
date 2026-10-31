@@ -44,6 +44,11 @@ flows:
   - id: crm
     public: true
     description: "AI анализатор текста CRM заметок для извлечения entities/relationships"
+
+  # Shop агенты
+  - id: shop
+    public: true
+    description: "AI-функции витрины shop: описания товаров и предложения опций-модификаторов"
   
   # Telegram Demo
   - id: telegram_demo
@@ -166,7 +171,7 @@ tools:
 # Общие настройки по умолчанию
 defaults:
   llm:
-    provider: humanitec_llm
+    provider: linnex_llm
     model: auto
     temperature: 0.2
   channels:

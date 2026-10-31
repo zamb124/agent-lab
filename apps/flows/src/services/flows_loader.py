@@ -165,10 +165,17 @@ class FlowsLoader:
                 else:
                     failed_bundle_ids.append(bundle_id)
             except Exception as e:
-                logger.error("flows.loader.bundle_load_failed", bundle_id=bundle_id, error=str(e), exc_info=True)
+                logger.error(
+                    "flows.loader.bundle_load_failed",
+                    bundle_id=bundle_id,
+                    error=str(e),
+                    exc_info=True,
+                )
                 failed_bundle_ids.append(bundle_id)
 
-        logger.info("flows.loader.flows_loaded", count=len(loaded_flow_ids), flow_ids=loaded_flow_ids)
+        logger.info(
+            "flows.loader.flows_loaded", count=len(loaded_flow_ids), flow_ids=loaded_flow_ids
+        )
         if failed_bundle_ids:
             logger.warning(
                 "flows.loader.bundles_failed",
@@ -407,11 +414,7 @@ class FlowsLoader:
                 "store_card_image_url": store_card_image_url,
                 "hidden": raw_hidden,
                 "depends_on_flow_ids": depends_on_flow_ids,
-                **(
-                    {"interface": raw_interface}
-                    if raw_interface is not None
-                    else {}
-                ),
+                **({"interface": raw_interface} if raw_interface is not None else {}),
             }
         )
 
@@ -475,8 +478,9 @@ class FlowsLoader:
                 logger.warning("flows.loader.node_missing_id", nodes_path=str(nodes_path))
                 continue
 
-            # Инлайним промпт из файла
+            # Инлайним промпт и схему structured output из файлов
             raw_node = self._inline_prompt_from_file(raw_node, bundle_dir)
+            raw_node = self._inline_output_schema_file(raw_node, bundle_dir)
             raw_node = await self._materialize_node_files(raw_node, node_id, bundle_dir.name)
 
             # Конвертируем tools в List[ToolReference]
@@ -517,6 +521,9 @@ class FlowsLoader:
                     "llm": llm_config,
                     "llm_context": llm_context,
                     "llm_context_resource_key": raw_node.get("llm_context_resource_key"),
+                    "llm_capability": raw_node.get("llm_capability"),
+                    "structured_output": raw_node.get("structured_output", False),
+                    "output_schema": raw_node.get("output_schema"),
                     "react": raw_node.get("react"),
                     "code": raw_node.get("code"),
                     "parameters_schema": raw_node.get("parameters_schema"),
@@ -819,9 +826,16 @@ class FlowsLoader:
             node["code"] = source
             del node["function"]
 
-            logger.debug("flows.loader.node_code_inlined", node_id=node_id, function_path=function_path)
+            logger.debug(
+                "flows.loader.node_code_inlined", node_id=node_id, function_path=function_path
+            )
         except Exception as e:
-            logger.error("flows.loader.node_code_load_failed", node_id=node_id, function_path=function_path, error=str(e))
+            logger.error(
+                "flows.loader.node_code_load_failed",
+                node_id=node_id,
+                function_path=function_path,
+                error=str(e),
+            )
 
     async def _load_branches_with_prompts(
         self, bundle_dir: Path, config: JsonObject
@@ -915,7 +929,9 @@ class FlowsLoader:
                             node_config["description"] = tool_ref.description
                         if tool_ref.parameters_schema and not node_config.get("parameters_schema"):
                             node_config["parameters_schema"] = tool_ref.parameters_schema
-                        logger.debug("flows.loader.tool_code_inlined", node_id=node_id, tool_id=tool_id)
+                        logger.debug(
+                            "flows.loader.tool_code_inlined", node_id=node_id, tool_id=tool_id
+                        )
                     else:
                         raise ValueError(
                             f"Node '{node_id}' type=tool references tool_id='{tool_id}' which was not found in tools_cache"
@@ -991,13 +1007,20 @@ class FlowsLoader:
             # Полностью определённые inline tools (не требуют поиска в кэшах)
             if exec_kind == "flow":
                 flow_ref = FlowToolReference.model_validate(tool_payload)
-                logger.debug("flows.loader.inline_flow_tool", context=context, tool_id=flow_ref.tool_id)
+                logger.debug(
+                    "flows.loader.inline_flow_tool", context=context, tool_id=flow_ref.tool_id
+                )
                 return require_json_object(
                     flow_ref.model_dump(mode="json", exclude_none=True),
                     f"{context}.flow_tool",
                 )
             if exec_kind in _INLINE_SELF_CONTAINED_TOOL_TYPES:
-                logger.debug("flows.loader.inline_tool", context=context, tool_id=tool_id, exec_kind=exec_kind)
+                logger.debug(
+                    "flows.loader.inline_tool",
+                    context=context,
+                    tool_id=tool_id,
+                    exec_kind=exec_kind,
+                )
                 return tool_payload
             if code_mode == CodeMode.MCP_TOOL.value:
                 logger.debug("flows.loader.inline_mcp_tool", context=context, tool_id=tool_id)
@@ -1113,7 +1136,9 @@ class FlowsLoader:
             if node_config.type == "llm_node":
                 self._validate_llm_node_tools(node_config.node_id, inlined_tools)
 
-        logger.debug("flows.loader.node_as_tool_inlined", context=context, node_id=node_config.node_id)
+        logger.debug(
+            "flows.loader.node_as_tool_inlined", context=context, node_id=node_config.node_id
+        )
         return result
 
     def _get_node_from_cache(self, node_id: str) -> NodeConfig | None:
@@ -1221,10 +1246,17 @@ class FlowsLoader:
                 else:
                     failed_bundle_ids.append(bundle_id)
             except Exception as e:
-                logger.error("flows.loader.bundle_load_failed", bundle_id=bundle_id, error=str(e), exc_info=True)
+                logger.error(
+                    "flows.loader.bundle_load_failed",
+                    bundle_id=bundle_id,
+                    error=str(e),
+                    exc_info=True,
+                )
                 failed_bundle_ids.append(bundle_id)
 
-        logger.info("flows.loader.company_flows_loaded", company_id=company_id, count=len(loaded_flow_ids))
+        logger.info(
+            "flows.loader.company_flows_loaded", company_id=company_id, count=len(loaded_flow_ids)
+        )
         if failed_bundle_ids:
             logger.warning(
                 "flows.loader.bundles_failed",
@@ -1249,9 +1281,7 @@ class FlowsLoader:
         if raw_deps is None:
             return []
         if not isinstance(raw_deps, list):
-            raise ValueError(
-                f"Bundle '{bundle_name}': depends_on_flow_ids must be list[str]"
-            )
+            raise ValueError(f"Bundle '{bundle_name}': depends_on_flow_ids must be list[str]")
         deps: list[str] = []
         for item in raw_deps:
             if not isinstance(item, str) or not item.strip():

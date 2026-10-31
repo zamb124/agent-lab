@@ -16,6 +16,7 @@
 - ReflectionNode - typed critic / test-time compute gate
 - ResourceNode - нода-ресурс на графе (identity / pass-through)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +24,7 @@ import json
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
-from typing import ClassVar, Literal, TypeAlias, overload, override
+from typing import ClassVar, Literal, TypeAlias, cast, overload, override
 
 from a2a.types import Artifact, Message, Part
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
@@ -65,6 +66,7 @@ from apps.flows.src.models.enums import ChannelType, NodeToolCallType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.models.hitl_schemas import HitlInterruptSnapshot, build_hitl_handoff_command
+from apps.flows.src.models.node_config import LLMCapability
 from apps.flows.src.models.resource import ResourceType
 from apps.flows.src.reflection import (
     CriticPolicy,
@@ -126,6 +128,7 @@ from apps.flows.src.tools.materialize import ToolMaterializeInput
 from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from apps.flows.tools.tables.tables import TABLES_TOOLS
 from core.a2a import artifact_from_json_dict, mapping_from_struct, struct_from_mapping
+from core.ai.providers import LLM_CAPABILITY_VALUES
 from core.ai.runtime import create_llm_client_from_call_config
 from core.authz.service import AuthzService
 from core.capabilities import (
@@ -366,7 +369,9 @@ def _config_parameters_schema(config: JsonObject) -> JsonObject | None:
     return schema
 
 
-def _config_resource_refs(config: JsonObject, field_name: str = "resources") -> dict[str, ResourceReferenceInput]:
+def _config_resource_refs(
+    config: JsonObject, field_name: str = "resources"
+) -> dict[str, ResourceReferenceInput]:
     raw = _config_mapping_default(config, field_name)
     out: dict[str, ResourceReferenceInput] = {}
     for resource_key, resource_value in raw.items():
@@ -473,7 +478,9 @@ class BaseNode(ABC):
         self.execution: FlowExecutionContext = execution
         self.redis_client: RedisClient = redis_client
         self.input_mapping: JsonObject | None = _config_mapping(self.config, "input_mapping")
-        self.output_mapping: dict[str, str] | None = _config_string_map(self.config, "output_mapping")
+        self.output_mapping: dict[str, str] | None = _config_string_map(
+            self.config, "output_mapping"
+        )
         self.save_to_messages: bool = _config_bool(self.config, "save_to_messages", False)
         self.message_field: str | None = _config_optional_string(self.config, "message_field")
         self.messages_filter: Literal["all", "own"] | list[str] = _config_messages_filter(
@@ -513,13 +520,9 @@ class BaseNode(ABC):
                 + f"before execution: {state.session_id!r}"
             )
         if state.durable_execution_branch_id is None:
-            raise RuntimeError(
-                f"Node '{self.node_id}' requires durable execution_branch_id"
-            )
+            raise RuntimeError(f"Node '{self.node_id}' requires durable execution_branch_id")
         if state.durable_node_schedule_sequence is None:
-            raise RuntimeError(
-                f"Node '{self.node_id}' requires NodeScheduled.sequence"
-            )
+            raise RuntimeError(f"Node '{self.node_id}' requires NodeScheduled.sequence")
 
     async def _run_durable_activity(
         self,
@@ -552,9 +555,7 @@ class BaseNode(ABC):
             else self._durable_activity_id(state, activity_type, input_payload)
         )
         resolved_idempotency_key = (
-            idempotency_key
-            if idempotency_key is not None
-            else resolved_activity_id
+            idempotency_key if idempotency_key is not None else resolved_activity_id
         )
         completed = await self.execution.activities.schedule(
             session_id=state.session_id,
@@ -592,7 +593,9 @@ class BaseNode(ABC):
                 error=str(exc),
             )
             if not completed_failed:
-                raise RuntimeError(f"Failed to mark activity as failed: {resolved_activity_id!r}") from exc
+                raise RuntimeError(
+                    f"Failed to mark activity as failed: {resolved_activity_id!r}"
+                ) from exc
             raise
 
         state_delta = build_state_delta(before_state, state)
@@ -675,16 +678,10 @@ class BaseNode(ABC):
             return list(all_messages)
 
         if self.messages_filter == "own":
-            return [
-                m for m in all_messages
-                if self._get_message_node_id(m) == self.node_id
-            ]
+            return [m for m in all_messages if self._get_message_node_id(m) == self.node_id]
 
         allowed = set(self.messages_filter)
-        return [
-            m for m in all_messages
-            if self._get_message_node_id(m) in allowed
-        ]
+        return [m for m in all_messages if self._get_message_node_id(m) in allowed]
 
     def _get_filtered_messages(self, state: ExecutionState) -> list[Message]:
         return self.get_filtered_messages(state)
@@ -768,11 +765,11 @@ class BaseNode(ABC):
             if nto is None:
                 raise
             raise NodeWallClockTimeoutError(self.node_id, nto) from e
-        except (FlowInterrupt, BreakpointInterrupt):
+        except FlowInterrupt, BreakpointInterrupt:
             raise
         except asyncio.CancelledError:
             raise
-        except (SystemExit, KeyboardInterrupt):
+        except SystemExit, KeyboardInterrupt:
             raise
         except Exception as e:
             enabled, allow_types = node_exception_policy(self.config)
@@ -964,6 +961,7 @@ class BaseNode(ABC):
         new_state.current_nodes = []
 
         return new_state
+
 
 class LlmNode(BaseNode):
     """
@@ -1351,8 +1349,7 @@ class LlmNode(BaseNode):
         if not node_resources_raw:
             node_resources_raw = _config_resource_refs(self.config)
         explicit = bool(
-            base.llm_context_resource_key
-            and str(base.llm_context_resource_key).strip()
+            base.llm_context_resource_key and str(base.llm_context_resource_key).strip()
         )
         has_node_resources = bool(node_resources_raw)
         if state is None:
@@ -1461,6 +1458,7 @@ class LlmNode(BaseNode):
 
         exc_response = False
         exc_allow: list[ExceptionAbsorbAllowName] = []
+        llm_capability: LLMCapability | None = None
         if self.config:
             if "exception_as_response" in self.config:
                 exc_response = bool(self.config["exception_as_response"])
@@ -1469,6 +1467,16 @@ class LlmNode(BaseNode):
                 if not isinstance(raw_allow, list):
                     raise ValueError("exception_allow_types: expected list[str]")
                 exc_allow = [ExceptionAbsorbAllowName(str(item)) for item in raw_allow]
+            raw_capability = self.config.get("llm_capability")
+            if raw_capability is not None:
+                if (
+                    not isinstance(raw_capability, str)
+                    or raw_capability not in LLM_CAPABILITY_VALUES
+                ):
+                    raise ValueError(
+                        f"llm_capability: expected one of {sorted(LLM_CAPABILITY_VALUES)}, got {raw_capability!r}"
+                    )
+                llm_capability = cast(LLMCapability, raw_capability)
         resources = {
             key: ResourceReference.model_validate(value)
             for key, value in _config_resource_refs(self.config).items()
@@ -1483,6 +1491,7 @@ class LlmNode(BaseNode):
             llm=llm_config,
             llm_context=llm_context,
             llm_context_resource_key=llm_context_resource_key,
+            llm_capability=llm_capability,
             resources=resources,
             react=react_config,
             structured_output=structured_output,
@@ -1520,9 +1529,7 @@ class LlmNode(BaseNode):
         _ = state
         return prompt_template, variables
 
-    async def after_prompt_render(
-        self, rendered_prompt: str, state: ExecutionState
-    ) -> str:
+    async def after_prompt_render(self, rendered_prompt: str, state: ExecutionState) -> str:
         """
         Хук вызывается ПОСЛЕ рендеринга промпта.
         Переопределите для модификации финального промпта.
@@ -1536,6 +1543,7 @@ class LlmNode(BaseNode):
         """
         _ = state
         return rendered_prompt
+
 
 class CodeNode(BaseNode):
     """
@@ -1561,7 +1569,11 @@ class CodeNode(BaseNode):
 
         self.language: str = _config_string(cfg, "language", "python")
         raw_entrypoint = cfg.get("entrypoint")
-        self.entrypoint: str | None = raw_entrypoint.strip() if isinstance(raw_entrypoint, str) and raw_entrypoint.strip() else None
+        self.entrypoint: str | None = (
+            raw_entrypoint.strip()
+            if isinstance(raw_entrypoint, str) and raw_entrypoint.strip()
+            else None
+        )
         raw_code = cfg.get("code")
         self.code: str | None = raw_code if isinstance(raw_code, str) else None
         raw_tool_id = cfg.get("tool_id")
@@ -1800,14 +1812,10 @@ class FlowNode(BaseNode):
     def _require_parent_child_scope(self, state: ExecutionState) -> tuple[str, int]:
         execution_branch_id = state.durable_execution_branch_id
         if execution_branch_id is None:
-            raise RuntimeError(
-                f"Flow node '{self.node_id}' requires durable execution_branch_id"
-            )
+            raise RuntimeError(f"Flow node '{self.node_id}' requires durable execution_branch_id")
         node_schedule_sequence = state.durable_node_schedule_sequence
         if node_schedule_sequence is None:
-            raise RuntimeError(
-                f"Flow node '{self.node_id}' requires NodeScheduled.sequence"
-            )
+            raise RuntimeError(f"Flow node '{self.node_id}' requires NodeScheduled.sequence")
         return execution_branch_id, node_schedule_sequence
 
     def _child_context_id(
@@ -1845,13 +1853,10 @@ class FlowNode(BaseNode):
         self,
         child_session_id: str,
     ) -> WorkflowExecutionPosition:
-        position = await self.execution.active_position(
-            child_session_id
-        )
+        position = await self.execution.active_position(child_session_id)
         if position is None:
             raise RuntimeError(
-                "Child workflow durable position not found: "
-                + f"{child_session_id!r}"
+                "Child workflow durable position not found: " + f"{child_session_id!r}"
             )
         return position
 
@@ -2158,8 +2163,7 @@ class FlowNode(BaseNode):
                     and payload.child_session_id == link.child_session_id
                     and payload.child_execution_branch_id == link.child_execution_branch_id
                     and payload.parent_execution_branch_id == link.parent_execution_branch_id
-                    and payload.parent_node_schedule_sequence
-                    == link.parent_node_schedule_sequence
+                    and payload.parent_node_schedule_sequence == link.parent_node_schedule_sequence
                 ):
                     return True
             if not history or offset + len(history) >= total:
@@ -2507,13 +2511,8 @@ class CodeAgentNode(BaseNode):
                 exp=execution_token_exp(flows_settings.capability_execution_token_ttl_seconds),
             )
             execution_token = issue_execution_token(claims)
-            files = await self.code_agent_source_service.list_files(
-                catalog_id=catalog_id
-            )
-            llm_url = (
-                f"{settings.server.get_service_url('flows').rstrip('/')}"
-                "/flows/api/v1/llm/v1"
-            )
+            files = await self.code_agent_source_service.list_files(catalog_id=catalog_id)
+            llm_url = f"{settings.server.get_service_url('flows').rstrip('/')}/flows/api/v1/llm/v1"
             gateway_url = settings.server.get_service_url("capability_gateway").rstrip("/")
             platform_env = self._platform_env(
                 execution_token=execution_token,
@@ -2834,7 +2833,9 @@ class MCPNode(BaseNode):
         server_id = self.server_id
         tool_name = self.tool_name
 
-        server = await MCPServerConfig.get(MCPServerConfig.server_row_id_for_active_company(server_id))
+        server = await MCPServerConfig.get(
+            MCPServerConfig.server_row_id_for_active_company(server_id)
+        )
         if not server:
             raise ValueError(f"MCP server not found: {server_id}")
 
@@ -2844,7 +2845,9 @@ class MCPNode(BaseNode):
         tool_id = mcp_tool_reference_id(server_id, tool_name)
         tool_ref = await ToolReference.get(ToolReference.row_id_for_active_company(tool_id))
         if tool_ref is None:
-            logger.info("flows.mcpnode.syncing.missing.toolreference", node_id=self.node_id, tool_id=tool_id)
+            logger.info(
+                "flows.mcpnode.syncing.missing.toolreference", node_id=self.node_id, tool_id=tool_id
+            )
             try:
                 _tool_ids, _tools = await sync_mcp_server_tools(
                     variables_service=self.variables_service,
@@ -2863,9 +2866,7 @@ class MCPNode(BaseNode):
         mcp_contract = tool_ref.require_mcp_contract()
 
         variables = require_json_object(state.variables, "state.variables")
-        headers_hash = hash_state_json(
-            require_json_object(request_headers, "mcp.request_headers")
-        )
+        headers_hash = hash_state_json(require_json_object(request_headers, "mcp.request_headers"))
         variables_hash = hash_state_json(variables)
 
         input_payload = require_json_object(
@@ -2941,9 +2942,7 @@ class DatasourceNode(BaseNode):
         self.datasource_id: str | None = _config_optional_string(cfg, "datasource_id")
         raw_operation = cfg.get("datasource_operation")
         if not isinstance(raw_operation, str) or not raw_operation.strip():
-            raise ValueError(
-                f"DatasourceNode '{self.node_id}': datasource_operation is required"
-            )
+            raise ValueError(f"DatasourceNode '{self.node_id}': datasource_operation is required")
         self.datasource_operation: DatasourceOperation = DatasourceOperation(raw_operation)
         self.sql: str | None = _config_optional_string(cfg, "sql")
         self.state_mapping: dict[str, str] = _config_string_map_default(cfg, "state_mapping")
@@ -2980,9 +2979,7 @@ class DatasourceNode(BaseNode):
                 protocol_result = await service.introspect(datasource_id, executors=executors)
             elif operation is DatasourceOperation.QUERY:
                 if sql is None or not sql.strip():
-                    raise ValueError(
-                        f"DatasourceNode '{self.node_id}': sql is required for query"
-                    )
+                    raise ValueError(f"DatasourceNode '{self.node_id}': sql is required for query")
                 protocol_result = await service.query(
                     datasource_id, sql, params, executors=executors
                 )
@@ -3182,9 +3179,7 @@ class HitlNode(BaseNode):
     def _resolve_hitl_text(self, template: str, state: ExecutionState) -> str:
         raw = template.strip()
         if not raw:
-            raise ValueError(
-                f"hitl_node {self.node_id}: empty title/message template"
-            )
+            raise ValueError(f"hitl_node {self.node_id}: empty title/message template")
         return MappingResolver.resolve_interpolated_string(
             raw,
             state,
@@ -3195,15 +3190,11 @@ class HitlNode(BaseNode):
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         ctx = get_request_context()
         if ctx is None or ctx.active_company is None:
-            raise ValueError(
-                f"hitl_node {self.node_id}: Context with active_company is required"
-            )
+            raise ValueError(f"hitl_node {self.node_id}: Context with active_company is required")
         company_id = ctx.active_company.company_id
         cid_resume = state.hitl_handoff_correlation_id
         if isinstance(cid_resume, str) and cid_resume.strip():
-            existing_resume = await WorkItem.any_by_correlation_id(
-                company_id, cid_resume.strip()
-            )
+            existing_resume = await WorkItem.any_by_correlation_id(company_id, cid_resume.strip())
             if existing_resume is None:
                 raise ValueError(
                     f"hitl_node {self.node_id}: resume with correlation_id={cid_resume!r}, "
@@ -3272,24 +3263,16 @@ class HitlNode(BaseNode):
                 + "(user_facing_message / question / handoff_user_message)"
             )
 
-        raw_mode = (
-            inputs.get("handoff_mode")
-            or self.config.get("handoff_mode")
-            or "single_reply"
-        )
+        raw_mode = inputs.get("handoff_mode") or self.config.get("handoff_mode") or "single_reply"
         mode = HandoffMode(str(raw_mode).strip())
 
         svc = self.hitl_work_item_service
         task_title = self._resolve_hitl_text(str(title_raw), state)
         question = self._resolve_hitl_text(str(message_raw), state)
         if not task_title:
-            raise ValueError(
-                f"hitl_node {self.node_id}: task_title is empty after resolve"
-            )
+            raise ValueError(f"hitl_node {self.node_id}: task_title is empty after resolve")
         if not question:
-            raise ValueError(
-                f"hitl_node {self.node_id}: user message is empty after resolve"
-            )
+            raise ValueError(f"hitl_node {self.node_id}: user message is empty after resolve")
         handoff_command = build_hitl_handoff_command(
             state=state,
             node_id=self.node_id,
@@ -3548,7 +3531,9 @@ class ReflectionNode(BaseNode):
                 error=str(exc),
             )
             if not completed_failed:
-                raise RuntimeError(f"Failed to mark reflection activity as failed: {activity_id!r}") from exc
+                raise RuntimeError(
+                    f"Failed to mark reflection activity as failed: {activity_id!r}"
+                ) from exc
             raise
 
         completed_ok = await self.execution.activities.complete(

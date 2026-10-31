@@ -1027,6 +1027,7 @@
         "wave_stop_warehouse_mismatch": "Stop transfer belongs to another warehouse",
         "address_required": "Delivery address is required",
         "ai_empty_result": "AI returned an empty result",
+        "ai_upstream": "AI operation is unavailable, try again later",
         "below_min_order": "Order total is below the minimum",
         "category_not_found": "Category not found",
         "delivery_disabled": "Delivery is disabled by the shop",

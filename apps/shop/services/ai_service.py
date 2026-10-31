@@ -1,90 +1,162 @@
-"""AI-функции shop поверх канонического AI-рантайма платформы.
+"""AI-функции shop: все операции — ветки компанийского flow ``shop`` по A2A.
 
-Никаких собственных LLM-клиентов: описания — `chat_for_capability`
-(`LLM_VISION` при наличии фото, иначе `LLM_CHAT`), улучшение и генерация
-фото — `NanoBananaClient` (capability `IMAGE_GEN`). Биллинг и pre-flight
-баланса живут внутри platform-клиентов.
+Промпты и схемы живут в bundle ``apps/flows/bundles/shop`` и редактируются на
+компанию во flow-редакторе — в коде промптов нет. Сервис передаёт только
+структурированные variables (A2A metadata) и файлы (Part.raw → state.files):
+``describe_photo`` — vision-описание по фото, ``enhance_photo`` и
+``generate_photo`` — image_gen ноды (референсы из state.files, ответ
+``{"file_ids": [...]}``).
 """
 
 from __future__ import annotations
 
+import base64
 import re
 
-from a2a.helpers.proto_helpers import get_message_text
-from a2a.types import Part, Role
 from pydantic import TypeAdapter
 
+from apps.shop.config import ShopSettings
 from apps.shop.models.api import ShopAiOptionSuggestion
-from core.ai.providers import AICapability
-from core.ai.runtime import chat_for_capability
-from core.clients.llm.messages import build_a2a_message
-from core.clients.nano_banana import NanoBananaClient
-from core.db.storage import SharedStorage
-from core.errors.boundary import PlatformNotFoundError
+from core.clients.a2a_client import A2AClient, A2AClientError, A2ATaskResult
+from core.config import get_settings
+from core.errors.boundary import PlatformNotFoundError, PlatformUnavailableError
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SystemPrincipal
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
 
-_JSON_ARRAY_RE = re.compile(r"\[.*\]", re.DOTALL)
+_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
-_DESCRIBE_PROMPT = """Ты копирайтер ресторанного меню. Напиши аппетитное описание блюда
-«{name}»{category_hint} на русском языке.
-
-Требования:
-- 1-2 предложения, до 160 символов
-- подчёркивает вкус и подачу, без канцелярита
-- без цены, без эмодзи, без кавычек
-- только текст описания, ничего больше"""
-
-_ENHANCE_PROMPT = """Enhance this food/product photo for a restaurant menu storefront:
-improve lighting, color grading and sharpness, make the dish look appetising.
-Keep the exact same dish, plating and composition. Photorealistic, menu-grade."""
-
-_GENERATE_PROMPT = """Professional menu photograph of «{name}»{desc_hint}:
-appetising, well-lit, shallow depth of field, restaurant-grade food styling,
-clean background, photorealistic, square composition."""
-
-_SUGGEST_OPTIONS_PROMPT = """Ты помогаешь ресторану настроить добавки к блюду
-«{name}»{group_hint}.
-
-Предложи 5-8 релевантных опций-модификаторов (добавки, топпинги или варианты),
-которые гости обычно выбирают к такому блюду.
-
-Ответь строго JSON-массивом без пояснений:
-[{{"name": "Название опции", "price_minor": цена в копейках}}]
-
-Требования:
-- name — короткое название на русском (1-3 слова)
-- price_minor — реалистичная цена в копейках (0 для бесплатных, обычно 3000-15000)
-- только валидный JSON, ничего больше"""
+_FLOW_ID = "shop"
+_BRANCH_DESCRIBE = "describe"
+_BRANCH_DESCRIBE_PHOTO = "describe_photo"
+_BRANCH_SUGGEST_OPTIONS = "suggest_options"
+_BRANCH_ENHANCE_PHOTO = "enhance_photo"
+_BRANCH_GENERATE_PHOTO = "generate_photo"
 
 
 class ShopAiService:
-    """AI-операции магазина: описания и фото товаров."""
+    """AI-операции магазина через ветки компанийского flow ``shop`` по A2A."""
 
-    def __init__(self, shared_storage: SharedStorage) -> None:
-        self._storage: SharedStorage = shared_storage
-        self._images: NanoBananaClient = NanoBananaClient(storage=shared_storage)
+    def __init__(self, settings: ShopSettings) -> None:
+        self._a2a: A2AClient = A2AClient(timeout=settings.ai_a2a_timeout_seconds)
 
-    async def _read_file_part(self, file_id: str) -> Part:
-        raw = await self._storage.get(f"file:{file_id}")
-        if not raw:
-            raise PlatformNotFoundError(
-                "file not found", error_code="file_not_found"
+    async def _flow_task(
+        self,
+        branch_id: str,
+        *,
+        content: str,
+        variables: JsonObject,
+        parts: list[JsonObject] | None = None,
+    ) -> A2ATaskResult:
+        """Вызов ветки flow ``shop``: variables через metadata, файлы — Part.raw."""
+        flows_base_url = get_settings().server.get_flows_service_url().rstrip("/")
+        try:
+            return await self._a2a.send_task(
+                base_url=f"{flows_base_url}/flows/api/v1/{_FLOW_ID}",
+                content=content,
+                branch_id=branch_id,
+                metadata={"variables": variables},
+                timeout=self._a2a.timeout,
+                parts=parts,
             )
-        record = FileRecord.model_validate_json(raw)
+        except A2AClientError as exc:
+            raise PlatformUnavailableError(
+                f"ai flow task failed: {exc}", error_code="ai_upstream"
+            ) from exc
+
+    async def _flow_text(
+        self,
+        branch_id: str,
+        *,
+        content: str,
+        variables: JsonObject,
+        parts: list[JsonObject] | None = None,
+    ) -> str:
+        """Вызов ветки flow и извлечение текста ответа."""
+        response = await self._flow_task(
+            branch_id, content=content, variables=variables, parts=parts
+        )
+        text = response.response.strip()
+        if not text:
+            raise PlatformNotFoundError("ai returned empty result", error_code="ai_empty_result")
+        return text
+
+    async def _flow_json(
+        self,
+        branch_id: str,
+        *,
+        content: str,
+        variables: JsonObject,
+        parts: list[JsonObject] | None = None,
+    ) -> JsonObject:
+        """Вызов ветки flow и извлечение structured output: data-парты artifacts/history, затем JSON из текста."""
+        response = await self._flow_task(
+            branch_id, content=content, variables=variables, parts=parts
+        )
+
+        def _data_from_parts(parts_raw: JsonValue) -> list[JsonObject]:
+            if not isinstance(parts_raw, list):
+                return []
+            found: list[JsonObject] = []
+            for item in parts_raw:
+                if not isinstance(item, dict):
+                    continue
+                part = require_json_object(item, "a2a.part")
+                data = part.get("data")
+                if isinstance(data, dict):
+                    found.append(TypeAdapter(JsonObject).validate_python(data))
+            return found
+
+        candidates: list[JsonObject] = []
+        history = response.task.get("history")
+        if isinstance(history, list):
+            for message in history:
+                if isinstance(message, dict):
+                    candidates.extend(_data_from_parts(message.get("parts")))
+        for artifact in response.artifacts:
+            candidates.extend(_data_from_parts(artifact.get("parts")))
+
+        # Data-part {"content": "<json/text>"} — обёртка текстового артефакта:
+        # внутренний JSON-объект приоритетнее самой обёртки.
+        for candidate in candidates:
+            inner = candidate.get("content")
+            if isinstance(inner, str):
+                match = _JSON_OBJECT_RE.search(inner)
+                if match is not None:
+                    try:
+                        return TypeAdapter(JsonObject).validate_json(match.group(0))
+                    except Exception:
+                        continue
+        if candidates:
+            return candidates[0]
+        text = response.response.strip()
+        match = _JSON_OBJECT_RE.search(text)
+        if match is not None:
+            return TypeAdapter(JsonObject).validate_json(match.group(0))
+        raise PlatformNotFoundError(
+            "ai returned no structured payload", error_code="ai_empty_result"
+        )
+
+    async def _read_file_part(self, file_id: str) -> JsonObject:
+        """Байты файла как A2A Part.raw (base64 на проводе) для передачи в flow."""
+        record = await FileRecord.get(file_id)
+        if record is None:
+            raise PlatformNotFoundError("file not found", error_code="file_not_found")
         handle = await FileGate().open_record(
             record, SystemPrincipal(company_id=record.company_id or "")
         )
         data = await handle.read_bytes()
         if not data:
-            raise PlatformNotFoundError(
-                "file empty", error_code="file_not_found"
-            )
-        return Part(raw=data, media_type=record.content_type, filename=file_id)
+            raise PlatformNotFoundError("file empty", error_code="file_not_found")
+        return {
+            "raw": base64.b64encode(data).decode("ascii"),
+            "mediaType": record.content_type,
+            "filename": file_id,
+        }
 
     async def describe_product(
         self,
@@ -93,77 +165,84 @@ class ShopAiService:
         category_name: str | None = None,
         photo_file_id: str | None = None,
     ) -> str:
-        """Описание блюда: по названию, а при наличии фото — vision по снимку."""
-        category_hint = f" в категории «{category_name}»" if category_name else ""
-        prompt = _DESCRIBE_PROMPT.format(name=name, category_hint=category_hint)
-        parts: list[Part] = [Part(text=prompt)]
-        capability = AICapability.LLM_CHAT
+        """Описание блюда: ветка ``describe``; по фото — vision-ветка ``describe_photo``."""
+        variables: JsonObject = {"product_name": name}
+        if category_name:
+            variables["category_name"] = category_name
         if photo_file_id:
-            parts.append(await self._read_file_part(photo_file_id))
-            capability = AICapability.LLM_VISION
-        response = await chat_for_capability(
-            capability,
-            [build_a2a_message(role=Role.ROLE_USER, parts=parts)],
-        )
-        text = get_message_text(response).strip().strip('"').strip()
-        if not text:
-            raise PlatformNotFoundError(
-                "ai returned empty description", error_code="ai_empty_result"
+            text = await self._flow_text(
+                _BRANCH_DESCRIBE_PHOTO,
+                content=f"Опиши блюдо «{name}» по фотографии",
+                variables=variables,
+                parts=[
+                    {"text": f"Опиши блюдо «{name}» по фотографии"},
+                    await self._read_file_part(photo_file_id),
+                ],
             )
-        return text[:500]
+        else:
+            text = await self._flow_text(
+                _BRANCH_DESCRIBE,
+                content=f"Опиши блюдо «{name}»",
+                variables=variables,
+            )
+        return text.strip('"').strip()[:500]
 
     async def suggest_options(
         self, *, product_name: str, group_name: str | None = None
     ) -> list[ShopAiOptionSuggestion]:
-        """Опции-модификаторы к блюду: LLM предлагает добавки с ценами."""
-        group_hint = f" для группы «{group_name}»" if group_name else ""
-        prompt = _SUGGEST_OPTIONS_PROMPT.format(
-            name=product_name, group_hint=group_hint
+        """Опции-модификаторы к блюду: ветка ``suggest_options`` (structured output)."""
+        variables: JsonObject = {"product_name": product_name}
+        if group_name:
+            variables["group_name"] = group_name
+        payload = await self._flow_json(
+            _BRANCH_SUGGEST_OPTIONS,
+            content=f"Предложи опции к блюду «{product_name}»",
+            variables=variables,
         )
-        response = await chat_for_capability(
-            AICapability.LLM_CHAT,
-            [build_a2a_message(role=Role.ROLE_USER, parts=[Part(text=prompt)])],
+        items_raw = payload.get("options")
+        if not isinstance(items_raw, list) or not items_raw:
+            raise PlatformNotFoundError("ai returned empty options", error_code="ai_empty_result")
+        return TypeAdapter(list[ShopAiOptionSuggestion]).validate_python(items_raw)[:20]
+
+    async def _flow_file_id(
+        self,
+        branch_id: str,
+        *,
+        content: str,
+        variables: JsonObject,
+        parts: list[JsonObject] | None = None,
+    ) -> str:
+        """Ветка image_gen: разбор ``{"file_ids": [...]}`` из structured/text ответа."""
+        payload = await self._flow_json(
+            branch_id, content=content, variables=variables, parts=parts
         )
-        text = get_message_text(response).strip()
-        match = _JSON_ARRAY_RE.search(text)
-        if match is None:
-            raise PlatformNotFoundError(
-                "ai returned no options", error_code="ai_empty_result"
-            )
-        items = TypeAdapter(list[ShopAiOptionSuggestion]).validate_json(
-            match.group(0)
-        )
-        if not items:
-            raise PlatformNotFoundError(
-                "ai returned empty options", error_code="ai_empty_result"
-            )
-        return items[:20]
+        file_ids_raw = payload.get("file_ids")
+        if not isinstance(file_ids_raw, list) or not file_ids_raw:
+            raise PlatformNotFoundError("ai returned no image", error_code="ai_empty_result")
+        file_id = file_ids_raw[0]
+        if not isinstance(file_id, str) or not file_id.strip():
+            raise PlatformNotFoundError("ai returned no image", error_code="ai_empty_result")
+        return file_id
 
     async def enhance_product_photo(self, *, file_id: str) -> str:
-        """Улучшение фото блюда через image_gen — возвращает новый file_id."""
-        file_ids = await self._images.generate_images(
-            prompt=_ENHANCE_PROMPT,
-            reference_file_ids=[file_id],
-            num_images=1,
-            is_editing=True,
+        """Улучшение фото блюда: ветка ``enhance_photo`` (image_gen с референсом) → file_id."""
+        return await self._flow_file_id(
+            _BRANCH_ENHANCE_PHOTO,
+            content="Улучши фотографию для витрины",
+            variables={},
+            parts=[
+                {"text": "Улучши фотографию для витрины"},
+                await self._read_file_part(file_id),
+            ],
         )
-        if not file_ids:
-            raise PlatformNotFoundError(
-                "ai returned no image", error_code="ai_empty_result"
-            )
-        return file_ids[0]
 
-    async def generate_product_photo(
-        self, *, name: str, description: str = ""
-    ) -> str:
-        """Генерация фото товара с нуля — возвращает file_id."""
-        desc_hint = f" — {description}" if description else ""
-        file_ids = await self._images.generate_images(
-            prompt=_GENERATE_PROMPT.format(name=name, desc_hint=desc_hint),
-            num_images=1,
+    async def generate_product_photo(self, *, name: str, description: str = "") -> str:
+        """Генерация фото товара с нуля: ветка ``generate_photo`` (image_gen) → file_id."""
+        variables: JsonObject = {"product_name": name}
+        if description:
+            variables["description"] = description
+        return await self._flow_file_id(
+            _BRANCH_GENERATE_PHOTO,
+            content=f"Сгенерируй фотографию «{name}»",
+            variables=variables,
         )
-        if not file_ids:
-            raise PlatformNotFoundError(
-                "ai returned no image", error_code="ai_empty_result"
-            )
-        return file_ids[0]

@@ -1027,6 +1027,7 @@
         "wave_stop_warehouse_mismatch": "Остановка принадлежит другому складу",
         "address_required": "Укажите адрес доставки",
         "ai_empty_result": "AI вернул пустой результат",
+        "ai_upstream": "AI-операция недоступна, попробуйте позже",
         "below_min_order": "Сумма заказа меньше минимальной",
         "category_not_found": "Категория не найдена",
         "delivery_disabled": "Доставка отключена магазином",

@@ -200,6 +200,17 @@ class TestA2AAgentCard:
             assert "id" in skill_entry, "skill entry MUST have 'id'"
             assert "name" in skill_entry, "skill entry MUST have 'name'"
 
+    @pytest.mark.asyncio
+    async def test_public_bundle_lazy_materialize(self, client, auth_headers_system):
+        """Новый public-bundle материализуется в компанию при первом обращении к flow_id."""
+        deleted = await client.delete("/flows/api/v1/flows/shop", headers=auth_headers_system)
+        assert deleted.status_code in (200, 403, 404)
+        resp = await client.get("/flows/api/v1/shop", headers=auth_headers_system)
+        assert resp.status_code == 200
+        card = resp.json()
+        skill_ids = {str(skill.get("id")) for skill in card.get("skills", [])}
+        assert {"describe", "suggest_options"} <= skill_ids
+
 
 class TestA2AMessageSend:
     """Тесты SendMessage - строгая проверка Task response."""

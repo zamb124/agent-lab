@@ -403,22 +403,26 @@ class TestModifierSnapshot:
 
 
 class TestAiSuggestOptions:
-    async def test_suggest_options_returns_items_or_clean_error(
+    async def test_suggest_options_flow_branch(
         self, shop_client: AsyncClient, unique_id: str
     ) -> None:
-        """AI-предложение опций: MockLLM в TESTING или честная ошибка провайдера."""
+        """AI-предложение опций идёт через ветку suggest_options системного flow ``shop``.
+
+        Под MockLLM flow возвращает схему-заглушку ``{"options": []}`` → сервис
+        отвечает честным ``ai_empty_result``; 200 с items — на живом провайдере.
+        """
         shop, _ = await _shop_with_product(shop_client, f"ais-{unique_id[:8]}")
         resp = await shop_client.post(
             f"{_SHOPS}/{shop['shop_id']}/ai/suggest-options",
             json={"product_name": "Пицца Маргарита", "group_name": "Добавки"},
         )
-        assert resp.status_code in (200, 400, 404, 409, 503)
         if resp.status_code == 200:
             items = resp.json()["items"]
             assert items
             assert all("name" in i and "price_minor" in i for i in items)
         else:
-            assert resp.json().get("error_code") or resp.json().get("error")
+            assert resp.status_code == 404, resp.text
+            assert resp.json()["error_code"] == "ai_empty_result"
 
     async def test_suggest_options_requires_shop(
         self, shop_client: AsyncClient

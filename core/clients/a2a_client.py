@@ -189,12 +189,16 @@ class A2AClient:
         *,
         timeout: float | None = None,
         task_id: str | None = None,
+        parts: Sequence[JsonObject] | None = None,
     ) -> A2ATaskResult:
         """Convenience SendMessage with a single text Part.
 
         Internal callers (CRM skills, remote_flow) do not hold the peer HTTP
         worker for the graph: SendMessageConfiguration.returnImmediately=true,
         then GetTask until terminal/interrupted or timeout.
+
+        `parts` заменяет одиночный text-Part целиком — для вызовов с файлами
+        (`{"raw": <base64>, "mediaType": ..., "filename": ...}`).
         """
         context_id = session_id or str(uuid.uuid4())
         final_metadata: JsonObject = dict(metadata) if metadata is not None else {}
@@ -206,7 +210,7 @@ class A2AClient:
         enqueue_timeout = min(_SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS, overall_timeout)
         submitted = await self.send_message(
             base_url,
-            parts=[{"text": content}],
+            parts=list(parts) if parts is not None else [{"text": content}],
             context_id=context_id,
             task_id=task_id,
             metadata=final_metadata or None,

@@ -1,0 +1,120 @@
+{
+  "flow_id": "shop",
+  "name": "Shop AI Flow",
+  "description": "AI-функции витрины: описания блюд и товаров (текст и по фото), предложения опций-модификаторов, улучшение и генерация фото. Ветки вызываются сервисом shop через A2A; промпты редактируются прямо здесь на компанию.",
+  "version": "1.0.0",
+  "entry": "main",
+  "variables": {
+    "interface_language_code": "ru",
+    "interface_language_name": "русском"
+  },
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "prompt": "prompts/main.md",
+      "llm": {
+        "model": "auto",
+        "temperature": 0.3,
+        "provider": "linnex_llm"
+      },
+      "tools": [],
+      "output_key": "response"
+    }
+  },
+  "edges": [],
+  "branches": {
+    "describe": {
+      "name": "Product description",
+      "description": "Аппетитное описание блюда/товара по названию и категории. Вход: variables.product_name, variables.category_name (опц.). Выход: текст описания.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/describe.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.7,
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "suggest_options": {
+      "name": "Modifier options suggestions",
+      "description": "Релевантные опции-модификаторы к блюду с ценами. Вход: variables.product_name, variables.group_name (опц.). Выход: {options: [{name, price_minor}]}.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/suggest_options.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.4,
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/suggest_options.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "describe_photo": {
+      "name": "Product description by photo",
+      "description": "Аппетитное описание блюда/товара по фотографии. Вход: variables.product_name, variables.category_name (опц.), image-файл в state.files. Выход: текст описания.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/describe_photo.md",
+          "llm_capability": "llm_vision",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.7,
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "enhance_photo": {
+      "name": "Enhance product photo",
+      "description": "Улучшение фотографии блюда/товара для витрины. Вход: image-файл в state.files (референс, режим редактирования), variables.product_name (опц.). Выход: {\"file_ids\": [file_id]}.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/enhance_photo.md",
+          "llm_capability": "image_gen",
+          "llm": {
+            "model": "auto",
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "generate_photo": {
+      "name": "Generate product photo",
+      "description": "Генерация фотографии товара с нуля. Вход: variables.product_name, variables.description (опц.). Выход: {\"file_ids\": [file_id]}.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/generate_photo.md",
+          "llm_capability": "image_gen",
+          "llm": {
+            "model": "auto",
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    }
+  }
+}

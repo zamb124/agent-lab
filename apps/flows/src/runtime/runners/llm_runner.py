@@ -18,6 +18,7 @@ from typing import ClassVar, override
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
     Message,
+    Part,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
 )
@@ -33,6 +34,7 @@ from apps.flows.src.durable_execution import (
     build_state_delta,
     hash_state_json,
 )
+from apps.flows.src.files.state_file_refs import upsert_state_file
 from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.runtime.a2a_messages import (
@@ -96,6 +98,7 @@ from core.a2a import (
     message_to_json_dict,
     part_has_text,
 )
+from core.ai.providers import AICapability
 from core.ai.runtime import create_llm_client_from_call_config
 from core.clients.llm import (
     LLMClient,
@@ -109,9 +112,14 @@ from core.clients.llm.mock_control import (
     resolve_llm_node_mock,
     resolve_tool_mock_result,
 )
+from core.clients.nano_banana import NanoBananaClient
 from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.errors import FlowExecutionError, ToolExecutionError
+from core.files.file_ref import stored_file_ref
+from core.files.models import FileRecord
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.llm_context import (
     LLMContextBlock,
     LLMContextProfile,
@@ -305,6 +313,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         self.agent_skill_host: AgentSkillRuntimeHost | None = agent_skill_host
         if self.agent_skill_host is not None:
             self.agent_skill_host.ensure_index_block()
+        self._vision_bytes: dict[str, bytes] = {}
 
     async def _checkpoint_state(
         self,
@@ -629,10 +638,74 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 )
                 await self._checkpoint_state(state)
 
+        effective_llm = resolve_effective_llm_config_for_node(self.node_config)
+        if effective_llm.capability == AICapability.IMAGE_GEN:
+            await self._run_image_gen(
+                state, user_content, context_id=context_id, task_id=task_id
+            )
+            return
+
         async for event in self._react_loop(
             state, llm_node_label, context_id, task_id, emitter
         ):
             yield event
+
+    async def _run_image_gen(
+        self,
+        state: ExecutionState,
+        user_content: str,
+        *,
+        context_id: str,
+        task_id: str,
+    ) -> None:
+        """Исполнение ``image_gen`` ноды: промпт + image-референсы ``state.files`` → file_ids.
+
+        Image-файлы из ``state.files`` идут референсами генерации; их наличие
+        включает режим редактирования (enhance), отсутствие — генерацию с нуля.
+        Результат — ``{"file_ids": [...]}`` в ``state.response``, FileRef'ы
+        дописываются в ``state.files``.
+        """
+        sid = self._source_node_id()
+        system_prompt = await self._render_prompt(state)
+        prompt = system_prompt
+        if user_content.strip():
+            prompt = (
+                f"{system_prompt}\n\n{user_content.strip()}"
+                if system_prompt.strip()
+                else user_content.strip()
+            )
+        references = [
+            ref
+            for ref in state.files
+            if ref.file_id is not None
+            and bool(ref.file_id.strip())
+            and ref.content_type.startswith("image/")
+        ]
+        file_ids = await NanoBananaClient().generate_images(
+            prompt=prompt,
+            reference_file_ids=[ref.file_id for ref in references if ref.file_id is not None]
+            or None,
+            num_images=1,
+            is_editing=bool(references),
+        )
+        if not file_ids:
+            raise FlowExecutionError(
+                message=f"LLM node '{sid}': image_gen returned no files",
+                payload={"node_id": sid},
+            )
+        for file_id in file_ids:
+            record = await FileRecord.get(file_id)
+            if record is None:
+                raise ValueError(f"image_gen produced unknown file: {file_id}")
+            upsert_state_file(state, stored_file_ref(record))
+        response = json.dumps({"file_ids": file_ids}, ensure_ascii=False)
+        state.messages.append(
+            new_assistant_message(
+                response, sid, None, context_id=context_id, task_id=task_id
+            )
+        )
+        state.response = response
+        await self._checkpoint_state(state)
 
     def _messages_to_dict(self, messages: Sequence[Message | JsonObject]) -> list[JsonObject]:
         """Конвертирует Message объекты в dict для трейсинга."""
@@ -893,6 +966,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         iteration, llm_node_label, trace_ctx=trace_ctx
                     ):
                         llm_messages = [system_msg] + messages
+                        llm_call_messages = llm_messages
+                        if effective_llm.capability == AICapability.LLM_VISION:
+                            llm_call_messages = await self._with_vision_file_parts(
+                                state, llm_messages
+                            )
                         content = ""
                         tool_calls: list[LLMToolCall] | None = None
                         had_reasoning_event = False
@@ -928,7 +1006,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 async for event in self._call_llm(
                                     llm,
                                     max_tok,
-                                    llm_messages,
+                                    llm_call_messages,
                                     tools_schema,
                                     context_id,
                                     task_id,
@@ -1289,6 +1367,62 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     tracer.record_state_snapshot(llm_node_span, state.model_dump(mode="json", exclude_none=False))
                     await self._close_context_memory_window(state)
                     await self._checkpoint_state(state)
+
+    async def _with_vision_file_parts(
+        self,
+        state: ExecutionState,
+        messages: list[Message],
+    ) -> list[Message]:
+        """``llm_vision``: байты image-файлов ``state.files`` — Parts последнего user-сообщения.
+
+        Инжекция только в исходящий вызов, в ``state.messages`` сырьё не пишется
+        (в durable state живут FileRef'ы); байты кешируются на прогон ноды.
+        """
+        image_refs = [
+            ref
+            for ref in state.files
+            if ref.file_id is not None
+            and bool(ref.file_id.strip())
+            and ref.content_type.startswith("image/")
+        ]
+        if not image_refs:
+            return messages
+        last_user_index = -1
+        for index in range(len(messages) - 1, -1, -1):
+            if messages[index].role == ROLE_USER:
+                last_user_index = index
+                break
+        if last_user_index < 0:
+            return messages
+        vision_message = Message()
+        vision_message.CopyFrom(messages[last_user_index])
+        for ref in image_refs:
+            if ref.file_id is None:
+                continue
+            vision_message.parts.append(
+                Part(
+                    raw=await self._vision_file_bytes(ref.file_id),
+                    media_type=ref.content_type,
+                    filename=ref.original_name or ref.file_id,
+                )
+            )
+        injected = list(messages)
+        injected[last_user_index] = vision_message
+        return injected
+
+    async def _vision_file_bytes(self, file_id: str) -> bytes:
+        cached = self._vision_bytes.get(file_id)
+        if cached is not None:
+            return cached
+        record = await FileRecord.get(file_id)
+        if record is None:
+            raise ValueError(f"llm_vision: file not found: {file_id}")
+        handle = await FileGate().open_record(
+            record, SystemPrincipal(company_id=record.company_id or "")
+        )
+        data = await handle.read_bytes()
+        self._vision_bytes[file_id] = data
+        return data
 
     def _resolve_llm_client(
         self,

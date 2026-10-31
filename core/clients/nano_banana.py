@@ -1,7 +1,7 @@
 """Клиент генерации изображений через platform LLM capability."""
 
 import re
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import Message, Part, Role
@@ -16,9 +16,6 @@ from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SystemPrincipal
 from core.logging import get_logger
 
-if TYPE_CHECKING:
-    from core.db.storage import Storage
-
 logger = get_logger(__name__)
 
 
@@ -32,15 +29,7 @@ class NanoBananaClient:
     Клиент для генерации изображений через platform LLM capability.
     """
 
-    def __init__(
-        self,
-        storage: "Storage",
-    ) -> None:
-        """
-        Аргументы:
-            storage: Storage для работы с БД
-        """
-        self._storage: Storage = storage
+    def __init__(self) -> None:
         self._llm: _ChatLLM | None = None
 
     def _create_image_generation_client(self) -> _ChatLLM:
@@ -98,14 +87,12 @@ class NanoBananaClient:
             logger.info("image.generate.references", count=len(reference_file_ids))
 
             for idx, file_id in enumerate(reference_file_ids):
-                file_key = f"file:{file_id}"
-                file_data_json = await self._storage.get(file_key)
+                file_record = await FileRecord.get(file_id)
 
-                if not file_data_json:
+                if file_record is None:
                     logger.warning("image.generate.file_missing", file_id=file_id)
                     continue
 
-                file_record = FileRecord.model_validate_json(file_data_json)
                 if file_record.company_id is None or file_record.company_id == "":
                     logger.warning("image.generate.file_missing_company", file_id=file_id)
                     continue
@@ -160,13 +147,11 @@ class NanoBananaClientFactory:
     """Фабрика для создания Nano Banana клиентов"""
 
     @staticmethod
-    def create_client(storage: "Storage") -> NanoBananaClient:
+    def create_client() -> NanoBananaClient:
         """Создает клиент на основе конфигурации"""
         settings = get_settings()
 
         if not settings.nano_banana.enabled:
             raise ValueError("Nano Banana is not configured")
 
-        return NanoBananaClient(
-            storage=storage,
-        )
+        return NanoBananaClient()
