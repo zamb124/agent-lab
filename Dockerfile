@@ -43,7 +43,8 @@ RUN npm ci
 COPY tsconfig.json tsconfig.base.json ./
 COPY scripts/build/ui.ts ./scripts/build/ui.ts
 COPY core/frontend/static ./core/frontend/static
-COPY tests/ui/design-system/components ./tests/ui/design-system/components
+COPY core/i18n/translations ./core/i18n/translations
+COPY tests/ ./tests/
 COPY apps/ ./apps/
 RUN npm run typecheck:ui \
     && npm run build:ui \
