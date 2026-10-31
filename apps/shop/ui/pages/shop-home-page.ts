@@ -1,0 +1,198 @@
+/**
+ * Магазины компании: карточки витрин, создание первого магазина в два поля,
+ * быстрые действия (меню, вид, заказы, открыть витрину).
+ */
+
+import { html, css } from 'lit';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-empty-state.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
+
+const STATUS_TONES: Record<string, string> = {
+    draft: 'var(--text-tertiary)',
+    published: 'var(--success)',
+    suspended: 'var(--warning)',
+};
+
+export class ShopHomePage extends PlatformPage {
+    static i18nNamespace = 'shop';
+
+    private _shops: ResourceController;
+    private _createOp: OpController;
+    private _newName = '';
+    private _newSlug = '';
+    private _slugTouched = false;
+
+    static override properties = {
+        _newName: { state: true },
+        _newSlug: { state: true },
+    };
+
+    static override styles = [
+        PlatformPage.styles,
+        css`
+            :host { display: block; height: 100%; overflow-y: auto; }
+            .wrap { max-width: 1100px; margin: 0 auto; padding: var(--space-6); }
+            h1 { margin: 0 0 var(--space-1); font-size: var(--text-2xl); color: var(--text-primary); }
+            .sub { color: var(--text-tertiary); font-size: var(--text-sm); margin-bottom: var(--space-5); }
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                gap: var(--space-4);
+            }
+            .card {
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                padding: var(--space-4);
+                background: var(--bg-surface);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .card-head { display: flex; align-items: center; gap: var(--space-2); }
+            .card-name { font-weight: var(--font-semibold); color: var(--text-primary); flex: 1; }
+            .status { font-size: var(--text-xs); font-weight: var(--font-medium); }
+            .slug { color: var(--text-tertiary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+            .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: auto; }
+            .create {
+                border: 1px dashed var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                padding: var(--space-4);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .create-title { font-weight: var(--font-medium); color: var(--text-primary); }
+            .hint { color: var(--text-tertiary); font-size: var(--text-xs); }
+        `,
+    ];
+
+    constructor() {
+        super();
+        this._shops = this.useResource('shop/shops');
+        this._createOp = this.useOp('shop/shop_create');
+    }
+
+    async onRouteActive(): Promise<void> {
+        await this._shops.load();
+    }
+
+    private _slugify(name: string): string {
+        const map: Record<string, string> = {
+            'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+            'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+            'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+            'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+            'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+        };
+        return name
+            .toLowerCase()
+            .split('')
+            .map((ch) => map[ch] ?? ch)
+            .join('')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 40);
+    }
+
+    private async _create() {
+        const slug = (this._newSlug || this._slugify(this._newName)).trim();
+        if (this._newName.trim() === '' || slug.length < 3) return;
+        const result = await this._createOp.run({ name: this._newName.trim(), slug });
+        if (result !== null) {
+            this._newName = '';
+            this._newSlug = '';
+            this._slugTouched = false;
+            await this._shops.load();
+            const created = result as { shop_id?: string };
+            if (created && typeof created.shop_id === 'string') {
+                this.navigate('shop_menu', { shopId: created.shop_id });
+            }
+        }
+    }
+
+    private _statusLabel(status: string) {
+        return this.t(`status.${status}`);
+    }
+
+    override render() {
+        const items = this._shops.items;
+        return html`
+            <div class="wrap">
+                <h1>${this.t('home.title')}</h1>
+                <div class="sub">${this.t('home.subtitle')}</div>
+                ${this._shops.loading && items.length === 0
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                    : html`
+                        <div class="grid">
+                            ${items.map((row) => {
+                                const shop = row as Record<string, unknown>;
+                                const shopId = String(shop.shop_id);
+                                const status = String(shop.status);
+                                return html`
+                                    <div class="card">
+                                        <div class="card-head">
+                                            <span class="card-name">${shop.name}</span>
+                                            <span class="status" style="color:${STATUS_TONES[status] ?? 'var(--text-tertiary)'}">
+                                                ${this._statusLabel(status)}
+                                            </span>
+                                        </div>
+                                        <span class="slug">${shop.slug}.linnex.io</span>
+                                        <div class="actions">
+                                            <platform-button size="sm" variant="primary" @click=${() => this.navigate('shop_menu', { shopId })}>
+                                                ${this.t('home.open_menu')}
+                                            </platform-button>
+                                            <platform-button size="sm" @click=${() => this.navigate('shop_builder', { shopId })}>
+                                                ${this.t('home.open_builder')}
+                                            </platform-button>
+                                            <platform-button size="sm" @click=${() => this.navigate('shop_orders', { shopId })}>
+                                                ${this.t('home.open_orders')}
+                                            </platform-button>
+                                            <platform-button size="sm" @click=${() => this.navigate('shop_settings', { shopId })}>
+                                                ${this.t('home.open_settings')}
+                                            </platform-button>
+                                        </div>
+                                    </div>
+                                `;
+                            })}
+                            <div class="create">
+                                <div class="create-title">${this.t('home.create_title')}</div>
+                                <platform-field
+                                    type="text"
+                                    mode="edit"
+                                    label=${this.t('home.field_name')}
+                                    .value=${this._newName}
+                                    @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                                        this._newName = typeof event.detail.value === 'string' ? event.detail.value : '';
+                                        if (!this._slugTouched) this._newSlug = this._slugify(this._newName);
+                                    }}
+                                ></platform-field>
+                                <platform-field
+                                    type="text"
+                                    mode="edit"
+                                    label=${this.t('home.field_slug')}
+                                    .value=${this._newSlug}
+                                    @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                                        this._slugTouched = true;
+                                        this._newSlug = typeof event.detail.value === 'string' ? event.detail.value : '';
+                                    }}
+                                ></platform-field>
+                                <div class="hint">${this._newSlug || this._slugify(this._newName) || 'my-shop'}.linnex.io</div>
+                                <platform-button
+                                    variant="primary"
+                                    ?busy=${this._createOp.busy}
+                                    ?disabled=${this._newName.trim() === ''}
+                                    @click=${() => this._create()}
+                                >${this.t('home.create_button')}</platform-button>
+                            </div>
+                        </div>
+                    `}
+            </div>
+        `;
+    }
+}
+
+customElements.define('shop-home-page', ShopHomePage);

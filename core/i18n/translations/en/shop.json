@@ -56,7 +56,9 @@
         "ai_enhance": "Enhance photo with AI",
         "save": "Save",
         "cancel": "Cancel",
-        "edit": "Edit"
+        "edit": "Edit",
+        "ai_generate": "Generate photo",
+        "ai_generate_hint": "AI draws an appetising dish photo from the name"
     },
     "builder": {
         "title": "Storefront appearance",
@@ -72,20 +74,22 @@
     "orders": {
         "title": "Orders",
         "empty": "No orders yet",
+        "fee": "Delivery",
+        "total": "Total",
         "status": {
             "new": "New",
             "accepted": "Accepted",
-            "cooking": "Cooking",
+            "preparing": "Preparing",
             "delivering": "Delivering",
             "done": "Done",
-            "rejected": "Rejected"
+            "cancelled": "Cancelled"
         },
         "action": {
             "accepted": "Accept",
-            "cooking": "Cook",
+            "preparing": "Start cooking",
             "delivering": "Deliver",
             "done": "Complete",
-            "rejected": "Reject"
+            "cancelled": "Cancel"
         },
         "delivery": {
             "delivery": "Delivery",
@@ -124,7 +128,12 @@
         "field_bot_token": "Bot token",
         "qr_hint": "Print the QR code and place it on tables or the storefront — guests open the menu via camera.",
         "qr_download": "Download QR (SVG)",
-        "embed_hint": "Embed the menu on your site:"
+        "embed_hint": "Embed the menu on your site:",
+        "logo": "Logo",
+        "cover": "Storefront cover",
+        "upload": "Upload",
+        "replace_photo": "Replace",
+        "brand_hint": "Logo and cover are the first things a guest sees"
     },
     "toast": {
         "shop_created": "Shop created",

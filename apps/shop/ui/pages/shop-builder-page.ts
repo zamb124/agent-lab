@@ -1,0 +1,233 @@
+/**
+ * Внешний вид витрины: шаблонные пресеты + акцентный цвет + живое превью.
+ * Директор выбирает шаблон и цвет — витрина пересобирается автоматически.
+ */
+
+import { html, css } from 'lit';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-empty-state.js';
+
+const PRESETS = ['menu', 'grid', 'compact'] as const;
+
+const ACCENTS = ['#e2553f', '#f2a33c', '#34c47c', '#3f8cff', '#9b5de5', '#ef476f', '#111827', '#0f766e'];
+
+export class ShopBuilderPage extends PlatformPage {
+    static i18nNamespace = 'shop';
+
+    declare shopId: string;
+
+    private _shops: ResourceController;
+    private _updateOp: OpController;
+    private _preset = 'menu';
+    private _accent = '#e2553f';
+    private _savedPreset = 'menu';
+    private _savedAccent = '#e2553f';
+
+    static override properties = {
+        shopId: { type: String, attribute: 'shop-id' },
+        _preset: { state: true },
+        _accent: { state: true },
+    };
+
+    static override styles = [
+        PlatformPage.styles,
+        css`
+            :host { display: block; height: 100%; overflow: hidden; }
+            .layout {
+                display: grid;
+                grid-template-columns: 340px 1fr;
+                height: 100%;
+            }
+            .panel {
+                padding: var(--space-6);
+                overflow-y: auto;
+                border-right: 1px solid var(--glass-border-subtle);
+            }
+            h1 { margin: 0 0 var(--space-4); font-size: var(--text-2xl); color: var(--text-primary); }
+            .section { margin-bottom: var(--space-5); }
+            .label { font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--text-secondary); margin-bottom: var(--space-2); }
+            .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+            .preset {
+                border: 2px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                padding: var(--space-2);
+                background: var(--bg-surface);
+                cursor: pointer;
+                text-align: center;
+                color: var(--text-primary);
+                transition: border-color 0.15s ease, transform 0.15s ease;
+            }
+            .preset:hover { transform: translateY(-1px); }
+            .preset.active { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+            .wire {
+                height: 72px;
+                border-radius: var(--radius-md);
+                background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                padding: 6px;
+                margin-bottom: var(--space-2);
+            }
+            .wire .hero { height: 16px; border-radius: 4px; background: var(--accent); opacity: 0.85; }
+            .wire .ln { height: 9px; border-radius: 3px; background: color-mix(in srgb, var(--text-primary) 22%, transparent); display: flex; gap: 4px; align-items: center; }
+            .wire .ln::before { content: ''; width: 9px; height: 9px; border-radius: 3px; background: var(--accent); flex-shrink: 0; }
+            .wire .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; flex: 1; }
+            .wire .tile { border-radius: 4px; background: color-mix(in srgb, var(--text-primary) 22%, transparent); position: relative; }
+            .wire .tile::after { content: ''; position: absolute; left: 3px; right: 3px; bottom: 3px; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.8; }
+            .wire .dense { height: 7px; border-radius: 3px; background: color-mix(in srgb, var(--text-primary) 22%, transparent); }
+            .wire .dense::after { content: ''; display: block; margin-left: auto; width: 12px; height: 7px; border-radius: 3px; background: var(--accent); opacity: 0.8; }
+            .preset .name { font-size: var(--text-xs); font-weight: var(--font-medium); display: block; padding-bottom: var(--space-1); }
+            .swatches { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+            .swatch {
+                width: 40px;
+                height: 40px;
+                border-radius: var(--radius-md);
+                border: 3px solid transparent;
+                cursor: pointer;
+            }
+            .swatch.active { border-color: var(--text-primary); }
+            .actions { display: flex; gap: var(--space-2); }
+            .preview {
+                position: relative;
+                background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .preview iframe {
+                width: 420px;
+                height: 100%;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: #0f1218;
+                margin: var(--space-4) 0;
+            }
+            .preview-url {
+                position: absolute;
+                top: var(--space-2);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            @media (max-width: 900px) {
+                .layout { grid-template-columns: 1fr; }
+                .preview { display: none; }
+            }
+        `,
+    ];
+
+    constructor() {
+        super();
+        this._shops = this.useResource('shop/shops');
+        this._updateOp = this.useOp('shop/shop_update');
+    }
+
+    async onRouteActive(): Promise<void> {
+        await this._shops.load();
+        this._hydrate();
+    }
+
+    private _shop(): Record<string, unknown> | null {
+        const row = this._shops.items.find((s) => (s as Record<string, unknown>).shop_id === this.shopId);
+        return row === undefined ? null : (row as Record<string, unknown>);
+    }
+
+    private _hydrate() {
+        const shop = this._shop();
+        if (shop === null) return;
+        const theme = (shop.theme ?? {}) as Record<string, unknown>;
+        this._preset = typeof theme.preset === 'string' ? theme.preset : 'menu';
+        this._accent = typeof theme.accent_color === 'string' ? theme.accent_color : '#e2553f';
+        this._savedPreset = this._preset;
+        this._savedAccent = this._accent;
+    }
+
+    private get _dirty(): boolean {
+        return this._preset !== this._savedPreset || this._accent !== this._savedAccent;
+    }
+
+    private _wireframe(preset: string) {
+        if (preset === 'grid') {
+            return html`<span class="wire"><span class="hero"></span><span class="tiles"><span class="tile"></span><span class="tile"></span><span class="tile"></span><span class="tile"></span></span></span>`;
+        }
+        if (preset === 'compact') {
+            return html`<span class="wire"><span class="hero"></span><span class="dense"></span><span class="dense"></span><span class="dense"></span><span class="dense"></span></span>`;
+        }
+        return html`<span class="wire"><span class="hero"></span><span class="ln"></span><span class="ln"></span><span class="ln"></span></span>`;
+    }
+
+    private async _save() {
+        const result = await this._updateOp.run({
+            shop_id: this.shopId,
+            theme: { preset: this._preset, accent_color: this._accent },
+        });
+        if (result !== null) {
+            this._savedPreset = this._preset;
+            this._savedAccent = this._accent;
+            await this._shops.load();
+        }
+    }
+
+    override render() {
+        const shop = this._shop();
+        if (shop === null) {
+            return html`<platform-empty-state loading></platform-empty-state>`;
+        }
+        const storefrontUrl = typeof shop.storefront_url === 'string' ? shop.storefront_url : '';
+        return html`
+            <div class="layout">
+                <div class="panel">
+                    <h1>${this.t('builder.title')}</h1>
+                    <div class="section">
+                        <div class="label">${this.t('builder.preset_label')}</div>
+                        <div class="presets">
+                            ${PRESETS.map((key) => html`
+                                <button
+                                    class="preset ${this._preset === key ? 'active' : ''}"
+                                    @click=${() => { this._preset = key; }}
+                                >
+                                    ${this._wireframe(key)}
+                                    <span class="name">${this.t(`builder.preset_${key}`)}</span>
+                                </button>
+                            `)}
+                        </div>
+                    </div>
+                    <div class="section">
+                        <div class="label">${this.t('builder.accent_label')}</div>
+                        <div class="swatches">
+                            ${ACCENTS.map((c) => html`
+                                <button
+                                    class="swatch ${this._accent === c ? 'active' : ''}"
+                                    style="background:${c}"
+                                    @click=${() => { this._accent = c; }}
+                                ></button>
+                            `)}
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <platform-button
+                            variant="primary"
+                            ?busy=${this._updateOp.busy}
+                            ?disabled=${!this._dirty}
+                            @click=${() => this._save()}
+                        >${this.t('builder.save')}</platform-button>
+                        <platform-button ?disabled=${!this._dirty} @click=${() => { this._preset = this._savedPreset; this._accent = this._savedAccent; }}>
+                            ${this.t('builder.reset')}
+                        </platform-button>
+                    </div>
+                </div>
+                <div class="preview">
+                    <span class="preview-url">${storefrontUrl}</span>
+                    ${storefrontUrl === ''
+                        ? html`<platform-empty-state icon="store" title=${this.t('builder.preview_unavailable')}></platform-empty-state>`
+                        : html`<iframe src=${storefrontUrl} title="storefront"></iframe>`}
+                </div>
+            </div>
+        `;
+    }
+}
+
+customElements.define('shop-builder-page', ShopBuilderPage);
