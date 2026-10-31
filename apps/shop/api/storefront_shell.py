@@ -42,6 +42,10 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .ob-open{{color:#4ade80}}
 .ob-closed{{color:#f0b45c}}
 .tabs{{position:sticky;top:0;z-index:5;display:flex;gap:8px;overflow-x:auto;padding:12px 2px;background:linear-gradient(180deg,var(--bg) 85%,transparent);scrollbar-width:none}}
+.msearch{{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:10px 18px;margin:10px 0 2px}}
+.msearch svg{{opacity:.5;flex-shrink:0}}
+.msearch input{{flex:1;min-width:0;font:inherit;font-size:15px;background:transparent;border:0;color:var(--text);outline:none}}
+.msearch input::placeholder{{color:var(--muted)}}
 .tabs::-webkit-scrollbar{{display:none}}
 .tabs button{{font:inherit;font-size:14.5px;padding:9px 16px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--card);cursor:pointer;white-space:nowrap;transition:all .15s}}
 .tabs button.on{{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}}
@@ -158,6 +162,8 @@ function saveCart(){{try{{localStorage.setItem(CART_KEY,JSON.stringify([...cart.
 function loadCart(){{try{{const raw=localStorage.getItem(CART_KEY);if(!raw)return;
   for(const[k,l]of JSON.parse(raw)){{if(l&&byId(l.pid))cart.set(k,{{pid:l.pid,qty:l.qty||1,sel:new Map(l.sel||[])}});}}}}catch(e){{}}}}
 const app=document.getElementById('app');
+let query='';
+window.menuSearch=v=>{{query=v.trim().toLowerCase();renderMenu();}};
 const NEST=S.modifier_nested_groups||{{}};
 const byId=id=>S.products.find(x=>x.id===id);
 function esc(s){{return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
@@ -201,10 +207,24 @@ function render(){{
   let h=`<div class="hero">${{photo(S.cover_file_id,'bg')}}<div class="veil"></div><div class="head">${{photo(S.logo_file_id,'logo')}}<div><h1 class="serif">${{esc(S.name)}}</h1>${{S.description?`<div class="desc">${{esc(S.description)}}</div>`:''}}</div></div></div>
   <div class="meta">${{hb?`<span class="${{hb.open?'ob-open':'ob-closed'}}">${{hb.t}}</span>`:''}}${{S.city||S.address?`<span>📍 ${{esc([S.city,S.address].filter(Boolean).join(', '))}}</span>`:''}}${{S.phone?`<span>☎ ${{esc(S.phone)}}</span>`:''}}${{S.delivery_enabled?'<span>🛵 Доставка</span>':''}}${{S.pickup_enabled?'<span>🛍 Самовывоз</span>':''}}</div>`;
   if(!S.products.length){{app.innerHTML=h+`<div class="empty">Меню скоро появится</div>`;return;}}
-  h+=`<div class="tabs">${{cats.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}${{other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}}</div>`;
+  h+=`<div id="msw"></div><div id="menu"></div>`;
+  app.innerHTML=h;
+  if(S.products.length>=6){{document.getElementById('msw').innerHTML=`<div class="msearch"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Поиск по меню" autocomplete="off" oninput="menuSearch(this.value)"></div>`;}}
+  renderMenu();
+}}
+function renderMenu(){{
+  const menu=document.getElementById('menu');if(!menu)return;
+  const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
+  const other=S.products.filter(p=>!p.category_id);
+  if(query){{
+    const hits=S.products.filter(p=>p.name.toLowerCase().includes(query)||(p.description||'').toLowerCase().includes(query));
+    menu.innerHTML=hits.length?ITEMS(hits):`<div class="empty">По запросу «${{esc(query)}}» ничего не нашлось</div>`;
+    return;
+  }}
+  let h=`<div class="tabs">${{cats.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}${{other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}}</div>`;
   for(const c of cats){{h+=`<h2 class="cat serif" id="c-${{c.id}}">${{esc(c.name)}}</h2>`+ITEMS(S.products.filter(p=>p.category_id===c.id));}}
   if(other.length){{h+=`<h2 class="cat serif" id="c-other">Ещё</h2>`+ITEMS(other);}}
-  app.innerHTML=h;
+  menu.innerHTML=h;
 }}
 window.jump=id=>{{document.getElementById('c-'+id)?.scrollIntoView({{behavior:'smooth',block:'start'}});}};
 window.addPlain=(pid,d)=>{{const key=pid+'#';const l=cart.get(key)||{{pid,sel:new Map(),qty:0}};

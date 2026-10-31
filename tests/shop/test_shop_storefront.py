@@ -229,6 +229,8 @@ class TestStorefrontPage:
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert "hoursBadge" in html.text
         assert "предзаказ" in html.text
+        assert "menuSearch" in html.text
+        assert "msearch" in html.text
 
     async def test_light_theme_renders_light_palette(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
