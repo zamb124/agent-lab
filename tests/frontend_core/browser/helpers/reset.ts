@@ -14,6 +14,10 @@ import {
     registerFactory,
     collectFactories,
 } from '@platform/lib/events/index.js';
+import type { EventEffect } from '@platform/lib/events/bus.js';
+import type { RouterRoute } from '@platform/lib/events/reducers/router.js';
+import type { SliceDef } from '@platform/lib/events/reducers/index.js';
+import type { CollectableFactory } from '@platform/lib/events/factories/register.js';
 import { _resetResourceRegistryForTests } from '@platform/lib/events/factories/_internal.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
 import { setPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
@@ -28,22 +32,22 @@ const TEST_PLATFORM_BRAND = {
     baseDomain: 'localhost',
     portSuffix: ':8002',
     protocol: 'http',
-    platformName: 'Humanitec',
-    supportEmail: 'support@humanitec.ru',
+    platformName: 'Linnex',
+    supportEmail: 'support@linnex.io',
     logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
     apexOrigin: 'http://localhost:8002/',
-    supportedDomains: ['humanitec.ru', 'linnex.io', 'localhost', 'lvh.me'],
-    modelsProductName: 'Humanitec Models',
-    voiceProductName: 'Humanitec Voice',
-    llmsDisplayLabel: 'Humanitec LLMs',
-    flowsProductLabel: 'Humanitec Flows',
+    supportedDomains: ['linnex.io', 'linnex.io', 'localhost', 'lvh.me'],
+    modelsProductName: 'Linnex Models',
+    voiceProductName: 'Linnex Voice',
+    llmsDisplayLabel: 'Linnex LLMs',
+    flowsProductLabel: 'Linnex Flows',
 };
 
-export function bootstrapTestPlatformBrand() {
+export function bootstrapTestPlatformBrand(): void {
     setPlatformBrandBootstrap(TEST_PLATFORM_BRAND);
 }
 
-export function resetPlatformState() {
+export function resetPlatformState(): void {
     resetPlatformBusForTests();
     clearFactoryRegistry();
     _resetResourceRegistryForTests();
@@ -57,19 +61,27 @@ export function resetPlatformState() {
     setPlatformFilesRouteSegment('frontend');
 }
 
+export interface BootstrapTestBusOptions {
+    factories?: CollectableFactory[];
+    baseUrl?: string;
+    routes?: RouterRoute[];
+    slices?: Record<string, SliceDef>;
+    effects?: EventEffect[];
+}
+
 /**
  * Поднять минимальный bus для тестов без сетевых эффектов.
  * routes = [] чтобы createRouterEffect не зарегистрировался.
  * opts.factories — registerFactory + collectFactories → slices/effects в bus.
  */
-export function bootstrapTestBus(opts = {}) {
+export function bootstrapTestBus(opts: BootstrapTestBusOptions = {}) {
     const factories = Array.isArray(opts.factories) ? opts.factories : [];
     for (const factory of factories) {
         registerFactory(factory);
     }
     const collected = factories.length > 0
         ? collectFactories(factories)
-        : { slices: {}, effects: [] };
+        : { slices: {} satisfies Record<string, SliceDef>, effects: [] satisfies EventEffect[] };
     return bootstrapPlatformBus({
         baseUrl: opts.baseUrl || '',
         routes: opts.routes || [],

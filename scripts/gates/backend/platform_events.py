@@ -66,6 +66,11 @@ DOMAIN_FLOWS_ONLY_ALLOWLIST: frozenset[str] = frozenset(
         # Леджер склада: факт проведённого движения — фильтры/триггеры
         # в flows (мувы не имеют своего list-ресурса, живут внутри накладной).
         "stock/move/done",
+        # Витрины: каталог и заказы — вход для flows-триггеров ресторана
+        # (свои уведомления/сценарии); списка заказов-коллекции в UI нет.
+        "shop/catalog/changed",
+        "shop/order/created",
+        "shop/order/status_changed",
     }
 )
 

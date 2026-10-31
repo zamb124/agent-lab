@@ -20,8 +20,6 @@ async def _shop_with_product(
             "slug": slug,
             "name": f"Shop {slug}",
             "kind": "restaurant",
-            "delivery_enabled": True,
-            "pickup_enabled": True,
         },
     )
     assert resp.status_code == 200, resp.text
@@ -90,11 +88,9 @@ class TestOrderCreate:
             )
         ).json()
         assert first["public_code"] == second["public_code"]
-        orders = (
-            await shop_client.get(
-                f"{_SHOPS}/{(await shop_client.get(_SHOPS)).json()['items'][-1]['shop_id']}/orders"
-            )
-        ).json()
+        shops = (await shop_client.get(_SHOPS)).json()["items"]
+        shop_id = next(s["shop_id"] for s in shops if s["slug"] == slug)
+        orders = (await shop_client.get(f"{_SHOPS}/{shop_id}/orders")).json()
         assert orders["total"] == 1
 
     async def test_order_status_by_public_code(
@@ -143,6 +139,39 @@ class TestOrderCreate:
             json=_order_body(product["shop_product_id"], delivery_type="delivery"),
         )
         assert resp.status_code == 409
+
+    async def test_order_rate_limited_by_ip(
+        self, shop_client: AsyncClient, shop_app, shop_di, unique_id: str
+    ) -> None:
+        """11-й заказ с того же IP за минуту — 429."""
+        from httpx2 import ASGITransport, AsyncClient
+
+        slug = f"rl-{unique_id[:8]}"
+        _, product = await _shop_with_product(shop_client, slug)
+        async with AsyncClient(
+            transport=ASGITransport(app=shop_app),
+            base_url="http://linnex.io",
+            headers={
+                "Host": "linnex.io",
+                "X-Forwarded-For": f"203.0.113.{int(unique_id[:4], 16) % 254 + 1}",
+            },
+        ) as limited:
+            for i in range(10):
+                resp = await limited.post(
+                    f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+                    json=_order_body(
+                        product["shop_product_id"], idempotency_key=f"rl-{i}-{unique_id}"
+                    ),
+                )
+                assert resp.status_code == 200, resp.text
+            resp = await limited.post(
+                f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+                json=_order_body(
+                    product["shop_product_id"], idempotency_key=f"rl-x-{unique_id}"
+                ),
+            )
+            assert resp.status_code == 429
+            assert resp.json()["error_code"] == "order_rate_limited"
 
     async def test_unavailable_product_rejected(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str

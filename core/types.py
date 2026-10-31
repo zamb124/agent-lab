@@ -67,6 +67,7 @@ else:
 
 class ASGIScope(TypedDict, total=False):
     type: Required[str]
+    method: NotRequired[str]
     headers: NotRequired[list[tuple[bytes, bytes]]]
     path: NotRequired[str]
     scheme: NotRequired[str]

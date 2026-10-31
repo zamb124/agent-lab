@@ -10,7 +10,7 @@ from collections.abc import Coroutine, Iterable
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import ClassVar, Literal, Self, TypeGuard, overload, override
+from typing import Any, ClassVar, Literal, Self, TypeGuard, overload, override
 from uuid import UUID
 
 from oxyde import F, Field, Model, QueryManager
@@ -241,6 +241,48 @@ class BoundQuery[TModel: "PlatformModel"](Query[TModel]):
             client=client,
             _skip_hooks=_skip_hooks,
             **data,
+        )
+
+    @override
+    async def bulk_create(
+        self,
+        objects: Iterable[TModel | dict[str, Any]],
+        *,
+        using: str | None = None,
+        client: SupportsExecute | None = None,
+        batch_size: int | None = None,
+    ) -> list[TModel]:
+        scoped = self._with_company()
+        if scoped is not self:
+            return await scoped.bulk_create(
+                objects, using=using, client=client, batch_size=batch_size
+            )
+        return await super().bulk_create(
+            objects,
+            using=await self._using(using),
+            client=client,
+            batch_size=batch_size,
+        )
+
+    @override
+    async def bulk_update(
+        self,
+        objects: Iterable[TModel],
+        fields: Iterable[str],
+        *,
+        using: str | None = None,
+        client: SupportsExecute | None = None,
+    ) -> int:
+        scoped = self._with_company()
+        if scoped is not self:
+            return await scoped.bulk_update(
+                objects, fields, using=using, client=client
+            )
+        return await super().bulk_update(
+            objects,
+            fields,
+            using=await self._using(using),
+            client=client,
         )
 
 

@@ -135,8 +135,8 @@ class TestHostMiddleware:
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
-            base_url="http://humanitec.ru",
-            headers={"Host": "humanitec.ru"},
+            base_url="http://linnex.io",
+            headers={"Host": "linnex.io"},
         ) as client:
             resp = await client.get("/")
             assert resp.status_code != 200 or "text/html" not in resp.headers.get(

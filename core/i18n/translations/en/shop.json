@@ -1,0 +1,159 @@
+{
+    "routes": {
+        "shop_home": "Shops",
+        "shop_menu": "Menu",
+        "shop_builder": "Appearance",
+        "shop_orders": "Orders",
+        "shop_settings": "Settings"
+    },
+    "bottom_nav": {
+        "home": "Shop",
+        "menu": "Menu",
+        "orders": "Orders",
+        "profile": "Profile"
+    },
+    "sidebar": {
+        "title": "Shop",
+        "nav": {
+            "shop_home": "Shops",
+            "shop_menu": "Menu",
+            "shop_builder": "Appearance",
+            "shop_orders": "Orders",
+            "shop_settings": "Settings"
+        }
+    },
+    "status": {
+        "draft": "Draft",
+        "published": "Published",
+        "suspended": "Suspended"
+    },
+    "home": {
+        "title": "My shops",
+        "subtitle": "Each shop is a storefront at name.linnex.io",
+        "create_title": "New shop",
+        "field_name": "Name",
+        "field_slug": "Storefront address",
+        "create_button": "Create shop",
+        "open_menu": "Menu",
+        "open_builder": "Theme",
+        "open_orders": "Orders",
+        "open_settings": "Settings"
+    },
+    "menu": {
+        "title": "Menu & products",
+        "new_category": "New category",
+        "field_name": "Dish / product",
+        "field_price": "Price, ₽",
+        "field_description": "Description",
+        "add_product": "Add",
+        "empty": "No products yet — add the first one above",
+        "col_name": "Name",
+        "col_description": "Description",
+        "col_price": "Price",
+        "col_available": "Available",
+        "ai_describe": "AI describe",
+        "photo_pick": "Photo",
+        "ai_enhance": "Enhance photo with AI",
+        "save": "Save",
+        "cancel": "Cancel",
+        "edit": "Edit"
+    },
+    "builder": {
+        "title": "Storefront appearance",
+        "preset_label": "Storefront template",
+        "preset_menu": "Menu",
+        "preset_grid": "Grid",
+        "preset_compact": "Compact",
+        "accent_label": "Brand accent",
+        "save": "Apply",
+        "reset": "Reset",
+        "preview_unavailable": "Storefront is not published yet"
+    },
+    "orders": {
+        "title": "Orders",
+        "empty": "No orders yet",
+        "status": {
+            "new": "New",
+            "accepted": "Accepted",
+            "cooking": "Cooking",
+            "delivering": "Delivering",
+            "done": "Done",
+            "rejected": "Rejected"
+        },
+        "action": {
+            "accepted": "Accept",
+            "cooking": "Cook",
+            "delivering": "Deliver",
+            "done": "Complete",
+            "rejected": "Reject"
+        },
+        "delivery": {
+            "delivery": "Delivery",
+            "pickup": "Pickup"
+        }
+    },
+    "settings": {
+        "title": "Shop settings",
+        "publish_title": "Publishing",
+        "publish_button": "Publish storefront",
+        "suspend_button": "Suspend",
+        "publish_hint": "Once published the storefront is open to everyone at the shop address",
+        "profile_title": "Profile",
+        "field_name": "Name",
+        "field_description": "Description",
+        "field_phone": "Phone",
+        "field_city": "City",
+        "field_address": "Address",
+        "delivery_title": "Fulfilment",
+        "pickup": "Pickup",
+        "delivery": "Delivery",
+        "field_delivery_fee": "Delivery fee, ₽",
+        "field_min_order": "Minimum order, ₽",
+        "domains_title": "Domains",
+        "field_domain": "Custom domain",
+        "domain_add": "Connect",
+        "domains_hint": "Point the domain DNS (CNAME) to linnex.io — we will verify it and issue a certificate",
+        "save": "Save",
+        "telegram_title": "Telegram notifications",
+        "telegram_hint": "Create a bot via @BotFather, paste the token and press Connect. Then send /start to the bot — orders will arrive here.",
+        "telegram_connect": "Connect",
+        "telegram_disconnect": "Disconnect",
+        "telegram_connected": "Bot connected — send it /start",
+        "telegram_bound": "Notifications go to the linked chat",
+        "telegram_bound_hint": "New orders and status changes are sent by the bot to your chat.",
+        "field_bot_token": "Bot token",
+        "qr_hint": "Print the QR code and place it on tables or the storefront — guests open the menu via camera.",
+        "qr_download": "Download QR (SVG)",
+        "embed_hint": "Embed the menu on your site:"
+    },
+    "toast": {
+        "shop_created": "Shop created",
+        "shop_create_failed": "Failed to create shop",
+        "shop_updated": "Saved",
+        "shop_update_failed": "Failed to save",
+        "shop_published": "Storefront published",
+        "shop_publish_failed": "Failed to publish",
+        "shop_suspended": "Storefront suspended",
+        "shop_suspend_failed": "Failed to suspend",
+        "categories_load_failed": "Failed to load categories",
+        "category_created": "Category created",
+        "category_create_failed": "Failed to create category",
+        "category_update_failed": "Failed to update category",
+        "category_remove_failed": "Failed to remove category",
+        "products_load_failed": "Failed to load products",
+        "product_created": "Product added",
+        "product_create_failed": "Failed to add product",
+        "product_update_failed": "Failed to update product",
+        "product_remove_failed": "Failed to remove product",
+        "orders_load_failed": "Failed to load orders",
+        "order_status_failed": "Failed to change order status",
+        "domain_added": "Domain added",
+        "domain_add_failed": "Failed to add domain",
+        "domain_provision_failed": "Domain verification failed",
+        "ai_describe_failed": "AI could not write a description",
+        "ai_enhance_failed": "AI could not enhance the photo",
+        "ai_generate_failed": "AI could not generate the photo",
+        "telegram_connect_failed": "Failed to connect the bot: check the token",
+        "telegram_disconnect_failed": "Failed to disconnect the bot"
+    }
+}

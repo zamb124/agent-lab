@@ -19,8 +19,8 @@ from core.di import require_di
 
 API_PREFIX = "/shop/api/v1"
 PUBLIC_PREFIX = f"{API_PREFIX}/public"
-_PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
-_PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
+_PLATFORM_ASGI_BASE_URL = "http://linnex.io"
+_PLATFORM_ASGI_HOST_HEADERS = {"Host": "linnex.io"}
 
 
 @pytest_asyncio.fixture
@@ -60,19 +60,25 @@ async def shop_client_company2(
     _ = shop_di
     async with AsyncClient(
         transport=ASGITransport(app=shop_app),
-        base_url=_PLATFORM_ASGI_HOST_HEADERS,
+        base_url=_PLATFORM_ASGI_BASE_URL,
         headers={**_PLATFORM_ASGI_HOST_HEADERS, **auth_headers_company2},
     ) as client:
         yield client
 
 
 @pytest_asyncio.fixture
-async def shop_public_client(shop_app, shop_di) -> AsyncIterator[AsyncClient]:
-    """Анонимный клиент без Authorization: публичная витрина и агрегатор."""
+async def shop_public_client(shop_app, shop_di, unique_id: str) -> AsyncIterator[AsyncClient]:
+    """Анонимный клиент без Authorization: публичная витрина и агрегатор.
+
+    Уникальный ``X-Forwarded-For`` на тест — IP-лимит заказов считается
+    по заголовку, иначе весь прогон делит один счётчик на 127.0.0.1.
+    """
     _ = shop_di
+    n = int(unique_id[:8], 16)
+    ip = f"10.{(n >> 8) % 254 + 1}.{n % 254 + 1}.7"
     async with AsyncClient(
         transport=ASGITransport(app=shop_app),
         base_url=_PLATFORM_ASGI_BASE_URL,
-        headers=_PLATFORM_ASGI_HOST_HEADERS,
+        headers={**_PLATFORM_ASGI_HOST_HEADERS, "X-Forwarded-For": ip},
     ) as client:
         yield client

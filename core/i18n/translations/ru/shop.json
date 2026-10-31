@@ -1,0 +1,159 @@
+{
+    "routes": {
+        "shop_home": "Магазины",
+        "shop_menu": "Меню",
+        "shop_builder": "Внешний вид",
+        "shop_orders": "Заказы",
+        "shop_settings": "Настройки"
+    },
+    "bottom_nav": {
+        "home": "Магазин",
+        "menu": "Меню",
+        "orders": "Заказы",
+        "profile": "Профиль"
+    },
+    "sidebar": {
+        "title": "Магазин",
+        "nav": {
+            "shop_home": "Магазины",
+            "shop_menu": "Меню",
+            "shop_builder": "Внешний вид",
+            "shop_orders": "Заказы",
+            "shop_settings": "Настройки"
+        }
+    },
+    "status": {
+        "draft": "Черновик",
+        "published": "Опубликован",
+        "suspended": "Приостановлен"
+    },
+    "home": {
+        "title": "Мои магазины",
+        "subtitle": "Каждый магазин — витрина на адресе имя.linnex.io",
+        "create_title": "Новый магазин",
+        "field_name": "Название",
+        "field_slug": "Адрес витрины",
+        "create_button": "Создать магазин",
+        "open_menu": "Меню",
+        "open_builder": "Вид",
+        "open_orders": "Заказы",
+        "open_settings": "Настройки"
+    },
+    "menu": {
+        "title": "Меню и товары",
+        "new_category": "Новая категория",
+        "field_name": "Блюдо / товар",
+        "field_price": "Цена, ₽",
+        "field_description": "Описание",
+        "add_product": "Добавить",
+        "empty": "Товаров пока нет — добавьте первый выше",
+        "col_name": "Название",
+        "col_description": "Описание",
+        "col_price": "Цена",
+        "col_available": "В наличии",
+        "ai_describe": "AI-описание",
+        "photo_pick": "Фото",
+        "ai_enhance": "Улучшить фото AI",
+        "save": "Сохранить",
+        "cancel": "Отмена",
+        "edit": "Изменить"
+    },
+    "builder": {
+        "title": "Внешний вид витрины",
+        "preset_label": "Шаблон витрины",
+        "preset_menu": "Меню",
+        "preset_grid": "Витрина",
+        "preset_compact": "Компакт",
+        "accent_label": "Фирменный цвет",
+        "save": "Применить",
+        "reset": "Отменить",
+        "preview_unavailable": "Витрина ещё не опубликована"
+    },
+    "orders": {
+        "title": "Заказы",
+        "empty": "Заказов пока нет",
+        "status": {
+            "new": "Новые",
+            "accepted": "Приняты",
+            "cooking": "Готовятся",
+            "delivering": "В доставке",
+            "done": "Завершены",
+            "rejected": "Отклонены"
+        },
+        "action": {
+            "accepted": "Принять",
+            "cooking": "Готовить",
+            "delivering": "В доставку",
+            "done": "Готово",
+            "rejected": "Отклонить"
+        },
+        "delivery": {
+            "delivery": "Доставка",
+            "pickup": "Самовывоз"
+        }
+    },
+    "settings": {
+        "title": "Настройки магазина",
+        "publish_title": "Публикация",
+        "publish_button": "Опубликовать витрину",
+        "suspend_button": "Приостановить",
+        "publish_hint": "После публикации витрина доступна всем по адресу магазина",
+        "profile_title": "Профиль",
+        "field_name": "Название",
+        "field_description": "Описание",
+        "field_phone": "Телефон",
+        "field_city": "Город",
+        "field_address": "Адрес",
+        "delivery_title": "Выдача заказов",
+        "pickup": "Самовывоз",
+        "delivery": "Доставка",
+        "field_delivery_fee": "Стоимость доставки, ₽",
+        "field_min_order": "Минимальный заказ, ₽",
+        "domains_title": "Домены",
+        "field_domain": "Свой домен",
+        "domain_add": "Подключить",
+        "domains_hint": "Наведите DNS домена (CNAME) на linnex.io — мы проверим и выпустим сертификат",
+        "save": "Сохранить",
+        "telegram_title": "Telegram-уведомления",
+        "telegram_hint": "Создайте бота через @BotFather, вставьте токен и нажмите «Подключить». Затем напишите боту /start — сюда будут приходить заказы.",
+        "telegram_connect": "Подключить",
+        "telegram_disconnect": "Отключить",
+        "telegram_connected": "Бот подключён — напишите ему /start",
+        "telegram_bound": "Уведомления приходят в привязанный чат",
+        "telegram_bound_hint": "Новые заказы и смены статусов отправляются ботом в ваш чат.",
+        "field_bot_token": "Токен бота",
+        "qr_hint": "Распечатайте QR-код и разместите на столах или витрине — гости откроют меню по камере телефона.",
+        "qr_download": "Скачать QR (SVG)",
+        "embed_hint": "Встройте меню на свой сайт:"
+    },
+    "toast": {
+        "shop_created": "Магазин создан",
+        "shop_create_failed": "Не удалось создать магазин",
+        "shop_updated": "Сохранено",
+        "shop_update_failed": "Не удалось сохранить",
+        "shop_published": "Витрина опубликована",
+        "shop_publish_failed": "Не удалось опубликовать",
+        "shop_suspended": "Витрина приостановлена",
+        "shop_suspend_failed": "Не удалось приостановить",
+        "categories_load_failed": "Не удалось загрузить категории",
+        "category_created": "Категория создана",
+        "category_create_failed": "Не удалось создать категорию",
+        "category_update_failed": "Не удалось обновить категорию",
+        "category_remove_failed": "Не удалось удалить категорию",
+        "products_load_failed": "Не удалось загрузить товары",
+        "product_created": "Товар добавлен",
+        "product_create_failed": "Не удалось добавить товар",
+        "product_update_failed": "Не удалось обновить товар",
+        "product_remove_failed": "Не удалось удалить товар",
+        "orders_load_failed": "Не удалось загрузить заказы",
+        "order_status_failed": "Не удалось сменить статус заказа",
+        "domain_added": "Домен добавлен",
+        "domain_add_failed": "Не удалось добавить домен",
+        "domain_provision_failed": "Не удалось проверить домен",
+        "ai_describe_failed": "AI не смог написать описание",
+        "ai_enhance_failed": "AI не смог улучшить фото",
+        "ai_generate_failed": "AI не смог сгенерировать фото",
+        "telegram_connect_failed": "Не удалось подключить бота: проверьте токен",
+        "telegram_disconnect_failed": "Не удалось отключить бота"
+    }
+}

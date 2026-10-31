@@ -14,7 +14,6 @@
         "submit": "Create workspace",
         "saving": "Creating…"
     },
-
     "notifications": {
         "title": "Notifications",
         "dismiss_all": "Clear all",
@@ -900,7 +899,6 @@
         "lara_branch_not_found": "Lara branch not found",
         "context_not_set": "Context is not set",
         "lara_task_failed": "Lara task failed",
-        "humanitec_llm_unavailable": "Platform LLM is unavailable for the company",
         "image_auto_wrong_endpoint": "image-auto is only available via image generation",
         "lara_model_wrong_path": "lara:<branch> uses a separate A2A bridge",
         "llm_proxy_model_invalid": "Invalid LLM proxy model",
@@ -1026,6 +1024,36 @@
         "wave_not_found": "Wave not found",
         "wave_state_conflict": "Wave cannot change state from its current state",
         "wave_stop_duplicate": "Stop transfer is duplicated",
-        "wave_stop_warehouse_mismatch": "Stop transfer belongs to another warehouse"
+        "wave_stop_warehouse_mismatch": "Stop transfer belongs to another warehouse",
+        "address_required": "Delivery address is required",
+        "ai_empty_result": "AI returned an empty result",
+        "below_min_order": "Order total is below the minimum",
+        "category_not_found": "Category not found",
+        "delivery_disabled": "Delivery is disabled by the shop",
+        "domain_invalid": "Invalid domain",
+        "domain_limit": "Domain limit reached",
+        "domain_not_found": "Domain not found",
+        "domain_platform_owned": "This domain belongs to the platform",
+        "domain_taken": "Domain is already taken",
+        "file_not_found": "File not found",
+        "linnex_llm_unavailable": "Platform LLM is unavailable for the company",
+        "order_code_exhausted": "Failed to generate order code",
+        "order_not_found": "Order not found",
+        "order_rejected": "Order rejected",
+        "order_transition_invalid": "Invalid order status transition",
+        "product_unavailable": "Product unavailable",
+        "shop_incomplete": "Complete the shop profile before publishing",
+        "shop_not_found": "Shop not found",
+        "shop_slug_taken": "Storefront address is already taken",
+        "shop_telegram_unavailable": "Telegram notifications unavailable",
+        "shop_telegram_unconfigured": "Telegram notifications are not configured",
+        "slug_invalid": "Invalid storefront address",
+        "slug_reserved": "This address is reserved by the platform",
+        "storefront_not_found": "Storefront not found",
+        "storefront_unavailable": "Storefront is temporarily unavailable",
+        "shop_telegram_rejected": "Telegram rejected the request — check the bot token",
+        "telegram_webhook_not_found": "Webhook not found",
+        "order_rate_limited": "Too many orders — try again in a minute",
+        "telegram_update_invalid": "Invalid Telegram update"
     }
 }
