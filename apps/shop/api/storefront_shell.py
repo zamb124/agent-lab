@@ -78,7 +78,22 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .panel h2{{font-size:21px;margin-bottom:16px;letter-spacing:-.01em}}
 .cl{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:15px;border-bottom:1px solid var(--line)}}
 .cl .n{{flex:1;min-width:0}}
+.cl .mods{{display:block;font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45}}
 .cl .s{{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}}
+.mg{{margin:16px 0}}
+.mg.nest{{margin:12px 0 4px 14px;padding-left:12px;border-left:2px solid var(--line)}}
+.mg-h{{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}}
+.mg-h b{{font-size:15px}}
+.mg-r{{font-size:12px;color:#f0b45c;white-space:nowrap}}
+.mg-r.ok{{color:var(--muted)}}
+.opts{{display:flex;flex-wrap:wrap;gap:8px}}
+.opt{{font:inherit;font-size:14px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all .12s}}
+.opt.on{{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}}
+.opt.dis{{opacity:.4;cursor:default}}
+.opt i{{font-style:normal;font-size:12.5px;opacity:.85}}
+.opt .stepper{{padding:2px}}
+.opt .stepper button{{width:24px;height:24px;font-size:15px}}
+.crow{{display:flex;justify-content:flex-end;margin-top:18px}}
 .seg{{display:flex;background:var(--card2);border-radius:14px;padding:4px;margin:14px 0}}
 .seg button{{flex:1;font:inherit;font-size:14.5px;font-weight:600;padding:11px;border:0;border-radius:11px;background:transparent;color:var(--muted);cursor:pointer}}
 .seg button.on{{background:var(--accent);color:#fff}}
@@ -99,6 +114,7 @@ button.big:disabled{{opacity:.45;cursor:default}}
 <div class="wrap" id="app"></div>
 <button class="cart" id="cart" onclick="openSheet()"></button>
 <div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="panel" id="panel"></div></div>
+<div class="sheet" id="csheet" onclick="if(event.target===this)closeCust()"><div class="panel" id="cpanel"></div></div>
 <script id="snapshot" type="application/json">{snapshot}</script>
 <script>
 const S=JSON.parse(document.getElementById('snapshot').textContent);
@@ -130,15 +146,35 @@ function hoursBadge(){{
 }}
 const cart=new Map();
 const app=document.getElementById('app');
+const NEST=S.modifier_nested_groups||{{}};
 const byId=id=>S.products.find(x=>x.id===id);
 function esc(s){{return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
 function photo(u,cls){{return u?`<img class="${{cls||''}}" src="${{IMG(u)}}" loading="lazy" alt="">`:'';}}
-function qtyCtl(p){{const q=cart.get(p.id)||0;
-  if(!q)return `<button class="add" onclick="add('${{p.id}}',1)">В корзину</button>`;
-  return `<span class="stepper"><button class="ghost" onclick="add('${{p.id}}',-1)">−</button><span>${{q}}</span><button onclick="add('${{p.id}}',1)">+</button></span>`;}}
-function rowList(ps){{return ps.map(p=>`<div class="item">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{fmt(p.price_minor)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
-function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{fmt(p.price_minor)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
-function rowCompact(ps){{return ps.map(p=>`<div class="item"><div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{fmt(p.price_minor)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
+function selHash(sel){{return [...sel.entries()].sort().map(([o,q])=>o+'x'+q).join(',');}}
+function cartQty(pid){{let n=0;for(const l of cart.values())if(l.pid===pid)n+=l.qty;return n;}}
+function unitPrice(p,sel){{let abs=0,delta=0;
+  const walk=groups=>{{for(const g of groups)for(const o of g.options){{const q=sel.get(o.id)||0;
+    if(!q)continue;
+    if(g.price_mode==='absolute')abs+=o.price_minor*q;else delta+=o.price_minor*q;
+    if(o.nested_group_id&&NEST[o.nested_group_id])walk([NEST[o.nested_group_id]]);}}}};
+  walk(p.modifier_groups||[]);
+  return (abs||p.price_minor)+delta;}}
+function modsText(p,sel){{const names=[];
+  const walk=groups=>{{for(const g of groups)for(const o of g.options){{const q=sel.get(o.id)||0;
+    if(!q)continue;names.push(q>1?o.name+' ×'+q:o.name);
+    if(o.nested_group_id&&NEST[o.nested_group_id])walk([NEST[o.nested_group_id]]);}}}};
+  walk(p.modifier_groups||[]);return names.join(', ');}}
+function priceLabel(p){{return (p.modifier_groups&&p.modifier_groups.length)?'от '+fmt(p.price_from_minor!=null?p.price_from_minor:p.price_minor):fmt(p.price_minor);}}
+function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;
+  const q=cartQty(p.id);
+  if(hasMod)return `<button class="add" onclick="customize('${{p.id}}')">${{q?'Выбрать · '+q:'Выбрать'}}</button>`;
+  const l=cart.get(p.id+'#');const n=l?l.qty:0;
+  if(!n)return `<button class="add" onclick="addPlain('${{p.id}}',1)">В корзину</button>`;
+  return `<span class="stepper"><button class="ghost" onclick="addPlain('${{p.id}}',-1)">−</button><span>${{n}}</span><button onclick="addPlain('${{p.id}}',1)">+</button></span>`;}}
+function refreshQty(pid){{document.querySelectorAll(`[data-qty="${{pid}}"]`).forEach(el=>{{el.innerHTML=qtyCtl(byId(pid));}});}}
+function rowList(ps){{return ps.map(p=>`<div class="item">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
+function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
+function rowCompact(ps){{return ps.map(p=>`<div class="item"><div class="b"><h3>${{esc(p.name)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
   const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
@@ -153,10 +189,12 @@ function render(){{
   app.innerHTML=h;
 }}
 window.jump=id=>{{document.getElementById('c-'+id)?.scrollIntoView({{behavior:'smooth',block:'start'}});}};
-window.add=(id,d)=>{{const q=(cart.get(id)||0)+d;if(q<=0)cart.delete(id);else cart.set(id,q);
-  document.querySelectorAll(`[data-qty="${{id}}"]`).forEach(el=>{{el.innerHTML=qtyCtl(byId(id));}});draw();}};
-function total(){{let t=0;for(const [id,q] of cart){{const p=byId(id);if(p)t+=p.price_minor*q;}}return t;}}
-function count(){{return [...cart.values()].reduce((a,x)=>a+x,0);}}
+window.addPlain=(pid,d)=>{{const key=pid+'#';const l=cart.get(key)||{{pid,sel:new Map(),qty:0}};
+  l.qty+=d;if(l.qty<=0)cart.delete(key);else cart.set(key,l);refreshQty(pid);draw();}};
+window.addLine=(key,d)=>{{const l=cart.get(key);if(!l)return;l.qty+=d;
+  if(l.qty<=0)cart.delete(key);else cart.set(key,l);refreshQty(l.pid);draw();}};
+function total(){{let t=0;for(const l of cart.values()){{const p=byId(l.pid);if(p)t+=unitPrice(p,l.sel)*l.qty;}}return t;}}
+function count(){{let n=0;for(const l of cart.values())n+=l.qty;return n;}}
 function draw(){{const b=document.getElementById('cart');const n=count();
   if(n){{b.textContent=`Корзина · ${{n}} · ${{fmt(total())}} →`;b.classList.add('show');}}else b.classList.remove('show');}}
 let dtype='';
@@ -174,7 +212,9 @@ function renderSheet(){{
   const seg=(S.delivery_enabled&&S.pickup_enabled)?`<div class="seg">
     <button class="${{dtype==='delivery'?'on':''}}" onclick="setDtype('delivery')">🛵 Доставка</button>
     <button class="${{dtype==='pickup'?'on':''}}" onclick="setDtype('pickup')">🛍 Самовывоз</button></div>`:'';
-  p.innerHTML=`<h2>Ваш заказ</h2>`+[...cart.entries()].map(([id,q])=>{{const x=byId(id);return x?`<div class="cl"><span class="n">${{esc(x.name)}}</span><span class="stepper"><button class="ghost" onclick="add('${{id}}',-1);renderSheet()">−</button><span>${{q}}</span><button onclick="add('${{id}}',1);renderSheet()">+</button></span><b class="s">${{fmt(x.price_minor*q)}}</b></div>`:'';}}).join('')+
+  p.innerHTML=`<h2>Ваш заказ</h2>`+[...cart.entries()].map(([key,l])=>{{const x=byId(l.pid);if(!x)return'';
+    const mods=modsText(x,l.sel);const u=unitPrice(x,l.sel);
+    return `<div class="cl"><span class="n">${{esc(x.name)}}${{mods?`<span class="mods">${{esc(mods)}}</span>`:''}}</span><span class="stepper"><button class="ghost" onclick="addLine('${{key}}',-1);renderSheet()">−</button><span>${{l.qty}}</span><button onclick="addLine('${{key}}',1);renderSheet()">+</button></span><b class="s">${{fmt(u*l.qty)}}</b></div>`;}}).join('')+
   seg+
   (dtype==='delivery'?`<div class="cl"><span>Доставка</span><b class="s">${{fmt(fee)}}</b></div>`:'')+
   `<div class="cl" style="border-bottom:0"><b>Итого</b><b class="s" style="font-size:18px">${{fmt(sub+fee)}}</b></div>
@@ -185,7 +225,8 @@ function renderSheet(){{
 }};
 window.closeSheet=()=>document.getElementById('sheet').classList.remove('show');
 window.submit=async()=>{{
-  const body={{items:[...cart.entries()].map(([id,qty])=>({{product_id:id,qty}})),
+  const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,
+    selections:[...l.sel.entries()].map(([option_id,qty])=>({{option_id,qty}}))}})),
     customer_name:document.getElementById('cn').value,customer_phone:document.getElementById('cp').value,
     delivery_type:dtype,
     address:dtype==='delivery'?(document.getElementById('ca')?.value||''):'',
@@ -213,6 +254,70 @@ window.trackOrder=async code=>{{
   }};
   setTimeout(poll,15000);
 }};
+let cust=null;
+function findGroup(pid,gid){{const p=byId(pid);
+  for(const g of p.modifier_groups||[])if(g.id===gid)return g;
+  for(const k in NEST)if(NEST[k].id===gid)return NEST[k];return null;}}
+function applyDefaults(pid){{const p=byId(pid);
+  const walk=groups=>{{for(const g of groups)for(const o of g.options){{if(o.is_default)cust.sel.set(o.id,1);
+    if(o.is_default&&o.nested_group_id&&NEST[o.nested_group_id])walk([NEST[o.nested_group_id]]);}}}};
+  walk(p.modifier_groups||[]);}}
+window.customize=pid=>{{cust={{pid,sel:new Map(),qty:1}};applyDefaults(pid);
+  renderCust();document.getElementById('csheet').classList.add('show');}};
+window.closeCust=()=>document.getElementById('csheet').classList.remove('show');
+function groupSelectedQty(g){{let n=0;for(const o of g.options)n+=cust.sel.get(o.id)||0;return n;}}
+window.optToggle=(pid,gid,oid)=>{{const g=findGroup(pid,gid);if(!g)return;
+  if(g.selection_mode==='single'){{for(const o of g.options)cust.sel.delete(o.id);cust.sel.set(oid,1);}}
+  else if(cust.sel.has(oid))cust.sel.delete(oid);
+  else{{const n=groupSelectedQty(g);if(g.max_selected!=null&&n>=g.max_selected)return;cust.sel.set(oid,1);}}
+  renderCust();}};
+window.optQty=(pid,gid,oid,d)=>{{const g=findGroup(pid,gid);if(!g)return;
+  const o=g.options.find(x=>x.id===oid);if(!o)return;
+  const q=(cust.sel.get(oid)||0)+d;
+  if(q<=0)cust.sel.delete(oid);
+  else{{if(q>o.max_per_option)return;
+    if(d>0&&g.max_selected!=null&&groupSelectedQty(g)>=g.max_selected&&!cust.sel.has(oid))return;
+    if(d>0&&g.max_selected!=null&&groupSelectedQty(g)>=g.max_selected&&q>(cust.sel.get(oid)||0))return;
+    cust.sel.set(oid,q);}}
+  renderCust();}};
+window.custQty=d=>{{cust.qty=Math.max(1,(cust.qty||1)+d);renderCust();}};
+function selValid(p){{const check=groups=>{{
+    for(const g of groups){{const n=groupSelectedQty(g);
+      if(n<(g.min_selected||0))return false;
+      if(g.selection_mode==='single'&&n>1)return false;
+      if(g.max_selected!=null&&n>g.max_selected)return false;
+      for(const o of g.options){{const q=cust.sel.get(o.id)||0;
+        if(q>(o.max_per_option||1))return false;
+        if(q>0&&o.nested_group_id&&NEST[o.nested_group_id]&&!check([NEST[o.nested_group_id]]))return false;}}}}
+    return true;}};
+  return check(p.modifier_groups||[]);}}
+function groupHtml(p,g,depth){{const n=groupSelectedQty(g);const req=g.min_selected>0;
+  const lim=g.max_selected!=null?`до ${{g.max_selected}}`:'';
+  const okSel=n>=(g.min_selected||0);
+  let h=`<div class="mg${{depth?' nest':''}}"><div class="mg-h"><b>${{esc(g.name)}}</b><span class="mg-r${{okSel?' ok':''}}">${{req?(lim?`обязательно · ${{lim}}`:'обязательно'):lim}}</span></div><div class="opts">`;
+  for(const o of g.options){{const q=cust.sel.get(o.id)||0;
+    const pr=o.price_minor?`<i>${{g.price_mode==='absolute'?fmt(o.price_minor):'+'+fmt(o.price_minor)}}</i>`:'';
+    const maxed=g.max_selected!=null&&n>=g.max_selected&&!q;
+    if(o.max_per_option>1&&q)
+      h+=`<span class="opt on"><span class="stepper"><button class="ghost" onclick="optQty('${{p.id}}','${{g.id}}','${{o.id}}',-1)">−</button><span>${{q}}</span><button onclick="optQty('${{p.id}}','${{g.id}}','${{o.id}}',1)">+</button></span>${{esc(o.name)}}${{pr}}</span>`;
+    else
+      h+=`<button class="opt${{q?' on':''}}${{maxed?' dis':''}}" onclick="optToggle('${{p.id}}','${{g.id}}','${{o.id}}')">${{esc(o.name)}}${{pr}}</button>`;}}
+  h+='</div>';
+  for(const o of g.options){{const q=cust.sel.get(o.id)||0;
+    if(q&&o.nested_group_id&&NEST[o.nested_group_id])h+=groupHtml(p,NEST[o.nested_group_id],depth+1);}}
+  return h+'</div>';}}
+function renderCust(){{if(!cust)return;const p=byId(cust.pid);if(!p)return;
+  const ok=selValid(p);const u=unitPrice(p,cust.sel);
+  document.getElementById('cpanel').innerHTML=`<h2>${{esc(p.name)}}</h2>`+
+    (p.modifier_groups||[]).map(g=>groupHtml(p,g,0)).join('')+
+    `<div class="crow"><span class="stepper"><button class="ghost" onclick="custQty(-1)">−</button><span>${{cust.qty}}</span><button onclick="custQty(1)">+</button></span></div>`+
+    `<button class="big"${{ok?'':' disabled'}} onclick="addCustom()">В корзину · ${{fmt(u*cust.qty)}}</button>`;}}
+window.addCustom=()=>{{if(!cust)return;const p=byId(cust.pid);
+  if(!p||!selValid(p))return;
+  const key=cust.pid+'#'+selHash(cust.sel);
+  const l=cart.get(key)||{{pid:cust.pid,sel:new Map(cust.sel),qty:0}};
+  l.qty+=cust.qty;cart.set(key,l);
+  cust=null;closeCust();refreshQty(p.id);draw();}};
 render();
 </script>
 </body>

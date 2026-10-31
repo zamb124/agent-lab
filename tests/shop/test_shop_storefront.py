@@ -178,3 +178,43 @@ class TestStorefrontPage:
         assert body["timezone"]
         html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
         assert "hoursBadge" in html.text
+
+    async def test_modifier_tree_renders_customize_sheet(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Продукт с модификаторами: дерево в снапшоте, sheet и selections в HTML."""
+        slug = f"modpage-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        shop_id = shop["shop_id"]
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop_id}/products",
+            json={"name": "Пицца", "price_minor": 50000},
+        )
+        assert resp.status_code == 200, resp.text
+        product = resp.json()
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop_id}/modifier-groups",
+            json={"name": "Размер", "selection_mode": "single", "min_selected": 1, "price_mode": "absolute"},
+        )
+        assert resp.status_code == 200, resp.text
+        group = resp.json()
+        gid = group["shop_modifier_group_id"]
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop_id}/modifier-groups/{gid}/options",
+            json={"name": "40 см", "price_minor": 65000, "is_default": True},
+        )
+        assert resp.status_code == 200, resp.text
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop_id}/products/{product['shop_product_id']}/modifier-groups/{gid}",
+            json={},
+        )
+        assert resp.status_code == 200, resp.text
+
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert html.status_code == 200
+        assert "csheet" in html.text
+        assert "customize(" in html.text
+        assert "selections" in html.text
+        assert "Размер" in html.text
+        assert "40 см" in html.text
+        assert "modifier_groups" in html.text
