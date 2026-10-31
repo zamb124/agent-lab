@@ -90,6 +90,10 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .panel{{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:22px 20px 44px;animation:up .25s ease}}
 @keyframes up{{from{{transform:translateX(-50%) translateY(40px)}}}}
 .panel h2{{font-size:21px;margin-bottom:16px;letter-spacing:-.01em}}
+.pshare{{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(18,18,20,.55);backdrop-filter:blur(8px);color:#fff;display:grid;place-items:center;z-index:2}}
+.pshare svg{{width:18px;height:18px;fill:currentColor}}
+.toast{{position:fixed;left:50%;transform:translateX(-50%) translateY(12px);bottom:90px;background:#1c1c20;color:#fff;padding:10px 18px;border-radius:999px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s ease;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,.3)}}
+.toast.show{{opacity:1;transform:translateX(-50%) translateY(0)}}
 .cl{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:15px;border-bottom:1px solid var(--line)}}
 .cl .n{{flex:1;min-width:0}}
 .cl .mods{{display:block;font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45}}
@@ -136,6 +140,7 @@ body.light .hero .veil{{background:linear-gradient(180deg,rgba(16,14,12,.1) 20%,
 <button class="cart" id="cart" onclick="openSheet()"></button>
 <div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="panel" id="panel"></div></div>
 <div class="sheet" id="csheet" onclick="if(event.target===this)closeCust()"><div class="panel" id="cpanel"></div></div>
+<div class="toast" id="toast"></div>
 <script id="snapshot" type="application/json">{snapshot}</script>
 <script>
 const S=JSON.parse(document.getElementById('snapshot').textContent);
@@ -376,6 +381,16 @@ window.customize=pid=>{{cust={{pid,sel:new Map(),qty:1}};applyDefaults(pid);
   renderCust();document.getElementById('csheet').classList.add('show');}};
 window.openProduct=pid=>customize(pid);
 window.closeCust=()=>document.getElementById('csheet').classList.remove('show');
+const SHARE_ICON='<svg viewBox="0 -960 960 960"><path d="M720-80q-50 0-85-35t-35-85q0-7 1-14.5t3-13.5L322-392q-17 15-38 23.5t-44 8.5q-50 0-85-35t-35-85 35-85 85-35q23 0 44 8.5t38 23.5l282-164q-2-6-3-13.5t-1-14.5q0-50 35-85t85-35 85 35 35 85-35 85-85 35q-23 0-44-8.5T638-672L356-508q2 6 3 13.5t1 14.5-1 14.5-3 13.5l282 164q17-15 38-23.5t44-8.5q50 0 85 35t35 85-35 85-85 35Z"/></svg>';
+let toastTimer=0;
+window.toast=msg=>{{const t=document.getElementById('toast');if(!t)return;
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}};
+window.shareProduct=pid=>{{const url=location.origin+location.pathname+'?p='+pid;
+  if(navigator.share)navigator.share({{url}}).catch(()=>{{}});
+  else if(navigator.clipboard)navigator.clipboard.writeText(url).then(()=>toast('Ссылка скопирована'),()=>{{}});
+  else toast(url);}};
+document.addEventListener('keydown',e=>{{if(e.key==='Escape'){{closeCust();closeSheet();}}}});
 function groupSelectedQty(g){{let n=0;for(const o of g.options)n+=cust.sel.get(o.id)||0;return n;}}
 window.optToggle=(pid,gid,oid)=>{{const g=findGroup(pid,gid);if(!g)return;
   if(g.selection_mode==='single'){{for(const o of g.options)cust.sel.delete(o.id);cust.sel.set(oid,1);}}
@@ -420,6 +435,7 @@ function groupHtml(p,g,depth){{const n=groupSelectedQty(g);const req=g.min_selec
 function renderCust(){{if(!cust)return;const p=byId(cust.pid);if(!p)return;
   const ok=selValid(p);const u=unitPrice(p,cust.sel);
   document.getElementById('cpanel').innerHTML=
+    `<button class="pshare" onclick="shareProduct('${{p.id}}')" aria-label="Поделиться">${{SHARE_ICON}}</button>`+
     `${{photo(p.photo_file_id,'phero')}}<h2>${{esc(p.name)}}${{tags(p)}}${{portionOf(p)}}</h2>`+
     `${{p.description?`<p class="pdesc">${{esc(p.description)}}</p>`:''}}`+
     (p.modifier_groups||[]).map(g=>groupHtml(p,g,0)).join('')+
