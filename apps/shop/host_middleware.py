@@ -12,6 +12,10 @@ from core.types import ASGIApp, ASGIReceive, ASGIScope, ASGISend
 
 _STOREFRONT_PAGE = "/shop/api/v1/public/s/"
 _MARKET_PAGE = "/shop/api/v1/public/market"
+_PUBLIC_FILES: dict[str, str] = {
+    "/robots.txt": "/shop/api/v1/public/robots.txt",
+    "/sitemap.xml": "/shop/api/v1/public/sitemap.xml",
+}
 
 
 class StorefrontHostMiddleware:
@@ -39,13 +43,19 @@ class StorefrontHostMiddleware:
             if name == b"host":
                 host = value.decode("latin-1").split(":")[0].strip().lower()
                 break
-        if scope.get("method") in ("GET", "HEAD") and scope.get("path") == "/":
+        path = scope.get("path")
+        if scope.get("method") not in ("GET", "HEAD") or not host.endswith(self._suffix):
+            await self._app(scope, receive, send)
+            return
+        if path == "/":
             if self._aggregator and host == self._aggregator:
                 scope["path"] = _MARKET_PAGE
             else:
                 slug = self._slug_for(host)
                 if slug is not None:
                     scope["path"] = f"{_STOREFRONT_PAGE}{slug}"
+        elif isinstance(path, str) and path in _PUBLIC_FILES:
+            scope["path"] = _PUBLIC_FILES[path]
         await self._app(scope, receive, send)
 
     def _slug_for(self, host: str) -> str | None:

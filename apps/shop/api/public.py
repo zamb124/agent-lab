@@ -160,6 +160,23 @@ async def telegram_webhook(shop_id: str, request: Request, di: Di) -> Response:
     return Response(status_code=200)
 
 
+@router.get("/robots.txt", response_model=None)
+async def get_robots(request: Request) -> Response:
+    """robots.txt витрин и агрегатора: индексация разрешена, sitemap на хосте."""
+    host = request.headers.get("host", "").split(":")[0] or "localhost"
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /shop/api/\n"
+        f"Sitemap: https://{host}/sitemap.xml\n"
+    )
+    return Response(
+        content=body,
+        media_type="text/plain",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @router.get("/sitemap.xml", response_model=None)
 async def get_sitemap(di: Di) -> Response:
     """Sitemap агрегатора: опубликованные витрины для поисковых роботов."""

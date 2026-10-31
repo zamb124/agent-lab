@@ -328,3 +328,26 @@ class TestMarketPage:
             assert "text/html" in resp.headers.get("content-type", "")
             assert "aggregate/search" in resp.text
             assert slug in resp.text
+
+    async def test_robots_and_sitemap_on_suffix_hosts(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """/robots.txt и /sitemap.xml резолвятся на slug- и агрегаторном хостах."""
+        slug = f"seo-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        from httpx2 import ASGITransport
+
+        from apps.shop.main import app
+
+        for host in (f"{slug}.linnex.io", "shop.linnex.io"):
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url=f"http://{host}",
+                headers={"Host": host},
+            ) as client:
+                robots = await client.get("/robots.txt")
+                assert robots.status_code == 200, host
+                assert "Sitemap:" in robots.text and host in robots.text
+                sitemap = await client.get("/sitemap.xml")
+                assert sitemap.status_code == 200, host
+                assert f"{slug}.linnex.io" in sitemap.text
