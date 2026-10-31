@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import math
+import re
 from collections.abc import Sequence
 from typing import ClassVar
 
@@ -244,3 +247,25 @@ def placeholder_rerank_scores(query: str, passages: list[str]) -> list[float]:
     """Детерминированные скоры для ``provider_litserve.infra.backend=placeholder`` и тестов."""
     q = set(query.lower().split())
     return [float(len(q & set(p.lower().split()))) for p in passages]
+
+
+def placeholder_embedding_vector(text: str, *, dimension: int) -> list[float]:
+    """Детерминированный unit-vector для ``provider_litserve.infra.backend=placeholder`` и тестов.
+
+    Та же feature-hash схема, что ``DeterministicAIEmbeddingClient``: токены
+    текста и document-фича мапятся в разреженный вектор и L2-нормализуются.
+    """
+    vector = [0.0] * dimension
+    tokens = re.findall(r"[\w]+", text.lower(), flags=re.UNICODE)
+    if not tokens:
+        tokens = ["__empty__"]
+    for feature in (*tokens, f"__document__:{text}"):
+        weight = 0.125 if feature.startswith("__document__:") else 1.0
+        digest = hashlib.sha256(feature.encode("utf-8")).digest()
+        idx = int.from_bytes(digest[:4], "big") % dimension
+        sign = 1.0 if digest[4] % 2 == 0 else -1.0
+        vector[idx] += sign * weight
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm == 0.0:
+        raise ValueError("placeholder embedding norm is zero")
+    return [value / norm for value in vector]

@@ -777,6 +777,7 @@
           "model_batch_size": 4,
           "embedding_model_id": "Qwen/Qwen3-Embedding-0.6B",
           "embedding_openai_model_id": "qwen/qwen3-embedding-0.6b",
+          "embedding_dimension": 1024,
           "rerank_openai_model_id": "qwen/qwen3-reranker-0.6b",
           "embedding_model_ids": [],
           "rerank_model_ids": [],

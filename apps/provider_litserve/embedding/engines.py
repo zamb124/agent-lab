@@ -15,12 +15,16 @@ from apps.provider_litserve.openai_server_contracts import (
     OpenAIEmbeddingsRequest,
     build_openai_embeddings_response,
     normalize_embedding_inputs,
+    placeholder_embedding_vector,
 )
 from apps.provider_litserve.provider_litserve_http_schemas import OpenAIEmbeddingsResponseBody
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
+from core.models.provider_litserve_model import ProviderLitserveModelPair
 from core.types import JsonValue
 from core.websocket import WsCommandError
+
+Backend = Literal["placeholder", "flagllm"]
 
 logger = get_logger(__name__)
 
@@ -73,16 +77,21 @@ def parse_embedding_body(raw: BaseModel | JsonValue) -> OpenAIEmbeddingsRequest:
 
 
 class LocalEmbeddingEngine:
-    """SentenceTransformer; ответ совпадает с тем, что парсит ``AIEmbeddingClient``."""
+    """SentenceTransformer или placeholder; ответ совпадает с тем, что парсит ``AIEmbeddingClient``."""
 
     def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         self._cfg: ProviderLitserveInfraConfig = cfg
         self._catalog: ModelCatalog = catalog
+        self._backend: Backend = "placeholder"
         self._models: dict[str, SentenceEmbeddingModel] = {}
         self._device: str = "cpu"
 
     def setup(self, device: str | None) -> None:
-        """Запоминает устройство для последующей загрузки модели."""
+        """Backend из конфига; ``placeholder`` не грузит веса — устройство не нужно."""
+        self._backend = self._cfg.backend
+        if self._backend == "placeholder":
+            self._models = {}
+            return
         if device:
             self._device = device
 
@@ -115,6 +124,19 @@ class LocalEmbeddingEngine:
     def allowed_model_ids(self) -> frozenset[str]:
         return self._catalog.allowed_ids("embedding")
 
+    def _placeholder_dimension(self, api_model_id: str) -> int:
+        entry = self._catalog.find_entry("embedding", api_model_id)
+        dimension = (
+            entry.dimension if isinstance(entry, ProviderLitserveModelPair) else None
+        )
+        if dimension is None:
+            dimension = self._cfg.embedding_dimension
+        if dimension is None or dimension <= 0:
+            raise RuntimeError(
+                f"provider_litserve placeholder: embedding dimension unknown for {api_model_id!r}"
+            )
+        return dimension
+
     def embed(self, requested_model: str, inp: str | list[str]) -> OpenAIEmbeddingsResponseBody:
         rid = requested_model.strip()
         hf_model_id = self._catalog.hf_model_id("embedding", rid)
@@ -144,6 +166,14 @@ class LocalEmbeddingEngine:
                 error_code="ws_invalid_payload",
                 error_params={"reason": "too_many_inputs", "max": max_n, "got": len(texts)},
             )
+
+        if self._backend == "placeholder":
+            dimension = self._placeholder_dimension(rid)
+            vectors = [
+                placeholder_embedding_vector(text, dimension=dimension)
+                for text in texts
+            ]
+            return build_openai_embeddings_response(model_id=canonical, vectors=vectors)
 
         model = self._ensure_model(hf_model_id)
         started_at = time.monotonic()
