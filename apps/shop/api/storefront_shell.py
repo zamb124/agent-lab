@@ -50,6 +50,9 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .tabs button{{font:inherit;font-size:14.5px;padding:9px 16px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--card);cursor:pointer;white-space:nowrap;transition:all .15s}}
 .tabs button.on{{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}}
 .cat{{font-size:21px;margin:28px 0 6px;letter-spacing:-.01em}}
+.mchunk{{animation:fade .3s ease}}
+.msk{{height:96px;border-radius:var(--radius);margin:14px 0;background:linear-gradient(100deg,var(--card2) 40%,var(--card) 50%,var(--card2) 60%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}}
+@keyframes shimmer{{from{{background-position:120% 0}}to{{background-position:-80% 0}}}}
 .item{{display:flex;gap:14px;padding:16px 2px;border-bottom:1px solid var(--line);animation:fade .3s ease}}
 .flash{{animation:flashRing 2.6s ease}}
 @keyframes flashRing{{0%,55%{{box-shadow:0 0 0 3px var(--accent);border-radius:14px}}100%{{box-shadow:0 0 0 0 transparent}}}}
@@ -219,8 +222,15 @@ function render(){{
   if(S.products.length>=6){{document.getElementById('msw').innerHTML=`<div class="msearch"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Поиск по меню" autocomplete="off" oninput="menuSearch(this.value)"></div>`;}}
   renderMenu();
 }}
+let queue=[],spyIO=null,moreIO=null;
+function spy(root){{if(!spyIO)return;
+  root.querySelectorAll('h2.cat[id]:not([data-spy])').forEach(h=>{{h.dataset.spy='1';spyIO.observe(h);}});}}
+function activate(id){{document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.cat===id));
+  const t=document.querySelector(`.tabs button[data-cat="${{CSS.escape(id)}}"]`);
+  t?.scrollIntoView({{inline:'center',block:'nearest'}});}}
 function renderMenu(){{
   const menu=document.getElementById('menu');if(!menu)return;
+  spyIO?.disconnect();moreIO?.disconnect();queue=[];
   const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
   const other=S.products.filter(p=>!p.category_id);
   if(query){{
@@ -228,12 +238,38 @@ function renderMenu(){{
     menu.innerHTML=hits.length?ITEMS(hits):`<div class="empty">По запросу «${{esc(query)}}» ничего не нашлось</div>`;
     return;
   }}
-  let h=`<div class="tabs">${{cats.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}${{other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}}</div>`;
-  for(const c of cats){{h+=`<h2 class="cat serif" id="c-${{c.id}}">${{esc(c.name)}}</h2>`+ITEMS(S.products.filter(p=>p.category_id===c.id));}}
-  if(other.length){{h+=`<h2 class="cat serif" id="c-other">Ещё</h2>`+ITEMS(other);}}
-  menu.innerHTML=h;
+  // Прогрессивный рендер: табы сразу, тело дорисовывается чанками по мере скролла —
+  // все данные уже в снапшоте, поэтому подгрузка мгновенная и бесшовная.
+  const CH=12,blocks=[];
+  const push=(id,name,items)=>{{for(let i=0;i<items.length;i+=CH)
+    blocks.push({{id:i===0?id:'',name:i===0?name:'',items:items.slice(i,i+CH)}});}};
+  for(const c of cats)push('c-'+c.id,c.name,S.products.filter(p=>p.category_id===c.id));
+  if(other.length)push('c-other','Ещё',other);
+  menu.innerHTML=`<div class="tabs">${{cats.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}${{other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}}</div><div id="mbody"></div><div id="msent"><div class="msk"></div><div class="msk"></div></div>`;
+  const body=menu.querySelector('#mbody'),sent=menu.querySelector('#msent');
+  queue=blocks;
+  const flush=()=>{{const b=queue.shift();
+    if(!b){{sent.remove();moreIO?.disconnect();return;}}
+    body.insertAdjacentHTML('beforeend',`<div class="mchunk">${{b.name?`<h2 class="cat serif"${{b.id?` id="${{b.id}}"`:""}}>${{esc(b.name)}}</h2>`:''}}${{ITEMS(b.items)}}</div>`);
+    spy(body);}};
+  const first=cats[0];if(first)activate(first.id);
+  for(let i=0;i<3&&queue.length;i++)flush();
+  spyIO=new IntersectionObserver(es=>{{for(const e of es)if(e.isIntersecting)activate(e.target.id.slice(2));}},{{rootMargin:'-30% 0px -60% 0px'}});
+  spy(body);
+  moreIO=new IntersectionObserver(es=>{{if(es[0].isIntersecting)for(let i=0;i<2&&queue.length;i++)flush();}},{{rootMargin:'1000px 0px'}});
+  if(queue.length)moreIO.observe(sent);else sent.remove();
 }}
-window.jump=id=>{{document.getElementById('c-'+id)?.scrollIntoView({{behavior:'smooth',block:'start'}});}};
+window.jump=id=>{{
+  let el=document.getElementById('c-'+id);
+  const m=document.getElementById('mbody'),sent=document.getElementById('msent');
+  while(!el&&queue.length&&m&&sent){{
+    const b=queue.shift();
+    m.insertAdjacentHTML('beforeend',`<div class="mchunk">${{b.name?`<h2 class="cat serif"${{b.id?` id="${{b.id}}"`:""}}>${{esc(b.name)}}</h2>`:''}}${{ITEMS(b.items)}}</div>`);
+    spy(m);
+    if(!queue.length)sent.remove();
+    el=document.getElementById('c-'+id);
+  }}
+  el?.scrollIntoView({{behavior:'smooth',block:'start'}});}};
 window.addPlain=(pid,d)=>{{const key=pid+'#';const l=cart.get(key)||{{pid,sel:new Map(),qty:0}};
   l.qty+=d;if(l.qty<=0)cart.delete(key);else cart.set(key,l);refreshQty(pid);draw();}};
 window.addLine=(key,d)=>{{const l=cart.get(key);if(!l)return;l.qty+=d;
