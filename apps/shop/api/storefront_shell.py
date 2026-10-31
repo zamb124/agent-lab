@@ -30,6 +30,9 @@ _PAGE = """<!DOCTYPE html>
 <style>
 :root{{--accent:{accent};--bg:#100e0c;--card:#1b1815;--card2:#241f1a;--text:#f6f1e8;--muted:#a89e90;--line:#2b251e;--radius:18px}}
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
+img{{background:var(--card2);transition:opacity .35s ease}}
+img:not(.ld){{opacity:0}}
+body.lock{{overflow:hidden}}
 body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:manipulation}}
 .serif{{font-family:ui-serif,Georgia,'Times New Roman',serif}}
 .wrap{{max-width:720px;margin:0 auto;padding:0 16px calc(150px + env(safe-area-inset-bottom))}}
@@ -57,6 +60,8 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .mchunk{{animation:fade .3s ease}}
 .msk{{height:96px;border-radius:var(--radius);margin:14px 0;background:linear-gradient(100deg,var(--card2) 40%,var(--card) 50%,var(--card2) 60%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}}
 @keyframes shimmer{{from{{background-position:120% 0}}to{{background-position:-80% 0}}}}
+.cart.pop{{animation:pop .28s ease}}
+@keyframes pop{{0%{{transform:translateX(-50%) scale(1)}}40%{{transform:translateX(-50%) scale(1.06)}}100%{{transform:translateX(-50%) scale(1)}}}}
 .item,.gcard{{cursor:pointer}}
 .phero{{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:var(--radius);margin-bottom:12px}}
 .pdesc{{color:var(--muted);font-size:14px;line-height:1.55;margin:4px 0 14px}}
@@ -185,7 +190,7 @@ window.menuSearch=v=>{{query=v.trim().toLowerCase();renderMenu();}};
 const NEST=S.modifier_nested_groups||{{}};
 const byId=id=>S.products.find(x=>x.id===id);
 function esc(s){{return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
-function photo(u,cls){{return u?`<img class="${{cls||''}}" src="${{IMG(u)}}" loading="lazy" alt="">`:'';}}
+function photo(u,cls){{return u?`<img class="${{cls||''}}" src="${{IMG(u)}}" loading="lazy" alt="" onload="this.classList.add('ld')">`:'';}}
 function selHash(sel){{return [...sel.entries()].sort().map(([o,q])=>o+'x'+q).join(',');}}
 function cartQty(pid){{let n=0;for(const l of cart.values())if(l.pid===pid)n+=l.qty;return n;}}
 function unitPrice(p,sel){{let abs=0,delta=0;
@@ -283,14 +288,17 @@ window.jump=id=>{{
     el=document.getElementById('c-'+id);
   }}
   el?.scrollIntoView({{behavior:'smooth',block:'start'}});}};
+window.haptic=()=>{{if(navigator.vibrate)navigator.vibrate(8);}};
 window.addPlain=(pid,d)=>{{const key=pid+'#';const l=cart.get(key)||{{pid,sel:new Map(),qty:0}};
-  l.qty+=d;if(l.qty<=0)cart.delete(key);else cart.set(key,l);refreshQty(pid);draw();}};
+  l.qty+=d;if(l.qty<=0)cart.delete(key);else cart.set(key,l);if(d>0)haptic();refreshQty(pid);draw();}};
 window.addLine=(key,d)=>{{const l=cart.get(key);if(!l)return;l.qty+=d;
   if(l.qty<=0)cart.delete(key);else cart.set(key,l);refreshQty(l.pid);draw();}};
 function total(){{let t=0;for(const l of cart.values()){{const p=byId(l.pid);if(p)t+=unitPrice(p,l.sel)*l.qty;}}return t;}}
 function count(){{let n=0;for(const l of cart.values())n+=l.qty;return n;}}
 function draw(){{const b=document.getElementById('cart');const n=count();saveCart();
-  if(n){{b.textContent=`Корзина · ${{n}} · ${{fmt(total())}} →`;b.classList.add('show');}}else b.classList.remove('show');}}
+  if(n){{b.textContent=`Корзина · ${{n}} · ${{fmt(total())}} →`;b.classList.add('show');
+    if(n>(b._n||0)){{b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop');}}}}else b.classList.remove('show');
+  b._n=n;}}
 let dtype='';
 window.openSheet=()=>{{
   if(!dtype)dtype=S.delivery_enabled?'delivery':'pickup';
@@ -396,12 +404,13 @@ window.shareProduct=pid=>{{const url=location.origin+location.pathname+'?p='+pid
   else toast(url);}};
 document.addEventListener('keydown',e=>{{if(e.key==='Escape'){{closeCust();closeSheet();}}}});
 let sheetDepth=0,popGuard=0;
-function sheetOpen(el){{el.classList.add('show');sheetDepth++;history.pushState({{sh:1}},'');}}
+function syncLock(){{document.body.classList.toggle('lock',!!document.querySelector('.sheet.show'));}}
+function sheetOpen(el){{el.classList.add('show');sheetDepth++;history.pushState({{sh:1}},'');syncLock();}}
 function sheetBack(el){{if(!el.classList.contains('show'))return;
-  el.classList.remove('show');if(sheetDepth>0){{sheetDepth--;popGuard++;history.back();}}}}
+  el.classList.remove('show');if(sheetDepth>0){{sheetDepth--;popGuard++;history.back();}}syncLock();}}
 window.addEventListener('popstate',()=>{{if(popGuard>0){{popGuard--;return;}}
   const list=document.querySelectorAll('.sheet.show');const s=list[list.length-1];
-  if(s){{s.classList.remove('show');sheetDepth=Math.max(0,sheetDepth-1);}}}});
+  if(s){{s.classList.remove('show');sheetDepth=Math.max(0,sheetDepth-1);syncLock();}}}});
 function groupSelectedQty(g){{let n=0;for(const o of g.options)n+=cust.sel.get(o.id)||0;return n;}}
 window.optToggle=(pid,gid,oid)=>{{const g=findGroup(pid,gid);if(!g)return;
   if(g.selection_mode==='single'){{for(const o of g.options)cust.sel.delete(o.id);cust.sel.set(oid,1);}}
