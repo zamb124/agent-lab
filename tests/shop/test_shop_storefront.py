@@ -178,6 +178,22 @@ class TestStorefrontPage:
         assert "CafeOrCoffeeShop" in html.text
         assert "hasMenu" in html.text and "Борщ" in html.text
 
+    async def test_storefront_deeplink_marks_product(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Диплинк ?p=<product_id>: карточки несут data-pid, JS скроллит и подсвечивает."""
+        slug = f"deep-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={"name": "Борщ", "price_minor": 35000},
+        )
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}?p=x")
+        assert html.status_code == 200
+        assert 'data-pid="' in html.text
+        assert "flashRing" in html.text
+        assert "get('p')" in html.text
+
     async def test_working_hours_in_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:
@@ -291,6 +307,7 @@ class TestMarketPage:
         assert "application/ld+json" in html.text
         assert "CollectionPage" in html.text and "ItemList" in html.text
         assert 'rel="canonical"' in html.text
+        assert "?p=" in html.text
 
     async def test_market_page_escapes_script_breakout(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str

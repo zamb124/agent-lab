@@ -129,7 +129,7 @@ async function runSearch(){{
     if(my!==req||!r.ok)return false;
     const d=await r.json();
     document.getElementById('hitsTitle').textContent=`«${{q}}» — найдено ${{d.total}}`;
-    document.getElementById('hitsGrid').innerHTML=d.items.length?d.items.map(p=>`<a class="pcard" href="${{LINK(p.shop_slug)}}">
+    document.getElementById('hitsGrid').innerHTML=d.items.length?d.items.map(p=>`<a class="pcard" href="${{LINK(p.shop_slug)}}?p=${{esc(p.product_id)}}">
       ${{p.photo_file_id?`<img src="${{IMG(p.photo_file_id)}}" loading="lazy" alt="">`:''}}
       <span class="b"><h3>${{esc(p.name)}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`).join('')
       :`<div class="empty">Ничего не нашлось — попробуйте другое название</div>`;

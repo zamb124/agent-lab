@@ -47,6 +47,8 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .tabs button.on{{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}}
 .cat{{font-size:21px;margin:28px 0 6px;letter-spacing:-.01em}}
 .item{{display:flex;gap:14px;padding:16px 2px;border-bottom:1px solid var(--line);animation:fade .3s ease}}
+.flash{{animation:flashRing 2.6s ease}}
+@keyframes flashRing{{0%,55%{{box-shadow:0 0 0 3px var(--accent);border-radius:14px}}100%{{box-shadow:0 0 0 0 transparent}}}}
 @keyframes fade{{from{{opacity:0;transform:translateY(6px)}}to{{opacity:1}}}}
 .item img{{width:92px;height:92px;border-radius:var(--radius);object-fit:cover;background:var(--card2);flex-shrink:0}}
 .item .b{{flex:1;min-width:0}}
@@ -184,9 +186,9 @@ function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;
   if(!n)return `<button class="add" onclick="addPlain('${{p.id}}',1)">В корзину</button>`;
   return `<span class="stepper"><button class="ghost" onclick="addPlain('${{p.id}}',-1)">−</button><span>${{n}}</span><button onclick="addPlain('${{p.id}}',1)">+</button></span>`;}}
 function refreshQty(pid){{document.querySelectorAll(`[data-qty="${{pid}}"]`).forEach(el=>{{el.innerHTML=qtyCtl(byId(pid));}});}}
-function rowList(ps){{return ps.map(p=>`<div class="item">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
-function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
-function rowCompact(ps){{return ps.map(p=>`<div class="item"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
+function rowList(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
+function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${{esc(p.id)}}">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
+function rowCompact(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
   const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
@@ -354,6 +356,9 @@ window.addCustom=()=>{{if(!cust)return;const p=byId(cust.pid);
   l.qty+=cust.qty;cart.set(key,l);
   cust=null;closeCust();refreshQty(p.id);draw();}};
 render();
+const deeplink=new URLSearchParams(location.search).get('p');
+if(deeplink){{const el=document.querySelector('[data-pid="'+CSS.escape(deeplink)+'"]');
+  if(el){{el.classList.add('flash');setTimeout(()=>el.scrollIntoView({{behavior:'smooth',block:'center'}}),200);}}}}
 </script>
 </body>
 </html>"""
