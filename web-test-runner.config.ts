@@ -33,8 +33,10 @@ const tsSiblingMiddleware: Middleware = async (ctx, next) => {
 
 // Симметрично middleware: гасим resolveImport плагина, который в .ts-файлах
 // переписывает specifier `./x.js` → `./x.ts` — см. tsSiblingMiddleware.
+// `delete` на инстансе не срабатывает — метод объявлен на прототипе класса;
+// own-property undefined перекрывает вызов хука.
 const tsEsbuildPlugin = esbuildPlugin({ ts: true });
-delete tsEsbuildPlugin.resolveImport;
+tsEsbuildPlugin.resolveImport = undefined;
 
 // node-resolve с .ts в extensions тоже переписывает specifier `./x.js` → `./x.ts`
 // для отсутствующего на диске .js — оборачиваем и возвращаем исходный specifier.
@@ -49,7 +51,6 @@ tsNodeResolvePlugin.resolveImport = async (args) => {
     if (
         typeof resolved === 'string'
         && args.source.endsWith('.js')
-        && args.source.startsWith('.')
         && resolved.endsWith('.ts')
     ) {
         return args.source;
