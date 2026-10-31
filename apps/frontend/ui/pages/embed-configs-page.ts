@@ -13,7 +13,8 @@ import { FrontendCreateEmbedModal } from '../modals/create-embed-modal.js';
 import { FrontendEmbedCodeModal } from '../modals/embed-code-modal.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
-import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ControllerFor } from '@platform/lib/base/use-resource.js';
+import type { EmbedConfig } from '@platform/lib/events/wire/frontend.gen.js';
 
 export class FrontendEmbedConfigsPage extends PlatformPage {
     static override styles: CSSResultGroup = [
@@ -78,24 +79,24 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
         super();
         this._configs = this.useResource('frontend/embed_configs', { autoload: true });
     }
-    private _configs: ResourceController;
+    private _configs: ControllerFor<'frontend/embed_configs'>;
 
 
     _create() {
         this.openModal(FrontendCreateEmbedModal);
     }
 
-    _edit(cfg: Record<string, unknown>) {
+    _edit(cfg: EmbedConfig) {
         this.openModal(FrontendCreateEmbedModal, { embedConfig: cfg });
     }
 
-    _showCode(cfg: Record<string, unknown>) {
+    _showCode(cfg: EmbedConfig) {
         this.openModal(FrontendEmbedCodeModal, { embedId: cfg.embed_id });
     }
 
-    async _delete(cfg: Record<string, unknown>) {
+    async _delete(cfg: EmbedConfig) {
         if (!(await platformConfirm(this.t('embed_page.confirm_delete')))) return;
-        this._configs.remove(typeof cfg.embed_id === 'string' ? cfg.embed_id : '');
+        this._configs.remove(cfg.embed_id);
     }
 
     _renderEmpty() {
@@ -108,7 +109,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
         `;
     }
 
-    _renderRow(c: Record<string, unknown>) {
+    _renderRow(c: EmbedConfig) {
         const status = c.status || 'active';
         return html`
             <tr>

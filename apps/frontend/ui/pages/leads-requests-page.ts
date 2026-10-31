@@ -21,6 +21,7 @@ import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { ControllerFor } from '@platform/lib/base/use-resource.js';
+import type { LeadRequestRecord } from '@platform/lib/events/wire/frontend.gen.js';
 
 export class FrontendLeadsRequestsPage extends PlatformPage {
     static override styles: CSSResultGroup = [
@@ -114,7 +115,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
         `;
     }
 
-    _renderTable(list: Record<string, unknown>[]) {
+    _renderTable(list: readonly LeadRequestRecord[]) {
         return html`
             <table>
                 <thead><tr>
@@ -128,7 +129,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                 <tbody>
                     ${list.map((l) => html`
                         <tr>
-                            <td class="created">${typeof l.created_at === 'string' || typeof l.created_at === 'number' ? new Date(l.created_at).toLocaleString() : ''}</td>
+                            <td class="created">${new Date(l.created_at).toLocaleString()}</td>
                             <td>${l.contact_name}</td>
                             <td>
                                 ${l.email
@@ -162,8 +163,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
     }
 
     override render(): TemplateResult {
-        const rawItems = this._list.items;
-        const list = Array.isArray(rawItems) ? rawItems : [];
+        const list = this._list.items;
         const loading = this._list.loading;
         const terminal = this._list.terminal;
         const error = this._list.error;

@@ -100,11 +100,11 @@ export class BlogPostPage extends PlatformPage {
         });
     }
 
-    _title(post: Record<string, unknown>) {
+    _title(post: Record<string, unknown>): string {
         const locale = this._localeSel.value;
-        if (locale === 'ru') return post.title_ru;
-        if (locale === 'en') return post.title_en;
-        throw new Error('blog-post-page: i18n.locale must be ru or en');
+        const title = locale === 'ru' ? post.title_ru : locale === 'en' ? post.title_en : undefined;
+        if (title === undefined) throw new Error('blog-post-page: i18n.locale must be ru or en');
+        return typeof title === 'string' ? title : '';
     }
 
     _body(post: Record<string, unknown>): string {

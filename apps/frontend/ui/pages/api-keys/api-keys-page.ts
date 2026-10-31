@@ -17,6 +17,7 @@ import { FrontendCreateApiKeyModal } from '../../modals/create-api-key-modal.js'
 import { FrontendEditApiKeyModal } from '../../modals/edit-api-key-modal.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { ControllerFor } from '@platform/lib/base/use-resource.js';
+import type { ApiKeyListItem } from '../../events/resources/api-keys.resource.js';
 
 export class FrontendApiKeysPage extends PlatformPage {
     static override styles: CSSResultGroup = [
@@ -107,11 +108,11 @@ export class FrontendApiKeysPage extends PlatformPage {
         this.openModal(FrontendCreateApiKeyModal);
     }
 
-    _rename(key: Record<string, unknown>) {
+    _rename(key: ApiKeyListItem) {
         this.openModal(FrontendEditApiKeyModal, { item: key });
     }
 
-    async _revoke(key: Record<string, unknown>) {
+    async _revoke(key: ApiKeyListItem) {
         const keyName = typeof key.name === 'string' ? key.name : '';
         const ok = await platformConfirm(
             this.t('api_keys_page.confirm_revoke', { name: keyName }),
@@ -180,7 +181,7 @@ export class FrontendApiKeysPage extends PlatformPage {
         `;
     }
 
-    _renderRow(k: Record<string, unknown>) {
+    _renderRow(k: ApiKeyListItem) {
         return html`
             <tr>
                 <td>${k.name}</td>

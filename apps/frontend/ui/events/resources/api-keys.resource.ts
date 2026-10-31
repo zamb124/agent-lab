@@ -21,10 +21,10 @@ import type { ResourceCollectionSlice, ResourceItem } from '@platform/lib/events
  * View-форма ключа для UI: wire `ApiKeyRecord` несёт служебные поля
  * (company_id, key_hash, created_by) — на клиент уходит только безопасная часть.
  */
-interface ApiKeyListItem extends ResourceItem {
+export interface ApiKeyListItem extends ResourceItem {
     key_id: string;
     name: string;
-    scopes: unknown[];
+    scopes: string[];
     key_prefix: string;
     created_at: string;
     last_used: string | null;
@@ -41,7 +41,7 @@ function mapApiKeyItem(raw: ResourceItem): ApiKeyListItem {
     return {
         key_id: raw.key_id,
         name: typeof raw.name === 'string' ? raw.name : '',
-        scopes: Array.isArray(raw.scopes) ? raw.scopes : [],
+        scopes: Array.isArray(raw.scopes) ? raw.scopes.filter((s): s is string => typeof s === 'string') : [],
         key_prefix: typeof raw.key_prefix === 'string' && raw.key_prefix.length > 0
             ? raw.key_prefix
             : (typeof raw.secret === 'string' ? raw.secret.slice(0, 12) : ''),

@@ -32,7 +32,7 @@ export class LandingHero extends PlatformElement {
     }
     declare _searchQuery: string;
     declare _searchMode: string;
-    declare _selectedFiles: any[];
+    declare _selectedFiles: File[];
 ;
 
     static override styles: CSSResultGroup = [
@@ -735,7 +735,7 @@ export class LandingHero extends PlatformElement {
         `;
     }
 
-    _renderSelectedFile(file: Record<string, unknown>, index: number) {
+    _renderSelectedFile(file: File, index: number) {
         return html`
             <div class="hero-file-chip" role="listitem">
                 <platform-icon file-icon name=${resolveFileIconKey(typeof file.name === 'string' ? file.name : '', typeof file.type === 'string' ? file.type : '')} size="18"></platform-icon>
