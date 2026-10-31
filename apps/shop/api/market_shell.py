@@ -74,7 +74,8 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
       <button class="go" type="submit">Найти</button>
     </form>
   </div>
-  <div id="hits" class="sec" style="display:none"><h2 id="hitsTitle"></h2><div class="results" id="hitsGrid"></div></div>
+  <div id="hits" class="sec" style="display:none"><h2 id="hitsTitle"></h2><div class="results" id="hitsGrid"></div>
+    <button class="chip" id="moreBtn" style="display:none;margin:16px auto 0" onclick="loadMore()">Показать ещё</button></div>
   <div class="sec" id="shopsSec">
     <h2>{shops_title}</h2>
     <div class="filters" id="kindChips"></div>
@@ -117,27 +118,44 @@ function renderChips(){{
 renderChips();renderShops();
 let timer=0,req=0;
 function debounced(){{clearTimeout(timer);timer=setTimeout(runSearch,350);}}
+let lastQ='';
+const pcardHtml=p=>`<a class="pcard" href="${{LINK(p.shop_slug)}}?p=${{esc(p.product_id)}}">
+  ${{p.photo_file_id?`<img src="${{IMG(p.photo_file_id)}}" loading="lazy" alt="">`:''}}
+  <span class="b"><h3>${{esc(p.name)}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`;
+function searchUrl(q,offset){{let url=`/shop/api/v1/public/aggregate/search?q=${{encodeURIComponent(q)}}&limit=24&offset=${{offset}}`;
+  if(fKind)url+=`&kind=${{fKind}}`;if(fCity)url+=`&city=${{encodeURIComponent(fCity)}}`;return url;}}
+function syncMore(total){{const g=document.getElementById('hitsGrid');
+  document.getElementById('moreBtn').style.display=g.children.length<total?'block':'none';}}
 async function runSearch(){{
   const q=document.getElementById('q').value.trim();
   const sec=document.getElementById('hits');
   if(!q){{sec.style.display='none';return false;}}
   const my=++req;
   try{{
-    let url=`/shop/api/v1/public/aggregate/search?q=${{encodeURIComponent(q)}}&limit=24`;
-    if(fKind)url+=`&kind=${{fKind}}`;if(fCity)url+=`&city=${{encodeURIComponent(fCity)}}`;
-    const r=await fetch(url);
+    const r=await fetch(searchUrl(q,0));
     if(my!==req||!r.ok)return false;
     const d=await r.json();
+    lastQ=q;
     document.getElementById('hitsTitle').textContent=`«${{q}}» — найдено ${{d.total}}`;
-    document.getElementById('hitsGrid').innerHTML=d.items.length?d.items.map(p=>`<a class="pcard" href="${{LINK(p.shop_slug)}}?p=${{esc(p.product_id)}}">
-      ${{p.photo_file_id?`<img src="${{IMG(p.photo_file_id)}}" loading="lazy" alt="">`:''}}
-      <span class="b"><h3>${{esc(p.name)}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`).join('')
+    document.getElementById('hitsGrid').innerHTML=d.items.length?d.items.map(pcardHtml).join('')
       :`<div class="empty">Ничего не нашлось — попробуйте другое название</div>`;
+    syncMore(d.total);
     sec.style.display='block';
     document.getElementById('hits').scrollIntoView({{behavior:'smooth',block:'start'}});
   }}catch(e){{}}
   return false;
 }}
+window.loadMore=async()=>{{
+  const g=document.getElementById('hitsGrid');
+  const my=req;
+  try{{
+    const r=await fetch(searchUrl(lastQ,g.children.length));
+    if(my!==req||!r.ok)return;
+    const d=await r.json();
+    g.insertAdjacentHTML('beforeend',d.items.map(pcardHtml).join(''));
+    syncMore(d.total);
+  }}catch(e){{}}
+}};
 </script>
 </body>
 </html>"""

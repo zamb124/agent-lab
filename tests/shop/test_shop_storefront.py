@@ -324,6 +324,7 @@ class TestMarketPage:
         assert "CollectionPage" in html.text and "ItemList" in html.text
         assert 'rel="canonical"' in html.text
         assert "?p=" in html.text
+        assert "loadMore" in html.text and "offset=" in html.text
 
     async def test_market_page_escapes_script_breakout(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
