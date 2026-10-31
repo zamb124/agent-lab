@@ -22,13 +22,17 @@ _PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content="{description}">
+<meta name="theme-color" content="{accent}">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 {seo_head}
 <style>
 :root{{--accent:{accent};--bg:#100e0c;--card:#1b1815;--card2:#241f1a;--text:#f6f1e8;--muted:#a89e90;--line:#2b251e;--radius:18px}}
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
-body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}}
+body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overscroll-behavior:none;touch-action:manipulation}}
 .serif{{font-family:ui-serif,Georgia,'Times New Roman',serif}}
-.wrap{{max-width:720px;margin:0 auto;padding:0 16px 160px}}
+.wrap{{max-width:720px;margin:0 auto;padding:0 16px calc(150px + env(safe-area-inset-bottom))}}
 .hero{{position:relative;margin:0 -16px;height:260px;overflow:hidden;background:linear-gradient(165deg,var(--accent) 0%,#221a12 75%)}}
 .hero .bg{{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.9}}
 .hero .veil{{position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,14,12,.15) 20%,rgba(16,14,12,.92) 100%)}}
@@ -41,7 +45,7 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .ob-open,.ob-closed{{font-weight:650}}
 .ob-open{{color:#4ade80}}
 .ob-closed{{color:#f0b45c}}
-.tabs{{position:sticky;top:0;z-index:5;display:flex;gap:8px;overflow-x:auto;padding:12px 2px;background:linear-gradient(180deg,var(--bg) 85%,transparent);scrollbar-width:none}}
+.tabs{{position:sticky;top:env(safe-area-inset-top);z-index:5;display:flex;gap:8px;overflow-x:auto;padding:12px 2px;background:linear-gradient(180deg,var(--bg) 85%,transparent);scrollbar-width:none}}
 .msearch{{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:10px 18px;margin:10px 0 2px}}
 .msearch svg{{opacity:.5;flex-shrink:0}}
 .msearch input{{flex:1;min-width:0;font:inherit;font-size:15px;background:transparent;border:0;color:var(--text);outline:none}}
@@ -82,17 +86,17 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .gcard .row{{display:flex;justify-content:space-between;align-items:center;margin-top:auto;gap:8px}}
 .compact .item{{padding:12px 2px}}
 .compact .item img{{display:none}}
-.cart{{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;width:min(688px,92vw);background:var(--accent);color:#fff;border:0;font:inherit;font-size:16px;font-weight:650;padding:17px;border-radius:99px;cursor:pointer;display:none;box-shadow:0 10px 40px rgba(0,0,0,.55);z-index:10;letter-spacing:.01em}}
+.cart{{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));width:min(688px,92vw);background:var(--accent);color:#fff;border:0;font:inherit;font-size:16px;font-weight:650;padding:17px;border-radius:99px;cursor:pointer;display:none;box-shadow:0 10px 40px rgba(0,0,0,.55);z-index:10;letter-spacing:.01em}}
 .cart.show{{display:block;animation:pop .25s ease}}
 @keyframes pop{{from{{transform:translateX(-50%) translateY(16px);opacity:0}}}}
 .sheet{{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);display:none;z-index:20}}
 .sheet.show{{display:block}}
-.panel{{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:22px 20px 44px;animation:up .25s ease}}
+.panel{{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:22px 20px calc(44px + env(safe-area-inset-bottom));animation:up .25s ease}}
 @keyframes up{{from{{transform:translateX(-50%) translateY(40px)}}}}
 .panel h2{{font-size:21px;margin-bottom:16px;letter-spacing:-.01em}}
 .pshare{{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(18,18,20,.55);backdrop-filter:blur(8px);color:#fff;display:grid;place-items:center;z-index:2}}
 .pshare svg{{width:18px;height:18px;fill:currentColor}}
-.toast{{position:fixed;left:50%;transform:translateX(-50%) translateY(12px);bottom:90px;background:#1c1c20;color:#fff;padding:10px 18px;border-radius:999px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s ease;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,.3)}}
+.toast{{position:fixed;left:50%;transform:translateX(-50%) translateY(12px);bottom:calc(90px + env(safe-area-inset-bottom));background:#1c1c20;color:#fff;padding:10px 18px;border-radius:999px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s ease;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,.3)}}
 .toast.show{{opacity:1;transform:translateX(-50%) translateY(0)}}
 .cl{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:15px;border-bottom:1px solid var(--line)}}
 .cl .n{{flex:1;min-width:0}}
@@ -291,7 +295,7 @@ let dtype='';
 window.openSheet=()=>{{
   if(!dtype)dtype=S.delivery_enabled?'delivery':'pickup';
   renderSheet();
-  document.getElementById('sheet').classList.add('show');
+  sheetOpen(document.getElementById('sheet'));
 }};
 window.setDtype=t=>{{dtype=t;renderSheet();}};
 function renderSheet(){{
@@ -338,7 +342,7 @@ async function refreshSavings(){{
     if(btn&&!btn.disabled)btn.textContent='Оформить заказ · '+fmt(d.total_minor);
   }}catch(e){{}}
 }}
-window.closeSheet=()=>document.getElementById('sheet').classList.remove('show');
+window.closeSheet=()=>sheetBack(document.getElementById('sheet'));
 window.submit=async()=>{{
   const body={{items:[...cart.values()].map(l=>({{product_id:l.pid,qty:l.qty,
     selections:[...l.sel.entries()].map(([option_id,qty])=>({{option_id,qty}}))}})),
@@ -378,9 +382,9 @@ function applyDefaults(pid){{const p=byId(pid);
     if(o.is_default&&o.nested_group_id&&NEST[o.nested_group_id])walk([NEST[o.nested_group_id]]);}}}};
   walk(p.modifier_groups||[]);}}
 window.customize=pid=>{{cust={{pid,sel:new Map(),qty:1}};applyDefaults(pid);
-  renderCust();document.getElementById('csheet').classList.add('show');}};
+  renderCust();sheetOpen(document.getElementById('csheet'));}};
 window.openProduct=pid=>customize(pid);
-window.closeCust=()=>document.getElementById('csheet').classList.remove('show');
+window.closeCust=()=>sheetBack(document.getElementById('csheet'));
 const SHARE_ICON='<svg viewBox="0 -960 960 960"><path d="M720-80q-50 0-85-35t-35-85q0-7 1-14.5t3-13.5L322-392q-17 15-38 23.5t-44 8.5q-50 0-85-35t-35-85 35-85 85-35q23 0 44 8.5t38 23.5l282-164q-2-6-3-13.5t-1-14.5q0-50 35-85t85-35 85 35 35 85-35 85-85 35q-23 0-44-8.5T638-672L356-508q2 6 3 13.5t1 14.5-1 14.5-3 13.5l282 164q17-15 38-23.5t44-8.5q50 0 85 35t35 85-35 85-85 35Z"/></svg>';
 let toastTimer=0;
 window.toast=msg=>{{const t=document.getElementById('toast');if(!t)return;
@@ -391,6 +395,13 @@ window.shareProduct=pid=>{{const url=location.origin+location.pathname+'?p='+pid
   else if(navigator.clipboard)navigator.clipboard.writeText(url).then(()=>toast('Ссылка скопирована'),()=>{{}});
   else toast(url);}};
 document.addEventListener('keydown',e=>{{if(e.key==='Escape'){{closeCust();closeSheet();}}}});
+let sheetDepth=0,popGuard=0;
+function sheetOpen(el){{el.classList.add('show');sheetDepth++;history.pushState({{sh:1}},'');}}
+function sheetBack(el){{if(!el.classList.contains('show'))return;
+  el.classList.remove('show');if(sheetDepth>0){{sheetDepth--;popGuard++;history.back();}}}}
+window.addEventListener('popstate',()=>{{if(popGuard>0){{popGuard--;return;}}
+  const list=document.querySelectorAll('.sheet.show');const s=list[list.length-1];
+  if(s){{s.classList.remove('show');sheetDepth=Math.max(0,sheetDepth-1);}}}});
 function groupSelectedQty(g){{let n=0;for(const o of g.options)n+=cust.sel.get(o.id)||0;return n;}}
 window.optToggle=(pid,gid,oid)=>{{const g=findGroup(pid,gid);if(!g)return;
   if(g.selection_mode==='single'){{for(const o of g.options)cust.sel.delete(o.id);cust.sel.set(oid,1);}}
