@@ -13,7 +13,10 @@
 import type { PlatformEvent } from '../contract.js';
 import { isPlainRecord, payloadFields } from '../payload.js';
 
-export interface CompanyRecord extends Record<string, unknown> {}
+export interface CompanyRecord extends Record<string, unknown> {
+    company_id?: string | undefined;
+    name?: string | undefined;
+}
 
 export interface CompaniesState {
     list: CompanyRecord[];

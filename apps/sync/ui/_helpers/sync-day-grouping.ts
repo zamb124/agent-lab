@@ -5,6 +5,8 @@
  * Чистые функции; работают с уже отсортированной по `sent_at` лентой.
  */
 
+import type { MessageRead } from '@platform/lib/events/wire/sync.gen.js';
+
 const SENDER_WINDOW_MS = 120_000;
 
 function _dayKey(iso: unknown) {
@@ -40,9 +42,9 @@ function _isYesterday(iso: unknown) {
  */
 export type SyncRenderEntry =
     | { kind: 'day'; label: string; key: string }
-    | { kind: 'message'; message: Record<string, unknown>; position: string };
+    | { kind: 'message'; message: MessageRead; position: string };
 
-export function groupMessagesForRender(messages: Array<Record<string, unknown>>, t: (key: string) => string): SyncRenderEntry[] {
+export function groupMessagesForRender(messages: MessageRead[], t: (key: string) => string): SyncRenderEntry[] {
     if (!Array.isArray(messages) || messages.length === 0) return [];
     const out: SyncRenderEntry[] = [];
     let currentDayKey = null;

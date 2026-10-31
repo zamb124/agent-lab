@@ -7,6 +7,7 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
+import type { EffectCtx } from '@platform/lib/events/contract.js';
 
 const WS_TIMEOUT_MS = 8_000;
 
@@ -34,7 +35,7 @@ export const settingsUpdateOp = createAsyncOp({
 
 // === AI providers ===
 
-function _reloadAiProviders(ctx: Record<string, unknown>) {
+function _reloadAiProviders(ctx: EffectCtx) {
     ctx.dispatch(
         aiProvidersLoadOp.events.REQUESTED,
         { public_host: window.location.host },

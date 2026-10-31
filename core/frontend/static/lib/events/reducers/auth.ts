@@ -20,6 +20,8 @@ export type AuthStatus = 'unknown' | 'validating' | 'authenticated' | 'unauthent
 
 export interface AuthUser extends Record<string, unknown> {
     company_id?: string | undefined;
+    name?: string | undefined;
+    raw?: Record<string, unknown> | undefined;
 }
 
 export interface AuthProvidersState {

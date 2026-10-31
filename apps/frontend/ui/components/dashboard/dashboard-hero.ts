@@ -9,6 +9,8 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
+import type { CompanyRecord } from '@platform/lib/events/reducers/companies.js';
 
 export class DashboardHero extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -75,24 +77,25 @@ export class DashboardHero extends PlatformElement {
         }));
         this._companies = this.select((s) => s.companies.list);
     }
-    private _auth: SelectController<any>;
-    private _companies: SelectController<any>;
+    private _auth: SelectController<{ user: AuthUser | null; activeCompanyId: string | null }>;
+    private _companies: SelectController<CompanyRecord[]>;
 
 
-    _userName(user: Record<string, unknown>) {
+    _userName(user: AuthUser | null) {
         if (user && typeof user.name === 'string' && user.name.trim().length > 0) {
             return user.name.trim();
         }
-        if (user && user.raw && typeof user.raw.name === 'string' && user.raw.name.trim().length > 0) {
-            return user.raw.name.trim();
+        const rawName = user?.raw?.name;
+        if (typeof rawName === 'string' && rawName.trim().length > 0) {
+            return rawName.trim();
         }
         return this.t('console_home.user_fallback');
     }
 
-    _activeCompanyName(activeCompanyId: Record<string, unknown>, list: Record<string, unknown>[]) {
+    _activeCompanyName(activeCompanyId: string | null, list: CompanyRecord[]) {
         if (!activeCompanyId || !Array.isArray(list)) return null;
         const found = list.find((c) => c.company_id === activeCompanyId);
-        return found ? found.name : null;
+        return found !== undefined && typeof found.name === 'string' ? found.name : null;
     }
 
     override render(): TemplateResult {

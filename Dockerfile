@@ -29,6 +29,8 @@ FROM python:3.14-slim AS docs-builder
 RUN pip install --no-cache-dir "zensical>=0.0.73"
 WORKDIR /app
 ENV PYTHONPATH=/app
+# esbuild — статические Go-бинари из ui-builder стейджа (без node-рантайма)
+COPY --from=ui-builder /app/node_modules/@esbuild ./node_modules/@esbuild
 COPY zensical.ru.toml zensical.en.toml ./
 COPY docs ./docs
 COPY core/frontend/static/assets/service_logos/frontend_logo.svg ./core/frontend/static/assets/service_logos/frontend_logo.svg

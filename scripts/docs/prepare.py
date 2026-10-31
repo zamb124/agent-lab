@@ -651,6 +651,10 @@ def _transpile_docs_javascripts(dst_root: Path) -> None:
         raise FileNotFoundError(f"Нет исходника документационного shell: {src}")
     esbuild = _repo_root() / "node_modules" / ".bin" / "esbuild"
     if not esbuild.is_file():
+        # Нативный бинарь платформенного пакета (docs-стейдж образа без node-рантайма)
+        candidates = sorted((_repo_root() / "node_modules" / "@esbuild").glob("*/bin/esbuild"))
+        esbuild = candidates[0] if candidates else esbuild
+    if not esbuild.is_file():
         raise FileNotFoundError(f"Нет esbuild для docs javascripts: {esbuild}; нужен npm install")
     out = dst_root / DOCS_SHELL_OUT
     out.parent.mkdir(parents=True, exist_ok=True)

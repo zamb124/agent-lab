@@ -9,7 +9,7 @@
 
 import { createAsyncOp, createFacets } from '@platform/lib/events/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
-import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { EffectCtx, PlatformEvent } from '@platform/lib/events/contract.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 const BASE_BILLING = '/frontend/api/platform-billing';
@@ -39,7 +39,7 @@ function _assertCompanyOverviewItemsShape(items: unknown[]) {
     }
 }
 
-function _toastError(ctx: Record<string, unknown>, key: string) {
+function _toastError(ctx: EffectCtx, key: string) {
     ctx.dispatch(
         CoreEvents.UI_TOAST_SHOW,
         { i18n_key: key },
