@@ -5,6 +5,7 @@ from __future__ import annotations
 from apps.shop.di import ShopDi
 from apps.shop.models.api import ShopCreateRequest
 from apps.shop.realtime.operations import (
+    ShopAiDescribeBatchPayload,
     ShopAiDescribePayload,
     ShopAiEnhancePhotoPayload,
     ShopAiGeneratePhotoPayload,
@@ -25,6 +26,7 @@ from apps.shop.realtime.operations import (
     ShopPublicOrderStatusPayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
+    op_ai_describe_batch,
     op_ai_describe_product,
     op_ai_enhance_photo,
     op_ai_generate_photo,
@@ -134,6 +136,9 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/ai/describe_requested": Operation(
         payload_model=ShopAiDescribePayload, fn=op_ai_describe_product
+    ),
+    "shop/ai/describe_batch_requested": Operation(
+        payload_model=ShopAiDescribeBatchPayload, fn=op_ai_describe_batch
     ),
     "shop/ai/enhance_photo_requested": Operation(
         payload_model=ShopAiEnhancePhotoPayload, fn=op_ai_enhance_photo

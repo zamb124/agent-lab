@@ -143,6 +143,18 @@ export const shopProductsListOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     restMirror: { method: 'GET', path: '/shop/api/v1/shops/{shop_id}/products' },
+    extraEffect: async (event, ctx): Promise<boolean> => {
+        if (event.type !== 'shop/catalog/changed') {
+            return false;
+        }
+        const pushedShopId = isPlainRecord(event.payload) ? event.payload.shop_id : undefined;
+        return rerunLastRequest(ctx, shopProductsListOp, {
+            when: (payload) =>
+                isPlainRecord(payload)
+                && typeof pushedShopId === 'string'
+                && payload.shop_id === pushedShopId,
+        });
+    },
 });
 
 export const shopProductCreateOp = createAsyncOp({
@@ -259,6 +271,16 @@ export const shopAiGeneratePhotoOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/generate-photo' },
 });
 
+export const shopAiDescribeBatchOp = createAsyncOp({
+    name: 'shop/ai_describe_batch',
+    successToastKey: 'shop:toast.ai_batch_started',
+    errorToastKey: 'shop:toast.ai_batch_failed',
+    commandType: 'shop/ai/describe_batch_requested',
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/describe-all' },
+});
+
 export const shopTelegramConnectOp = createAsyncOp({
     name: 'shop/telegram_connect',
     errorToastKey: 'shop:toast.telegram_connect_failed',
@@ -300,6 +322,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/ai_describe': typeof shopAiDescribeOp;
         'shop/ai_enhance_photo': typeof shopAiEnhancePhotoOp;
         'shop/ai_generate_photo': typeof shopAiGeneratePhotoOp;
+        'shop/ai_describe_batch': typeof shopAiDescribeBatchOp;
         'shop/telegram_connect': typeof shopTelegramConnectOp;
         'shop/telegram_disconnect': typeof shopTelegramDisconnectOp;
     }

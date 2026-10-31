@@ -28,6 +28,8 @@ from apps.shop.models.api import (
 )
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.realtime.operations import (
+    ShopAiBatchResponse,
+    ShopAiDescribeBatchPayload,
     ShopAiDescribePayload,
     ShopAiEnhancePhotoPayload,
     ShopAiFileResponse,
@@ -48,6 +50,7 @@ from apps.shop.realtime.operations import (
     ShopProductUpdatePayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
+    op_ai_describe_batch,
     op_ai_describe_product,
     op_ai_enhance_photo,
     op_ai_generate_photo,
@@ -341,6 +344,15 @@ async def ai_describe(shop_id: str, body: ShopAiDescribeRequest, di: Di) -> Shop
             category_name=body.category_name,
             photo_file_id=body.photo_file_id,
         ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/ai/describe-all", response_model=ShopAiBatchResponse)
+async def ai_describe_all(shop_id: str, di: Di) -> ShopAiBatchResponse:
+    return await op_ai_describe_batch(
+        ShopAiDescribeBatchPayload(shop_id=shop_id),
         user=require_context().user,
         di=di,
     )

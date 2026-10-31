@@ -96,12 +96,23 @@ async def publish_shop_event(
 async def publish_shop_catalog_changed(
     shop_id: str, slug: str, company_id: str
 ) -> None:
-    """Доменный факт для flows-триггеров; UI меню и так знает свои мутации."""
-    payload = ShopCatalogChangedEventPayload(shop_id=shop_id, slug=slug)
+    """Факт смены каталога: flows-триггеры + UI-рефреш списка товаров.
+
+    Доставляется в компанию (вкладки и batch-мутации с сервера видят
+    изменения каталога) и как доменное событие для flows-триггеров.
+    """
+    dumped = ShopCatalogChangedEventPayload(shop_id=shop_id, slug=slug).model_dump(
+        mode="json"
+    )
+    await publish_event_to_company(
+        company_id=company_id,
+        type=SHOP_CATALOG_CHANGED,
+        payload=dumped,
+    )
     await publish_domain_event(
         type=SHOP_CATALOG_CHANGED,
         company_id=company_id,
-        payload=payload.model_dump(mode="json"),
+        payload=dumped,
     )
 
 

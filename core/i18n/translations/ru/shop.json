@@ -72,7 +72,8 @@
         "import_preview": "Будет добавлено позиций:",
         "import_invalid": "строк не распознано — проверьте формат",
         "import_run": "Добавить в меню",
-        "import_close": "Закрыть"
+        "import_close": "Закрыть",
+        "ai_fill": "AI-описания"
     },
     "builder": {
         "title": "Внешний вид витрины",
@@ -191,6 +192,8 @@
         "telegram_connect_failed": "Не удалось подключить бота: проверьте токен",
         "telegram_disconnect_failed": "Не удалось отключить бота",
         "products_imported": "Позиции добавлены в меню",
-        "products_import_failed": "Не удалось импортировать меню"
+        "products_import_failed": "Не удалось импортировать меню",
+        "ai_batch_started": "AI генерирует описания — обычно это занимает до минуты",
+        "ai_batch_failed": "Не удалось запустить генерацию описаний"
     }
 }

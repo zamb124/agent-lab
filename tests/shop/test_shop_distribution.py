@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from httpx2 import AsyncClient
 
 from apps.shop.models.shop import Shop
@@ -196,4 +195,36 @@ class TestAiOperations:
         resp = await shop_client.post(
             f"{_SHOPS}/shop_missing/ai/describe", json={"name": "x"}
         )
+        assert resp.status_code in (404, 400)
+
+    async def test_ai_describe_batch_enqueues_pending_count(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Batch AI: считает позиции без описания и ставит задачу в очередь."""
+        slug = f"aib-{unique_id[:8]}"
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": slug, "name": f"Shop {slug}"}
+        )
+        assert resp.status_code == 200, resp.text
+        shop = resp.json()
+        await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={"name": "Без описания", "price_minor": 100},
+        )
+        await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={
+                "name": "С описанием",
+                "price_minor": 100,
+                "description": "Уже написано",
+            },
+        )
+        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/describe-all")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["enqueued"] == 1
+
+    async def test_ai_describe_batch_requires_shop(
+        self, shop_client: AsyncClient
+    ) -> None:
+        resp = await shop_client.post(f"{_SHOPS}/shop_missing/ai/describe-all")
         assert resp.status_code in (404, 400)

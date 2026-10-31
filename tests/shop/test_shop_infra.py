@@ -19,6 +19,7 @@ class TestWorkerTopology:
 
     def test_shop_task_specs_declared(self) -> None:
         from apps.shop.tasks.task_names import (
+            SHOP_AI_DESCRIBE_BATCH,
             SHOP_NOTIFY_ORDER,
             SHOP_PROVISION_DOMAIN,
             SHOP_REBUILD_AGGREGATE,
@@ -27,6 +28,7 @@ class TestWorkerTopology:
         )
 
         for spec in (
+            SHOP_AI_DESCRIBE_BATCH,
             SHOP_REBUILD_STOREFRONT,
             SHOP_NOTIFY_ORDER,
             SHOP_PROVISION_DOMAIN,

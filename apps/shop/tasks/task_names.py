@@ -21,8 +21,12 @@ SHOP_RECONCILE_DOMAINS_TICK = declare_task(
 SHOP_REBUILD_AGGREGATE = declare_task(
     "shop_rebuild_aggregate", queue="shop", retry=True, max_retries=2
 )
+SHOP_AI_DESCRIBE_BATCH = declare_task(
+    "shop_ai_describe_batch", queue="shop"
+)
 
 __all__ = [
+    "SHOP_AI_DESCRIBE_BATCH",
     "SHOP_NOTIFY_ORDER",
     "SHOP_PROVISION_DOMAIN",
     "SHOP_REBUILD_AGGREGATE",

@@ -36,6 +36,7 @@ from apps.shop.models.api import (
 )
 from apps.shop.models.enums import ShopOrderStatus
 from apps.shop.tasks.task_names import (
+    SHOP_AI_DESCRIBE_BATCH,
     SHOP_NOTIFY_ORDER,
     SHOP_PROVISION_DOMAIN,
     SHOP_REBUILD_STOREFRONT,
@@ -160,12 +161,20 @@ class ShopAiGeneratePhotoPayload(StrictBaseModel):
     description: str = Field(default="", max_length=1000)
 
 
+class ShopAiDescribeBatchPayload(StrictBaseModel):
+    shop_id: str = Field(min_length=1)
+
+
 class ShopAiTextResponse(StrictBaseModel):
     text: str
 
 
 class ShopAiFileResponse(StrictBaseModel):
     file_id: str
+
+
+class ShopAiBatchResponse(StrictBaseModel):
+    enqueued: int
 
 
 async def _shop_response(shop: Shop, di: Di) -> ShopResponse:
@@ -724,6 +733,23 @@ async def op_ai_generate_photo(
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     return ShopAiFileResponse(file_id=file_id)
+
+
+async def op_ai_describe_batch(
+    payload: ShopAiDescribeBatchPayload, *, user: User, di: Di
+) -> ShopAiBatchResponse:
+    """Постановка фоновой AI-генерации описаний для всех позиций без текста."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    products = await ShopProduct.list_by_shop(payload.shop_id)
+    pending = sum(1 for p in products if not p.description.strip())
+    _ = await enqueue(
+        SHOP_AI_DESCRIBE_BATCH,
+        shop_id=payload.shop_id,
+        company_id=scope.company_id,
+    )
+    return ShopAiBatchResponse(enqueued=max(pending, 0))
 
 
 async def _assert_shop_in_scope(di: Di, company_id: str, shop_id: str) -> None:

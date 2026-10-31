@@ -47,6 +47,7 @@ export class ShopMenuPage extends PlatformPage {
     private _productRemoveOp: OpController;
     private _importOp: OpController;
     private _aiDescribeOp: OpController;
+    private _aiDescribeBatchOp: OpController;
     private _aiEnhanceOp: OpController;
     private _aiGenerateOp: OpController;
     private _uploadOp: OpController;
@@ -210,6 +211,7 @@ export class ShopMenuPage extends PlatformPage {
         this._productRemoveOp = this.useOp('shop/product_remove');
         this._importOp = this.useOp('shop/products_import');
         this._aiDescribeOp = this.useOp('shop/ai_describe');
+        this._aiDescribeBatchOp = this.useOp('shop/ai_describe_batch');
         this._aiEnhanceOp = this.useOp('shop/ai_enhance_photo');
         this._aiGenerateOp = this.useOp('shop/ai_generate_photo');
         this._uploadOp = this.useOp('platform/file_create');
@@ -444,6 +446,12 @@ export class ShopMenuPage extends PlatformPage {
         return { items, invalid };
     }
 
+    private async _runAiBatch() {
+        const missing = this._products.filter((p) => !p.description?.trim()).length;
+        if (missing === 0) return;
+        await this._aiDescribeBatchOp.run({ shop_id: this.shopId });
+    }
+
     private async _runImport() {
         const { items } = this._parseImport();
         if (items.length === 0) return;
@@ -477,9 +485,20 @@ export class ShopMenuPage extends PlatformPage {
             <div class="wrap">
                 <div class="page-head">
                     <h1>${this.t('menu.title')}</h1>
-                    <platform-button size="sm" @click=${() => { this._importOpen = !this._importOpen; }}>
-                        <platform-icon name="upload" size="14"></platform-icon> ${this.t('menu.import_button')}
-                    </platform-button>
+                    <div class="head-actions">
+                        ${(() => {
+                            const missing = this._products.filter((p) => !p.description?.trim()).length;
+                            return missing > 0 ? html`
+                                <platform-button size="sm" variant="primary" ?busy=${this._aiDescribeBatchOp.busy}
+                                    @click=${() => this._runAiBatch()}>
+                                    <platform-icon name="sparkles" size="14"></platform-icon> ${this.t('menu.ai_fill')} · ${missing}
+                                </platform-button>
+                            ` : html``;
+                        })()}
+                        <platform-button size="sm" @click=${() => { this._importOpen = !this._importOpen; }}>
+                            <platform-icon name="upload" size="14"></platform-icon> ${this.t('menu.import_button')}
+                        </platform-button>
+                    </div>
                 </div>
                 ${this._importOpen ? html`
                     <div class="import-panel">

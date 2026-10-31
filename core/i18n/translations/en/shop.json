@@ -72,7 +72,8 @@
         "import_preview": "Items to add:",
         "import_invalid": "lines not recognised — check the format",
         "import_run": "Add to menu",
-        "import_close": "Close"
+        "import_close": "Close",
+        "ai_fill": "AI descriptions"
     },
     "builder": {
         "title": "Storefront appearance",
@@ -191,6 +192,8 @@
         "telegram_connect_failed": "Failed to connect the bot: check the token",
         "telegram_disconnect_failed": "Failed to disconnect the bot",
         "products_imported": "Items added to the menu",
-        "products_import_failed": "Menu import failed"
+        "products_import_failed": "Menu import failed",
+        "ai_batch_started": "AI is generating descriptions — usually takes up to a minute",
+        "ai_batch_failed": "Failed to start description generation"
     }
 }
