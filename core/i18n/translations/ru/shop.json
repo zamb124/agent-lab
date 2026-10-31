@@ -90,7 +90,9 @@
         "preview_unavailable": "Витрина ещё не опубликована",
         "mode_label": "Оформление",
         "mode_dark": "Тёмная",
-        "mode_light": "Светлая"
+        "mode_light": "Светлая",
+        "device_phone": "Телефон",
+        "device_desktop": "Десктоп"
     },
     "orders": {
         "title": "Заказы",

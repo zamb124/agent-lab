@@ -90,7 +90,9 @@
         "preview_unavailable": "Storefront is not published yet",
         "mode_label": "Appearance",
         "mode_dark": "Dark",
-        "mode_light": "Light"
+        "mode_light": "Light",
+        "device_phone": "Phone",
+        "device_desktop": "Desktop"
     },
     "orders": {
         "title": "Orders",

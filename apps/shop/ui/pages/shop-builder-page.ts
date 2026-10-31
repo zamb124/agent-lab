@@ -26,6 +26,7 @@ export class ShopBuilderPage extends PlatformPage {
     private _preset = 'menu';
     private _accent = '#e2553f';
     private _mode = 'dark';
+    private _device = 'phone';
     private _savedPreset = 'menu';
     private _savedAccent = '#e2553f';
     private _savedMode = 'dark';
@@ -35,6 +36,7 @@ export class ShopBuilderPage extends PlatformPage {
         _preset: { state: true },
         _accent: { state: true },
         _mode: { state: true },
+        _device: { state: true },
     };
 
     static override styles = [
@@ -128,14 +130,37 @@ export class ShopBuilderPage extends PlatformPage {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
                 background: #0f1218;
-                margin: var(--space-4) 0;
+                margin: var(--space-8) 0 var(--space-4);
+                transition: width 0.2s ease;
             }
-            .preview-url {
+            .preview iframe.desktop {
+                width: min(960px, calc(100% - var(--space-8)));
+            }
+            .preview-bar {
                 position: absolute;
                 top: var(--space-2);
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+            }
+            .preview-url {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
             }
+            .devices { display: flex; gap: var(--space-1); }
+            .devices button {
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--bg-surface);
+                color: var(--text-tertiary);
+                border-radius: var(--radius-sm);
+                width: 30px;
+                height: 26px;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .devices button.active { color: var(--accent); border-color: var(--accent); }
             @media (max-width: 900px) {
                 .layout { grid-template-columns: 1fr; }
                 .preview { display: none; }
@@ -195,6 +220,11 @@ export class ShopBuilderPage extends PlatformPage {
             this._savedAccent = this._accent;
             this._savedMode = this._mode;
             await this._shops.load();
+            const frame = this.renderRoot?.querySelector<HTMLIFrameElement>('.preview iframe');
+            if (frame !== null && frame !== undefined && frame.src !== '') {
+                const src = frame.src.split('#')[0] ?? frame.src;
+                frame.src = `${src}${src.includes('?') ? '&' : '?'}v=${Date.now()}`;
+            }
         }
     }
 
@@ -258,10 +288,20 @@ export class ShopBuilderPage extends PlatformPage {
                     </div>
                 </div>
                 <div class="preview">
-                    <span class="preview-url">${storefrontUrl}</span>
+                    <div class="preview-bar">
+                        <div class="devices">
+                            <button class=${this._device === 'phone' ? 'active' : ''} title=${this.t('builder.device_phone')}
+                                @click=${() => { this._device = 'phone'; }}
+                            ><platform-icon name="smartphone" size="14"></platform-icon></button>
+                            <button class=${this._device === 'desktop' ? 'active' : ''} title=${this.t('builder.device_desktop')}
+                                @click=${() => { this._device = 'desktop'; }}
+                            ><platform-icon name="monitor" size="14"></platform-icon></button>
+                        </div>
+                        <span class="preview-url">${storefrontUrl}</span>
+                    </div>
                     ${storefrontUrl === ''
                         ? html`<platform-empty-state icon="store" title=${this.t('builder.preview_unavailable')}></platform-empty-state>`
-                        : html`<iframe src=${storefrontUrl} title="storefront"></iframe>`}
+                        : html`<iframe class=${this._device === 'desktop' ? 'desktop' : ''} src=${storefrontUrl} title="storefront"></iframe>`}
                 </div>
             </div>
         `;
