@@ -40,6 +40,7 @@ export class ShopSettingsPage extends PlatformPage {
     private _uploadOp: OpController;
     private _aiDescribeShopOp: OpController;
     private _aiGenerateCoverOp: OpController;
+    private _aiGenerateLogoOp: OpController;
     private _logoFileId = '';
     private _coverFileId = '';
     private _hours: Array<{ open: string; close: string; closed: boolean }> = [];
@@ -139,6 +140,7 @@ export class ShopSettingsPage extends PlatformPage {
         this._uploadOp = this.useOp('platform/file_create');
         this._aiDescribeShopOp = this.useOp('shop/ai_describe_shop');
         this._aiGenerateCoverOp = this.useOp('shop/ai_generate_cover');
+        this._aiGenerateLogoOp = this.useOp('shop/ai_generate_logo');
     }
 
     async onRouteActive(): Promise<void> {
@@ -277,6 +279,24 @@ export class ShopSettingsPage extends PlatformPage {
         }
     }
 
+    private async _aiGenerateLogo() {
+        const name = this._name.trim();
+        if (name === '') return;
+        const result = await this._aiGenerateLogoOp.run({
+            shop_id: this.shopId,
+            name,
+            description: this._description,
+        });
+        if (result === null || typeof result !== 'object') return;
+        const fileId = (result as { file_id?: unknown }).file_id;
+        if (typeof fileId !== 'string') return;
+        const saved = await this._updateOp.run({ shop_id: this.shopId, logo_file_id: fileId });
+        if (saved !== null) {
+            this._logoFileId = fileId;
+            await this._shops.load();
+        }
+    }
+
     private async _publish() {
         const result = await this._publishOp.run({ shop_id: this.shopId });
         if (result !== null) await this._shops.load();
@@ -367,10 +387,16 @@ export class ShopSettingsPage extends PlatformPage {
                         </button>
                     </div>
                     <div class="hint">${this.t('settings.brand_hint')}</div>
-                    <platform-button size="sm" ?busy=${this._aiGenerateCoverOp.busy} ?disabled=${this._name.trim() === ''}
-                        title=${this.t('settings.ai_cover_hint')}
-                        @click=${() => this._aiGenerateCover()}
-                    ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_generate_cover')}</platform-button>
+                    <div class="ai-row">
+                        <platform-button size="sm" ?busy=${this._aiGenerateCoverOp.busy} ?disabled=${this._name.trim() === ''}
+                            title=${this.t('settings.ai_cover_hint')}
+                            @click=${() => this._aiGenerateCover()}
+                        ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_generate_cover')}</platform-button>
+                        <platform-button size="sm" ?busy=${this._aiGenerateLogoOp.busy} ?disabled=${this._name.trim() === ''}
+                            title=${this.t('settings.ai_logo_hint')}
+                            @click=${() => this._aiGenerateLogo()}
+                        ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_generate_logo')}</platform-button>
+                    </div>
                     <platform-field type="text" mode="edit" label=${this.t('settings.field_name')} .value=${this._name}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                     ></platform-field>

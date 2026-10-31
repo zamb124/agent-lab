@@ -886,6 +886,22 @@ async def op_ai_generate_cover(
     return ShopAiFileResponse(file_id=file_id)
 
 
+async def op_ai_generate_logo(
+    payload: ShopAiShopPayload, *, user: User, di: Di
+) -> ShopAiFileResponse:
+    """AI-генерация логотипа витрины — вернёт file_id."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        file_id = await di.ai_service.generate_shop_logo(
+            name=payload.name, description=payload.description
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ShopAiFileResponse(file_id=file_id)
+
+
 async def op_ai_autofill(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:
     """AI-оформление витрины одной командой: описание и обложка в пустые поля.
 

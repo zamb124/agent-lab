@@ -176,7 +176,9 @@
         "ai_describe": "AI description",
         "ai_describe_hint": "Write or improve the storefront description from the name and draft",
         "ai_generate_cover": "Generate cover",
-        "ai_cover_hint": "AI will create a storefront cover from the shop name and description"
+        "ai_cover_hint": "AI will create a storefront cover from the shop name and description",
+        "ai_generate_logo": "Generate logo",
+        "ai_logo_hint": "AI will create a shop logo from the name and description"
     },
     "toast": {
         "shop_created": "Shop created",

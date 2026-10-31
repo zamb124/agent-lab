@@ -289,6 +289,15 @@ export const shopAiGenerateCoverOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/generate-cover' },
 });
 
+export const shopAiGenerateLogoOp = createAsyncOp({
+    name: 'shop/ai_generate_logo',
+    errorToastKey: 'shop:toast.ai_generate_failed',
+    commandType: 'shop/ai/generate_logo_requested',
+    transport: 'ws',
+    wsTimeoutMs: 120_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/generate-logo' },
+});
+
 export const shopAiAutofillOp = createAsyncOp({
     name: 'shop/ai_autofill',
     successToastKey: 'shop:toast.ai_autofill_done',
@@ -513,6 +522,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/ai_generate_photo': typeof shopAiGeneratePhotoOp;
         'shop/ai_describe_shop': typeof shopAiDescribeShopOp;
         'shop/ai_generate_cover': typeof shopAiGenerateCoverOp;
+        'shop/ai_generate_logo': typeof shopAiGenerateLogoOp;
         'shop/ai_autofill': typeof shopAiAutofillOp;
         'shop/ai_parse_menu': typeof shopAiParseMenuOp;
         'shop/ai_describe_batch': typeof shopAiDescribeBatchOp;

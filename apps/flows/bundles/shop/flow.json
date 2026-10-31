@@ -171,6 +171,24 @@
         }
       },
       "edges": []
+    },
+    "generate_logo": {
+      "name": "Generate shop logo",
+      "description": "Генерация логотипа магазина (квадратная эмблема). Вход: variables.shop_name, variables.description (опц.). Выход: {\"file_ids\": [file_id]}.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/generate_logo.md",
+          "llm_capability": "image_gen",
+          "llm": {
+            "model": "auto",
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
     }
   }
 }

@@ -86,6 +86,7 @@ from apps.shop.realtime.operations import (
     op_ai_describe_shop,
     op_ai_enhance_photo,
     op_ai_generate_cover,
+    op_ai_generate_logo,
     op_ai_generate_photo,
     op_ai_parse_menu,
     op_ai_suggest_options,
@@ -432,6 +433,17 @@ async def ai_describe_shop(shop_id: str, body: ShopAiBriefRequest, di: Di) -> Sh
 @router.post("/{shop_id}/ai/generate-cover", response_model=ShopAiFileResponse)
 async def ai_generate_cover(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiFileResponse:
     return await op_ai_generate_cover(
+        ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/ai/generate-logo", response_model=ShopAiFileResponse)
+async def ai_generate_logo(
+    shop_id: str, body: ShopAiBriefRequest, di: Di
+) -> ShopAiFileResponse:
+    return await op_ai_generate_logo(
         ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
         di=di,

@@ -38,6 +38,7 @@ _BRANCH_ENHANCE_PHOTO = "enhance_photo"
 _BRANCH_GENERATE_PHOTO = "generate_photo"
 _BRANCH_DESCRIBE_SHOP = "describe_shop"
 _BRANCH_GENERATE_COVER = "generate_cover"
+_BRANCH_GENERATE_LOGO = "generate_logo"
 _BRANCH_PARSE_MENU = "parse_menu"
 
 
@@ -286,5 +287,16 @@ class ShopAiService:
         return await self._flow_file_id(
             _BRANCH_GENERATE_COVER,
             content=f"Сгенерируй обложку витрины «{name}»",
+            variables=variables,
+        )
+
+    async def generate_shop_logo(self, *, name: str, description: str = "") -> str:
+        """Генерация логотипа магазина: ветка ``generate_logo`` (image_gen) → file_id."""
+        variables: JsonObject = {"shop_name": name}
+        if description:
+            variables["description"] = description
+        return await self._flow_file_id(
+            _BRANCH_GENERATE_LOGO,
+            content=f"Сгенерируй логотип «{name}»",
             variables=variables,
         )

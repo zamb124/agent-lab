@@ -473,6 +473,25 @@ class TestAiOperations:
         assert resp.status_code == 200, resp.text
         assert resp.json()["file_id"] == generated_id
 
+    async def test_ai_generate_logo_image_gen_branch(
+        self,
+        shop_client: AsyncClient,
+        shop_di,
+        mock_llm_redis,
+        unique_id: str,
+    ) -> None:
+        """generate-logo: ветка generate_logo flow (image_gen) → file_id логотипа."""
+        await _reset_shop_flow()
+        shop = await _published_shop(shop_client, f"ail-{unique_id[:8]}")
+        generated_id = await _create_image_file(shop_di, "logo.png")
+        await mock_llm_redis([{"type": "text", "content": f"logo stored: {generated_id}"}])
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/ai/generate-logo",
+            json={"name": "Пицца Парк", "description": "Семейная пиццерия"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["file_id"] == generated_id
+
     async def test_ai_autofill_fills_empty_fields(
         self,
         shop_client: AsyncClient,
