@@ -37,6 +37,7 @@ if isinstance(_settings, ShopSettings):
         StorefrontHostMiddleware,
         domain_suffix=_settings.storefront_domain_suffix,
         reserved=_settings.reserved_slugs,
+        aggregator_host=_settings.aggregator_host,
     )
 
 

@@ -14,6 +14,7 @@ import segno
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from apps.shop.api.market_shell import market_html
 from apps.shop.api.storefront_shell import storefront_html
 from apps.shop.di import Di
 from apps.shop.models.api import (
@@ -34,6 +35,7 @@ from apps.shop.realtime.operations import (
 from core.context import require_context
 from core.errors.boundary import PlatformNotFoundError
 from core.pagination import OffsetPage
+from core.platform_brand.resolver import resolve_brand_or_primary
 from core.types import JsonObject, parse_json_object
 from core.websocket import WsCommandError
 
@@ -177,6 +179,31 @@ async def get_sitemap(di: Di) -> Response:
 # --- Агрегатор ---
 
 
+@router.get("/market", response_model=None)
+async def get_market_page(request: Request, di: Di) -> HTMLResponse:
+    """Публичная страница агрегатора: все published-витрины + поиск по каталогу."""
+    shops = await di.aggregate_service.list_shops()
+    snapshot: JsonObject = {
+        "shops": [
+            {
+                "slug": s.slug,
+                "name": s.name,
+                "kind": s.kind.value,
+                "city": s.city,
+                "description": s.description,
+                "logo_file_id": s.logo_file_id,
+                "cover_file_id": s.cover_file_id,
+            }
+            for s in shops
+        ],
+    }
+    brand = resolve_brand_or_primary(request.headers.get("host"))
+    return HTMLResponse(
+        content=market_html(snapshot, brand=brand.platform_name),
+        headers={"Cache-Control": "public, max-age=60"},
+    )
+
+
 @router.get("/aggregate/shops")
 async def list_aggregate_shops(di: Di, city: str | None = None) -> dict[str, object]:
     shops = await di.aggregate_service.list_shops(city=city)
@@ -188,6 +215,7 @@ async def list_aggregate_shops(di: Di, city: str | None = None) -> dict[str, obj
                 "kind": s.kind.value,
                 "city": s.city,
                 "logo_file_id": s.logo_file_id,
+                "cover_file_id": s.cover_file_id,
                 "description": s.description,
             }
             for s in shops

@@ -248,3 +248,60 @@ class TestStorefrontPage:
         assert "Размер" in html.text
         assert "40 см" in html.text
         assert "modifier_groups" in html.text
+
+
+class TestMarketPage:
+    async def test_market_page_lists_only_published(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Анонимная страница агрегатора: published в снапшоте, draft — нет."""
+        slug = f"mkt-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": f"mktd-{unique_id[:8]}", "name": "Черновик"}
+        )
+        assert resp.status_code == 200
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/market")
+        assert html.status_code == 200
+        assert "text/html" in html.headers["content-type"]
+        assert "<title>" in html.text and 'name="description"' in html.text
+        assert slug in html.text
+        assert "Черновик" not in html.text
+        assert "aggregate/search" in html.text
+
+    async def test_market_page_escapes_script_breakout(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Имя с `</script>` не вырывается из inline-JSON — fail-closed против XSS."""
+        slug = f"xss-{unique_id[:8]}"
+        resp = await shop_client.post(
+            _SHOPS,
+            json={"slug": slug, "name": 'A</script><script>alert(1)</script>', "kind": "cafe"},
+        )
+        assert resp.status_code == 200, resp.text
+        await shop_client.post(f"{_SHOPS}/{resp.json()['shop_id']}/publish")
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/market")
+        assert html.status_code == 200
+        assert "A</script>" not in html.text
+        assert "<\\/script>" in html.text
+
+    async def test_aggregator_host_root_rewrites_to_market(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """GET / на shop.linnex.io отдаёт страницу агрегатора, а не витрину."""
+        slug = f"agg-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        from httpx2 import ASGITransport
+
+        from apps.shop.main import app
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://shop.linnex.io",
+            headers={"Host": "shop.linnex.io"},
+        ) as client:
+            resp = await client.get("/")
+            assert resp.status_code == 200, resp.text[:200]
+            assert "text/html" in resp.headers.get("content-type", "")
+            assert "aggregate/search" in resp.text
+            assert slug in resp.text

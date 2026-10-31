@@ -11,15 +11,24 @@ from __future__ import annotations
 from core.types import ASGIApp, ASGIReceive, ASGIScope, ASGISend
 
 _STOREFRONT_PAGE = "/shop/api/v1/public/s/"
+_MARKET_PAGE = "/shop/api/v1/public/market"
 
 
 class StorefrontHostMiddleware:
-    """Рерайт корня slug-поддомена на страницу витрины."""
+    """Рерайт корня slug-поддомена на страницу витрины, хоста агрегатора — на market."""
 
-    def __init__(self, app: ASGIApp, *, domain_suffix: str, reserved: frozenset[str]) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        domain_suffix: str,
+        reserved: frozenset[str],
+        aggregator_host: str,
+    ) -> None:
         self._app: ASGIApp = app
         self._suffix: str = f".{domain_suffix}" if domain_suffix else ""
         self._reserved: frozenset[str] = reserved
+        self._aggregator: str = aggregator_host.strip().lower()
 
     async def __call__(self, scope: ASGIScope, receive: ASGIReceive, send: ASGISend) -> None:
         if scope["type"] != "http" or not self._suffix:
@@ -30,9 +39,13 @@ class StorefrontHostMiddleware:
             if name == b"host":
                 host = value.decode("latin-1").split(":")[0].strip().lower()
                 break
-        slug = self._slug_for(host)
-        if slug is not None and scope.get("method") in ("GET", "HEAD") and scope.get("path") == "/":
-            scope["path"] = f"{_STOREFRONT_PAGE}{slug}"
+        if scope.get("method") in ("GET", "HEAD") and scope.get("path") == "/":
+            if self._aggregator and host == self._aggregator:
+                scope["path"] = _MARKET_PAGE
+            else:
+                slug = self._slug_for(host)
+                if slug is not None:
+                    scope["path"] = f"{_STOREFRONT_PAGE}{slug}"
         await self._app(scope, receive, send)
 
     def _slug_for(self, host: str) -> str | None:
