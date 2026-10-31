@@ -23,6 +23,7 @@ export class ShopHomePage extends PlatformPage {
     private _shops: ResourceController;
     private _createOp: OpController;
     private _publishOp: OpController;
+    private _autofillOp: OpController;
     private _newName = '';
     private _newSlug = '';
     private _slugTouched = false;
@@ -91,6 +92,7 @@ export class ShopHomePage extends PlatformPage {
         this._shops = this.useResource('shop/shops');
         this._createOp = this.useOp('shop/shop_create');
         this._publishOp = this.useOp('shop/shop_publish');
+        this._autofillOp = this.useOp('shop/ai_autofill');
     }
 
     async onRouteActive(): Promise<void> {
@@ -133,6 +135,11 @@ export class ShopHomePage extends PlatformPage {
 
     private async _publish(shopId: string) {
         const result = await this._publishOp.run({ shop_id: shopId });
+        if (result !== null) await this._shops.load();
+    }
+
+    private async _autofill(shopId: string) {
+        const result = await this._autofillOp.run({ shop_id: shopId });
         if (result !== null) await this._shops.load();
     }
 
@@ -186,6 +193,11 @@ export class ShopHomePage extends PlatformPage {
                                             ? html`<a class="hint" href=${storefrontUrl} target="_blank" rel="noopener">${this.t('home.published_open')} →</a>`
                                             : nothing}
                                         <div class="actions">
+                                            ${(!shop.description || !shop.cover_file_id)
+                                                ? html`<platform-button size="sm" ?busy=${this._autofillOp.busy} @click=${() => this._autofill(shopId)}>
+                                                      ${this.t('home.ai_autofill')}
+                                                  </platform-button>`
+                                                : nothing}
                                             <platform-button size="sm" variant="primary" @click=${() => this.navigate('shop_menu', { shopId })}>
                                                 ${this.t('home.open_menu')}
                                             </platform-button>

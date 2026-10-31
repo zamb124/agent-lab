@@ -43,6 +43,7 @@
         "menu_count": "menu items",
         "menu_empty": "menu is empty — add dishes",
         "publish": "Publish",
+        "ai_autofill": "Fill with AI",
         "published_open": "Open storefront",
         "ready_hint": "Storefront is ready to publish",
         "fill_hint": "Fill the menu, pick a design — and publish"
@@ -208,6 +209,7 @@
         "telegram_disconnect_failed": "Failed to disconnect the bot",
         "products_imported": "Items added to the menu",
         "products_import_failed": "Menu import failed",
+        "ai_autofill_done": "Storefront is styled: description and cover are ready",
         "ai_batch_started": "AI is generating descriptions — usually takes up to a minute",
         "ai_batch_failed": "Failed to start description generation",
         "modifiers_load_failed": "Failed to load option groups",

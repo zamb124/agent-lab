@@ -886,6 +886,32 @@ async def op_ai_generate_cover(
     return ShopAiFileResponse(file_id=file_id)
 
 
+async def op_ai_autofill(payload: ShopIdPayload, *, user: User, di: Di) -> ShopResponse:
+    """AI-оформление витрины одной командой: описание и обложка в пустые поля.
+
+    Заполненные вручную поля не перетираются — точечная перегенерация
+    остаётся на кнопках describe-shop/generate-cover в настройках.
+    """
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    shop = await _shop_in_scope(di, scope.company_id, payload.shop_id)
+    patch = ShopUpdateRequest()
+    description = shop.description or ""
+    if not description:
+        description = await di.ai_service.describe_shop(name=shop.name, city=shop.city or "")
+    patch.description = description
+    if not shop.cover_file_id:
+        patch.cover_file_id = await di.ai_service.generate_shop_cover(
+            name=shop.name, description=description
+        )
+    updated = await di.shop_service.update_shop(scope.company_id, shop.shop_id, patch)
+    await publish_shop_event(
+        SHOP_SHOP_UPDATED, updated.shop_id, updated.slug, updated.status, scope.company_id
+    )
+    await _enqueue_rebuild(di, updated.shop_id, updated.slug)
+    return await _shop_response(updated, di)
+
+
 async def _shop_in_scope(di: Di, company_id: str, shop_id: str) -> Shop:
     try:
         return await di.shop_service.get_shop(company_id, shop_id)

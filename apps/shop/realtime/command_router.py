@@ -41,6 +41,7 @@ from apps.shop.realtime.operations import (
     ShopPublicOrderStatusPayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
+    op_ai_autofill,
     op_ai_describe_batch,
     op_ai_describe_product,
     op_ai_describe_shop,
@@ -208,6 +209,7 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     "shop/ai/generate_cover_requested": Operation(
         payload_model=ShopAiShopPayload, fn=op_ai_generate_cover
     ),
+    "shop/ai/autofill_requested": Operation(payload_model=ShopIdPayload, fn=op_ai_autofill),
     "shop/ai/parse_menu_requested": Operation(
         payload_model=ShopAiParseMenuPayload, fn=op_ai_parse_menu
     ),

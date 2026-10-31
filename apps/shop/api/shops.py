@@ -80,6 +80,7 @@ from apps.shop.realtime.operations import (
     ShopPromoUpdatePayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
+    op_ai_autofill,
     op_ai_describe_batch,
     op_ai_describe_product,
     op_ai_describe_shop,
@@ -411,9 +412,7 @@ async def ai_enhance_photo(
 
 
 @router.post("/{shop_id}/ai/generate-photo", response_model=ShopAiFileResponse)
-async def ai_generate_photo(
-    shop_id: str, body: ShopAiBriefRequest, di: Di
-) -> ShopAiFileResponse:
+async def ai_generate_photo(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiFileResponse:
     return await op_ai_generate_photo(
         ShopAiGeneratePhotoPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
@@ -422,9 +421,7 @@ async def ai_generate_photo(
 
 
 @router.post("/{shop_id}/ai/describe-shop", response_model=ShopAiTextResponse)
-async def ai_describe_shop(
-    shop_id: str, body: ShopAiBriefRequest, di: Di
-) -> ShopAiTextResponse:
+async def ai_describe_shop(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiTextResponse:
     return await op_ai_describe_shop(
         ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
@@ -433,14 +430,17 @@ async def ai_describe_shop(
 
 
 @router.post("/{shop_id}/ai/generate-cover", response_model=ShopAiFileResponse)
-async def ai_generate_cover(
-    shop_id: str, body: ShopAiBriefRequest, di: Di
-) -> ShopAiFileResponse:
+async def ai_generate_cover(shop_id: str, body: ShopAiBriefRequest, di: Di) -> ShopAiFileResponse:
     return await op_ai_generate_cover(
         ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
         di=di,
     )
+
+
+@router.post("/{shop_id}/ai/autofill", response_model=ShopResponse)
+async def ai_autofill(shop_id: str, di: Di) -> ShopResponse:
+    return await op_ai_autofill(ShopIdPayload(shop_id=shop_id), user=require_context().user, di=di)
 
 
 @router.post("/{shop_id}/ai/parse-menu", response_model=ShopAiParseMenuResponse)

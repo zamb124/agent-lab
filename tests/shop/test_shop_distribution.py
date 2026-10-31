@@ -472,3 +472,50 @@ class TestAiOperations:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["file_id"] == generated_id
+
+    async def test_ai_autofill_fills_empty_fields(
+        self,
+        shop_client: AsyncClient,
+        shop_di,
+        mock_llm_redis,
+        unique_id: str,
+    ) -> None:
+        """autofill: одной командой — describe_shop в описание и generate_cover в обложку."""
+        await _reset_shop_flow()
+        shop = await _published_shop(shop_client, f"aif-{unique_id[:8]}")
+        generated_id = await _create_image_file(shop_di, "cover.png")
+        await mock_llm_redis(
+            [
+                {"type": "text", "content": "Уютная пиццерия у парка"},
+                {"type": "text", "content": f"cover stored: {generated_id}"},
+            ]
+        )
+        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/autofill")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["description"] == "Уютная пиццерия у парка"
+        assert body["cover_file_id"] == generated_id
+
+    async def test_ai_autofill_keeps_manual_fields(
+        self,
+        shop_client: AsyncClient,
+        shop_di,
+        mock_llm_redis,
+        unique_id: str,
+    ) -> None:
+        """autofill не перетирает заполненное вручную: генерируется только обложка."""
+        await _reset_shop_flow()
+        shop = await _published_shop(shop_client, f"aik-{unique_id[:8]}")
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}", json={"description": "Наш текст"}
+        )
+        assert resp.status_code == 200
+        generated_id = await _create_image_file(shop_di, "cover.png")
+        await mock_llm_redis(
+            [{"type": "text", "content": f"cover stored: {generated_id}"}]
+        )
+        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/ai/autofill")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["description"] == "Наш текст"
+        assert body["cover_file_id"] == generated_id
