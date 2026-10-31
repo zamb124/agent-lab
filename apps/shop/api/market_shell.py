@@ -35,6 +35,10 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .search .go{{font:inherit;font-size:14.5px;font-weight:650;padding:10px 20px;border-radius:99px;border:0;background:var(--accent);color:#fff;cursor:pointer}}
 .sec{{margin-top:40px}}
 .sec h2{{font-size:21px;letter-spacing:-.01em;margin-bottom:14px}}
+.filters{{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}}
+.chip{{font:inherit;font-size:13.5px;font-weight:600;padding:8px 16px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--muted);cursor:pointer;transition:all .15s ease}}
+.chip:hover{{border-color:color-mix(in srgb,var(--accent) 50%,var(--line));color:var(--text)}}
+.chip.on{{background:var(--accent);border-color:var(--accent);color:#fff}}
 .shops{{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}}
 .shop{{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;text-decoration:none;color:var(--text);transition:transform .15s ease,border-color .15s ease}}
 .shop:hover{{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}}
@@ -72,6 +76,8 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
   <div id="hits" class="sec" style="display:none"><h2 id="hitsTitle"></h2><div class="results" id="hitsGrid"></div></div>
   <div class="sec" id="shopsSec">
     <h2>{shops_title}</h2>
+    <div class="filters" id="kindChips"></div>
+    <div class="filters" id="cityChips"></div>
     <div class="shops" id="shops"></div>
   </div>
   <div class="foot">Сделано на <b>{brand}</b> — собери свою витрину и продавай без комиссий агрегаторов</div>
@@ -83,14 +89,31 @@ const fmt=v=>(v/100).toLocaleString('ru-RU')+' ₽';
 const IMG=u=>u?`/shop/api/v1/files/download/${{u}}`:'';
 const LINK=s=>`/shop/api/v1/public/s/${{s}}`;
 function esc(s){{return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
-const KIND={{restaurant:'Ресторан',cafe:'Кафе',store:'Магазин',bakery:'Пекарня',other:'Заведение'}};
+const KIND={{restaurant:'Ресторан',cafe:'Кафе',bakery:'Пекарня',shop:'Магазин',other:'Заведение'}};
 function shopCard(s){{return `<a class="shop" href="${{LINK(s.slug)}}">
   <span class="cover">${{s.cover_file_id?`<img src="${{IMG(s.cover_file_id)}}" loading="lazy" alt="">`:''}}</span>
   <span class="b">${{s.logo_file_id?`<img class="logo" src="${{IMG(s.logo_file_id)}}" alt="">`:''}}<span>
     <h3>${{esc(s.name)}}</h3>
     <span class="meta">${{esc([KIND[s.kind]||KIND.other,s.city].filter(Boolean).join(' · '))}}${{s.description?`<br>${{esc(s.description)}}`:''}}</span>
   </span></span></a>`;}}
-document.getElementById('shops').innerHTML=S.shops.length?S.shops.map(shopCard).join(''):`<div class="empty">Витрины скоро появятся</div>`;
+let fKind='',fCity='';
+function renderShops(){{
+  const list=S.shops.filter(s=>(!fKind||s.kind===fKind)&&(!fCity||s.city===fCity));
+  document.getElementById('shops').innerHTML=list.length?list.map(shopCard).join(''):`<div class="empty">Под фильтр ничего не подходит</div>`;
+}}
+function chips(elId,values,cur,set){{
+  const el=document.getElementById(elId);
+  if(values.length<2){{el.style.display='none';return;}}
+  el.innerHTML=values.map(v=>`<button class="chip${{v.k===cur?' on':''}}" data-v="${{esc(v.k)}}">${{esc(v.t)}}</button>`).join('');
+  el.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{{set(c.dataset.v===cur?'':c.dataset.v);renderChips();renderShops();runSearch();}});
+}}
+function renderChips(){{
+  const kinds=[...new Set(S.shops.map(s=>s.kind))].map(k=>({{k,t:KIND[k]||KIND.other}}));
+  const cities=[...new Set(S.shops.map(s=>s.city).filter(Boolean))].sort().map(c=>({{k:c,t:c}}));
+  chips('kindChips',[{{k:'',t:'Все'}},...kinds],fKind,v=>fKind=v);
+  chips('cityChips',[{{k:'',t:'Все города'}},...cities],fCity,v=>fCity=v);
+}}
+renderChips();renderShops();
 let timer=0,req=0;
 function debounced(){{clearTimeout(timer);timer=setTimeout(runSearch,350);}}
 async function runSearch(){{
@@ -99,7 +122,9 @@ async function runSearch(){{
   if(!q){{sec.style.display='none';return false;}}
   const my=++req;
   try{{
-    const r=await fetch(`/shop/api/v1/public/aggregate/search?q=${{encodeURIComponent(q)}}&limit=24`);
+    let url=`/shop/api/v1/public/aggregate/search?q=${{encodeURIComponent(q)}}&limit=24`;
+    if(fKind)url+=`&kind=${{fKind}}`;if(fCity)url+=`&city=${{encodeURIComponent(fCity)}}`;
+    const r=await fetch(url);
     if(my!==req||!r.ok)return false;
     const d=await r.json();
     document.getElementById('hitsTitle').textContent=`«${{q}}» — найдено ${{d.total}}`;

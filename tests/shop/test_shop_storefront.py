@@ -268,6 +268,8 @@ class TestMarketPage:
         assert slug in html.text
         assert "Черновик" not in html.text
         assert "aggregate/search" in html.text
+        assert "kindChips" in html.text and "cityChips" in html.text
+        assert "&kind=" in html.text and "&city=" in html.text
 
     async def test_market_page_escapes_script_breakout(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
