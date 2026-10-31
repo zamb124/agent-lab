@@ -86,7 +86,7 @@ export class FrontendTopupModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, unknown> = {};
+        const errors: Record<string, string> = {};
         const amount =
             typeof this._amount === 'number' && Number.isFinite(this._amount) ? this._amount : null;
         if (amount === null) {

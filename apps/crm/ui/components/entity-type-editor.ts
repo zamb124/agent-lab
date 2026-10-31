@@ -556,15 +556,16 @@ export class CRMEntityTypeEditor extends PlatformElement {
                             ${this.namespaces.length > 0 ? html`
                                 <div class="namespace-pills">
                                     ${this.namespaces.map((ns: Record<string, unknown>) => {
+                                        const nsName = typeof ns.name === 'string' ? ns.name : '';
                                         const list = Array.isArray(this._draft.namespace_ids) ? this._draft.namespace_ids : [];
-                                        const checked = list.includes(ns.name);
+                                        const checked = list.includes(nsName);
                                         return html`
                                             <button
                                                 type="button"
                                                 class="ns-pill ${checked ? 'active' : ''}"
-                                                @click=${() => this._onTogglePill(ns.name, !checked)}
+                                                @click=${() => this._onTogglePill(nsName, !checked)}
                                             >
-                                                ${ns.name}
+                                                ${nsName}
                                             </button>
                                         `;
                                     })}

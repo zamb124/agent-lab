@@ -30,24 +30,13 @@ import '../platform-calendar-modal.js';
 import '../platform-mail-modal.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { SelectController } from '../../events/select-controller.js';
-
-interface AuthUserRecord {
-    id?: string;
-    name?: string;
-    company_id?: string | undefined;
-    raw?: Record<string, unknown>;
-}
+import type { AuthUser } from '../../events/reducers/auth.js';
+import type { CompanyRecord } from '../../events/reducers/companies.js';
 
 interface AuthSliceView {
     status?: string;
-    user?: AuthUserRecord | undefined;
+    user?: AuthUser | undefined;
     activeCompanyId?: string | null;
-}
-
-interface CompanyRecord {
-    company_id?: string | undefined;
-    name?: string;
-    role?: unknown;
 }
 
 export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
@@ -487,7 +476,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         return companyRecord.role.includes('owner');
     }
 
-    _resolveSwitchCardTitle(user: AuthUserRecord | null | undefined): string {
+    _resolveSwitchCardTitle(user: AuthUser | null | undefined): string {
         if (!user) return '';
         if (typeof user.name === 'string' && user.name.trim() !== '') return user.name.trim();
         const raw = user.raw;

@@ -19,8 +19,14 @@ import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 const RESOURCE_NODE_MENU_EXCLUDE = new Set(['toggle_entry', 'advanced_incoming_policy']);
 
-function collapseContextMenuSeparators(items: readonly Record<string, unknown>[]) {
-    const out: Record<string, unknown>[] = [];
+interface ContextMenuItem {
+    kind: string;
+    icon?: string;
+    danger?: boolean;
+}
+
+function collapseContextMenuSeparators(items: readonly ContextMenuItem[]): ContextMenuItem[] {
+    const out: ContextMenuItem[] = [];
     for (let i = 0; i < items.length; i += 1) {
         const item = items[i];
         if (item === undefined) {
@@ -167,7 +173,7 @@ export class FlowsCanvasContextMenu extends PlatformElement {
         return this.t(`canvas.context_menu.${kind}`);
     }
 
-    _activate(item: any) {
+    _activate(item: ContextMenuItem) {
         if (item.kind === 'separator') return;
         this.emit('action', { kind: item.kind, target: this.target, targetId: this.targetId });
         this.emit('close');

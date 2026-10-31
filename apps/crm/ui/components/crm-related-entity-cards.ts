@@ -78,7 +78,7 @@ export class CRMRelatedEntityCards extends PlatformElement {
                 ${list.map((entity) => {
                     const tone = relatedTone(entity);
                     const subtitle = relatedSubtitle(entity);
-                    const name = entity.name && entity.name.length > 0 ? entity.name : entity.entity_id;
+                    const name = typeof entity.name === 'string' && entity.name.length > 0 ? entity.name : entity.entity_id;
                     const iconName = entityDisplayIconName(entity, this.entityTypeRows);
                     return html`
                         <button

@@ -271,7 +271,7 @@ export class SyncChatList extends PlatformElement {
     _channelMatchesSearch(channel: Record<string, unknown>, search: string) {
         if (search === '') return true;
         if (channel.type === 'direct') {
-            const peerName = channel.peer && typeof channel.peer.display_name === 'string'
+            const peerName = isPlainRecord(channel.peer) && typeof channel.peer.display_name === 'string'
                 ? channel.peer.display_name.toLowerCase()
                 : '';
             return peerName.includes(search);
@@ -306,7 +306,7 @@ export class SyncChatList extends PlatformElement {
             if (typeof userId === 'string') dmUserIds.add(userId);
         }
         const search = this._searchQuery();
-        let members = this._members.items.filter((m: Record<string, unknown>) => !dmUserIds.has(m.user_id));
+        let members = this._members.items.filter((m: Record<string, unknown>) => typeof m.user_id !== 'string' || !dmUserIds.has(m.user_id));
         if (search !== '') {
             members = members.filter((m: Record<string, unknown>) => resolveDisplayName(m).toLowerCase().includes(search));
         }

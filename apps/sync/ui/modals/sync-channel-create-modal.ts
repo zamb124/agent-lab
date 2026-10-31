@@ -221,24 +221,27 @@ export class SyncChannelCreateModal extends PlatformFormModal {
                     ${!teamLoading && candidates.length === 0 ? html`
                         <platform-empty-state icon="users" title=${this.t('channel_modal.members_empty')}></platform-empty-state>
                     ` : ''}
-                    ${candidates.map((m: Record<string, unknown>) => html`
+                    ${candidates.map((m: Record<string, unknown>) => {
+                        const userId = typeof m.user_id === 'string' ? m.user_id : '';
+                        return html`
                         <label class="member-row" @click=${(e: Event) => {
                             const target = e.target;
                             if (target instanceof HTMLInputElement) return;
-                            this._toggleMember(m.user_id);
+                            this._toggleMember(userId);
                         }}>
                             <input
                                 type="checkbox"
-                                .checked=${this._isSelected(m.user_id)}
-                                @change=${() => this._toggleMember(m.user_id)}
+                                .checked=${this._isSelected(userId)}
+                                @change=${() => this._toggleMember(userId)}
                             />
                             <platform-user-chip
-                                user-id=${m.user_id}
+                                user-id=${userId}
                                 size="md"
                                 ?interactive=${false}
                             ></platform-user-chip>
                         </label>
-                    `)}
+                    `;
+                    })}
                 </div>
             </div>
 

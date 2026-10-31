@@ -107,11 +107,11 @@ export class BlogPostPage extends PlatformPage {
         throw new Error('blog-post-page: i18n.locale must be ru or en');
     }
 
-    _body(post: Record<string, unknown>) {
+    _body(post: Record<string, unknown>): string {
         const locale = this._localeSel.value;
-        if (locale === 'ru') return post.body_ru;
-        if (locale === 'en') return post.body_en;
-        throw new Error('blog-post-page: i18n.locale must be ru or en');
+        const body = locale === 'ru' ? post.body_ru : locale === 'en' ? post.body_en : undefined;
+        if (body === undefined) throw new Error('blog-post-page: i18n.locale must be ru or en');
+        return typeof body === 'string' ? body : '';
     }
 
     override render(): TemplateResult {

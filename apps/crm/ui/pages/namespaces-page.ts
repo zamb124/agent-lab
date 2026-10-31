@@ -28,6 +28,7 @@ import type {
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 
 const NAMESPACES_NAME = 'crm/namespaces';
 
@@ -183,7 +184,7 @@ export class CRMNamespacesPage extends PlatformPage {
     ];
 
     private _namespaces: ResourceController;
-    private _authSel: SelectController<Record<string, unknown> | undefined>;
+    private _authSel: SelectController<AuthUser | null>;
 
     constructor() {
         super();
@@ -263,12 +264,13 @@ export class CRMNamespacesPage extends PlatformPage {
             ? ns.description
             : '';
         const badges = this._connectedIntegrationBadges(ns);
+        const nsName = typeof ns.name === 'string' ? ns.name : '';
         return html`
             <article class="card">
                 <div class="card-header">
                     <h3 class="card-title">
                         <platform-icon name="folder" size="14"></platform-icon>
-                        <span class="card-name">${ns.name}</span>
+                        <span class="card-name">${nsName}</span>
                     </h3>
                     ${badges.length > 0
                         ? html`
@@ -297,11 +299,11 @@ export class CRMNamespacesPage extends PlatformPage {
                     ? html`<p class="card-description">${description}</p>`
                     : html`<p class="card-description card-empty-description">${this.t('namespaces_page.empty_description')}</p>`}
                 <div class="card-actions">
-                    <button type="button" class="btn btn-primary" @click=${() => this._onEdit(ns.name)}>
+                    <button type="button" class="btn btn-primary" @click=${() => this._onEdit(nsName)}>
                         <platform-icon name="settings" size="12"></platform-icon>
                         ${this.t('namespaces_page.action_settings')}
                     </button>
-                    <button type="button" class="btn" @click=${() => this._onOpenNamespace(ns.name)}>
+                    <button type="button" class="btn" @click=${() => this._onOpenNamespace(nsName)}>
                         <platform-icon name="arrow-right" size="12"></platform-icon>
                         ${this.t('namespaces_page.action_open')}
                     </button>

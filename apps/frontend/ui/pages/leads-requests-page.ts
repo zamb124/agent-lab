@@ -128,7 +128,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                 <tbody>
                     ${list.map((l) => html`
                         <tr>
-                            <td class="created">${new Date(l.created_at).toLocaleString()}</td>
+                            <td class="created">${typeof l.created_at === 'string' || typeof l.created_at === 'number' ? new Date(l.created_at).toLocaleString() : ''}</td>
                             <td>${l.contact_name}</td>
                             <td>
                                 ${l.email

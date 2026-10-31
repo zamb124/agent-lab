@@ -38,11 +38,14 @@ type AnySliceFactory = SliceFactory<object, ActionMap>;
 
 /** Контроллер фабрики F: состояние — S фабрики (`F['slice']['initial']`), методы — её actions. */
 export type ResourceControllerOf<F extends AnyResourceFactory> = ResourceController<F['slice']['initial']> & ActionMethods<F['actions']>;
-export type OpControllerOf<F extends AnyOpFactory> = OpController<F['slice']['initial']> & ActionMethods<F['actions']>;
+export type OpControllerOf<F extends AnyOpFactory> = OpController<F['slice']['initial'], AsyncOpResultOf<F>> & ActionMethods<F['actions']>;
 export type SliceControllerOf<F extends AnySliceFactory> = SliceController<F['slice']['initial']> & ActionMethods<F['actions']>;
 
 /** Результат `OpController.run()`: `TResult` фабрики; `unknown` для нетипизированного op. */
 export type OpRunResult<S extends AsyncOpSlice<unknown>> = S extends AsyncOpSlice<infer R> ? R : unknown;
+
+/** `TResult` фабрики async-op (result команды `commandType`). */
+export type AsyncOpResultOf<F> = F extends AsyncOpFactory<infer R, AsyncOpSlice<unknown>, ActionMap> ? R : unknown;
 
 /** Элемент курсорной ленты по типу фабрики. */
 export type CursorListItemOf<F> = F extends CursorListFactory<infer I> ? I : unknown;
@@ -270,13 +273,16 @@ function _httpStatus(payload: unknown): number | null {
     return typeof payload.status === 'number' ? payload.status : null;
 }
 
-export class OpController<S extends AsyncOpSlice<unknown> = AsyncOpSlice> {
+export class OpController<
+    S extends AsyncOpSlice<unknown> = AsyncOpSlice,
+    TResult = OpRunResult<S>,
+> {
     host: ControllerHost;
-    op: AsyncOpFactory<unknown, S, ActionMap>;
+    op: AsyncOpFactory<TResult, S, ActionMap>;
     private _slice: SelectController<unknown>;
     private _failureStatus: number | null = null;
 
-    constructor(host: ControllerHost, op: AsyncOpFactory<unknown, S, ActionMap>) {
+    constructor(host: ControllerHost, op: AsyncOpFactory<TResult, S, ActionMap>) {
         _requireFactory(op, 'async-op', 'OpController');
         this.host = host;
         this.op = op;
@@ -292,7 +298,7 @@ export class OpController<S extends AsyncOpSlice<unknown> = AsyncOpSlice> {
     get lastResult(): S['lastResult'] { return this.state.lastResult; }
     get lastRequestId(): string | null { return this.state.lastRequestId; }
 
-    run(payload?: unknown): Promise<OpRunResult<S> | null> {
+    run(payload?: unknown): Promise<TResult | null> {
         this._failureStatus = null;
         const okType = this.op.events.SUCCEEDED;
         const failType = this.op.events.FAILED;
@@ -321,7 +327,7 @@ export class OpController<S extends AsyncOpSlice<unknown> = AsyncOpSlice> {
                     ? pl.result
                     : null;
                 this._failureStatus = null;
-                resolve(out as OpRunResult<S> | null);
+                resolve(out as TResult | null);
             });
             unsubFail = this.bus.subscribeType(failType, (event) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) return;

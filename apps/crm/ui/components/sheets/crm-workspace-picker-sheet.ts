@@ -23,6 +23,7 @@ import type {
     ResourceController,
 } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { PlatformBusState } from '@platform/lib/events/bus-state.js';
 
 const FACTORY_NAME = 'crm/namespaces';
 
@@ -89,7 +90,7 @@ export class CrmWorkspacePickerSheet extends PlatformBottomSheet {
         this._namespaces = this.useResource(FACTORY_NAME);
         this._authSel = this.select((s) => s.auth.user);
         this._namespaceSelectionByCompany = this.select(
-            (s: Record<string, unknown>) => s.ui.namespace.selectionByCompany,
+            (s: PlatformBusState) => s.ui.namespace.selectionByCompany,
         );
     }
 

@@ -123,7 +123,8 @@ export class SupportPage extends PlatformPage {
 
     override render(): TemplateResult {
         const status = this._status;
-        const statusText = status.i18nKey.length > 0 ? this.t(status.i18nKey) : '';
+        const statusKey = typeof status.i18nKey === 'string' ? status.i18nKey : '';
+        const statusText = statusKey.length > 0 ? this.t(statusKey) : '';
         const supportEmail = this._supportEmail();
         return html`
             <landing-header></landing-header>

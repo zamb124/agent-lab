@@ -5,7 +5,7 @@
  * @param {object} draft — черновик с полями `type_id`, `parent_type_id`
  * @param {object[]|null|undefined} catalogRows — типы из каталога `{ type_id, parent_type_id }`
  */
-export function entityTypeNoteSubtreeLocked(draft: Record<string, unknown> | null | undefined, catalogRows: { type_id?: unknown; parent_type_id?: unknown }[] | null | undefined): boolean {
+export function entityTypeNoteSubtreeLocked(draft: { type_id?: unknown; parent_type_id?: unknown } | null | undefined, catalogRows: { type_id?: unknown; parent_type_id?: unknown }[] | null | undefined): boolean {
     if (draft === null || draft === undefined || typeof draft !== 'object') {
         throw new Error('entityTypeNoteSubtreeLocked: draft required');
     }

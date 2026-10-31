@@ -145,19 +145,22 @@ export class SyncForwardModal extends PlatformModal {
             ${channels.length === 0
                 ? html`<platform-empty-state icon="forward" title=${this.t('chat_view.no_other_channels')}></platform-empty-state>`
                 : html`<div class="list">
-                    ${channels.map((c: Record<string, unknown>) => html`
+                    ${channels.map((c: Record<string, unknown>) => {
+                        const channelId = typeof c.channel_id === 'string' ? c.channel_id : '';
+                        return html`
                         <div
-                            class=${this._selectedIds.includes(c.channel_id) ? 'form-item selected' : 'form-item'}
-                            @click=${() => this._toggle(c.channel_id)}
+                            class=${this._selectedIds.includes(channelId) ? 'form-item selected' : 'form-item'}
+                            @click=${() => this._toggle(channelId)}
                         >
                             <div class="form-checkbox">
-                                ${this._selectedIds.includes(c.channel_id) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
+                                ${this._selectedIds.includes(channelId) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
                             </div>
                             <div class="form-item-content">
                                 <sync-channel-row pick-mode .channel=${c}></sync-channel-row>
                             </div>
                         </div>
-                    `)}
+                    `;
+                    })}
                 </div>`}
         `;
     }

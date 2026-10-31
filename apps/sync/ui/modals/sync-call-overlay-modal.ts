@@ -2461,7 +2461,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                     ${items.length === 0 ? html`
                         <platform-empty-state icon="chat" title=${this.t('call_overlay.no_messages_yet')}></platform-empty-state>
                     ` : items.map((m: Record<string, unknown>) => {
-                        const sender = m.sender !== null && typeof m.sender === 'object' ? m.sender : {};
+                        const sender: Record<string, unknown> = isPlainRecord(m.sender) ? m.sender : {};
                         const senderName = typeof sender.display_name === 'string' && sender.display_name !== ''
                             ? sender.display_name
                             : (typeof sender.user_id === 'string' ? sender.user_id : this.t('call_overlay.participant_fallback'));
@@ -2471,8 +2471,8 @@ export class SyncCallOverlayModal extends PlatformModal {
                             throw new Error('sync call: message contents must be an array');
                         }
                         const text = (Array.isArray(rawContents) ? rawContents : [])
-                            .filter((c: Record<string, unknown>) => c.type === 'text/plain' && c.data && typeof c.data.body === 'string')
-                            .map((c: Record<string, unknown>) => c.data.body)
+                            .filter((c: Record<string, unknown>) => c.type === 'text/plain' && isPlainRecord(c.data) && typeof c.data.body === 'string')
+                            .map((c: Record<string, unknown>) => isPlainRecord(c.data) && typeof c.data.body === 'string' ? c.data.body : '')
                             .join('\n');
                         if (text === '') return nothing;
                         const time = typeof m.sent_at === 'string'

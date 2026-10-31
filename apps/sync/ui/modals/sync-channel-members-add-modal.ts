@@ -85,19 +85,22 @@ export class SyncChannelMembersAddModal extends PlatformFormModal {
                 }}
             ></platform-field>
             <div class="members">
-                ${filtered.map((m: Record<string, unknown>) => html`
+                ${filtered.map((m: Record<string, unknown>) => {
+                    const userId = typeof m.user_id === 'string' ? m.user_id : '';
+                    return html`
                     <div
-                        class=${this._selected.has(m.user_id) ? 'form-item selected' : 'form-item'}
-                        @click=${() => this._toggleMember(m.user_id)}
+                        class=${this._selected.has(userId) ? 'form-item selected' : 'form-item'}
+                        @click=${() => this._toggleMember(userId)}
                     >
                         <div class="form-checkbox">
-                            ${this._selected.has(m.user_id) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
+                            ${this._selected.has(userId) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
                         </div>
                         <div class="form-item-content">
-                            <platform-user-chip user-id=${m.user_id} size="sm" ?interactive=${false}></platform-user-chip>
+                            <platform-user-chip user-id=${userId} size="sm" ?interactive=${false}></platform-user-chip>
                         </div>
                     </div>
-                `)}
+                `;
+                })}
             </div>
         `;
     }

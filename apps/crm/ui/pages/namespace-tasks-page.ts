@@ -644,10 +644,12 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
 
     _renderRow(task: Record<string, unknown>): TemplateResult {
         const variant = statusVariant(task.status);
-        const showCancel = ACTIVE_STATUSES.has(task.status);
-        const showRetry = task.status === 'failed' || task.status === 'cancelled';
-        const showRollback = task.task_type === 'knowledge_import' && task.status === 'completed';
-        const showReviewComplete = task.task_type === 'knowledge_import' && task.status === 'review_required';
+        const status = typeof task.status === 'string' ? task.status : '';
+        const pct = typeof task.progress_pct === 'number' ? task.progress_pct : 0;
+        const showCancel = ACTIVE_STATUSES.has(status);
+        const showRetry = status === 'failed' || status === 'cancelled';
+        const showRollback = task.task_type === 'knowledge_import' && status === 'completed';
+        const showReviewComplete = task.task_type === 'knowledge_import' && status === 'review_required';
         const opBusy = this._isAnyOpBusy();
         return html`
             <tr>
@@ -669,10 +671,10 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
                 </td>
                 <td>
                     <div class="progress-bar">
-                        <div style="width: ${Math.max(0, Math.min(100, task.progress_pct))}%"></div>
+                        <div style="width: ${Math.max(0, Math.min(100, pct))}%"></div>
                     </div>
                     <div class="stage">
-                        ${task.progress_pct}% · ${task.stage || this.t('namespace_tasks_page.no_stage')}
+                        ${pct}% · ${task.stage || this.t('namespace_tasks_page.no_stage')}
                     </div>
                 </td>
                 <td>

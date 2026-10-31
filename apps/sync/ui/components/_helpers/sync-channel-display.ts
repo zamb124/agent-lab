@@ -9,6 +9,7 @@
 import { resolveChannelTitle, resolveDisplayName } from '../../_helpers/sync-id-resolvers.js';
 import { getTypingIndicatorLine } from '../../_helpers/sync-typing.js';
 import { findCompanyMember } from '../../_helpers/sync-presence.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 /**
  * Заголовок канала. Тонкая обёртка над `resolveChannelTitle` для
@@ -69,7 +70,7 @@ export function buildChatSubtitle({
         t,
     });
     if (typingLine !== '') return typingLine;
-    if (channel.type === 'direct' && channel.peer && typeof channel.peer === 'object') {
+    if (channel.type === 'direct' && isPlainRecord(channel.peer)) {
         const member = findCompanyMember(members, channel.peer.user_id);
         if (member && member.is_online === true) return t('chat_header.subtitle_online');
         if (member && typeof member.last_seen_at === 'string' && member.last_seen_at !== '') {

@@ -4,6 +4,7 @@ import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-metric-card.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import type { CrawlProfileSummary } from '@platform/lib/events/wire/search.gen.js';
 
 export class CrawlReportMetricStrip extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -16,7 +17,7 @@ export class CrawlReportMetricStrip extends PlatformElement {
         errorKind: { type: String },
         countFromSummary: { attribute: false },
     }
-    declare summary: Record<string, unknown> | null;
+    declare summary: CrawlProfileSummary | null;
     declare locale: string;
     declare busy: boolean;
     declare refreshing: boolean;

@@ -95,7 +95,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
 
     async _delete(cfg: Record<string, unknown>) {
         if (!(await platformConfirm(this.t('embed_page.confirm_delete')))) return;
-        this._configs.remove(cfg.embed_id);
+        this._configs.remove(typeof cfg.embed_id === 'string' ? cfg.embed_id : '');
     }
 
     _renderEmpty() {

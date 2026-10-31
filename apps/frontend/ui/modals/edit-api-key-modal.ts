@@ -64,7 +64,7 @@ export class FrontendEditApiKeyModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, unknown> = {};
+        const errors: Record<string, string> = {};
         if (!this._name.trim()) errors.name = this.t('api_key_modal.err_name');
         return errors;
     }

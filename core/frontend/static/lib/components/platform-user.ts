@@ -24,7 +24,9 @@ import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResu
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
+import type { AuthUser } from '../events/reducers/auth.js';
 import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
+import type { CompanyRecord } from '../events/reducers/companies.js';
 import { buildCompanySubdomainUrl } from '../utils/company-url.js';
 import { COMPANY_SWITCH_STORAGE_KEY } from '../events/effects/auth-company-navigation.effect.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
@@ -53,23 +55,10 @@ function hasOwnerRole(role: unknown): boolean {
     return false;
 }
 
-interface AuthUserRecord {
-    id?: string;
-    name?: string;
-    company_id?: string | undefined;
-    raw?: Record<string, unknown>;
-}
-
 interface AuthSliceView {
     status?: string;
-    user?: AuthUserRecord | undefined;
+    user?: AuthUser | undefined;
     activeCompanyId?: string | null;
-}
-
-interface CompanyRecord {
-    company_id?: string | undefined;
-    name?: string;
-    role?: unknown;
 }
 
 export class PlatformUser extends PlatformElement {
@@ -288,14 +277,14 @@ export class PlatformUser extends PlatformElement {
         return company && company.name ? company.name : '';
     }
 
-    _displayName(user: AuthUserRecord): string {
+    _displayName(user: AuthUser): string {
         if (user.name) return user.name;
         const raw = user.raw;
         if (raw && typeof raw.name === 'string' && raw.name) return raw.name;
         return this.t('menu.user_fallback');
     }
 
-    _displayEmail(user: AuthUserRecord): string {
+    _displayEmail(user: AuthUser): string {
         const raw = user.raw;
         if (!raw) return '';
         if (Array.isArray(raw.emails) && raw.emails.length > 0 && typeof raw.emails[0] === 'string') {
@@ -304,14 +293,14 @@ export class PlatformUser extends PlatformElement {
         return '';
     }
 
-    _avatarUrl(user: AuthUserRecord): string | null {
+    _avatarUrl(user: AuthUser): string | null {
         const raw = user.raw;
         if (!raw || typeof raw.avatar_url !== 'string') return null;
         const trimmed = raw.avatar_url.trim();
         return trimmed === '' ? null : trimmed;
     }
 
-    _avatarLetter(user: AuthUserRecord): string {
+    _avatarLetter(user: AuthUser): string {
         const sources = [user.name, user.raw && user.raw.name, this._displayEmail(user)];
         for (const src of sources) {
             if (typeof src === 'string' && src.trim().length > 0) {

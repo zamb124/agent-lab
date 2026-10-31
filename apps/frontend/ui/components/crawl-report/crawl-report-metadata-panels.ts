@@ -2,6 +2,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import type { CrawlPageFilterMetadata, CrawlStructuralSignals, CrawlUrlEnrichmentSnapshot } from '@platform/lib/events/wire/search.gen.js';
 
 function textOrDash(value: unknown): string {
     if (typeof value === 'string' && value.length > 0) return value;
@@ -16,7 +17,7 @@ export class CrawlReportStructuralPanel extends PlatformElement {
         signals: { type: Object },
         locale: { type: String },
     }
-    declare signals: Record<string, unknown> | null;
+    declare signals: CrawlStructuralSignals | null;
     declare locale: string;
 ;
 
@@ -130,8 +131,8 @@ export class CrawlReportFilterMetadataPanel extends PlatformElement {
         enrichmentSnapshot: { type: Object },
         locale: { type: String },
     }
-    declare filterMetadata: Record<string, unknown> | null;
-    declare enrichmentSnapshot: Record<string, unknown> | null;
+    declare filterMetadata: CrawlPageFilterMetadata | null;
+    declare enrichmentSnapshot: CrawlUrlEnrichmentSnapshot | null;
     declare locale: string;
 
     static override styles: CSSResultGroup = CrawlReportStructuralPanel.styles;

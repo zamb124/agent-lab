@@ -215,7 +215,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, unknown> = {};
+        const errors: Record<string, string> = {};
         const id = this._id.trim();
         if (!id || !/^[a-z0-9_-]{1,32}$/.test(id)) {
             errors.id = this.t('settings_page.ai_providers.custom_modal_id_invalid');

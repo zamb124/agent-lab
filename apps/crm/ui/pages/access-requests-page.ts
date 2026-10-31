@@ -396,6 +396,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
             : req.requester_id;
         const isPending = req.status === STATUS_PENDING;
         const message = typeof req.message === 'string' && req.message.length > 0 ? req.message : '';
+        const accessRequestId = typeof req.access_request_id === 'string' ? req.access_request_id : '';
 
         return html`
             <article class="request">
@@ -427,7 +428,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
                             type="button"
                             class="btn btn-approve"
                             ?disabled=${updating}
-                            @click=${() => this._onApprove(req.access_request_id)}
+                            @click=${() => this._onApprove(accessRequestId)}
                         >
                             <platform-icon name="check" size="14"></platform-icon>
                             ${this.t('access_requests_page.action_approve')}
@@ -436,7 +437,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
                             type="button"
                             class="btn btn-reject"
                             ?disabled=${updating}
-                            @click=${() => this._onReject(req.access_request_id)}
+                            @click=${() => this._onReject(accessRequestId)}
                         >
                             <platform-icon name="close" size="14"></platform-icon>
                             ${this.t('access_requests_page.action_reject')}

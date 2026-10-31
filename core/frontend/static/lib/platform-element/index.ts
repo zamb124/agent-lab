@@ -199,7 +199,7 @@ export class PlatformElement extends LitElement {
 
     useOp<N extends FactoryNameOfKind<'async-op'>>(name: N): OpControllerOf<PlatformFactoryRegistry[N]> {
         const factory = getFactory(name, 'async-op');
-        return bindActions(new OpController(this, factory), factory.actions, 'OpController', factory.name);
+        return bindActions(new OpController(this, factory), factory.actions, 'OpController', factory.name) as OpControllerOf<PlatformFactoryRegistry[N]>;
     }
 
     useForm<N extends FactoryNameOfKind<'form'>>(name: N): FormController {

@@ -13,7 +13,7 @@ import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import type { ResourceCollectionSlice, ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
 import { isPlatformEventType, isPlainRecord } from '@platform/lib/events/payload.js';
-import type { WikiPageSummary } from '@platform/lib/events/wire/wiki.gen.js';
+import type { WikiPage, WikiPageSummary } from '@platform/lib/events/wire/wiki.gen.js';
 
 export const WIKI_PAGE_EVENTS = [
     'wiki/page/created',
@@ -34,7 +34,7 @@ function mergeSummary(state: ResourceCollectionSlice<WikiPageSummary>, summary: 
     return { ...state, items, byId: { ...state.byId, [id]: summary } };
 }
 
-function unwrapWikiPageResult(state: AsyncOpSlice, event: PlatformEvent, events: Readonly<Record<string, string>>): AsyncOpSlice {
+function unwrapWikiPageResult(state: AsyncOpSlice<WikiPage>, event: PlatformEvent, events: Readonly<Record<string, string>>): AsyncOpSlice<WikiPage> {
     if (event.type !== events.SUCCEEDED) {
         return state;
     }
@@ -49,7 +49,7 @@ function unwrapWikiPageResult(state: AsyncOpSlice, event: PlatformEvent, events:
     if (!isPlainRecord(page)) {
         throw new Error('wiki pages: ожидался WikiPageResponse с полем page');
     }
-    return { ...state, lastResult: page };
+    return { ...state, lastResult: page as WikiPage };
 }
 
 export const wikiPagesResource = createResourceCollection({

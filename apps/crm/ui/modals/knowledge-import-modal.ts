@@ -600,13 +600,14 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                     : html`
                         <div class="ki-types-grid">
                             ${types.map((t: Record<string, unknown>) => {
-                                const selected = this._selectedTypeIds.includes(t.type_id);
+                                const typeId = typeof t.type_id === 'string' ? t.type_id : '';
+                                const selected = this._selectedTypeIds.includes(typeId);
                                 return html`
                                     <button
                                         type="button"
                                         class="ki-type-card ${selected ? 'selected' : ''}"
                                         aria-pressed=${selected ? 'true' : 'false'}
-                                        @click=${() => this._toggleType(t.type_id)}
+                                        @click=${() => this._toggleType(typeId)}
                                     >
                                         <span class="ki-type-check">
                                             ${selected ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}

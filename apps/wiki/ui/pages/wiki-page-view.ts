@@ -648,7 +648,7 @@ export class WikiPageView extends PlatformPage {
         // Страница перерисовывается от индикатора сохранения и оглавления и при
         // этом заново связывает `.value` редактора. Без синхронизации туда
         // уезжал бы документ до правки, и набранный символ терялся.
-        this._page = { ...this._page, content: doc };
+        this._page = { ...this._requirePage(), content: doc };
         this._scheduleSave();
         this._refreshOutline();
     }
@@ -672,14 +672,14 @@ export class WikiPageView extends PlatformPage {
     private _onIconSelect(event: CustomEvent<{ emoji?: string }>) {
         const emoji = textOrEmpty(event.detail.emoji);
         void this._properties.run({ wiki_page_id: this.pageId, icon: emoji });
-        this._page = { ...this._page, icon: emoji };
+        this._page = { ...this._requirePage(), icon: emoji };
         this._iconAnchor = null;
         void this._pages.load();
     }
 
     private _onIconClear() {
         void this._properties.run({ wiki_page_id: this.pageId, icon: '' });
-        this._page = { ...this._page, icon: '' };
+        this._page = { ...this._requirePage(), icon: '' };
         this._iconAnchor = null;
         void this._pages.load();
     }
@@ -798,12 +798,12 @@ export class WikiPageView extends PlatformPage {
         }
         const coverUrl = buildPlatformFileDownloadUrl(String(file.file_id));
         await this._properties.run({ wiki_page_id: this.pageId, cover_url: coverUrl });
-        this._page = { ...this._page, cover_url: coverUrl };
+        this._page = { ...this._requirePage(), cover_url: coverUrl };
     }
 
     private async _removeCover(): Promise<void> {
         await this._properties.run({ wiki_page_id: this.pageId, cover_url: '' });
-        this._page = { ...this._page, cover_url: '' };
+        this._page = { ...this._requirePage(), cover_url: '' };
     }
 
     private _onEditorFilePickRequested(event: CustomEvent<{ kind?: string }>) {
@@ -1137,7 +1137,7 @@ export class WikiPageView extends PlatformPage {
         }
         const fullWidth = detail.value;
         await this._properties.run({ wiki_page_id: this.pageId, is_full_width: fullWidth });
-        this._page = { ...this._page, is_full_width: fullWidth };
+        this._page = { ...this._requirePage(), is_full_width: fullWidth };
     }
 
     /** Автор последней правки — вход в историю версий: иначе её не видно. */

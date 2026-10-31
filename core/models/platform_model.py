@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Coroutine, Iterable, Mapping
+from collections.abc import Coroutine, Iterable
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -246,7 +246,7 @@ class BoundQuery[TModel: "PlatformModel"](Query[TModel]):
     @override
     async def bulk_create(
         self,
-        objects: Iterable[TModel | Mapping[str, PersistedValue]],
+        objects: Iterable[TModel | dict[str, PersistedValue]],
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,

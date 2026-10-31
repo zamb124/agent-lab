@@ -102,7 +102,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
     }
 
     override validateForm() {
-        const errors: Record<string, unknown> = {};
+        const errors: Record<string, string> = {};
         if (!this._targetService.trim()) errors.target_service = this.t('scheduler_modal.err_service');
         if (!this._taskName.trim()) errors.task_name = this.t('scheduler_modal.err_task');
         if (this._scheduleType === 'cron' && !this._cron.trim()) {

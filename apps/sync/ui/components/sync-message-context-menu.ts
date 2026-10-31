@@ -101,20 +101,19 @@ export class SyncMessageContextMenu extends PlatformElement {
         const target = this._currentTarget();
         if (!target) return null;
         const slice = this._messagesStoreSel.value;
-        if (!slice || !slice.byChannelId || typeof slice.byChannelId !== 'object') {
+        if (!slice || !isPlainRecord(slice.byChannelId)) {
             return null;
         }
         const channelId = this._resolveChannelId();
         if (channelId === '') return null;
-        const channelData = slice.byChannelId[channelId];
+        const channelData = isPlainRecord(slice.byChannelId[channelId]) ? slice.byChannelId[channelId] : null;
         if (!channelData || !Array.isArray(channelData.items)) return null;
         const found = channelData.items.find((m: Record<string, unknown>) => m.message_id === target.messageId);
         if (found) return found;
         const pendingMap = channelData.pendingByLocalId;
-        if (pendingMap && typeof pendingMap === 'object' && pendingMap[target.messageId]) {
-            return pendingMap[target.messageId];
-        }
-        return null;
+        const pendingMessageId = typeof target.messageId === 'string' ? target.messageId : '';
+        const pending = isPlainRecord(pendingMap) ? pendingMap[pendingMessageId] : null;
+        return isPlainRecord(pending) ? pending : null;
     }
 
     _dismiss() {

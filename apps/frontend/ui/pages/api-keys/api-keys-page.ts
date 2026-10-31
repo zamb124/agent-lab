@@ -112,8 +112,9 @@ export class FrontendApiKeysPage extends PlatformPage {
     }
 
     async _revoke(key: Record<string, unknown>) {
+        const keyName = typeof key.name === 'string' ? key.name : '';
         const ok = await platformConfirm(
-            this.t('api_keys_page.confirm_revoke', { name: key.name }),
+            this.t('api_keys_page.confirm_revoke', { name: keyName }),
             {
                 title: this.t('api_keys_page.revoke_title'),
                 variant: 'danger',
@@ -123,7 +124,7 @@ export class FrontendApiKeysPage extends PlatformPage {
             },
         );
         if (!ok) return;
-        this._keys.remove(key.key_id);
+        this._keys.remove(typeof key.key_id === 'string' ? key.key_id : '');
     }
 
     _copySecret(secret: string) {
@@ -189,7 +190,7 @@ export class FrontendApiKeysPage extends PlatformPage {
                         ${(Array.isArray(k.scopes) ? k.scopes : []).map((s: string) => html`<span class="scope-tag">${s}</span>`)}
                     </div>
                 </td>
-                <td>${k.created_at ? new Date(k.created_at).toLocaleDateString() : ''}</td>
+                <td>${typeof k.created_at === 'string' || typeof k.created_at === 'number' ? new Date(k.created_at).toLocaleDateString() : ''}</td>
                 <td>
                     <button class="btn btn-ghost" @click=${() => this._rename(k)}>
                         ${this.t('api_keys_page.edit_title')}
