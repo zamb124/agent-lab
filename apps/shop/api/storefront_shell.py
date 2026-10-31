@@ -96,7 +96,9 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 @keyframes pop{{from{{transform:translateX(-50%) translateY(16px);opacity:0}}}}
 .sheet{{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);display:none;z-index:20}}
 .sheet.show{{display:block}}
-.panel{{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:22px 20px calc(44px + env(safe-area-inset-bottom));animation:up .25s ease}}
+.panel{{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:min(720px,100vw);max-height:88vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:10px 20px calc(44px + env(safe-area-inset-bottom));animation:up .25s ease;transition:transform .18s ease}}
+.panel.drag{{transition:none}}
+.grab{{width:38px;height:5px;border-radius:99px;background:var(--line);margin:0 auto 12px;touch-action:none}}
 @keyframes up{{from{{transform:translateX(-50%) translateY(40px)}}}}
 .panel h2{{font-size:21px;margin-bottom:16px;letter-spacing:-.01em}}
 .pshare{{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(18,18,20,.55);backdrop-filter:blur(8px);color:#fff;display:grid;place-items:center;z-index:2}}
@@ -147,8 +149,8 @@ body.light .hero .veil{{background:linear-gradient(180deg,rgba(16,14,12,.1) 20%,
 <body class="{body_class}">
 <div class="wrap" id="app"></div>
 <button class="cart" id="cart" onclick="openSheet()"></button>
-<div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="panel" id="panel"></div></div>
-<div class="sheet" id="csheet" onclick="if(event.target===this)closeCust()"><div class="panel" id="cpanel"></div></div>
+<div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="panel"><div class="grab"></div><div id="panel"></div></div></div>
+<div class="sheet" id="csheet" onclick="if(event.target===this)closeCust()"><div class="panel"><div class="grab"></div><div id="cpanel"></div></div></div>
 <div class="toast" id="toast"></div>
 <script id="snapshot" type="application/json">{snapshot}</script>
 <script>
@@ -411,6 +413,18 @@ function sheetBack(el){{if(!el.classList.contains('show'))return;
 window.addEventListener('popstate',()=>{{if(popGuard>0){{popGuard--;return;}}
   const list=document.querySelectorAll('.sheet.show');const s=list[list.length-1];
   if(s){{s.classList.remove('show');sheetDepth=Math.max(0,sheetDepth-1);syncLock();}}}});
+let dragY=null,dragEl=null;
+document.addEventListener('touchstart',e=>{{const p=e.target.closest('.panel');if(!p)return;
+  if(e.touches[0].clientY-p.getBoundingClientRect().top>46)return;
+  dragY=e.touches[0].clientY;dragEl=p;p.classList.add('drag');}},{{passive:true}});
+document.addEventListener('touchmove',e=>{{if(dragY==null)return;
+  const dy=Math.max(0,e.touches[0].clientY-dragY);
+  if(dy>0)e.preventDefault();
+  dragEl.style.transform=`translateX(-50%) translateY(${{dy}}px)`;}},{{passive:false}});
+document.addEventListener('touchend',e=>{{if(dragY==null)return;
+  const dy=Math.max(0,e.changedTouches[0].clientY-dragY);
+  const p=dragEl;p.classList.remove('drag');p.style.transform='';dragY=dragEl=null;
+  if(dy>90)sheetBack(p.parentElement);}});
 function groupSelectedQty(g){{let n=0;for(const o of g.options)n+=cust.sel.get(o.id)||0;return n;}}
 window.optToggle=(pid,gid,oid)=>{{const g=findGroup(pid,gid);if(!g)return;
   if(g.selection_mode==='single'){{for(const o of g.options)cust.sel.delete(o.id);cust.sel.set(oid,1);}}
