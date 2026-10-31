@@ -271,6 +271,24 @@ export const shopAiGeneratePhotoOp = createAsyncOp({
     restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/generate-photo' },
 });
 
+export const shopAiDescribeShopOp = createAsyncOp({
+    name: 'shop/ai_describe_shop',
+    errorToastKey: 'shop:toast.ai_describe_failed',
+    commandType: 'shop/ai/describe_shop_requested',
+    transport: 'ws',
+    wsTimeoutMs: 60_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/describe-shop' },
+});
+
+export const shopAiGenerateCoverOp = createAsyncOp({
+    name: 'shop/ai_generate_cover',
+    errorToastKey: 'shop:toast.ai_generate_failed',
+    commandType: 'shop/ai/generate_cover_requested',
+    transport: 'ws',
+    wsTimeoutMs: 120_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/ai/generate-cover' },
+});
+
 export const shopAiDescribeBatchOp = createAsyncOp({
     name: 'shop/ai_describe_batch',
     successToastKey: 'shop:toast.ai_batch_started',
@@ -474,6 +492,8 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/ai_describe': typeof shopAiDescribeOp;
         'shop/ai_enhance_photo': typeof shopAiEnhancePhotoOp;
         'shop/ai_generate_photo': typeof shopAiGeneratePhotoOp;
+        'shop/ai_describe_shop': typeof shopAiDescribeShopOp;
+        'shop/ai_generate_cover': typeof shopAiGenerateCoverOp;
         'shop/ai_describe_batch': typeof shopAiDescribeBatchOp;
         'shop/modifier_groups_list': typeof shopModifierGroupsListOp;
         'shop/modifier_group_create': typeof shopModifierGroupCreateOp;

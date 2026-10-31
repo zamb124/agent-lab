@@ -115,6 +115,42 @@
         }
       },
       "edges": []
+    },
+    "describe_shop": {
+      "name": "Shop description",
+      "description": "Продающее описание магазина/ресторана для витрины. Вход: variables.shop_name, variables.description (опц., текущий черновик для улучшения), variables.city (опц.). Выход: текст описания.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/describe_shop.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.7,
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "generate_cover": {
+      "name": "Generate shop cover",
+      "description": "Генерация обложки витрины (hero-баннер). Вход: variables.shop_name, variables.description (опц.). Выход: {\"file_ids\": [file_id]}.",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/generate_cover.md",
+          "llm_capability": "image_gen",
+          "llm": {
+            "model": "auto",
+            "provider": "linnex_llm"
+          },
+          "tools": [],
+          "output_key": "response"
+        }
+      },
+      "edges": []
     }
   }
 }

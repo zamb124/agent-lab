@@ -163,7 +163,11 @@
         "day_3": "Thu",
         "day_4": "Fri",
         "day_5": "Sat",
-        "day_6": "Sun"
+        "day_6": "Sun",
+        "ai_describe": "AI description",
+        "ai_describe_hint": "Write or improve the storefront description from the name and draft",
+        "ai_generate_cover": "Generate cover",
+        "ai_cover_hint": "AI will create a storefront cover from the shop name and description"
     },
     "toast": {
         "shop_created": "Shop created",

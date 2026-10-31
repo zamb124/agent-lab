@@ -255,6 +255,14 @@ class ShopAiSuggestOptionsPayload(StrictBaseModel):
     group_name: str | None = Field(default=None, max_length=200)
 
 
+class ShopAiShopPayload(StrictBaseModel):
+    """AI над карточкой магазина: имя обязательно, description — черновик из формы."""
+
+    shop_id: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=300)
+    description: str = Field(default="", max_length=1000)
+
+
 class ShopAiTextResponse(StrictBaseModel):
     text: str
 
@@ -824,6 +832,45 @@ async def op_ai_describe_batch(
         company_id=scope.company_id,
     )
     return ShopAiBatchResponse(enqueued=max(pending, 0))
+
+
+async def op_ai_describe_shop(
+    payload: ShopAiShopPayload, *, user: User, di: Di
+) -> ShopAiTextResponse:
+    """AI-описание магазина для витрины (улучшает черновик, если передан)."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    shop = await _shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        text = await di.ai_service.describe_shop(
+            name=payload.name, description=payload.description, city=shop.city or ""
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ShopAiTextResponse(text=text)
+
+
+async def op_ai_generate_cover(
+    payload: ShopAiShopPayload, *, user: User, di: Di
+) -> ShopAiFileResponse:
+    """AI-генерация обложки витрины — вернёт file_id."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    await _assert_shop_in_scope(di, scope.company_id, payload.shop_id)
+    try:
+        file_id = await di.ai_service.generate_shop_cover(
+            name=payload.name, description=payload.description
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    return ShopAiFileResponse(file_id=file_id)
+
+
+async def _shop_in_scope(di: Di, company_id: str, shop_id: str) -> Shop:
+    try:
+        return await di.shop_service.get_shop(company_id, shop_id)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
 
 
 async def _assert_shop_in_scope(di: Di, company_id: str, shop_id: str) -> None:

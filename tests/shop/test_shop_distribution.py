@@ -50,6 +50,29 @@ async def _create_image_file(shop_di, name: str) -> str:
     return record.file_id
 
 
+async def _reset_shop_flow() -> None:
+    """Сносит компанийскую копию flow ``shop``: следующий A2A-вызов лениво
+    материализует актуальный bundle со всеми ветками."""
+    from apps.flows.src.models.flow_config import FlowConfig
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
+    from core.models.identity_models import User
+    from tests.fixtures.ai_provider_defaults import make_test_company
+
+    set_context(
+        Context(
+            user=User(user_id="test_user", name="Test User"),
+            active_company=make_test_company(company_id="system", name="System"),
+            session_id="test_session",
+            channel="test",
+        )
+    )
+    try:
+        _ = await FlowConfig.delete_by_flow_id("shop")
+    finally:
+        clear_context()
+
+
 async def _published_shop(client: AsyncClient, slug: str) -> dict[str, object]:
     resp = await client.post(
         _SHOPS, json={"slug": slug, "name": f"Shop {slug}", "kind": "restaurant"}
@@ -357,3 +380,50 @@ class TestAiOperations:
         )
         assert resp.status_code == 404
         assert resp.json().get("error_code") == "file_not_found"
+
+    async def test_ai_describe_shop_flow_branch(
+        self,
+        shop_client: AsyncClient,
+        mock_llm_redis,
+        mock_llm_capture,
+        unique_id: str,
+    ) -> None:
+        """describe-shop: ветка describe_shop flow — промпт магазина с variables доходит до LLM."""
+        await _reset_shop_flow()
+        shop = await _published_shop(shop_client, f"aid-{unique_id[:8]}")
+        await mock_llm_redis([{"type": "text", "content": "Уютная пиццерия у парка"}])
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/ai/describe-shop",
+            json={"name": "Пицца Парк", "description": "пицца и всё"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["text"] == "Уютная пиццерия у парка"
+
+        calls = await mock_llm_capture()
+        rendered = "\n".join(
+            str(part.get("text", ""))
+            for call in calls
+            for message in call.get("messages", [])
+            for part in message.get("parts", [])
+        )
+        assert "локального бизнеса" in rendered
+        assert "Пицца Парк" in rendered
+
+    async def test_ai_generate_cover_image_gen_branch(
+        self,
+        shop_client: AsyncClient,
+        shop_di,
+        mock_llm_redis,
+        unique_id: str,
+    ) -> None:
+        """generate-cover: ветка generate_cover flow (image_gen) → file_id обложки."""
+        await _reset_shop_flow()
+        shop = await _published_shop(shop_client, f"aic-{unique_id[:8]}")
+        generated_id = await _create_image_file(shop_di, "cover.png")
+        await mock_llm_redis([{"type": "text", "content": f"cover stored: {generated_id}"}])
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/ai/generate-cover",
+            json={"name": "Пицца Парк", "description": "Семейная пиццерия"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["file_id"] == generated_id

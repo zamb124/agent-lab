@@ -38,6 +38,8 @@ export class ShopSettingsPage extends PlatformPage {
     private _telegramConnectOp: OpController;
     private _telegramDisconnectOp: OpController;
     private _uploadOp: OpController;
+    private _aiDescribeShopOp: OpController;
+    private _aiGenerateCoverOp: OpController;
     private _logoFileId = '';
     private _coverFileId = '';
     private _hours: Array<{ open: string; close: string; closed: boolean }> = [];
@@ -111,6 +113,7 @@ export class ShopSettingsPage extends PlatformPage {
                 text-align: center;
             }
             .brand-tile:hover { border-color: var(--accent); color: var(--accent); }
+            .ai-row { display: flex; justify-content: flex-end; }
             .hours { display: flex; flex-direction: column; gap: var(--space-2); }
             .day-row { display: grid; grid-template-columns: 32px 1fr 12px 1fr auto; gap: var(--space-2); align-items: center; }
             .day-row.off platform-field { opacity: 0.4; pointer-events: none; }
@@ -134,6 +137,8 @@ export class ShopSettingsPage extends PlatformPage {
         this._telegramDisconnectOp = this.useOp('shop/telegram_disconnect');
         this._domainProvisionOp = this.useOp('shop/domain_provision');
         this._uploadOp = this.useOp('platform/file_create');
+        this._aiDescribeShopOp = this.useOp('shop/ai_describe_shop');
+        this._aiGenerateCoverOp = this.useOp('shop/ai_generate_cover');
     }
 
     async onRouteActive(): Promise<void> {
@@ -240,6 +245,38 @@ export class ShopSettingsPage extends PlatformPage {
         }
     }
 
+    private async _aiDescribeShop() {
+        const name = this._name.trim();
+        if (name === '') return;
+        const result = await this._aiDescribeShopOp.run({
+            shop_id: this.shopId,
+            name,
+            description: this._description,
+        });
+        if (result !== null && typeof result === 'object') {
+            const text = (result as { text?: unknown }).text;
+            if (typeof text === 'string' && text !== '') this._description = text;
+        }
+    }
+
+    private async _aiGenerateCover() {
+        const name = this._name.trim();
+        if (name === '') return;
+        const result = await this._aiGenerateCoverOp.run({
+            shop_id: this.shopId,
+            name,
+            description: this._description,
+        });
+        if (result === null || typeof result !== 'object') return;
+        const fileId = (result as { file_id?: unknown }).file_id;
+        if (typeof fileId !== 'string') return;
+        const saved = await this._updateOp.run({ shop_id: this.shopId, cover_file_id: fileId });
+        if (saved !== null) {
+            this._coverFileId = fileId;
+            await this._shops.load();
+        }
+    }
+
     private async _publish() {
         const result = await this._publishOp.run({ shop_id: this.shopId });
         if (result !== null) await this._shops.load();
@@ -330,12 +367,22 @@ export class ShopSettingsPage extends PlatformPage {
                         </button>
                     </div>
                     <div class="hint">${this.t('settings.brand_hint')}</div>
+                    <platform-button size="sm" ?busy=${this._aiGenerateCoverOp.busy} ?disabled=${this._name.trim() === ''}
+                        title=${this.t('settings.ai_cover_hint')}
+                        @click=${() => this._aiGenerateCover()}
+                    ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_generate_cover')}</platform-button>
                     <platform-field type="text" mode="edit" label=${this.t('settings.field_name')} .value=${this._name}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._name = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                     ></platform-field>
                     <platform-field type="text" mode="edit" label=${this.t('settings.field_description')} .value=${this._description}
                         @change=${(e: CustomEvent<{ value?: unknown }>) => { this._description = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                     ></platform-field>
+                    <div class="ai-row">
+                        <platform-button size="sm" ?busy=${this._aiDescribeShopOp.busy} ?disabled=${this._name.trim() === ''}
+                            title=${this.t('settings.ai_describe_hint')}
+                            @click=${() => this._aiDescribeShop()}
+                        ><platform-icon name="sparkles" size="14"></platform-icon> ${this.t('settings.ai_describe')}</platform-button>
+                    </div>
                     <div class="row">
                         <platform-field type="text" mode="edit" label=${this.t('settings.field_phone')} .value=${this._phone}
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._phone = typeof e.detail.value === 'string' ? e.detail.value : ''; }}

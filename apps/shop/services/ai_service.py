@@ -36,6 +36,8 @@ _BRANCH_DESCRIBE_PHOTO = "describe_photo"
 _BRANCH_SUGGEST_OPTIONS = "suggest_options"
 _BRANCH_ENHANCE_PHOTO = "enhance_photo"
 _BRANCH_GENERATE_PHOTO = "generate_photo"
+_BRANCH_DESCRIBE_SHOP = "describe_shop"
+_BRANCH_GENERATE_COVER = "generate_cover"
 
 
 class ShopAiService:
@@ -244,5 +246,32 @@ class ShopAiService:
         return await self._flow_file_id(
             _BRANCH_GENERATE_PHOTO,
             content=f"Сгенерируй фотографию «{name}»",
+            variables=variables,
+        )
+
+    async def describe_shop(
+        self, *, name: str, description: str = "", city: str = ""
+    ) -> str:
+        """Описание магазина для витрины: ветка ``describe_shop``."""
+        variables: JsonObject = {"shop_name": name}
+        if description:
+            variables["description"] = description
+        if city:
+            variables["city"] = city
+        text = await self._flow_text(
+            _BRANCH_DESCRIBE_SHOP,
+            content=f"Напиши описание магазина «{name}»",
+            variables=variables,
+        )
+        return text.strip('"').strip()[:500]
+
+    async def generate_shop_cover(self, *, name: str, description: str = "") -> str:
+        """Генерация обложки витрины: ветка ``generate_cover`` (image_gen) → file_id."""
+        variables: JsonObject = {"shop_name": name}
+        if description:
+            variables["description"] = description
+        return await self._flow_file_id(
+            _BRANCH_GENERATE_COVER,
+            content=f"Сгенерируй обложку витрины «{name}»",
             variables=variables,
         )

@@ -9,9 +9,9 @@ from fastapi import APIRouter, Query
 from apps.shop.di import Di
 from apps.shop.models import ShopDomain
 from apps.shop.models.api import (
+    ShopAiBriefRequest,
     ShopAiDescribeRequest,
     ShopAiEnhancePhotoRequest,
-    ShopAiGeneratePhotoRequest,
     ShopAiSuggestOptionsRequest,
     ShopAiSuggestOptionsResponse,
     ShopCategoryCreateRequest,
@@ -48,6 +48,7 @@ from apps.shop.realtime.operations import (
     ShopAiEnhancePhotoPayload,
     ShopAiFileResponse,
     ShopAiGeneratePhotoPayload,
+    ShopAiShopPayload,
     ShopAiSuggestOptionsPayload,
     ShopAiTextResponse,
     ShopCategoryCreatePayload,
@@ -78,7 +79,9 @@ from apps.shop.realtime.operations import (
     ShopUpdatePayload,
     op_ai_describe_batch,
     op_ai_describe_product,
+    op_ai_describe_shop,
     op_ai_enhance_photo,
+    op_ai_generate_cover,
     op_ai_generate_photo,
     op_ai_suggest_options,
     op_categories_create,
@@ -405,10 +408,32 @@ async def ai_enhance_photo(
 
 @router.post("/{shop_id}/ai/generate-photo", response_model=ShopAiFileResponse)
 async def ai_generate_photo(
-    shop_id: str, body: ShopAiGeneratePhotoRequest, di: Di
+    shop_id: str, body: ShopAiBriefRequest, di: Di
 ) -> ShopAiFileResponse:
     return await op_ai_generate_photo(
         ShopAiGeneratePhotoPayload(shop_id=shop_id, name=body.name, description=body.description),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/ai/describe-shop", response_model=ShopAiTextResponse)
+async def ai_describe_shop(
+    shop_id: str, body: ShopAiBriefRequest, di: Di
+) -> ShopAiTextResponse:
+    return await op_ai_describe_shop(
+        ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/ai/generate-cover", response_model=ShopAiFileResponse)
+async def ai_generate_cover(
+    shop_id: str, body: ShopAiBriefRequest, di: Di
+) -> ShopAiFileResponse:
+    return await op_ai_generate_cover(
+        ShopAiShopPayload(shop_id=shop_id, name=body.name, description=body.description),
         user=require_context().user,
         di=di,
     )
