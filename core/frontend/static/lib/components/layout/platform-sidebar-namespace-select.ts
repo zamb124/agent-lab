@@ -6,7 +6,7 @@
  * Поведение выбора и модалки — у родителя; темизация через CSS-переменные на предке.
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../platform-icon.js';

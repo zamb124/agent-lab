@@ -1,0 +1,46 @@
+---
+description: "provider_litserve — локальный не-LLM инференс (embedding/rerank/STT/TTS/VAD): Postgres-каталог моделей, LitServe spawn-воркеры, ops-цикл, canonical URL и auth. Читать при правке apps/provider_litserve, litserve_catalog_entries и /v1/* инференса"
+globs:
+  - "apps/provider_litserve/**"
+  - "core/models/provider_litserve_model.py"
+  - "migrations/shared/*provider_litserve*"
+  - "deploy/helm/agent-lab/templates/50-gpu/litserve.yaml"
+alwaysApply: false
+---
+
+# provider_litserve
+
+Сервис `provider_litserve` (порт 8014, образ `base.gpu`) — GPU-под локального не-LLM инференса: embedding, rerank, STT, TTS, VAD за `/v1/*`, плюс системная админка каталога на `/litserve` (только компания `system`, `require_system_admin`). Локальных LLM нет и не планируется. Провайдер живёт под `core.ai`: оркестрация AI — `core.ai` (`ai_models.mdc`), владелец речи — `apps/voice` + `voice_resolver` (`voice.mdc`), владелец RAG — `apps/rag`/`core.rag` (`rag.mdc`), chat-proxy — `apps/flows` (`llm_proxy`).
+
+## Модель
+
+- `ProviderLitserveModel` (`core/models/provider_litserve_model.py`, shared DB, таблица `provider_litserve_models`) — единственный источник истины каталога. `kind` ∈ `embedding` | `rerank` | `stt` | `tts` | `vad`; `status` ∈ `pending` | `downloading` | `ready` | `failed` | `deleting` | `deleted`; `params` (JSONB) — типизированные поля записи (revision, dimension, context_length, silero_*…).
+- `LitserveCatalogEntry` = `ProviderLitserveModelPair` (embedding/rerank) | typed entry (`ProviderLitserveSTT/TTS/VADModelEntry`); `row.to_entry()` — round-trip `params` → typed.
+- `ProviderLitserveCatalogEntries` — DTO ready-каталога по kind для платформенных резолверов; читается через `litserve_catalog_entries()` (in-process TTL-кэш 60 с).
+- `ModelCatalog` (`apps/provider_litserve/catalog.py`) — иммутабельный boot-time снимок ready-строк; `from_seed(cfg)` — только conf (тесты, ASGI); `load(enabled_kinds=)` — из БД.
+
+## Инварианты
+
+### Каталог
+
+- Desired-state — только Postgres. Pod-local SQLite/файловый реестр как источник запрещён; conf `infra.*_models` — только seed при старте (`sync_seed_entries`); дефолт kind — самая старая ready-запись, tombstone `deleted` не воскрешается.
+- `/v1/models` — проекция каталога (`build_provider_litserve_v1_models_response` от записей `ModelCatalog`), не самостоятельный реестр.
+- LitServe spawn-воркеры получают `ModelCatalog` конструктором LitAPI через pickle — модели, ставшие `ready` после старта пода, обслуживаются после рестарта. Module-state каталог воркерам недоступен.
+- Резолверы платформы (`voice_resolver`, `voice_providers_catalog`, `apps/voice`, `apps/frontend`, `core.ai` catalog probe) читают только `litserve_catalog_entries()` — не `infra.*_models`.
+
+### Операции
+
+- `BackgroundTasks` для скачивания весов запрещён — durable ops-цикл `apps/provider_litserve/model_ops.py`: `pending → downloading → ready|failed`, `deleting → deleted`; старт — `reset_downloading_to_pending` (crash-recovery).
+- Админ-API `/litserve/api/models` пишет только статусные переходы в Postgres; скачивание и удаление весов исполняет ops-цикл пода.
+
+### Адресация и auth
+
+- Один источник адреса: `settings.server.provider_litserve_service_url` (`get_service_url("provider_litserve")`, default `http://127.0.0.1:8014`) + `openai_v1_base_url` для корня `/v1`. Своих `provider_litserve.api.*`, speech-default URL и публичных дефолтов нет. Явный `base_url` — только deliberate-override в `rag.embedding.api` и `voice.*.litserve`.
+- `/litserve` и `/litserve/api/*` — `require_system_admin` в хендлерах/роутере; спецправил в `AuthMiddleware` для путей сервиса нет. `/litserve/ui/static` — anonymous-статика.
+- `/v1/*` — внутрикластерный wire-протокол (route rules anonymous by design). Defense-in-depth: `provider_litserve.lit_server_api_key` (env `LIT_SERVER_API_KEY`) → `Authorization: Bearer` в клиентах; без ключа — placeholder `PROVIDER_LITSERVE_PLACEHOLDER_BEARER` (`local-litserve`).
+
+### Границы
+
+- Сервис не читает `settings.rag.*`, `settings.voice.*`, `settings.llm.*` — dimension/context_length и типизированные параметры приходят из записей каталога (`params`).
+- Клиенты STT/TTS/VAD (`core/clients/*_client.py`) принимают `api_key`; фабрики derive URL из canonical service URL при `base_url=None`.
+- Мёртвые OpenAI chat-контракты запрещены: `/v1` сервиса — только models/embeddings/rerank/audio.

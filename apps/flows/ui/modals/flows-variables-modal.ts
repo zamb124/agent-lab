@@ -14,7 +14,8 @@ import '@platform/lib/components/variables/platform-company-variables-panel.js';
 import './flows-variable-editor-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
@@ -248,7 +249,7 @@ export class FlowsVariablesModal extends PlatformModal {
 
     _renderFlowTable(rows: readonly FlowVarEntry[]) {
         if (rows.length === 0) {
-            return html`<div class="flows-vars-empty">${this.t('variables_modal.empty_flow')}</div>`;
+            return html`<platform-empty-state icon="database" title=${this.t('variables_modal.empty_flow')}></platform-empty-state>`;
         }
         return html`
             <table class="flows-vars-table">

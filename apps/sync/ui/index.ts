@@ -6,10 +6,12 @@
  * (см. `architecture.mdc`).
  */
 
-import '@platform/lib/components/app-loader.js';
+import '@platform/lib/utils/viewport-app-vh.js';
+import '@platform/lib/utils/platform-deeplink-init.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-form-modal.js';
 import '@platform/lib/components/platform-modal-stack.js';

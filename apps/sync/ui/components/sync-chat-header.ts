@@ -24,7 +24,7 @@ import type { NetworkState } from '@platform/lib/events/reducers/network.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import { buildChatSubtitle, channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { isOnline, findCompanyMember } from '../_helpers/sync-presence.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
@@ -352,7 +352,7 @@ export class SyncChatHeader extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('pointerdown', this._onDocClick);
+        this.useDomEvent(document, 'pointerdown', this._onDocClick);
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
             this._headerMql = window.matchMedia('(max-width: 767px)');
             this._headerMql.addEventListener('change', this._onHeaderMqlChange);
@@ -368,7 +368,6 @@ export class SyncChatHeader extends PlatformElement {
             this._headerMql.removeEventListener('change', this._onHeaderMqlChange);
             this._headerMql = null;
         }
-        document.removeEventListener('pointerdown', this._onDocClick);
         super.disconnectedCallback();
     }
 
@@ -555,7 +554,7 @@ export class SyncChatHeader extends PlatformElement {
                     <platform-icon name="chat" size="22"></platform-icon>
                 </span>
                 <div class="text">
-                    <glass-spinner></glass-spinner>
+                    <platform-spinner></platform-spinner>
                 </div>
                 <div class="actions"></div>
             `;

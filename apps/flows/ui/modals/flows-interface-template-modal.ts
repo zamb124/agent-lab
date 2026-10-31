@@ -11,6 +11,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-modal-search-field.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '../components/interface-editor/flows-interface-template-card.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -116,9 +117,10 @@ export class FlowsInterfaceTemplateModal extends PlatformModal {
                     >${this.t(`interface_editor.template_category_${category}`)}</span>`)}
                 </div>
             </div>
-            ${this._templates.busy ? html`<div class="empty">${this.t('interface_editor.loading')}</div>` : nothing}
-            ${!this._templates.busy && templates.length === 0
-                ? html`<div class="empty"><platform-icon name="search" size="24"></platform-icon><div>${this.t('interface_editor.template_empty')}</div></div>`
+            ${this._templates.busy && templates.length === 0
+                ? html`<platform-empty-state loading></platform-empty-state>`
+                : templates.length === 0
+                ? html`<platform-empty-state icon="search" title=${this.t('interface_editor.template_empty')}></platform-empty-state>`
                 : html`<div class="grid">
                     ${templates.map((template: any) => html`<flows-interface-template-card .template=${template}
                         @template-select=${(event: CustomEvent) => { this._detailId = event.detail.templateId; }}></flows-interface-template-card>`)}

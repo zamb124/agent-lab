@@ -55,7 +55,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-file-table.js';
 import '@platform/lib/components/platform-file-row.js';
 import '@platform/lib/components/platform-file-card.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '../components/office-integration-banner.js';
 import '../components/office-file-toolbar.js';
 import '../components/office-file-details-panel.js';
@@ -1385,7 +1385,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                                             @result-open=${this._onSemanticResultOpen}
                                         ></office-catalog-semantic-search-results>
                                     ` : html`
-                                        ${docsLoading ? html`<div class="loading"><glass-spinner size="lg"></glass-spinner></div>` : ''}
+                                        ${docsLoading ? html`<div class="loading"><platform-spinner size="lg"></platform-spinner></div>` : ''}
                                         ${showEmpty ? (atRoot ? this._renderEmptyNamespaceRoot() : this._renderEmptyNoDocuments()) : ''}
                                         ${!docsLoading && (docs.length > 0 || childCatalogs.length > 0)
                                             ? (state.viewMode === 'grid'

@@ -72,6 +72,7 @@ export class FlowsFloatingPanel extends PlatformElement {
     private _boundGeometryTransitionEnd: (event: Event) => void;
     private _boundPanelPointerMove: (event: MouseEvent) => void;
     private _boundPanelPointerUp: (event: MouseEvent) => void;
+    private _panelPointerUnsubs: Array<() => void> = [];
     static i18nNamespace = 'flows';
 
     static override properties: PropertyDeclarations = {
@@ -503,18 +504,12 @@ export class FlowsFloatingPanel extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        if (typeof window !== 'undefined') {
-            window.addEventListener('resize', this._boundPanelViewportResize);
-        }
-        this.addEventListener('transitionend', this._boundGeometryTransitionEnd);
+        this.useDomEvent(window, 'resize', this._boundPanelViewportResize);
+        this.useDomEvent(this, 'transitionend', this._boundGeometryTransitionEnd);
     }
 
     override disconnectedCallback(): void {
         this._endPanelPointerInteraction();
-        this.removeEventListener('transitionend', this._boundGeometryTransitionEnd);
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('resize', this._boundPanelViewportResize);
-        }
         super.disconnectedCallback?.();
     }
 
@@ -966,9 +961,15 @@ export class FlowsFloatingPanel extends PlatformElement {
             startRect: { ...rect },
         };
         this.setAttribute('data-dragging', '');
-        window.addEventListener('pointermove', this._boundPanelPointerMove);
-        window.addEventListener('pointerup', this._boundPanelPointerUp);
-        window.addEventListener('pointercancel', this._boundPanelPointerUp);
+        this._listenPanelPointer();
+    }
+
+    private _listenPanelPointer() {
+        this._panelPointerUnsubs = [
+            this.useDomEvent(window, 'pointermove', this._boundPanelPointerMove),
+            this.useDomEvent(window, 'pointerup', this._boundPanelPointerUp),
+            this.useDomEvent(window, 'pointercancel', this._boundPanelPointerUp),
+        ];
     }
 
     _onResizePointerDown(e: PointerEvent) {
@@ -993,9 +994,7 @@ export class FlowsFloatingPanel extends PlatformElement {
             startRect: { ...rect },
         };
         this.setAttribute('data-resizing', '');
-        window.addEventListener('pointermove', this._boundPanelPointerMove);
-        window.addEventListener('pointerup', this._boundPanelPointerUp);
-        window.addEventListener('pointercancel', this._boundPanelPointerUp);
+        this._listenPanelPointer();
     }
 
     _onAssistantResizePointerDown(e: PointerEvent) {
@@ -1017,9 +1016,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         };
         this.setAttribute('data-assistant-resizing', '');
         this._setGeometryTransition(false);
-        window.addEventListener('pointermove', this._boundPanelPointerMove);
-        window.addEventListener('pointerup', this._boundPanelPointerUp);
-        window.addEventListener('pointercancel', this._boundPanelPointerUp);
+        this._listenPanelPointer();
     }
 
     _onPanelPointerMove(e: MouseEvent) {
@@ -1096,11 +1093,10 @@ export class FlowsFloatingPanel extends PlatformElement {
         this.removeAttribute('data-dragging');
         this.removeAttribute('data-resizing');
         this.removeAttribute('data-assistant-resizing');
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('pointermove', this._boundPanelPointerMove);
-            window.removeEventListener('pointerup', this._boundPanelPointerUp);
-            window.removeEventListener('pointercancel', this._boundPanelPointerUp);
+        for (const unsub of this._panelPointerUnsubs) {
+            unsub();
         }
+        this._panelPointerUnsubs = [];
         if (hadInteraction) {
             this._persistPanelRect({ flush: true });
             this._emitLayoutChange();

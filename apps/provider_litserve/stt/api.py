@@ -27,6 +27,7 @@ from typing import Protocol
 import litserve as ls
 from fastapi import Request
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
 from core.types import JsonObject, JsonValue
@@ -43,10 +44,11 @@ class STTEngine(Protocol):
 class STTLitAPI(ls.LitAPI):
     """OpenAI-совместимый эндпоинт /v1/audio/transcriptions."""
 
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         super().__init__(api_path="/v1/audio/transcriptions")
         self._cfg: ProviderLitserveInfraConfig = cfg
-        self._engine: STTEngine = LocalSTTEngine(cfg)
+        self._catalog = catalog
+        self._engine: STTEngine = LocalSTTEngine(cfg, catalog)
 
     def setup(self, device: str | None) -> None:
         d = device if device is not None else resolve_torch_device(self._cfg)
@@ -54,7 +56,7 @@ class STTLitAPI(ls.LitAPI):
 
     def decode_request(self, request: Request, **kwargs: JsonValue) -> STTTranscriptionInput:
         _ = kwargs
-        return parse_stt_body(request, default_api_model_id=self._cfg.stt_default_api_model_id)
+        return parse_stt_body(request, default_api_model_id=self._catalog.default_api_model_id("stt"))
 
     def batch(self, inputs: list[STTTranscriptionInput]) -> list[STTTranscriptionInput]:
         return inputs

@@ -5,11 +5,12 @@
  */
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
@@ -865,7 +866,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     _renderProviders() {
         const loading = this._load.busy || this._catalog.busy;
         return loading
-            ? html`<glass-spinner></glass-spinner>`
+            ? html`<platform-spinner></platform-spinner>`
             : html`<div class="grid">${KINDS.map((k) => this._renderProviderCard(k))}</div>`;
     }
 
@@ -1072,7 +1073,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 <div class="actions-row">
                     <glass-button ?disabled=${!canSave} @click=${this._saveRule}>
                         ${isBusy
-                            ? html`<glass-spinner size="sm"></glass-spinner>`
+                            ? html`<platform-spinner size="sm"></platform-spinner>`
                             : html`<platform-icon name="${isEdit ? 'check' : 'plus'}" size="14"></platform-icon>`}
                         ${isEdit
                             ? this.t('pronunciation_rules_page.btn_update')
@@ -1102,15 +1103,9 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                         : nothing}
                 </h3>
                 ${isLoading
-                    ? html`<glass-spinner></glass-spinner>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : rules.length === 0
-                        ? html`
-                            <div class="empty-state">
-                                <div style="margin-bottom:var(--space-2)">
-                                    <platform-icon name="microphone" size="28"></platform-icon>
-                                </div>
-                                ${this.t('pronunciation_rules_page.empty')}
-                            </div>`
+                        ? html`<platform-empty-state icon="microphone" title=${this.t('pronunciation_rules_page.empty')}></platform-empty-state>`
                         : html`
                             <div class="rules-list">
                                 ${rules.map((rule) => this._renderRuleItem(rule, isDeleting))}
@@ -1180,7 +1175,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 </div>
                 <glass-button ?disabled=${!this._testText || isBusy} @click=${this._runTest}>
                     ${isBusy
-                        ? html`<glass-spinner size="sm"></glass-spinner>`
+                        ? html`<platform-spinner size="sm"></platform-spinner>`
                         : html`<platform-icon name="check" size="14"></platform-icon>`}
                     ${this.t('pronunciation_rules_page.test_run')}
                 </glass-button>

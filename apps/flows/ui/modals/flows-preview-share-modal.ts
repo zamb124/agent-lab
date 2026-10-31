@@ -10,7 +10,7 @@ import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
@@ -147,7 +147,7 @@ export class FlowsPreviewShareModal extends PlatformModal {
         if (st.busy) {
             return html`
                 <div class="body-wrap">
-                    <glass-spinner></glass-spinner>
+                    <platform-spinner></platform-spinner>
                 </div>
             `;
         }

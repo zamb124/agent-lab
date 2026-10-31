@@ -1,5 +1,9 @@
 """
 provider_litserve: платформенный FastAPI shell + LitServe-контур /v1/*.
+
+LitServer собирается внутри lifespan-рецепта ``litserve_workers``: каталог
+моделей — снимок ``ready``-строк ``provider_litserve_models`` (Postgres), а не
+conf и не pod-local реестр; spawn-воркеры получают его через pickle LitAPI.
 """
 
 from __future__ import annotations
@@ -7,7 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -19,7 +23,7 @@ from fastapi.routing import APIRoute
 from litserve.server import response_queue_to_buffer
 
 from apps.provider_litserve.api import models_router
-from apps.provider_litserve.api.models import system_auth_dependency
+from apps.provider_litserve.catalog import ModelCatalog, sync_seed_entries
 from apps.provider_litserve.config import (
     ProviderLitserveServiceSettings,
     get_provider_litserve_settings,
@@ -30,19 +34,12 @@ from apps.provider_litserve.litserve_runtime import (
     ProviderLitserveRuntime,
     provider_litserve_runtime,
 )
-from apps.provider_litserve.model_registry import (
-    init_registry,
-    sync_defaults_from_config,
-)
+from apps.provider_litserve.model_ops import run_model_ops_loop
 from apps.provider_litserve.openai_server_contracts import (
     build_provider_litserve_v1_models_response,
 )
 from apps.provider_litserve.provider_litserve_http_schemas import V1ModelsResponseBody
 from apps.provider_litserve.reranker.api import RerankerLitAPI
-from apps.provider_litserve.runtime_models import (
-    reload_runtime_catalog_from_sqlite,
-    runtime_api_model_ids,
-)
 from apps.provider_litserve.stt.api import STTLitAPI
 from apps.provider_litserve.tts.api import TTSLitAPI
 from apps.provider_litserve.vad.api import VADLitAPI
@@ -54,6 +51,12 @@ from core.app.spa import mount_core_frontend, resolve_ui_static_dir
 from core.config.models import ProviderLitserveInfraConfig
 from core.di import recipe
 from core.imports import module_sdk
+from core.models.provider_litserve_model import (
+    LitserveCatalogEntry,
+    LitserveModelKind,
+    ProviderLitserveModelPair,
+)
+from core.request_scope import require_system_admin
 from core.utils.background import finish_background_task
 
 UI_PREFIX = "/litserve"
@@ -80,7 +83,8 @@ class ProviderLitserveArgNamespace(argparse.Namespace):
     port: int | None = None
 
 
-def _ui_index_handler() -> FileResponse:
+async def _ui_index_handler(di: Di) -> FileResponse:
+    _ = await require_system_admin(di.authz_service)
     return FileResponse(UI_INDEX_PATH)
 
 
@@ -145,47 +149,30 @@ def _register_ui_routes(app: FastAPI) -> None:
         raise RuntimeError(f"UI entrypoint not found: {UI_INDEX_PATH}")
 
     router = APIRouter(include_in_schema=False)
-    router.add_api_route(
-        UI_PREFIX,
-        _ui_index_handler,
-        methods=["GET"],
-        dependencies=[Depends(system_auth_dependency)],
-    )
-    router.add_api_route(
-        f"{UI_PREFIX}/",
-        _ui_index_handler,
-        methods=["GET"],
-        dependencies=[Depends(system_auth_dependency)],
-    )
+    router.add_api_route(UI_PREFIX, _ui_index_handler, methods=["GET"])
+    router.add_api_route(f"{UI_PREFIX}/", _ui_index_handler, methods=["GET"])
     router.add_api_route(f"{UI_PREFIX}/health", _ui_health_handler, methods=["GET"])
     router.add_api_route("/health/inference", _inference_health_handler, methods=["GET"])
     app.include_router(router)
 
 
-def _register_v1_models_route(server: ls.LitServer) -> None:
-    settings = get_provider_litserve_settings()
-    cfg = settings.provider_litserve.infra
+def _catalog_pairs(
+    catalog: ModelCatalog,
+    kind: LitserveModelKind,
+) -> list[ProviderLitserveModelPair]:
+    entries: Sequence[LitserveCatalogEntry] = catalog.entries(kind)
+    return [entry for entry in entries if isinstance(entry, ProviderLitserveModelPair)]
 
+
+def _register_v1_models_route(server: ls.LitServer, catalog: ModelCatalog) -> None:
     def list_models() -> V1ModelsResponseBody:
         created = int(time.time())
-        embedding_model_ids = runtime_api_model_ids("embedding", cfg)
-        rerank_model_ids = runtime_api_model_ids("rerank", cfg)
-        stt_model_ids = runtime_api_model_ids("stt", cfg)
-        tts_model_ids = runtime_api_model_ids("tts", cfg)
-        vad_model_ids = runtime_api_model_ids("vad", cfg)
         return build_provider_litserve_v1_models_response(
-            embedding_openai_model_id=cfg.embedding_openai_model_id,
-            embedding_model_ids=embedding_model_ids,
-            embedding_hf_model_id=cfg.embedding_model_id,
-            embedding_dimension=settings.rag.embedding.api.dimension,
-            embedding_context_length=8192,
-            rerank_openai_model_id=cfg.rerank_openai_model_id,
-            rerank_model_ids=rerank_model_ids,
-            rerank_hf_model_id=cfg.model_id,
-            rerank_context_length=8192,
-            stt_model_ids=stt_model_ids,
-            tts_model_ids=tts_model_ids,
-            vad_model_ids=vad_model_ids,
+            embedding_entries=_catalog_pairs(catalog, "embedding"),
+            rerank_entries=_catalog_pairs(catalog, "rerank"),
+            stt_model_ids=catalog.api_model_ids("stt"),
+            tts_model_ids=catalog.api_model_ids("tts"),
+            vad_model_ids=catalog.api_model_ids("vad"),
             created=created,
         )
 
@@ -223,46 +210,25 @@ def _merge_litserver_v1_routes(app: FastAPI, lit_app: FastAPI) -> None:
         known.add(signature)
 
 
-def _build_litserver_apis(cfg: ProviderLitserveInfraConfig) -> list[ls.LitAPI]:
+def _build_litserver_apis(
+    cfg: ProviderLitserveInfraConfig,
+    catalog: ModelCatalog,
+) -> list[ls.LitAPI]:
     enabled = resolved_enabled_workers(cfg)
     apis: list[ls.LitAPI] = []
     if "embedding" in enabled:
-        apis.append(EmbeddingLitAPI(cfg))
+        apis.append(EmbeddingLitAPI(cfg, catalog))
     if "rerank" in enabled:
-        apis.append(RerankerLitAPI(cfg))
+        apis.append(RerankerLitAPI(cfg, catalog))
     if "stt" in enabled:
-        apis.append(STTLitAPI(cfg))
+        apis.append(STTLitAPI(cfg, catalog))
     if "tts" in enabled:
-        apis.append(TTSLitAPI(cfg))
+        apis.append(TTSLitAPI(cfg, catalog))
     if "vad" in enabled:
-        apis.append(VADLitAPI(cfg))
+        apis.append(VADLitAPI(cfg, catalog))
     if not apis:
         raise RuntimeError("provider_litserve: no LitServe workers enabled")
     return apis
-
-
-def _register_litserver_v1(app: FastAPI, runtime: ProviderLitserveRuntime) -> None:
-    settings = get_provider_litserve_settings()
-    cfg = settings.provider_litserve.infra
-    lit_server = ls.LitServer(
-        _build_litserver_apis(cfg),
-        accelerator=cfg.accelerator,
-        workers_per_device=cfg.workers_per_device,
-        timeout=cfg.request_timeout_seconds,
-        fast_queue=cfg.fast_queue,
-    )
-    _register_v1_models_route(lit_server)
-    _register_v1_inference_health_route(lit_server)
-    _merge_litserver_v1_routes(app, lit_server.app)
-    runtime.server = lit_server
-
-
-async def _bootstrap_runtime_registry() -> None:
-    settings = get_provider_litserve_settings()
-    cfg = settings.provider_litserve.infra
-    init_registry(cfg)
-    sync_defaults_from_config(cfg)
-    _ = reload_runtime_catalog_from_sqlite(cfg)
 
 
 async def _start_litserver_runtime(app: FastAPI, runtime: ProviderLitserveRuntime) -> None:
@@ -315,10 +281,38 @@ async def _stop_litserver_runtime(runtime: ProviderLitserveRuntime) -> None:
 
 
 async def litserve_workers(litserve_runtime: ProviderLitserveRuntime) -> AsyncIterator[None]:
-    await _bootstrap_runtime_registry()
-    await _start_litserver_runtime(app, litserve_runtime)
-    yield
-    await _stop_litserver_runtime(litserve_runtime)
+    settings = get_provider_litserve_settings()
+    cfg = settings.provider_litserve.infra
+    app = litserve_runtime.require_app()
+
+    _ = await sync_seed_entries(cfg)
+    catalog = await ModelCatalog.load(enabled_kinds=resolved_enabled_workers(cfg))
+
+    lit_server = ls.LitServer(
+        _build_litserver_apis(cfg, catalog),
+        accelerator=cfg.accelerator,
+        workers_per_device=cfg.workers_per_device,
+        timeout=cfg.request_timeout_seconds,
+        fast_queue=cfg.fast_queue,
+    )
+    _register_v1_models_route(lit_server, catalog)
+    _register_v1_inference_health_route(lit_server)
+    _merge_litserver_v1_routes(app, lit_server.app)
+    litserve_runtime.server = lit_server
+
+    ops_task = asyncio.create_task(
+        run_model_ops_loop(cfg),
+        name="provider_litserve_model_ops",
+    )
+    started = False
+    try:
+        await _start_litserver_runtime(app, litserve_runtime)
+        started = True
+        yield
+    finally:
+        await finish_background_task(ops_task)
+        if started:
+            await _stop_litserver_runtime(litserve_runtime)
 
 
 def build_app() -> FastAPI:
@@ -336,10 +330,11 @@ def build_app() -> FastAPI:
             (f"{UI_PREFIX}/ui/static", str(UI_ROOT_PATH), "litserve-ui-static"),
         ],
         mount_repo_documentation=False,
+        include_platform_routers=False,
     )
     mount_core_frontend(app)
     _register_ui_routes(app)
-    _register_litserver_v1(app, provider_litserve_runtime)
+    provider_litserve_runtime.attach_app(app)
     return app
 
 

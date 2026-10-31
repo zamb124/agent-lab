@@ -2,7 +2,7 @@
  * Ручки ширины и кнопки align на рамке выделения. Геометрия — ``span-layout.js``.
  */
 
-import { html, nothing } from '../../lit-shim.js';
+import { html, nothing } from 'lit';
 import { ALIGN_VALUES, blockAlign, blockSpan, spanContainerWidth, startSpanResize } from './span-layout.js';
 
 export { ALIGN_VALUES, SPAN_COLUMNS, blockAlign, blockSpan, clampSpan, spanFromPointer, spanContainerWidth, startSpanResize } from './span-layout.js';

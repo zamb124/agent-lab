@@ -20,7 +20,7 @@
  */
 
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
@@ -105,19 +105,15 @@ export class PlatformUser extends PlatformElement {
         this._companiesLoaded = false;
 
         this._anchor = null;
-        this._onDocumentClick = this._onDocumentClick.bind(this);
-        this._onStorage = this._onStorage.bind(this);
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('click', this._onDocumentClick);
-        window.addEventListener('storage', this._onStorage);
+        this.useDomEvent(document, 'click', (e) => this._onDocumentClick(e));
+        this.useDomEvent(window, 'storage', (e: StorageEvent) => this._onStorage(e));
     }
 
     override disconnectedCallback(): void {
-        document.removeEventListener('click', this._onDocumentClick);
-        window.removeEventListener('storage', this._onStorage);
         super.disconnectedCallback();
     }
 

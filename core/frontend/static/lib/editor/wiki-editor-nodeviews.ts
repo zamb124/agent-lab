@@ -14,8 +14,6 @@ import type { PmNodeLike, PmViewLike } from './pm-types.js';
 import { attrString } from './wiki-schema-builder.js';
 import '../components/platform-icon.js';
 
-export const CODEMIRROR_BUNDLE_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
-
 /** Base path `/{segment}/api/v1/files/download/` для текущего SPA. */
 export function resolveDefaultFileUrlBase(): string {
     return `${resolvePlatformFilesApiBase()}/download/`;
@@ -54,7 +52,7 @@ function isCmModule(value: unknown): value is CmModule {
 
 export function loadCodeMirrorBundle(): Promise<CmModule> {
     if (_cmBundlePromise === null) {
-        _cmBundlePromise = import(CODEMIRROR_BUNDLE_URL).then((mod: unknown) => {
+        _cmBundlePromise = import('../codemirror/codemirror-lazy.js').then((mod: unknown) => {
             if (!isCmModule(mod)) {
                 throw new Error('wiki-editor-nodeviews: codemirror bundle is not CmModule');
             }

@@ -45,7 +45,7 @@ export class LandingHeader extends PlatformElement {
                 overflow-x: clip;
                 background: var(--marketing-header-bg);
                 backdrop-filter: blur(10px);
-                border-bottom: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                border-bottom: 1px solid var(--glass-border-medium);
             }
             
             .header-container {
@@ -94,7 +94,7 @@ export class LandingHeader extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 18px;
                 font-weight: 500;
-                color: var(--landing-secondary, #E8E8E8);
+                color: var(--text-secondary);
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
@@ -105,7 +105,7 @@ export class LandingHeader extends PlatformElement {
                 object-fit: contain;
                 display: block;
                 flex: 0 0 auto;
-                filter: var(--landing-wordmark-filter, none);
+                filter: none;
             }
             
             .nav {
@@ -170,15 +170,15 @@ export class LandingHeader extends PlatformElement {
                 transform: translateX(-50%);
                 margin-top: 16px;
                 min-width: 220px;
-                background: var(--landing-dropdown-bg, rgba(30, 30, 30, 0.98));
+                background: var(--glass-solid-strong);
                 backdrop-filter: blur(20px);
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                border: 1px solid var(--glass-border-medium);
                 border-radius: 12px;
                 padding: 12px;
                 display: none;
                 flex-direction: column;
                 gap: 4px;
-                box-shadow: var(--landing-elevated-shadow, 0 20px 40px rgba(0, 0, 0, 0.4));
+                box-shadow: var(--glass-shadow-strong);
             }
             
             .nav-dropdown.open .nav-dropdown-menu {
@@ -190,14 +190,14 @@ export class LandingHeader extends PlatformElement {
                 align-items: center;
                 gap: 12px;
                 padding: 12px 16px;
-                color: var(--landing-secondary, #E8E8E8);
+                color: var(--text-secondary);
                 text-decoration: none;
                 border-radius: 8px;
                 transition: var(--motion-transition-interactive);
             }
             
             .nav-dropdown-item:hover {
-                background: rgba(87, 104, 254, 0.15);
+                background: color-mix(in srgb, var(--accent) 15%, transparent);
                 color: var(--accent);
             }
             
@@ -228,7 +228,7 @@ export class LandingHeader extends PlatformElement {
             .nav-dropdown-item-desc {
                 font-family: var(--font-sans);
                 font-size: 12px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
+                color: var(--text-secondary);
             }
             
             .header-actions {
@@ -245,7 +245,7 @@ export class LandingHeader extends PlatformElement {
                 gap: 4px;
                 background: transparent;
                 border: none;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 font-family: var(--font-sans);
                 font-size: 14px;
             }
@@ -254,14 +254,14 @@ export class LandingHeader extends PlatformElement {
                 border: 0;
                 background: transparent;
                 padding: 4px 8px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
+                color: var(--text-secondary);
                 font: inherit;
                 cursor: pointer;
                 transition: color 0.3s;
             }
             
             .lang-option.active {
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
             }
             
             .lang-option:hover {
@@ -269,18 +269,18 @@ export class LandingHeader extends PlatformElement {
             }
             
             .lang-separator {
-                color: var(--landing-text-faint, rgba(232, 232, 232, 0.3));
+                color: var(--text-disabled);
             }
 
             .theme-toggle {
                 width: 34px;
                 height: 34px;
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
+                border: 1px solid var(--glass-border-medium);
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: var(--landing-secondary, #E8E8E8);
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.05));
+                color: var(--text-secondary);
+                background: var(--glass-bg-subtle);
                 cursor: pointer;
                 transition: var(--motion-transition-interactive);
             }
@@ -297,7 +297,7 @@ export class LandingHeader extends PlatformElement {
                 background: var(--platform-btn-primary-bg);
                 border: none;
                 border-radius: 24px;
-                color: var(--landing-on-primary, #FFFFFF);
+                color: var(--text-on-accent);
                 font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 500;
@@ -316,7 +316,7 @@ export class LandingHeader extends PlatformElement {
                 background: transparent;
                 border: 1px solid var(--accent);
                 border-radius: 24px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 500;
@@ -328,7 +328,7 @@ export class LandingHeader extends PlatformElement {
             
             .dashboard-btn:hover {
                 background: var(--accent);
-                color: var(--landing-on-primary, #FFFFFF);
+                color: var(--text-on-accent);
             }
             
             .burger {
@@ -344,7 +344,7 @@ export class LandingHeader extends PlatformElement {
             .burger-line {
                 width: 24px;
                 height: 2px;
-                background: var(--landing-secondary);
+                background: var(--text-secondary);
                 transition: var(--motion-transition-interactive);
             }
             
@@ -364,18 +364,18 @@ export class LandingHeader extends PlatformElement {
                 display: none;
                 position: fixed;
                 inset: 0;
-                top: var(--landing-header-height, 71px);
+                top: var(--marketing-header-height);
                 box-sizing: border-box;
                 padding: clamp(16px, 4vw, 28px) clamp(16px, 5vw, 24px) max(24px, env(safe-area-inset-bottom));
                 flex-direction: column;
                 align-items: stretch;
                 gap: clamp(12px, 3vw, 20px);
                 z-index: 10000;
-                background: var(--landing-mobile-menu-bg, #0f0f0f);
+                background: var(--marketing-page-bg);
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
-                min-height: calc(100vh - var(--landing-header-height, 71px));
-                min-height: calc(100dvh - var(--landing-header-height, 71px));
+                min-height: calc(100vh - var(--marketing-header-height));
+                min-height: calc(100dvh - var(--marketing-header-height));
                 max-width: 100vw;
             }
             
@@ -536,13 +536,13 @@ export class LandingHeader extends PlatformElement {
                 width: 100%;
                 box-sizing: border-box;
                 padding-top: 4px;
-                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.08));
+                border-top: 1px solid var(--glass-border-medium);
             }
             
             .mobile-products-title {
                 font-family: var(--font-sans);
                 font-size: 12px;
-                color: var(--landing-text-faint, rgba(232, 232, 232, 0.5));
+                color: var(--text-disabled);
                 text-transform: uppercase;
                 letter-spacing: 0.08em;
                 padding: 12px 0 8px;
@@ -555,7 +555,7 @@ export class LandingHeader extends PlatformElement {
                 align-items: center;
                 gap: 12px;
                 padding: 12px 12px;
-                color: var(--landing-secondary, #E8E8E8);
+                color: var(--text-secondary);
                 text-decoration: none;
                 font-family: var(--font-sans);
                 font-size: clamp(16px, 4.2vw, 18px);
@@ -568,7 +568,7 @@ export class LandingHeader extends PlatformElement {
             }
             
             .mobile-product-link:hover {
-                background: rgba(87, 104, 254, 0.15);
+                background: color-mix(in srgb, var(--accent) 15%, transparent);
             }
             
             .mobile-product-icon {
@@ -589,7 +589,7 @@ export class LandingHeader extends PlatformElement {
                 width: 100%;
                 box-sizing: border-box;
                 padding-top: 4px;
-                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.08));
+                border-top: 1px solid var(--glass-border-medium);
             }
         `
     ];
@@ -741,7 +741,7 @@ export class LandingHeader extends PlatformElement {
         super.connectedCallback();
         this._handleOutsideClick = this._handleOutsideClick.bind(this);
         this._syncLandingHeaderHeight = this._syncLandingHeaderHeight.bind(this);
-        document.addEventListener('click', this._handleOutsideClick);
+        this.useDomEvent(document, 'click', this._handleOutsideClick);
     }
 
     override firstUpdated() {
@@ -753,7 +753,6 @@ export class LandingHeader extends PlatformElement {
     }
 
     override disconnectedCallback(): void {
-        document.removeEventListener('click', this._handleOutsideClick);
         if (this._headerResizeObserver !== null) {
             this._headerResizeObserver.disconnect();
             this._headerResizeObserver = null;

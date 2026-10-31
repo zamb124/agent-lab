@@ -47,7 +47,7 @@ import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/fields/platform-field-shell.js';
 import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import { PlatformMarkdownEditor } from '@platform/lib/components/platform-markdown-editor.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { markdownToHtml } from '@platform/lib/utils/markdown.js';
@@ -1666,7 +1666,7 @@ export class CRMNoteCardView extends PlatformElement {
             }
         });
 
-        window.addEventListener('resize', this._onMobileToolbarPortResize);
+        this.useDomEvent(window, 'resize', this._onMobileToolbarPortResize);
     }
 
     override disconnectedCallback(): void {
@@ -1690,7 +1690,6 @@ export class CRMNoteCardView extends PlatformElement {
             clearTimeout(this._attachmentsPopoverCloseTimer);
             this._attachmentsPopoverCloseTimer = null;
         }
-        window.removeEventListener('resize', this._onMobileToolbarPortResize);
         this._teardownMobileToolbarPortRendering();
         super.disconnectedCallback();
     }
@@ -3513,7 +3512,7 @@ export class CRMNoteCardView extends PlatformElement {
             : null;
         return html`
             <div class="note-markdown-format-banner" role="status" aria-live="polite">
-                <glass-spinner size="sm"></glass-spinner>
+                <platform-spinner size="sm"></platform-spinner>
                 <div class="note-markdown-format-banner-main">
                     <div class="note-markdown-format-banner-head">
                         <span>${

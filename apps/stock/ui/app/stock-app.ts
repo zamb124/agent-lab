@@ -45,6 +45,7 @@ import {
 } from '../events/resources/stock.resource.js';
 
 import '@platform/lib/components/layout/platform-island.js';
+import '../components/stock-sidebar.js';
 import '../pages/stock-home-page.js';
 import '../pages/stock-transfers-page.js';
 import '../pages/stock-transfer-page.js';
@@ -70,7 +71,6 @@ const STOCK_BOTTOM_NAV_ITEMS = [
 
 export class StockApp extends PlatformApp {
     static defaultI18nNamespace = 'stock';
-    static topBarEnabled = true;
     static bottomNavItems = STOCK_BOTTOM_NAV_ITEMS;
     static platformAssistant = {
         branchId: 'stock',
@@ -117,14 +117,19 @@ export class StockApp extends PlatformApp {
         PlatformApp.styles,
         css`
             :host {
-                display: block;
+                display: flex;
+                flex-direction: row;
                 width: var(--app-vw, 100vw);
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
-
+            .sidebar {
+                height: var(--app-vh, 100vh);
+                flex-shrink: 0;
+            }
             .main {
+                flex: 1;
                 height: 100%;
                 min-width: 0;
                 display: flex;
@@ -138,6 +143,15 @@ export class StockApp extends PlatformApp {
                 flex: 1;
                 min-height: 0;
                 min-width: 0;
+            }
+            @media (max-width: 767px) {
+                .main { padding: 0; }
+                .sidebar {
+                    position: absolute;
+                    width: 0;
+                    height: 0;
+                    overflow: visible;
+                }
             }
         `,
     ];
@@ -159,6 +173,7 @@ export class StockApp extends PlatformApp {
 
     override renderRoute(routeKey: string | null, params: Record<string, string>) {
         return html`
+            <div class="sidebar"><stock-sidebar></stock-sidebar></div>
             <div class="main">
                 <platform-island padding="none" ?content-no-scroll=${true}>
                     ${this._renderPage(routeKey, params)}

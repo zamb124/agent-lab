@@ -23,7 +23,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {
     CSSResultGroup,
@@ -361,7 +361,7 @@ export class CRMAccessRequestModal extends PlatformModal {
                     </div>
                     <div class="meta">
                         <div class="name">${this.entityId}</div>
-                        <div class="sub"><glass-spinner></glass-spinner></div>
+                        <div class="sub"><platform-spinner></platform-spinner></div>
                     </div>
                 </div>
             `;

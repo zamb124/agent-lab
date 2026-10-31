@@ -40,7 +40,10 @@ from core.config.models import (
     YandexLLMProviderConfig,
     ZAIProviderConfig,
 )
-from core.config.openai_v1_base_url import normalize_openai_v1_base_url
+from core.config.openai_v1_base_url import (
+    normalize_openai_v1_base_url,
+    openai_v1_base_url,
+)
 from core.types import JsonObject
 from core.variables import VariableResolutionError, VarResolver
 
@@ -175,7 +178,9 @@ def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
     if provider == "custom_openai_compatible":
         raise ValueError("custom_openai_compatible LLM requires an explicit base_url")
     if provider == PROVIDER_LITSERVE:
-        return settings.provider_litserve.resolve_openai_v1_base_url()
+        return openai_v1_base_url(
+            settings.server.get_service_url("provider_litserve")
+        )
     raise ValueError(f"Unknown LLM provider: {provider}")
 
 

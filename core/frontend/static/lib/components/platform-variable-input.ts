@@ -4,12 +4,12 @@
  */
 
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { variableRefsStyles } from '../styles/shared/variable-refs.styles.js';
 import './fields/platform-field-shell.js';
 import { listSystemVariableKeys } from './variables/platform-system-variables-catalog.js';
-import { createVariableExtensions, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
+import { createVariableExtensions, refreshVariableDecorations, requireCmModule } from '../codemirror/variable-extensions.js';
 import type {
     CmEditorViewLike,
     CmModule,
@@ -289,7 +289,7 @@ export class PlatformVariableInput extends PlatformElement {
     }
 
     async _initCodeMirror(): Promise<void> {
-        const cm = await import('/static/core/assets/codemirror/codemirror-bundle.js');
+        const cm = requireCmModule(await import('../codemirror/codemirror-lazy.js'));
         this._cmBundle = cm;
         this._createEditor();
     }

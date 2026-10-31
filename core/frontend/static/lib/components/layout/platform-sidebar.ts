@@ -9,7 +9,7 @@
  * для совместимости (no-op на мобиле); код будет упразднён при следующем рефакторинге.
  */
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { CoreEvents } from '../../events/contract.js';
 import { sidebarHostStyles, sidebarStyles } from '../../styles/shared/sidebar.styles.js';
@@ -72,7 +72,7 @@ export class PlatformSidebar extends PlatformElement {
         super.connectedCallback();
         this._checkMobile();
         this._setupResizeObserver();
-        document.addEventListener('keydown', this._boundKeyHandler);
+        this.useDomEvent(document, 'keydown', this._boundKeyHandler);
         /*
          * Mobile shell 2026: на мобиле сайдбар скрыт CSS'ом (display:none). Подписки на
          * UI_SIDEBAR_* оставлены для desktop-режимов (collapsed/expanded), но команды
@@ -93,7 +93,6 @@ export class PlatformSidebar extends PlatformElement {
     override disconnectedCallback(): void {
         super.disconnectedCallback();
         this._resizeObserver?.disconnect();
-        document.removeEventListener('keydown', this._boundKeyHandler);
     }
 
     override updated(changedProps: PropertyValues<this>): void {

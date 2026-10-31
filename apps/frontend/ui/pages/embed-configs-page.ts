@@ -8,7 +8,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { FrontendCreateEmbedModal } from '../modals/create-embed-modal.js';
 import { FrontendEmbedCodeModal } from '../modals/embed-code-modal.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
@@ -59,15 +59,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
             }
             .status-tag.active { background: var(--success); color: white; }
             .status-tag.disabled { background: var(--warning); color: white; }
-
-            .empty {
-                padding: var(--space-8) var(--space-6);
-                text-align: center; color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: 1px dashed var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-            }
-            .empty .empty-title { color: var(--text-primary); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
+            platform-empty-state { margin-top: var(--space-4); }
 
             .info-banner {
                 padding: var(--space-3) var(--space-4);
@@ -108,10 +100,11 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
 
     _renderEmpty() {
         return html`
-            <div class="empty">
-                <div class="empty-title">${this.t('embed_page.empty_title')}</div>
-                <div>${this.t('embed_page.empty_description')}</div>
-            </div>
+            <platform-empty-state
+                icon="code"
+                title=${this.t('embed_page.empty_title')}
+                hint=${this.t('embed_page.empty_description')}
+            ></platform-empty-state>
         `;
     }
 
@@ -155,7 +148,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
             <div class="page-body">
             <div class="info-banner">${this.t('embed_page.external_wizard_note')}</div>
             ${loading && configs.length === 0
-                ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
+                ? html`<platform-empty-state loading></platform-empty-state>`
                 : configs.length === 0
                     ? this._renderEmpty()
                     : html`

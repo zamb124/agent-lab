@@ -1,23 +1,14 @@
-"""runtime_models: резолв api_model_id -> hf_model_id для STT/TTS/VAD.
+"""ModelCatalog: резолв api_model_id → hf_model_id для STT/TTS/VAD/embedding/rerank.
 
-Без моков и monkeypatch: вызываем реальные функции
-``replace_runtime_catalog`` / ``resolve_hf_model_id`` /
-``allowed_api_model_ids`` / ``runtime_api_model_ids`` /
-``reset_runtime_catalog_for_tests``. Перед каждым тестом autouse-фикстура
-в этом модуле сбрасывает каталог, поэтому тесты независимы.
+Без моков и monkeypatch: реальный ``ModelCatalog`` поверх conf-seed
+(``ModelCatalog.from_seed``) и ручных ``entries``.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from apps.provider_litserve.runtime_models import (
-    allowed_api_model_ids,
-    replace_runtime_catalog,
-    reset_runtime_catalog_for_tests,
-    resolve_hf_model_id,
-    runtime_api_model_ids,
-)
+from apps.provider_litserve.catalog import ModelCatalog
 from core.config.models import (
     ProviderLitserveInfraConfig,
     ProviderLitserveSTTModelEntry,
@@ -28,14 +19,8 @@ from core.config.models import (
 pytestmark = pytest.mark.timeout(15)
 
 
-@pytest.fixture(autouse=True)
-def _reset_runtime_catalog_autouse() -> None:
-    reset_runtime_catalog_for_tests()
-
-
 def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
     return ProviderLitserveInfraConfig(
-        sqlite_path=f"./data/test/{unique_id}.db",
         stt_models=[
             ProviderLitserveSTTModelEntry(
                 api_model_id=f"gigaam-{unique_id}",
@@ -43,7 +28,6 @@ def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
                 revision="e2e_rnnt",
             ),
         ],
-        stt_default_api_model_id=f"gigaam-{unique_id}",
         tts_models=[
             ProviderLitserveTTSModelEntry(
                 api_model_id=f"silero-tts-{unique_id}",
@@ -53,7 +37,6 @@ def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
                 sample_rate=24000,
             ),
         ],
-        tts_default_api_model_id=f"silero-tts-{unique_id}",
         vad_models=[
             ProviderLitserveVADModelEntry(
                 api_model_id=f"silero-{unique_id}",
@@ -62,99 +45,59 @@ def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
                 threshold=0.5,
             ),
         ],
-        vad_default_api_model_id=f"silero-{unique_id}",
     )
 
 
-def test_resolve_uses_default_map_when_runtime_catalog_not_initialized(unique_id):
-    cfg = _cfg(unique_id)
-    reset_runtime_catalog_for_tests()
-    assert resolve_hf_model_id("stt", f"gigaam-{unique_id}", cfg) == "ai-sage/GigaAM-v3"
-    assert resolve_hf_model_id("tts", f"silero-tts-{unique_id}", cfg) == "snakers4/silero-models"
-    assert resolve_hf_model_id("vad", f"silero-{unique_id}", cfg) == "snakers4/silero-vad"
+def test_from_seed_resolves_all_kinds(unique_id):
+    catalog = ModelCatalog.from_seed(_cfg(unique_id))
+    assert catalog.hf_model_id("stt", f"gigaam-{unique_id}") == "ai-sage/GigaAM-v3"
+    assert catalog.hf_model_id("tts", f"silero-tts-{unique_id}") == "snakers4/silero-models"
+    assert catalog.hf_model_id("vad", f"silero-{unique_id}") == "snakers4/silero-vad"
 
 
-def test_resolve_returns_none_for_unknown_api_id(unique_id):
-    cfg = _cfg(unique_id)
-    assert resolve_hf_model_id("stt", f"unknown-{unique_id}", cfg) is None
-    assert resolve_hf_model_id("tts", f"unknown-{unique_id}", cfg) is None
-    assert resolve_hf_model_id("vad", f"unknown-{unique_id}", cfg) is None
+def test_hf_model_id_returns_none_for_unknown_api_id(unique_id):
+    catalog = ModelCatalog.from_seed(_cfg(unique_id))
+    assert catalog.hf_model_id("stt", f"unknown-{unique_id}") is None
+    assert catalog.hf_model_id("tts", f"unknown-{unique_id}") is None
+    assert catalog.hf_model_id("vad", f"unknown-{unique_id}") is None
 
 
-def test_resolve_embedding_and_rerank_fall_back_to_config_when_runtime_initialized_empty(unique_id):
-    """Конфиг — источник истины для дефолтных пар RAG; SQLite может отставать после смены model id."""
-    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
-    replace_runtime_catalog([])
-    assert resolve_hf_model_id("embedding", cfg.embedding_openai_model_id, cfg) == cfg.embedding_model_id
-    assert resolve_hf_model_id("rerank", cfg.rerank_openai_model_id, cfg) == cfg.model_id
-    emb_ids = runtime_api_model_ids("embedding", cfg)
-    assert cfg.embedding_openai_model_id in emb_ids
-    rerank_ids = runtime_api_model_ids("rerank", cfg)
-    assert cfg.rerank_openai_model_id in rerank_ids
+def test_find_entry_case_insensitive(unique_id):
+    catalog = ModelCatalog.from_seed(_cfg(unique_id))
+    entry = catalog.find_entry("stt", f"GIGAAM-{unique_id}".upper())
+    assert entry is not None
+    assert entry.hf_model_id == "ai-sage/GigaAM-v3"
 
 
-def test_replace_runtime_catalog_overrides_defaults(unique_id):
-    cfg = _cfg(unique_id)
-    counts = replace_runtime_catalog(
-        [
-            {
-                "kind": "stt",
-                "api_model_id": f"runtime-stt-{unique_id}",
-                "hf_model_id": "openai/whisper-large-v3",
-            },
-            {
-                "kind": "tts",
-                "api_model_id": f"runtime-tts-{unique_id}",
-                "hf_model_id": "x/y-tts",
-            },
-            {
-                "kind": "vad",
-                "api_model_id": f"runtime-vad-{unique_id}",
-                "hf_model_id": "x/y-vad",
-            },
-        ]
-    )
-    assert counts["stt"] == 1
-    assert counts["tts"] == 1
-    assert counts["vad"] == 1
-
-    assert resolve_hf_model_id("stt", f"runtime-stt-{unique_id}", cfg) == "openai/whisper-large-v3"
-    assert resolve_hf_model_id("stt", f"gigaam-{unique_id}", cfg) is None
-    assert allowed_api_model_ids("stt", cfg) == frozenset({f"runtime-stt-{unique_id}"})
+def test_find_typed_returns_typed_entry(unique_id):
+    catalog = ModelCatalog.from_seed(_cfg(unique_id))
+    stt = catalog.find_typed("stt", f"gigaam-{unique_id}")
+    assert isinstance(stt, ProviderLitserveSTTModelEntry)
+    assert stt.revision == "e2e_rnnt"
+    tts = catalog.find_typed("tts", f"silero-tts-{unique_id}")
+    assert isinstance(tts, ProviderLitserveTTSModelEntry)
+    vad = catalog.find_typed("vad", f"silero-{unique_id}")
+    assert isinstance(vad, ProviderLitserveVADModelEntry)
+    assert vad.threshold == pytest.approx(0.5)
 
 
-def test_runtime_api_model_ids_merges_defaults_when_not_initialized(unique_id):
-    cfg = _cfg(unique_id)
-    ids = runtime_api_model_ids("stt", cfg)
-    assert f"gigaam-{unique_id}" in ids
+def test_from_seed_includes_embedding_and_rerank_pairs(unique_id):
+    catalog = ModelCatalog.from_seed(_cfg(unique_id))
+    emb_ids = catalog.api_model_ids("embedding")
+    assert catalog.hf_model_id("embedding", emb_ids[0]) is not None
+    rerank_ids = catalog.api_model_ids("rerank")
+    assert catalog.hf_model_id("rerank", rerank_ids[0]) is not None
 
 
-def test_runtime_api_model_ids_uses_only_runtime_when_initialized(unique_id):
-    cfg = _cfg(unique_id)
-    replace_runtime_catalog(
-        [
-            {
-                "kind": "stt",
-                "api_model_id": f"runtime-only-{unique_id}",
-                "hf_model_id": "openai/whisper-large-v3",
-            }
-        ]
-    )
-    ids = runtime_api_model_ids("stt", cfg)
-    assert ids == [f"runtime-only-{unique_id}"]
+def test_empty_catalog_entries_and_allowed_ids(unique_id):
+    catalog = ModelCatalog({})
+    assert catalog.entries("stt") == ()
+    assert catalog.api_model_ids("stt") == []
+    assert catalog.allowed_ids("stt") == frozenset()
+    assert catalog.hf_model_id("stt", f"x-{unique_id}") is None
 
 
-def test_reset_runtime_catalog_for_tests_returns_to_default_map(unique_id):
-    cfg = _cfg(unique_id)
-    replace_runtime_catalog(
-        [
-            {
-                "kind": "stt",
-                "api_model_id": f"runtime-{unique_id}",
-                "hf_model_id": "openai/whisper-large-v3",
-            }
-        ]
-    )
-    assert resolve_hf_model_id("stt", f"gigaam-{unique_id}", cfg) is None
-    reset_runtime_catalog_for_tests()
-    assert resolve_hf_model_id("stt", f"gigaam-{unique_id}", cfg) == "ai-sage/GigaAM-v3"
+def test_allowed_ids_matches_entries(unique_id):
+    catalog = ModelCatalog.from_seed(_cfg(unique_id))
+    assert catalog.allowed_ids("stt") == frozenset({f"gigaam-{unique_id}"})
+    assert catalog.api_model_ids("stt") == [f"gigaam-{unique_id}"]

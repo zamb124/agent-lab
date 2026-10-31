@@ -273,11 +273,12 @@ def test_tts_litapi_encode_response_returns_starlette_not_raw_bytes(unique_id):
     """Сырой ``bytes`` в FastAPI с аннотацией ``-> bytes`` сериализуется как JSON → UnicodeDecodeError на WAV."""
     from starlette.responses import Response
 
+    from apps.provider_litserve.catalog import ModelCatalog
     from apps.provider_litserve.tts.api import TTSLitAPI
     from core.config.models import ProviderLitserveInfraConfig
 
-    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
-    api = TTSLitAPI(cfg)
+    cfg = ProviderLitserveInfraConfig()
+    api = TTSLitAPI(cfg, ModelCatalog.from_seed(cfg))
     body = b"RIFF" + bytes(40)
     out = api.encode_response(body)
     assert isinstance(out, Response)

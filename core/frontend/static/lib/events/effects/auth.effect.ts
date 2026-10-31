@@ -62,7 +62,8 @@ function isAuthMeResponse(value: unknown): value is AuthMeResponse {
     }
     for (const key of ['user_id', 'name', 'email', 'avatar_url', 'company_id'] as const) {
         const field = value[key];
-        if (field !== undefined && typeof field !== 'string') {
+        // Поля str | None сериализуются в null — это «отсутствует», не ошибка типа.
+        if (field !== undefined && field !== null && typeof field !== 'string') {
             return false;
         }
     }

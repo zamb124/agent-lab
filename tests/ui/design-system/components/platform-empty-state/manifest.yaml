@@ -1,0 +1,13 @@
+component: platform-empty-state
+doc_slug: platform-empty-state
+tier: T0
+title_ru: Пустое состояние
+title_en: Empty state
+import: "@platform/lib/components/platform-empty-state.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

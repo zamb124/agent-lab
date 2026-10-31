@@ -29,7 +29,6 @@ from core.ai.providers import (
     AICapability,
     validate_platform_provider_for_capability,
 )
-from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.models.billing_models import DEFAULT_TARIFF_PRICES
 from core.rag_indexing_schema import IndexProfileConfig
 from core.types import JsonObject, JsonValue, SpeechProvider, VadProvider
@@ -142,6 +141,10 @@ class DatabaseConfig(BaseModel):
     stock_url: str | None = Field(
         default=None,
         description="PostgreSQL platform_stock (леджер склада: moves, quants, valuation)",
+    )
+    shop_url: str | None = Field(
+        default=None,
+        description="PostgreSQL platform_shop (витрины, каталог, заказы, домены)",
     )
     redis_url: str = "redis://localhost:8099"
     redis_inventory_interval_seconds: int = Field(
@@ -528,11 +531,13 @@ class LitserveSpeechBackendConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = True
-    base_url: str = Field(
-        default="http://provider-litserve:8014",
+    base_url: str | None = Field(
+        default=None,
         description=(
-            "Базовый URL provider-litserve (без trailing slash). "
-            "Используется для /v1/audio/transcriptions, /v1/audio/speech, /v1/audio/vad."
+            "Явный override базового URL provider-litserve (без trailing slash) для "
+            "/v1/audio/transcriptions, /v1/audio/speech, /v1/audio/vad. "
+            "None — канонический ``server.provider_litserve_service_url`` "
+            "(``provider_litserve_service_url()``)."
         ),
     )
     timeout_s: float = Field(
@@ -941,7 +946,7 @@ class EmbeddingApiConfig(BaseModel):
     model: str = "qwen/qwen3-embedding-0.6b"
     dimension: int = 1024
     # Явный override корня ``…/v1``: при ``provider=openrouter`` пусто — из ``llm``;
-    # при ``provider=provider_litserve`` пусто — из ``provider_litserve.api.base_url`` в настройках.
+    # при ``provider=provider_litserve`` пусто — из ``server.provider_litserve_service_url`` + ``/v1``.
     base_url: str | None = None
     mrl_output_dimension: int | None = Field(
         default=None,
@@ -1004,7 +1009,7 @@ class RerankerApiRuntimeConfig(BaseModel):
     """
     HTTP-реранкер: таймаут и опционально полный URL эндпоинта (override).
 
-    При ``provider=provider_litserve`` URL по умолчанию строится из ``provider_litserve.api.base_url`` + ``/rerank``.
+    При ``provider=provider_litserve`` URL по умолчанию строится из ``server.provider_litserve_service_url`` + ``/v1/rerank``.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
@@ -1049,14 +1054,6 @@ class RerankerRuntimeConfig(BaseModel):
         if self.enabled and self.api is not None:
             return float(self.api.timeout_seconds)
         return 60.0
-
-
-class ProviderLitserveApiConfig(BaseModel):
-    """OpenAI-совместимый корень (как ``llm.openrouter.base_url``): ``…/v1`` для embeddings, rerank, models."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    base_url: str | None = None
 
 
 class ProviderLitserveSTTModelEntry(BaseModel):
@@ -1334,7 +1331,7 @@ class ProviderLitserveInfraConfig(BaseModel):
     max_passage_chars: int = 64000
     max_length: int = 8192
     model_batch_size: int = 4
-    model_id: str = "Qwen/Qwen3-Reranker-0.6B"
+    rerank_model_id: str = "Qwen/Qwen3-Reranker-0.6B"
 
     use_fp16: bool = True
     use_bf16: bool = False
@@ -1354,6 +1351,7 @@ class ProviderLitserveInfraConfig(BaseModel):
     rerank_openai_model_id: str = "qwen/qwen3-reranker-0.6b"
     embedding_model_ids: list[str] = Field(default_factory=list)
     rerank_model_ids: list[str] = Field(default_factory=list)
+    embedding_dimension: int | None = None
 
     stt_models: list["ProviderLitserveSTTModelEntry"] = Field(
         default_factory=lambda: [
@@ -1366,14 +1364,9 @@ class ProviderLitserveInfraConfig(BaseModel):
         description=(
             "Полный список STT-моделей провайдера. Каждый элемент описывает одну модель "
             "(api id для /v1/audio/transcriptions, hf id для весов, опциональная revision). "
-            "Дефолт указывается в stt_default_api_model_id. Расширяется из UI /litserve/models."
+            "Дефолт — самая старая ready-запись каталога. Расширяется из UI /litserve/models."
         ),
     )
-    stt_default_api_model_id: str = Field(
-        default="gigaam-v3-rnnt-ru",
-        description="api id STT-модели по умолчанию (должен присутствовать в stt_models).",
-    )
-
     tts_models: list["ProviderLitserveTTSModelEntry"] = Field(
         default_factory=lambda: [
             ProviderLitserveTTSModelEntry(
@@ -1388,14 +1381,9 @@ class ProviderLitserveInfraConfig(BaseModel):
         description=(
             "Полный список TTS-моделей провайдера. Каждый элемент описывает одну модель "
             "(api id для /v1/audio/speech, hf id каталога, silero_bundle, voice, sample_rate). "
-            "Дефолт указывается в tts_default_api_model_id. Расширяется из UI /litserve/models."
+            "Дефолт — самая старая ready-запись каталога. Расширяется из UI /litserve/models."
         ),
     )
-    tts_default_api_model_id: str = Field(
-        default="silero-tts-v5-5-ru",
-        description="api id TTS-модели по умолчанию (должен присутствовать в tts_models).",
-    )
-
     vad_models: list["ProviderLitserveVADModelEntry"] = Field(
         default_factory=lambda: [
             ProviderLitserveVADModelEntry(
@@ -1408,21 +1396,15 @@ class ProviderLitserveInfraConfig(BaseModel):
         description=(
             "Полный список VAD-моделей провайдера. Каждый элемент описывает одну модель "
             "(api id для /v1/audio/vad, hf id, sample_rate, threshold). "
-            "Дефолт указывается в vad_default_api_model_id. Расширяется из UI /litserve/models."
+            "Дефолт — самая старая ready-запись каталога. Расширяется из UI /litserve/models."
         ),
     )
-    vad_default_api_model_id: str = Field(
-        default="silero-vad-v5",
-        description="api id VAD-модели по умолчанию (должен присутствовать в vad_models).",
-    )
-
     enabled_workers: list[Literal["embedding", "rerank", "stt", "tts", "vad"]] = Field(
         default_factory=list,
         description="Явный список LitServe-воркеров процесса. Пусто — embedding/rerank/stt/tts/vad.",
     )
 
     hf_token: str | None = None
-    sqlite_path: str = "./data/provider_litserve/registry.db"
 
 
 class ProviderLitserveConfig(BaseModel):
@@ -1430,14 +1412,15 @@ class ProviderLitserveConfig(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    api: ProviderLitserveApiConfig = Field(default_factory=ProviderLitserveApiConfig)
     infra: ProviderLitserveInfraConfig = Field(default_factory=ProviderLitserveInfraConfig)
-
-    def resolve_openai_v1_base_url(self) -> str:
-        raw = self.api.base_url
-        if raw is None or not str(raw).strip():
-            raise ValueError('provider_litserve.api.base_url is empty')
-        return normalize_openai_v1_base_url(str(raw).strip())
+    lit_server_api_key: str | None = Field(
+        default=None,
+        description=(
+            "Ключ для ``Authorization: Bearer`` на ``/v1`` provider_litserve. На самом поде "
+            "его проверяет LitServe (env ``LIT_SERVER_API_KEY``); здесь — клиентская копия "
+            "для platform-клиентов (voice/embedding/rerank/models list). Пусто — ``/v1`` без ключа."
+        ),
+    )
 
 
 class RagTtlConfig(BaseModel):

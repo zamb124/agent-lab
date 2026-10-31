@@ -15,7 +15,7 @@
  * kind: 'platform.service_switcher'
  */
 
-import { html, css } from '../../lit-shim.js';
+import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformBottomSheet } from '../layout/platform-bottom-sheet.js';
 import { registerBottomSheetKind } from '../../utils/bottom-sheet-registry.js';
@@ -28,7 +28,7 @@ import '../platform-services-launcher.js';
 import '../platform-notification-manager.js';
 import '../platform-calendar-modal.js';
 import '../platform-mail-modal.js';
-import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../../lit-shim.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { SelectController } from '../../events/select-controller.js';
 
 interface AuthUserRecord {
@@ -354,8 +354,8 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         this.heading = this.t('service_switcher.heading');
     }
 
-    override updated(changed: PropertyValues<this>): void {
-        super.updated(changed);
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate(changed);
         if (!changed.has('open')) {
             return;
         }
@@ -366,7 +366,11 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         const auth = this._authSelect.value;
         if (auth.status === 'authenticated' && auth.user && !this._companiesBootstrapDispatched) {
             this._companiesBootstrapDispatched = true;
-            this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
+            queueMicrotask(() => {
+                if (this.isConnected) {
+                    this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
+                }
+            });
         }
     }
 

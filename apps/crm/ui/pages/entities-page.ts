@@ -34,7 +34,8 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
@@ -1064,27 +1065,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 border-color: var(--error, #f43f5e);
             }
 
-            .empty {
-                border: 1px dashed var(--crm-stroke);
-                border-radius: var(--radius-xl);
-                min-height: 200px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-                gap: var(--space-2);
-                padding: var(--space-6) var(--space-4);
-                box-sizing: border-box;
-            }
-            .empty-import { gap: var(--space-4); max-width: 440px; margin: 0 auto; }
-            .empty-import-text {
-                color: var(--text-secondary);
-                font-size: var(--text-base);
-                line-height: 1.5;
-                margin: 0;
-                text-align: center;
-            }
+            platform-empty-state { min-height: 200px; }
             .import-wizard-btn {
                 display: inline-flex;
                 align-items: center;
@@ -1335,10 +1316,6 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     private _entitiesMergeFirstId: string;
     private _debounceTimer: ReturnType<typeof setTimeout> | null;
     private _scrollObserver: IntersectionObserver | null;
-    private _mql: MediaQueryList | null;
-    private _mqlListener: ((e: MediaQueryListEvent) => void) | null;
-    private _mqlWide: MediaQueryList | null;
-    private _mqlWideListener: ((e: MediaQueryListEvent) => void) | null;
     private _lastNamespace: string | null | undefined;
     private _onEmbeddedDetailLeftGraphTab: () => void;
 
@@ -1366,10 +1343,6 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         this._entitiesMergeFirstId = '';
         this._debounceTimer = null;
         this._scrollObserver = null;
-        this._mql = null;
-        this._mqlListener = null;
-        this._mqlWide = null;
-        this._mqlWideListener = null;
         this._lastNamespace = undefined;
         this._isWideDesktopSplit =
             typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -1398,14 +1371,12 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     override connectedCallback(): void {
         super.connectedCallback();
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-            this._mql = window.matchMedia('(max-width: 767px)');
-            this._mqlListener = (e: MediaQueryListEvent) => { this._isMobile = e.matches; };
-            this._mql.addEventListener('change', this._mqlListener);
-            this._isMobile = this._mql.matches;
-            this._mqlWide = window.matchMedia('(min-width: 1280px)');
-            this._mqlWideListener = (e: MediaQueryListEvent) => { this._isWideDesktopSplit = e.matches; };
-            this._mqlWide.addEventListener('change', this._mqlWideListener);
-            this._isWideDesktopSplit = this._mqlWide.matches;
+            const mql = window.matchMedia('(max-width: 767px)');
+            this.useDomEvent(mql, 'change', (e: MediaQueryListEvent) => { this._isMobile = e.matches; });
+            this._isMobile = mql.matches;
+            const mqlWide = window.matchMedia('(min-width: 1280px)');
+            this.useDomEvent(mqlWide, 'change', (e: MediaQueryListEvent) => { this._isWideDesktopSplit = e.matches; });
+            this._isWideDesktopSplit = mqlWide.matches;
         }
 
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._reloadAll());
@@ -1440,21 +1411,11 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         super.firstUpdated(changed);
         const root = this.shadowRoot;
         if (root) {
-            root.addEventListener('crm-embedded-detail-left-graph-tab', this._onEmbeddedDetailLeftGraphTab);
+            this.useDomEvent(root, 'crm-embedded-detail-left-graph-tab', () => this._onEmbeddedDetailLeftGraphTab());
         }
     }
 
     override disconnectedCallback(): void {
-        const root = this.shadowRoot;
-        if (root) {
-            root.removeEventListener('crm-embedded-detail-left-graph-tab', this._onEmbeddedDetailLeftGraphTab);
-        }
-        if (this._mql && this._mqlListener) {
-            this._mql.removeEventListener('change', this._mqlListener);
-        }
-        if (this._mqlWide && this._mqlWideListener) {
-            this._mqlWide.removeEventListener('change', this._mqlWideListener);
-        }
         if (this._debounceTimer) {
             clearTimeout(this._debounceTimer);
             this._debounceTimer = null;
@@ -2493,21 +2454,20 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     _renderEmpty() {
         if (this._hasActiveFilters()) {
             return html`
-                <div class="empty">
-                    <platform-icon name="database" size="40"></platform-icon>
-                    <span>${this.t('entities.empty')}</span>
-                    <span style="font-size: var(--text-sm)">${this.t('entities_page.empty_filters_hint')}</span>
-                </div>
+                <platform-empty-state
+                    icon="filter"
+                    title=${this.t('entities.empty')}
+                    hint=${this.t('entities_page.empty_filters_hint')}
+                ></platform-empty-state>
             `;
         }
         return html`
-            <div class="empty empty-import">
-                <p class="empty-import-text">${this.t('import_wizard_cta.empty_entities_hint')}</p>
+            <platform-empty-state icon="import" hint=${this.t('import_wizard_cta.empty_entities_hint')}>
                 <button class="import-wizard-btn" type="button" @click=${() => this._goToImportWizard()}>
                     <platform-icon name="import" size="18"></platform-icon>
                     ${this.t('import_wizard_cta.open_wizard')}
                 </button>
-            </div>
+            </platform-empty-state>
         `;
     }
 
@@ -2569,7 +2529,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
             >
                 <section class="list-panel ${listActive ? 'mobile-active' : ''} ${loading ? 'busy' : ''}">
                     ${loading
-                        ? html`<div class="list-overlay"><glass-spinner size="lg"></glass-spinner></div>`
+                        ? html`<div class="list-overlay"><platform-spinner size="lg"></platform-spinner></div>`
                         : nothing}
                     <div class="cards-scroll">
                         ${items.length === 0 && !loading
@@ -2583,7 +2543,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                                         </div>
                                     `}
                                 ${loadingMore
-                                    ? html`<div class="loading-more"><glass-spinner></glass-spinner></div>`
+                                    ? html`<div class="loading-more"><platform-spinner></platform-spinner></div>`
                                     : nothing}
                                 <div class="scroll-sentinel"></div>
                             `}

@@ -31,7 +31,7 @@ import '../../components/crawl-report/crawl-report-metric-strip.js';
 import '../../components/crawl-report/crawl-report-running-banner.js';
 import '../../components/crawl-report/crawl-report-charts-panel.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
@@ -966,13 +966,13 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _renderTableLoading() {
-        return html`<div class="table-loading"><glass-spinner size="sm"></glass-spinner></div>`;
+        return html`<div class="table-loading"><platform-spinner size="sm"></platform-spinner></div>`;
     }
 
     _renderTableShell(refreshing: boolean, content: unknown) {
         return html`
             <div class="table-panel ${refreshing ? 'refreshing' : ''}">
-                ${refreshing ? html`<div class="table-refresh-indicator"><glass-spinner size="sm"></glass-spinner></div>` : null}
+                ${refreshing ? html`<div class="table-refresh-indicator"><platform-spinner size="sm"></platform-spinner></div>` : null}
                 ${content}
             </div>
         `;

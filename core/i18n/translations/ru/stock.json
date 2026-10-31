@@ -13,6 +13,16 @@
         "products": "Товары",
         "profile": "Профиль"
     },
+    "sidebar": {
+        "title": "Склад",
+        "nav": {
+            "stock_home": "Пульс",
+            "stock_transfers": "Переводы",
+            "stock_products": "Товары",
+            "stock_locations": "Локации",
+            "stock_valuation": "Оценка"
+        }
+    },
     "home": {
         "title": "Пульс склада",
         "empty": "Склад не настроен",
@@ -69,5 +79,45 @@
         "unit_cost": "Цена ед.",
         "qty_after": "Остаток",
         "value_after": "Стоимость после"
+    },
+    "toast": {
+        "product_created": "Продукт создан",
+        "product_create_failed": "Не удалось создать продукт",
+        "product_updated": "Продукт обновлён",
+        "product_update_failed": "Не удалось обновить продукт",
+        "location_created": "Локация создана",
+        "location_create_failed": "Не удалось создать локацию",
+        "location_updated": "Локация обновлена",
+        "location_update_failed": "Не удалось обновить локацию",
+        "warehouse_created": "Склад создан",
+        "warehouse_create_failed": "Не удалось создать склад",
+        "operation_type_updated": "Тип операции обновлён",
+        "operation_type_update_failed": "Не удалось обновить тип операции",
+        "transfer_created": "Перевод создан",
+        "transfer_create_failed": "Не удалось создать перевод",
+        "transfer_confirmed": "Перевод подтверждён",
+        "transfer_confirm_failed": "Не удалось подтвердить перевод",
+        "transfer_assigned": "Зарезервировано",
+        "transfer_assign_failed": "Не удалось зарезервировать",
+        "transfer_validated": "Перевод проведён",
+        "transfer_validate_failed": "Не удалось провести перевод",
+        "transfer_cancelled": "Перевод отменён",
+        "transfer_cancel_failed": "Не удалось отменить перевод",
+        "transfer_returned": "Возврат оформлен",
+        "transfer_return_failed": "Не удалось оформить возврат",
+        "move_line_updated": "Строка движения обновлена",
+        "move_line_update_failed": "Не удалось обновить строку движения",
+        "move_decision_applied": "Решение применено",
+        "move_decision_apply_failed": "Не удалось применить решение",
+        "inventory_set": "Инвентаризация зафиксирована",
+        "inventory_set_failed": "Не удалось зафиксировать инвентаризацию",
+        "inventory_applied": "Инвентаризация применена",
+        "inventory_apply_failed": "Не удалось применить инвентаризацию",
+        "valuation_revalued": "Переоценка выполнена",
+        "valuation_revalue_failed": "Не удалось выполнить переоценку",
+        "valuation_correction_done": "Корректировка внесена",
+        "valuation_correction_failed": "Не удалось внести корректировку",
+        "lot_created": "Партия создана",
+        "lot_create_failed": "Не удалось создать партию"
     }
 }

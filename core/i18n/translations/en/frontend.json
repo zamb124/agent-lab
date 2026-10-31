@@ -686,7 +686,8 @@
         "filter_personal": "Personal",
         "toast_created": "Namespace created",
         "toast_create_failed": "Failed to create namespace",
-        "open_crm": "CRM settings & grants"
+        "open_crm": "CRM settings & grants",
+        "empty": "No namespaces yet"
     },
     "team_page": {
         "title": "Team",
@@ -872,6 +873,7 @@
         "saving": "Saving...",
         "oauth_title": "OAuth providers",
         "oauth_info": "Configure sign-in methods for your team",
+        "oauth_empty": "No providers configured",
         "provider_active": "Active",
         "sessions_placeholder": "Active session list will be available in a future version",
         "integrations_title": "Available integrations",

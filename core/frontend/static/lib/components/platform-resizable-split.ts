@@ -15,8 +15,8 @@
  * </platform-resizable-split>
  */
 
-import { css, html } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
+import { css, html } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 
 import { PlatformElement } from '../platform-element/index.js';
 import { platformStorageKey } from '../utils/storage-keys.js';
@@ -201,10 +201,14 @@ export class PlatformResizableSplit extends PlatformElement {
         this._dragging = true;
         this._dragOrigin = event.clientX;
         this._dragStartSize = this.size;
-        window.addEventListener('pointermove', this._onPointerMove);
-        window.addEventListener('pointerup', this._onPointerUp);
+        this._dragUnsubs = [
+            this.useDomEvent(window, 'pointermove', this._onPointerMove),
+            this.useDomEvent(window, 'pointerup', this._onPointerUp),
+        ];
         this.requestUpdate();
     }
+
+    private _dragUnsubs: Array<() => void> = [];
 
     _onPointerMove(event: PointerEvent): void {
         if (!this._dragging) {
@@ -225,8 +229,10 @@ export class PlatformResizableSplit extends PlatformElement {
     }
 
     _detachDragListeners(): void {
-        window.removeEventListener('pointermove', this._onPointerMove);
-        window.removeEventListener('pointerup', this._onPointerUp);
+        for (const unsub of this._dragUnsubs) {
+            unsub();
+        }
+        this._dragUnsubs = [];
     }
 
     _onHandleKeyDown(event: KeyboardEvent): void {

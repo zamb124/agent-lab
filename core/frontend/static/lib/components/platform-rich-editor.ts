@@ -14,8 +14,8 @@
  * прокруткой страницы и не конфликтует с модалками.
  */
 
-import { html, nothing } from '../lit-shim.js';
-import type { PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { html, nothing } from 'lit';
+import type { PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 
 import { PlatformElement } from '../platform-element/index.js';
 import { StyleCache } from '../utils/style-cache.js';

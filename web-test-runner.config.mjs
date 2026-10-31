@@ -77,23 +77,7 @@ export default {
             inject: {
                 importMap: {
                     imports: {
-                        'lit': '/core/frontend/static/assets/js/lit/lit.min.js',
-                        'lit/directives/class-map.js':
-                            '/core/frontend/static/assets/js/lit/directives/class-map.min.js',
-                        'lit/directives/repeat.js':
-                            '/core/frontend/static/assets/js/lit/directives/repeat.min.js',
-                        'lit/directives/unsafe-html.js':
-                            '/core/frontend/static/assets/js/lit/directives/unsafe-html.min.js',
-                        'lit/directives/when.js': '/core/frontend/static/assets/js/lit/directives/when.min.js',
-                        'lit/directives/guard.js': '/core/frontend/static/assets/js/lit/directives/guard.min.js',
                         '@platform/lib/': '/core/frontend/static/lib/',
-                        'centrifuge': '/core/frontend/static/assets/js/centrifuge/centrifuge.esm.min.js',
-                        'marked': '/core/frontend/static/assets/js/marked/marked.esm.min.js',
-                        '@capacitor/app': '/core/frontend/static/assets/js/vendor/@capacitor/app/index.js',
-                        '@capacitor/core': '/core/frontend/static/assets/js/vendor/@capacitor/core/index.js',
-                        '@capacitor/splash-screen': '/core/frontend/static/assets/js/vendor/@capacitor/splash-screen/index.js',
-                        '@capacitor/push-notifications':
-                            '/core/frontend/static/assets/js/vendor/@capacitor/push-notifications/index.js',
                     },
                 },
             },

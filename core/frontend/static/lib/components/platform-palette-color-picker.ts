@@ -5,7 +5,7 @@
  */
 
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { COLOR_PALETTE } from '../utils/color-palette.js';
 

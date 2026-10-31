@@ -88,17 +88,6 @@
         "about_title": "About RAG Service",
         "about_text": "Retrieval Augmented Generation: documents are chunked, vectorized, and stored for semantic search across enterprise data."
     },
-    "namespace_create_modal": {
-        "header": "Create namespace",
-        "label_name": "Name",
-        "name_placeholder": "my-namespace",
-        "name_hint": "Lowercase letters, digits, hyphen; up to 64 characters",
-        "label_description": "Description",
-        "description_placeholder": "Describe what this namespace is for...",
-        "submit": "Create",
-        "submitting": "Creating...",
-        "cancel": "Cancel"
-    },
     "toast": {
         "namespace_created": "Namespace created",
         "namespace_create_failed": "Failed to create namespace",

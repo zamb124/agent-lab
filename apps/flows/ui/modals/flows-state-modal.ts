@@ -10,7 +10,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '../components/editors/flows-code-editor.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
@@ -80,7 +80,7 @@ export class FlowsStateModal extends PlatformModal {
         const err = this._stateOp.error;
         const json = result ? JSON.stringify(result, null, 2) : '';
         if (this._stateOp.busy && !result && !err) {
-            return html`<glass-spinner></glass-spinner>`;
+            return html`<platform-spinner></platform-spinner>`;
         }
         if (err) {
             return html`<p class="state-load-error">

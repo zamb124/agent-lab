@@ -18,7 +18,7 @@
  */
 
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import type { RouterRoute } from '../../events/reducers/router.js';
 import type { SelectController } from '../../events/select-controller.js';
@@ -165,20 +165,17 @@ export class PlatformTopBar extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('touchstart', this._boundTouchStart, { passive: true });
-        document.addEventListener('touchmove', this._boundTouchMove, { passive: true });
-        document.addEventListener('touchend', this._boundTouchEnd, { passive: true });
+        this.useDomEvent(document, 'touchstart', this._boundTouchStart, { passive: true });
+        this.useDomEvent(document, 'touchmove', this._boundTouchMove, { passive: true });
+        this.useDomEvent(document, 'touchend', this._boundTouchEnd, { passive: true });
     }
 
     override disconnectedCallback(): void {
         super.disconnectedCallback();
-        document.removeEventListener('touchstart', this._boundTouchStart);
-        document.removeEventListener('touchmove', this._boundTouchMove);
-        document.removeEventListener('touchend', this._boundTouchEnd);
     }
 
-    override updated(changed: PropertyValues<this>): void {
-        super.updated && super.updated(changed);
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate && super.willUpdate(changed);
         const v = this._routerSelect ? this._routerSelect.value : null;
         if (v) {
             this._routeKey = v.routeKey;

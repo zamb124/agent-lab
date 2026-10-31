@@ -174,6 +174,8 @@ export const stockValuationResource = createResourceCollection({
 
 export const stockProductCreateOp = createAsyncOp({
     name: 'stock/product_create',
+    successToastKey: 'stock:toast.product_created',
+    errorToastKey: 'stock:toast.product_create_failed',
     commandType: 'stock/products/create_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -182,6 +184,8 @@ export const stockProductCreateOp = createAsyncOp({
 
 export const stockProductUpdateOp = createAsyncOp({
     name: 'stock/product_update',
+    successToastKey: 'stock:toast.product_updated',
+    errorToastKey: 'stock:toast.product_update_failed',
     commandType: 'stock/products/update_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -190,6 +194,8 @@ export const stockProductUpdateOp = createAsyncOp({
 
 export const stockLocationCreateOp = createAsyncOp({
     name: 'stock/location_create',
+    successToastKey: 'stock:toast.location_created',
+    errorToastKey: 'stock:toast.location_create_failed',
     commandType: 'stock/locations/create_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -198,6 +204,8 @@ export const stockLocationCreateOp = createAsyncOp({
 
 export const stockLocationUpdateOp = createAsyncOp({
     name: 'stock/location_update',
+    successToastKey: 'stock:toast.location_updated',
+    errorToastKey: 'stock:toast.location_update_failed',
     commandType: 'stock/locations/update_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -206,6 +214,8 @@ export const stockLocationUpdateOp = createAsyncOp({
 
 export const stockWarehouseCreateOp = createAsyncOp({
     name: 'stock/warehouse_create',
+    successToastKey: 'stock:toast.warehouse_created',
+    errorToastKey: 'stock:toast.warehouse_create_failed',
     commandType: 'stock/warehouses/create_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -214,6 +224,7 @@ export const stockWarehouseCreateOp = createAsyncOp({
 
 export const stockWarehousePulseOp = createAsyncOp({
     name: 'stock/warehouse_pulse',
+    silent: true,
     commandType: 'stock/warehouse/pulse_requested',
     transport: 'ws',
     wsTimeoutMs: 10_000,
@@ -222,6 +233,7 @@ export const stockWarehousePulseOp = createAsyncOp({
 
 export const stockOperationTypesListOp = createAsyncOp({
     name: 'stock/operation_types_list',
+    silent: true,
     commandType: 'stock/operation_types/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -230,6 +242,8 @@ export const stockOperationTypesListOp = createAsyncOp({
 
 export const stockOperationTypeUpdateOp = createAsyncOp({
     name: 'stock/operation_type_update',
+    successToastKey: 'stock:toast.operation_type_updated',
+    errorToastKey: 'stock:toast.operation_type_update_failed',
     commandType: 'stock/operation_types/update_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -238,6 +252,8 @@ export const stockOperationTypeUpdateOp = createAsyncOp({
 
 export const stockTransferCreateOp = createAsyncOp({
     name: 'stock/transfer_create',
+    successToastKey: 'stock:toast.transfer_created',
+    errorToastKey: 'stock:toast.transfer_create_failed',
     commandType: 'stock/transfers/create_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -246,6 +262,7 @@ export const stockTransferCreateOp = createAsyncOp({
 
 export const stockTransferItemOp = createAsyncOp({
     name: 'stock/transfer_item',
+    silent: true,
     commandType: 'stock/transfers/item_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -254,6 +271,8 @@ export const stockTransferItemOp = createAsyncOp({
 
 export const stockTransferConfirmOp = createAsyncOp({
     name: 'stock/transfer_confirm',
+    successToastKey: 'stock:toast.transfer_confirmed',
+    errorToastKey: 'stock:toast.transfer_confirm_failed',
     commandType: 'stock/transfers/confirm_requested',
     transport: 'ws',
     wsTimeoutMs: 15_000,
@@ -262,6 +281,8 @@ export const stockTransferConfirmOp = createAsyncOp({
 
 export const stockTransferAssignOp = createAsyncOp({
     name: 'stock/transfer_assign',
+    successToastKey: 'stock:toast.transfer_assigned',
+    errorToastKey: 'stock:toast.transfer_assign_failed',
     commandType: 'stock/transfers/assign_requested',
     transport: 'ws',
     wsTimeoutMs: 15_000,
@@ -270,6 +291,8 @@ export const stockTransferAssignOp = createAsyncOp({
 
 export const stockTransferValidateOp = createAsyncOp({
     name: 'stock/transfer_validate',
+    successToastKey: 'stock:toast.transfer_validated',
+    errorToastKey: 'stock:toast.transfer_validate_failed',
     commandType: 'stock/transfers/validate_requested',
     transport: 'ws',
     wsTimeoutMs: 20_000,
@@ -278,6 +301,8 @@ export const stockTransferValidateOp = createAsyncOp({
 
 export const stockTransferCancelOp = createAsyncOp({
     name: 'stock/transfer_cancel',
+    successToastKey: 'stock:toast.transfer_cancelled',
+    errorToastKey: 'stock:toast.transfer_cancel_failed',
     commandType: 'stock/transfers/cancel_requested',
     transport: 'ws',
     wsTimeoutMs: 15_000,
@@ -286,6 +311,8 @@ export const stockTransferCancelOp = createAsyncOp({
 
 export const stockTransferReturnOp = createAsyncOp({
     name: 'stock/transfer_return',
+    successToastKey: 'stock:toast.transfer_returned',
+    errorToastKey: 'stock:toast.transfer_return_failed',
     commandType: 'stock/transfers/return_requested',
     transport: 'ws',
     wsTimeoutMs: 20_000,
@@ -294,6 +321,8 @@ export const stockTransferReturnOp = createAsyncOp({
 
 export const stockMoveLineUpdateOp = createAsyncOp({
     name: 'stock/move_line_update',
+    successToastKey: 'stock:toast.move_line_updated',
+    errorToastKey: 'stock:toast.move_line_update_failed',
     commandType: 'stock/move_lines/update_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -302,6 +331,8 @@ export const stockMoveLineUpdateOp = createAsyncOp({
 
 export const stockMoveApplyDecisionOp = createAsyncOp({
     name: 'stock/move_apply_decision',
+    successToastKey: 'stock:toast.move_decision_applied',
+    errorToastKey: 'stock:toast.move_decision_apply_failed',
     commandType: 'stock/move/apply_decision_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -310,6 +341,8 @@ export const stockMoveApplyDecisionOp = createAsyncOp({
 
 export const stockQuantInventorySetOp = createAsyncOp({
     name: 'stock/quant_inventory_set',
+    successToastKey: 'stock:toast.inventory_set',
+    errorToastKey: 'stock:toast.inventory_set_failed',
     commandType: 'stock/quants/inventory_set_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -318,6 +351,8 @@ export const stockQuantInventorySetOp = createAsyncOp({
 
 export const stockQuantInventoryApplyOp = createAsyncOp({
     name: 'stock/quant_inventory_apply',
+    successToastKey: 'stock:toast.inventory_applied',
+    errorToastKey: 'stock:toast.inventory_apply_failed',
     commandType: 'stock/quants/inventory_apply_requested',
     transport: 'ws',
     wsTimeoutMs: 15_000,
@@ -326,6 +361,7 @@ export const stockQuantInventoryApplyOp = createAsyncOp({
 
 export const stockValuationProductValueOp = createAsyncOp({
     name: 'stock/valuation_product_value',
+    silent: true,
     commandType: 'stock/valuation/product_value_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -334,6 +370,8 @@ export const stockValuationProductValueOp = createAsyncOp({
 
 export const stockValuationRevalueOp = createAsyncOp({
     name: 'stock/valuation_revalue',
+    successToastKey: 'stock:toast.valuation_revalued',
+    errorToastKey: 'stock:toast.valuation_revalue_failed',
     commandType: 'stock/valuation/revalue_requested',
     transport: 'ws',
     wsTimeoutMs: 10_000,
@@ -342,6 +380,8 @@ export const stockValuationRevalueOp = createAsyncOp({
 
 export const stockValuationCorrectionOp = createAsyncOp({
     name: 'stock/valuation_correction',
+    successToastKey: 'stock:toast.valuation_correction_done',
+    errorToastKey: 'stock:toast.valuation_correction_failed',
     commandType: 'stock/valuation/correction_requested',
     transport: 'ws',
     wsTimeoutMs: 10_000,
@@ -350,6 +390,7 @@ export const stockValuationCorrectionOp = createAsyncOp({
 
 export const stockBarcodeResolveOp = createAsyncOp({
     name: 'stock/barcode_resolve',
+    silent: true,
     commandType: 'stock/barcode/resolve_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -358,6 +399,7 @@ export const stockBarcodeResolveOp = createAsyncOp({
 
 export const stockLotsListOp = createAsyncOp({
     name: 'stock/lots_list',
+    silent: true,
     commandType: 'stock/lots/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -366,6 +408,8 @@ export const stockLotsListOp = createAsyncOp({
 
 export const stockLotCreateOp = createAsyncOp({
     name: 'stock/lot_create',
+    successToastKey: 'stock:toast.lot_created',
+    errorToastKey: 'stock:toast.lot_create_failed',
     commandType: 'stock/lots/create_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,
@@ -374,6 +418,7 @@ export const stockLotCreateOp = createAsyncOp({
 
 export const stockUomsListOp = createAsyncOp({
     name: 'stock/uoms_list',
+    silent: true,
     commandType: 'stock/uoms/list_requested',
     transport: 'ws',
     wsTimeoutMs: 8_000,

@@ -39,7 +39,8 @@ import { CRM_NOTE_UPDATED, CRM_TASK_UPDATED } from '../events/types.js';
 import { stripOuterMarkdownCodeFence } from '@platform/lib/utils/strip-outer-markdown-fence.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-voice-dictation.js';
 import '@platform/lib/components/layout/page-header.js';
@@ -648,26 +649,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             .summary-chip--clickable { cursor: pointer; font-family: inherit; }
             .summary-chip--clickable:hover { filter: brightness(1.12); }
 
-            .empty {
-                border: 1px dashed var(--crm-stroke);
-                border-radius: var(--radius-xl);
-                min-height: 200px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-3);
-                padding: var(--space-6);
-                text-align: center;
-                color: var(--text-tertiary);
-            }
-
-            .empty-hint {
-                font-size: var(--text-sm);
-                color: var(--text-tertiary);
-                max-width: 36rem;
-                line-height: 1.45;
-            }
+            platform-empty-state { min-height: 200px; }
 
             .summary-overlay { display: none; }
 
@@ -764,7 +746,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 }
                 .cards-scroll { padding-right: var(--space-1); }
                 .cards-grid { grid-template-columns: 1fr; gap: var(--space-3); }
-                .empty { padding: var(--space-4); }
                 .summary-panel { display: none; }
                 .summary-overlay {
                     position: fixed; inset: 0;
@@ -858,8 +839,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     private _tasks: ResourceController;
     private _entityTypes: ResourceController;
     private _routeKeySel: SelectController<string | null>;
-    private _mql: MediaQueryList | null;
-    private _mqlListener: ((e: MediaQueryListEvent) => void) | null;
     private _debounceTimer: ReturnType<typeof setTimeout> | null;
     private _latestRangeBootstrapped: boolean;
     private _mediaRecorder: MediaRecorder | null = null;
@@ -894,8 +873,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
         this._routeKeySel = this.select((state) => state.router.routeKey);
 
-        this._mql = null;
-        this._mqlListener = null;
         this._debounceTimer = null;
         this._latestRangeBootstrapped = false;
     }
@@ -903,15 +880,14 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     override connectedCallback(): void {
         super.connectedCallback();
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-            this._mql = window.matchMedia('(max-width: 767px)');
-            this._mqlListener = (e: MediaQueryListEvent) => {
+            const mql = window.matchMedia('(max-width: 767px)');
+            this.useDomEvent(mql, 'change', (e: MediaQueryListEvent) => {
                 this._isMobile = e.matches;
                 if (!e.matches) {
                     this._mobileHeaderSearch = false;
                 }
-            };
-            this._mql.addEventListener('change', this._mqlListener);
-            this._isMobile = this._mql.matches;
+            });
+            this._isMobile = mql.matches;
         }
 
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
@@ -975,9 +951,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     }
 
     override disconnectedCallback(): void {
-        if (this._mql && this._mqlListener) {
-            this._mql.removeEventListener('change', this._mqlListener);
-        }
         if (this._debounceTimer) {
             clearTimeout(this._debounceTimer);
             this._debounceTimer = null;
@@ -1822,7 +1795,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                             title=${this.t('daily_notes_page.add_note')}
                         >
                             ${this._creatingNote
-                                ? html`<glass-spinner size="xs"></glass-spinner>`
+                                ? html`<platform-spinner size="xs"></platform-spinner>`
                                 : html`<platform-icon name="plus" size="18"></platform-icon>`}
                         </button>
                         <button
@@ -1877,7 +1850,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                     <button class="cta-btn" type="button" ?disabled=${this._creatingNote} @click=${this._onCreateNote}>
                         <span class="cta-btn-content">
                             ${this._creatingNote
-                                ? html`<glass-spinner size="xs"></glass-spinner>`
+                                ? html`<platform-spinner size="xs"></platform-spinner>`
                                 : ''}
                             ${this._creatingNote
                                 ? this.t('daily_notes_page.add_note_creating')
@@ -1892,12 +1865,13 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 <section class="main-column">
                     <div class="cards-scroll">
                         ${loading && filteredNotes.length === 0 ? html`
-                            <div class="empty"><glass-spinner size="sm"></glass-spinner></div>
+                            <platform-empty-state loading></platform-empty-state>
                         ` : filteredNotes.length === 0 ? html`
-                            <div class="empty">
-                                <div>${this.t('daily_notes_page.empty_period')}</div>
-                                <div class="empty-hint">${this.t('daily_notes_page.empty_period_hints')}</div>
-                            </div>
+                            <platform-empty-state
+                                icon="book-open"
+                                title=${this.t('daily_notes_page.empty_period')}
+                                hint=${this.t('daily_notes_page.empty_period_hints')}
+                            ></platform-empty-state>
                         ` : html`
                             <div class="cards-grid">
                                 ${filteredNotes.map((note) => this._renderNoteCard(note))}

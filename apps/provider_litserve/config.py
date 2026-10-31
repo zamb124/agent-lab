@@ -2,7 +2,7 @@
 Настройки процесса ``apps/provider_litserve`` из ``services.provider_litserve``.
 
 Параметры порта и воркеров: ``provider_litserve.infra``.
-Публичный URL для клиентов RAG: ``provider_litserve.api``.
+Канонический URL сервиса для клиентов: ``server.provider_litserve_service_url`` (+ ``/v1``).
 """
 
 from __future__ import annotations

@@ -27,7 +27,7 @@ export class LandingPlans extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0 0 60px 0;
                 text-align: center;
             }
@@ -39,8 +39,8 @@ export class LandingPlans extends PlatformElement {
             }
             
             .plan-card {
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.03));
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                background: var(--glass-bg-subtle);
+                border: 1px solid var(--glass-border-medium);
                 border-radius: 24px;
                 padding: 40px;
                 backdrop-filter: blur(10px);
@@ -49,12 +49,12 @@ export class LandingPlans extends PlatformElement {
             
             .plan-card:hover {
                 transform: translateY(-5px);
-                border-color: rgba(87, 104, 254, 0.5);
+                border-color: color-mix(in srgb, var(--accent) 50%, transparent);
             }
             
             .plan-card.premium {
-                background: radial-gradient(circle at top right, rgba(87, 104, 254, 0.2), var(--landing-panel-bg, rgba(255, 255, 255, 0.03)));
-                border-color: var(--landing-primary);
+                background: radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 20%, transparent), var(--glass-bg-subtle));
+                border-color: var(--marketing-product-accent);
                 position: relative;
                 overflow: hidden;
             }
@@ -66,7 +66,7 @@ export class LandingPlans extends PlatformElement {
                 right: -50%;
                 width: 200%;
                 height: 200%;
-                background: radial-gradient(circle, rgba(87, 104, 254, 0.3), transparent 70%);
+                background: radial-gradient(circle, color-mix(in srgb, var(--accent) 30%, transparent), transparent 70%);
                 filter: blur(80px);
                 pointer-events: none;
             }
@@ -74,11 +74,11 @@ export class LandingPlans extends PlatformElement {
             .plan-badge {
                 display: inline-block;
                 padding: 6px 16px;
-                background: rgba(87, 104, 254, 0.2);
-                border: 1px solid var(--landing-primary);
+                background: color-mix(in srgb, var(--accent) 20%, transparent);
+                border: 1px solid var(--marketing-product-accent);
                 border-radius: 20px;
                 font-size: 12px;
-                color: var(--landing-primary);
+                color: var(--marketing-product-accent);
                 margin-bottom: 16px;
                 font-weight: 500;
             }
@@ -87,7 +87,7 @@ export class LandingPlans extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 36px;
                 font-weight: 500;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0 0 16px 0;
             }
 
@@ -95,19 +95,19 @@ export class LandingPlans extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 22px;
                 font-weight: 600;
-                color: var(--landing-primary);
+                color: var(--marketing-product-accent);
                 margin: 0 0 16px 0;
             }
             
             .plan-card.premium .plan-name {
-                color: var(--landing-primary);
+                color: var(--marketing-product-accent);
             }
             
             .plan-description {
                 font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.6;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
+                color: var(--text-secondary);
                 margin: 0 0 32px 0;
             }
             
@@ -120,7 +120,7 @@ export class LandingPlans extends PlatformElement {
             .plan-features li {
                 font-family: var(--font-sans);
                 font-size: 14px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 padding-left: 28px;
                 position: relative;
                 margin-bottom: 12px;
@@ -131,7 +131,7 @@ export class LandingPlans extends PlatformElement {
                 content: '✓';
                 position: absolute;
                 left: 0;
-                color: var(--landing-primary);
+                color: var(--marketing-product-accent);
                 font-weight: bold;
                 font-size: 18px;
             }
@@ -139,10 +139,10 @@ export class LandingPlans extends PlatformElement {
             .plan-target {
                 font-family: var(--font-sans);
                 font-size: 14px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
+                color: var(--text-secondary);
                 margin: 0 0 24px 0;
                 padding-top: 24px;
-                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                border-top: 1px solid var(--glass-border-medium);
             }
             
             .plan-cta {
@@ -159,24 +159,24 @@ export class LandingPlans extends PlatformElement {
             
             .plan-cta.transparent {
                 background: transparent;
-                border: 1px solid var(--landing-secondary);
-                color: var(--landing-on-primary, #FFFFFF);
+                border: 1px solid var(--text-secondary);
+                color: var(--text-on-accent);
             }
             
             .plan-cta.transparent:hover {
-                background: rgba(87, 104, 254, 0.1);
-                border-color: var(--landing-primary);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
+                border-color: var(--marketing-product-accent);
             }
             
             .plan-cta.primary {
-                background: var(--landing-primary);
-                color: var(--landing-secondary);
+                background: var(--marketing-product-accent);
+                color: var(--text-secondary);
             }
             
             .plan-cta.primary:hover {
-                background: #6877ff;
+                background: var(--accent);
                 transform: translateY(-2px);
-                box-shadow: 0 10px 30px rgba(87, 104, 254, 0.4);
+                box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 40%, transparent);
             }
             
             @media (min-width: 768px) {

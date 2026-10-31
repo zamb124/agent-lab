@@ -1,0 +1,43 @@
+{{- if .Values.ingress.enabled }}
+{{- $platformDomains := .Values.ingress.platformDomains | default (list (dict "apexHost" .Values.ingress.apexHost "wildcardHost" .Values.ingress.wildcardHost)) }}
+{{- $shop := index .Values.applications "shop" }}
+{{- if and $shop $shop.enabled }}
+{{- /*
+  Витрины shop на wildcard-субдоменах: <slug>.<apex> и агрегатор shop.<apex>.
+  priority=5 — между platform-services (10, сервис-пути на субдоменах) и
+  platform-frontend (-100, catch-all). Точные host-ингрессы инфра-поддоменов
+  (grafana/livekit/onlyoffice, priority=1000) всегда выигрывают у wildcard.
+  Apex сюда не входит: его «голые» пути остаются за frontend SPA.
+*/}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-shop-storefront
+  namespace: {{ .Values.namespace }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.priority: "5"
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Values.namespace }}-compress@kubernetescrd
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        {{- range $platformDomains }}
+        - {{ .wildcardHost | quote }}
+        {{- end }}
+      secretName: platform-tls
+  rules:
+    {{- range $platformDomains }}
+    - host: {{ .wildcardHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $shop.serviceName }}
+                port:
+                  number: {{ $shop.port }}
+    {{- end }}
+{{- end }}
+{{- end }}

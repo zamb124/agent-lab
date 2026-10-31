@@ -6,7 +6,7 @@
  * Модель узла (группа): id, label, icon?, children[] (routeKey на группе не задаётся).
  */
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { sidebarNavItemStyles } from '../../styles/shared/sidebar.styles.js';
 import {

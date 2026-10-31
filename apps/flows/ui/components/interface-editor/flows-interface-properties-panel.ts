@@ -13,6 +13,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-variable-input.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { INPUT_BLOCK_TYPES } from '@platform/lib/a2a/constants.js';
 import {
     catalogEntry,
@@ -645,9 +646,9 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
     }
 
     override render(): TemplateResult {
-        if (this.page === null) return html`<div class="empty">${this.t('interface_editor.properties_empty')}</div>`;
+        if (this.page === null) return html`<platform-empty-state title=${this.t('interface_editor.properties_empty')}></platform-empty-state>`;
         if (this.block === null) return html`${this._renderPage()}${this._renderContract()}`;
-        if (this.schema === null) return html`<div class="empty">${this.t('interface_editor.properties_empty')}</div>`;
+        if (this.schema === null) return html`<platform-empty-state title=${this.t('interface_editor.properties_empty')}></platform-empty-state>`;
         const blockType = this.block.type;
         const entry = catalogEntry(this.catalog, blockType);
         return html`

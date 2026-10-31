@@ -7,12 +7,12 @@
  *
  * Сам компонент не делает HTTP — это работа icon.effect.
  */
-import { html, css } from '../../assets/js/lit/lit.min.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../assets/js/lit/lit.min.js';
-import { unsafeHTML } from '../../assets/js/lit/directives/unsafe-html.min.js';
+import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { ICON_EVENTS } from '../events/reducers/icon.js';
-import type { PlatformBusState } from '../events/bus-state.js';
+import type { IconState } from '../events/reducers/icon.js';
 import type { SelectController } from '../events/select-controller.js';
 import { resolveFileIconBasename } from '../utils/file-icons.js';
 
@@ -53,7 +53,7 @@ export class PlatformIcon extends PlatformElement {
     declare colored: boolean;
     declare fileIcon: boolean;
 
-    _iconSvgSelect: SelectController<string>;
+    _iconSel: SelectController<IconState>;
 
     constructor() {
         super();
@@ -62,7 +62,7 @@ export class PlatformIcon extends PlatformElement {
         this.filled = false;
         this.colored = false;
         this.fileIcon = false;
-        this._iconSvgSelect = this.select((state) => this._selectIconSvg(state));
+        this._iconSel = this.select((state) => state.icon);
     }
 
     override updated(changed: PropertyValues<this>): void {
@@ -70,25 +70,32 @@ export class PlatformIcon extends PlatformElement {
             this.style.setProperty('--icon-size', `${this.size}px`);
         }
         if (changed.has('name') || changed.has('fileIcon')) {
-            this._requestLoad();
-            this.requestUpdate();
+            this._scheduleLoad();
         }
     }
 
     override firstUpdated(): void {
-        this._requestLoad();
+        this._scheduleLoad();
     }
 
-    _selectIconSvg(state: PlatformBusState): string {
+    _scheduleLoad(): void {
+        queueMicrotask(() => {
+            if (this.isConnected) {
+                this._requestLoad();
+            }
+        });
+    }
+
+    _svgFrom(iconState: IconState): string {
         if (!this.name) {
             return '';
         }
         if (this.fileIcon) {
             const basename = resolveFileIconBasename(this.name);
-            const svg = state.icon.fileCache[basename];
+            const svg = iconState.fileCache[basename];
             return typeof svg === 'string' ? svg : '';
         }
-        const svg = state.icon.uiCache[this.name];
+        const svg = iconState.uiCache[this.name];
         return typeof svg === 'string' ? svg : '';
     }
 
@@ -96,8 +103,7 @@ export class PlatformIcon extends PlatformElement {
         if (!this.name) {
             return;
         }
-        const cachedSvg = this._iconSvgSelect.value;
-        if (typeof cachedSvg === 'string' && cachedSvg.length > 0) {
+        if (this._svgFrom(this._iconSel.value).length > 0) {
             return;
         }
         if (this.fileIcon) {
@@ -109,8 +115,10 @@ export class PlatformIcon extends PlatformElement {
     }
 
     _resolveSvg(): string {
-        const svg = this._iconSvgSelect.value;
-        return typeof svg === 'string' ? svg : '';
+        if (!this.isConnected) {
+            return '';
+        }
+        return this._svgFrom(this._iconSel.value);
     }
 
     override render(): TemplateResult {

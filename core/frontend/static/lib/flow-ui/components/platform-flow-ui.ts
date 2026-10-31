@@ -15,7 +15,7 @@
  */
 
 import { isPlainRecord, recordField } from '../../events/payload.js';
-import { LitElement, html, nothing, type PropertyValues } from '../../lit-shim.js';
+import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import { buildFlowSessionFileCreateSpecJson } from '../../utils/file-create-spec.js';
 import { resolvePlatformFileRefs } from '../../utils/platform-file-upload.js';
 import { stopStreamTtsPlayback } from '../../voice/stream-tts-registry.js';

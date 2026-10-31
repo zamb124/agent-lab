@@ -615,7 +615,7 @@ async def test_flows_chat_settings_for_customers(
     )
 
     await flows_open_chat_page(page, flows_ui, flow_id)
-    chat = page.locator("chat-page platform-flow-ui").first
+    chat = page.locator("flows-chat-page platform-flow-ui").first
     await expect(chat).to_be_visible(timeout=30_000)
     await flows_seed_mock_llm(
         [

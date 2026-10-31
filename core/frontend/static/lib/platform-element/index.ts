@@ -36,7 +36,7 @@
  *   this.startOAuth(provider, { returnPath?, plan? })   — auth/oauth/start_requested
  */
 
-import { LitElement } from '../../assets/js/lit/lit.min.js';
+import { LitElement } from 'lit';
 import type { CSSResultGroup } from 'lit';
 import { StyleCache } from '../utils/style-cache.js';
 import { baseStyles } from './styles.js';
@@ -141,6 +141,30 @@ export class PlatformElement extends LitElement {
     useEvent(type: string, handler: (event: PlatformEvent) => void): () => void {
         assertEventType(type);
         const unsub = this.bus.subscribeType(type, handler);
+        this._busTypeUnsubs.push(unsub);
+        return unsub;
+    }
+
+    /**
+     * DOM-слушатель на window/document/элемент с авто-снятием на disconnectedCallback.
+     * Единственный способ глобальных DOM-подписок: голые addEventListener +
+     * removeEventListener-пары и bound-поля под них запрещены ui_canon.
+     * Для транзиентных сессий (drag: pointermove/up на время жеста) — снять
+     * возвращённым unsub при конце жеста; повторный вызов при disconnect безопасен.
+     */
+    useDomEvent<E extends Event>(
+        target: EventTarget,
+        type: string,
+        handler: (event: E) => void,
+        options?: boolean | AddEventListenerOptions,
+    ): () => void {
+        const listener: EventListener = (event) => {
+            handler(event as E);
+        };
+        target.addEventListener(type, listener, options);
+        const unsub = () => {
+            target.removeEventListener(type, listener, options);
+        };
         this._busTypeUnsubs.push(unsub);
         return unsub;
     }

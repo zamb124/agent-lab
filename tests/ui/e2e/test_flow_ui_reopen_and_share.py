@@ -323,7 +323,7 @@ async def test_flow_ui_share_revoke_from_owner_ui_blocks_viewer(
 
     viewer = await _open_share(page, frontend_ui, share.share_url)
     try:
-        share_menu = page.locator("chat-page platform-flow-ui details.share").first
+        share_menu = page.locator("flows-chat-page platform-flow-ui details.share").first
         await expect(share_menu).to_be_visible(timeout=30_000)
         await share_menu.evaluate("(el) => { el.open = true; }")
         revoke_btn = share_menu.locator("button").filter(has_text=re.compile(r"^Revoke link$"))
@@ -427,7 +427,7 @@ async def test_flow_ui_share_redacts_state_path_for_viewer(
         await flows_chat_wait_ready(page)
         await flows_chat_send_message(page, user_line)
         await expect(
-            page.locator('chat-page platform-flow-ui [data-block-id="last-reply"]')
+            page.locator('flows-chat-page platform-flow-ui [data-block-id="last-reply"]')
         ).to_contain_text(f"Last reply: {reply_text}", timeout=120_000)
         assert await flows_chat_state_value(page, "response") == reply_text
 

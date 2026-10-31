@@ -1,5 +1,5 @@
-import { html, css, unsafeCSS, nothing } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { html, css, unsafeCSS, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { isPlainRecord } from '../events/payload.js';
 import { PlatformPopover } from './platform-popover.js';
@@ -535,6 +535,13 @@ export class PlatformDatePicker extends PlatformElement {
         if (changed.has('value')) {
             this._syncInternalFromExternalValue();
         }
+        if (this._anchor === null && this.hasUpdated) {
+            const trigger = this.renderRoot?.querySelector('platform-field-shell')
+                ?? this.renderRoot?.querySelector('.trigger');
+            if (trigger instanceof HTMLElement) {
+                this._anchor = trigger;
+            }
+        }
     }
 
     willUpdateOpenState(): void {
@@ -545,13 +552,6 @@ export class PlatformDatePicker extends PlatformElement {
     }
 
     override updated(changed: PropertyValues<this>): void {
-        if (this._anchor === null) {
-            const trigger = this.renderRoot?.querySelector('platform-field-shell')
-                ?? this.renderRoot?.querySelector('.trigger');
-            if (trigger instanceof HTMLElement) {
-                this._anchor = trigger;
-            }
-        }
         if (!this.open) {
             return;
         }

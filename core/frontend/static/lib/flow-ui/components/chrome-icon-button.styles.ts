@@ -1,6 +1,6 @@
 /** Круглая иконка-кнопка chrome ``<platform-flow-ui>`` и её меню; общая для хоста и share/embed. */
 
-import { css } from '../../lit-shim.js';
+import { css } from 'lit';
 
 export const chromeIconButtonStyles = css`
         .chrome-icon-btn {

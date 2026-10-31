@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 export class StockLocationsPage extends PlatformPage {
     static i18nNamespace = 'stock';
@@ -23,7 +24,7 @@ export class StockLocationsPage extends PlatformPage {
                 border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary);
             }
             th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            .empty { padding: var(--space-8); text-align: center; color: var(--text-tertiary); }
+            platform-empty-state { margin-top: var(--space-8); }
         `,
     ];
 
@@ -41,8 +42,10 @@ export class StockLocationsPage extends PlatformPage {
         return html`
             <div class="wrap">
                 <h1>${this.t('locations.title')}</h1>
-                ${items.length === 0
-                    ? html`<div class="empty">${this.t('locations.empty')}</div>`
+                ${this._locations.loading
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                    : items.length === 0
+                    ? html`<platform-empty-state icon="pin" title=${this.t('locations.empty')}></platform-empty-state>`
                     : html`
                         <table>
                             <thead><tr>

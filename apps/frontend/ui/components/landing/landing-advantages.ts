@@ -21,7 +21,7 @@ export class LandingAdvantages extends PlatformElement {
                 position: absolute;
                 width: 800px;
                 height: 800px;
-                background: rgba(87, 104, 254, 0.6);
+                background: color-mix(in srgb, var(--accent) 60%, transparent);
                 filter: blur(150px);
                 border-radius: 50%;
                 top: 10%;
@@ -34,7 +34,7 @@ export class LandingAdvantages extends PlatformElement {
                 position: absolute;
                 width: 1000px;
                 height: 400px;
-                background: var(--landing-panel-border-strong, rgba(255, 255, 255, 0.2));
+                background: var(--glass-border-strong);
                 filter: blur(100px);
                 top: 40%;
                 right: -300px;
@@ -54,7 +54,7 @@ export class LandingAdvantages extends PlatformElement {
                 font-size: 32px;
                 font-weight: 500;
                 line-height: 1.3;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 text-align: center;
                 margin: 0 0 80px 0;
                 max-width: 900px;
@@ -71,12 +71,12 @@ export class LandingAdvantages extends PlatformElement {
             
             .advantage-badge {
                 padding: 20px 32px;
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.05));
-                border: 1px solid var(--landing-panel-border-strong, rgba(255, 255, 255, 0.2));
+                background: var(--glass-bg-subtle);
+                border: 1px solid var(--glass-border-strong);
                 border-radius: 30px;
                 font-family: var(--font-sans);
                 font-size: 16px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 backdrop-filter: blur(20px);
                 text-align: center;
                 animation: floatBadge 4s ease-in-out infinite;
@@ -98,7 +98,7 @@ export class LandingAdvantages extends PlatformElement {
                 animation-delay: 1.6s;
                 font-size: 20px;
                 padding: 28px 48px;
-                border-color: var(--landing-primary);
+                border-color: var(--marketing-product-accent);
             }
             
             .advantage-badge:nth-child(4) {
@@ -116,10 +116,10 @@ export class LandingAdvantages extends PlatformElement {
             }
             
             .advantage-badge:hover {
-                border-color: var(--landing-primary);
+                border-color: var(--marketing-product-accent);
                 transform: translateY(-5px) scale(1.05);
                 animation-play-state: paused;
-                box-shadow: 0 10px 40px rgba(87, 104, 254, 0.3);
+                box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 30%, transparent);
             }
             
             .advantage-link {
@@ -128,7 +128,7 @@ export class LandingAdvantages extends PlatformElement {
             }
             
             .advantage-link:hover {
-                background: rgba(87, 104, 254, 0.15);
+                background: color-mix(in srgb, var(--accent) 15%, transparent);
             }
             
             @keyframes floatBadge {

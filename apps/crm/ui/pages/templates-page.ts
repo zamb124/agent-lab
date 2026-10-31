@@ -26,7 +26,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -347,12 +347,7 @@ export class CRMTemplatesPage extends PlatformPage {
                 font-family: var(--font-mono);
             }
 
-            .empty {
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-                padding: var(--space-3);
-                text-align: center;
-            }
+            platform-empty-state { padding: var(--space-6); }
 
             .field {
                 display: flex;
@@ -1177,11 +1172,13 @@ export class CRMTemplatesPage extends PlatformPage {
                     </button>
                 </div>
                 ${this._showCreateForm ? this._renderCreateForm() : ''}
-                ${templates.length > 0 ? html`
+                ${this._templates.loading && templates.length === 0
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                    : templates.length > 0 ? html`
                     <div class="templates-list">
                         ${templates.map((tpl) => this._renderTemplateCard(tpl))}
                     </div>
-                ` : html`<div class="empty">${this.t('templates_page.empty')}</div>`}
+                ` : html`<platform-empty-state icon="list" title=${this.t('templates_page.empty')}></platform-empty-state>`}
             </div>
         `;
     }
@@ -1289,7 +1286,7 @@ export class CRMTemplatesPage extends PlatformPage {
             return html`
                 <div class="right-column">
                     <div class="panel">
-                        <div class="empty">${this.t('templates_page.no_template_selected')}</div>
+                        <platform-empty-state icon="file-text" title=${this.t('templates_page.no_template_selected')}></platform-empty-state>
                     </div>
                 </div>
             `;
@@ -1298,7 +1295,7 @@ export class CRMTemplatesPage extends PlatformPage {
             return html`
                 <div class="right-column">
                     <div class="panel">
-                        <div class="empty"><glass-spinner size="lg"></glass-spinner></div>
+                        <platform-empty-state loading></platform-empty-state>
                     </div>
                 </div>
             `;
@@ -1316,7 +1313,7 @@ export class CRMTemplatesPage extends PlatformPage {
     _renderMetaPanel(detail: Record<string, unknown>): TemplateResult {
         const meta = this._metaDraft;
         if (!meta) {
-            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         return html`
             <div class="panel">
@@ -1424,7 +1421,7 @@ export class CRMTemplatesPage extends PlatformPage {
                     <div class="types-grid">
                         ${types.map((item) => this._renderTypeCard(item))}
                     </div>
-                ` : html`<div class="empty">${this.t('templates_page.no_types')}</div>`}
+                ` : html`<platform-empty-state icon="columns" title=${this.t('templates_page.no_types')}></platform-empty-state>`}
             </div>
         `;
     }

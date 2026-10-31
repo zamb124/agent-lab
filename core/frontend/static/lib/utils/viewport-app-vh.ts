@@ -107,7 +107,7 @@ declare global {
 }
 
 /**
- * Идемпотентный запуск: один раз на загрузку страницы (импорт из app-loader).
+ * Идемпотентный запуск: один раз на загрузку страницы (прямой импорт из index.ts приложений).
  */
 export function initPlatformViewportAppVh(): void {
     if (typeof window === 'undefined') {

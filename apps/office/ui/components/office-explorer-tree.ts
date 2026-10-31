@@ -239,13 +239,9 @@ export class OfficeExplorerTree extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('click', this._onDocumentClick);
+        this.useDomEvent(document, 'click', this._onDocumentClick);
     }
 
-    override disconnectedCallback(): void {
-        document.removeEventListener('click', this._onDocumentClick);
-        super.disconnectedCallback();
-    }
 
     private _onDocumentClickHandler() {
         this._hideContextMenu();

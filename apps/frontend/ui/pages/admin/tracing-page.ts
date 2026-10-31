@@ -46,7 +46,8 @@ function firstText(values: readonly unknown[]): string {
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-trace-viewer.js';
 import '@platform/lib/components/platform-span-attributes-viewer.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -331,9 +332,9 @@ export class FrontendTracingPage extends PlatformPage {
                 ${isOpen ? html`
                     <div class="suggest">
                         ${this._facets.loading(key)
-                            ? html`<div class="suggest-empty"><glass-spinner></glass-spinner></div>`
+                            ? html`<platform-empty-state loading></platform-empty-state>`
                             : (items.length === 0
-                                ? html`<div class="suggest-empty">${this.t('tracing_page.empty')}</div>`
+                                ? html`<platform-empty-state icon="trace-timeline" title=${this.t('tracing_page.empty')}></platform-empty-state>`
                                 : items.map((it) => {
                                     const suggestValue = typeof it === 'string'
                                         ? it
@@ -501,7 +502,7 @@ export class FrontendTracingPage extends PlatformPage {
                 </div>
                 <div class="drawer-body">
                     ${loading
-                        ? html`<glass-spinner></glass-spinner>`
+                        ? html`<platform-spinner></platform-spinner>`
                         : (error
                             ? html`<div class="state error">
                                 <div class="state-title">${this.t('tracing_page.trace_load_error')}</div>
@@ -541,7 +542,7 @@ export class FrontendTracingPage extends PlatformPage {
         const error = this._spans.error;
         let body;
         if (loading && records.length === 0) {
-            body = html`<div class="state"><glass-spinner></glass-spinner></div>`;
+            body = html`<div class="state"><platform-spinner></platform-spinner></div>`;
         } else if (terminal === 'forbidden') {
             body = html`<div class="state forbidden">
                 <div class="state-title">${this.t('tracing_page.forbidden')}</div>
@@ -565,7 +566,7 @@ export class FrontendTracingPage extends PlatformPage {
                 ${hasMore ? html`
                     <div class="footer-actions">
                         <button class="btn" ?disabled=${loadingMore} @click=${() => this._spans.loadMore()}>
-                            ${loadingMore ? html`<glass-spinner size="xs"></glass-spinner>` : this.t('tracing_page.load_more')}
+                            ${loadingMore ? html`<platform-spinner size="xs"></platform-spinner>` : this.t('tracing_page.load_more')}
                         </button>
                     </div>
                 ` : null}

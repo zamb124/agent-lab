@@ -3,11 +3,11 @@
  */
 
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../platform-button.js';
-import '../glass-spinner.js';
+import '../platform-spinner.js';
 import { isPlainRecord } from '../../events/payload.js';
 import type { OpController } from '../../base/use-resource.js';
 
@@ -173,7 +173,7 @@ export class PlatformVariableResolvePreview extends PlatformElement {
                 ></platform-field>
             </div>
             <platform-button @click=${() => this._runPreview()}>${this.t('editor.preview_run')}</platform-button>
-            ${this._loading ? html`<glass-spinner></glass-spinner>` : ''}
+            ${this._loading ? html`<platform-spinner></platform-spinner>` : ''}
             ${!this._loading && this._items.length === 0
                 ? html`<div class="empty">${this.t('editor.preview_empty')}</div>`
                 : html`

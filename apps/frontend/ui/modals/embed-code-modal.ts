@@ -11,7 +11,7 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -162,7 +162,7 @@ export class FrontendEmbedCodeModal extends PlatformModal {
     override renderBody() {
         const entry = this._entry();
         if (this._isLoading() || entry === null) {
-            return html`<div class="loading"><glass-spinner></glass-spinner></div>`;
+            return html`<div class="loading"><platform-spinner></platform-spinner></div>`;
         }
         const html_code = typeof entry.html_code === 'string' ? entry.html_code : '';
         const page_url = typeof entry.page_url === 'string' ? entry.page_url : '';

@@ -4,7 +4,7 @@
  * Active route подсвечивается по `state.router.routeKey`. Переходы — через
  * `this.navigate(routeKey)`. Триггерит первичную загрузку списка провайдеров
  * (`useResource('rag/providers')`) при монтировании; использует фабричный
- * `rag-provider-badge` для отображения активного провайдера.
+ * `rag-provider-status` для отображения активного провайдера.
  */
 
 import { html, css } from 'lit';
@@ -18,7 +18,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/platform-notification-manager.js';
-import './rag-provider-badge.js';
+import './rag-provider-status.js';
 
 const NAV_ITEMS = [
     { route: 'namespaces', icon: 'folder',   label_key: 'sidebar.menu_namespaces' },
@@ -157,7 +157,7 @@ export class RagSidebar extends PlatformElement {
                 </nav>
 
                 <div class="provider-section" data-hide-collapsed>
-                    <rag-provider-badge></rag-provider-badge>
+                    <rag-provider-status></rag-provider-status>
                 </div>
 
                 <div slot="footer">

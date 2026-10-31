@@ -16,7 +16,8 @@ import { buildFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -206,7 +207,6 @@ export class FlowsMcpServersModal extends PlatformModal {
         _editing: { state: true },
         _form: { state: true },
         _formError: { state: true },
-        _saving: { state: true },
         _testFeedback: { state: true },
         _testingServerId: { state: true },
         _installedSearch: { state: true },
@@ -229,7 +229,6 @@ export class FlowsMcpServersModal extends PlatformModal {
     declare _editing: string | null;
     declare _form: McpServerForm;
     declare _formError: string | null;
-    declare _saving: boolean;
     declare _testFeedback: McpTestFeedback | null;
     declare _testingServerId: string | null;
     declare _installedSearch: string;
@@ -653,6 +652,11 @@ export class FlowsMcpServersModal extends PlatformModal {
     ];
     private _activeCompanySel: SelectController<string | null>;
     private _servers: ResourceController;
+
+    private get _saving(): boolean {
+        return this._servers.createInFlight
+            || (typeof this._editing === 'string' && this._editing.length > 0 && this._servers.isBusy(this._editing));
+    }
     private _serversListOp: OpController;
     private _syncOp: OpController;
     private _testOp: OpController;
@@ -679,7 +683,6 @@ export class FlowsMcpServersModal extends PlatformModal {
         super();
         this.headerSavePrimary = true;
         this.size = 'lg';
-        this._saving = false;
         this._view = 'list';
         this._listTab = 'installed';
         this._editing = null;
@@ -752,7 +755,6 @@ export class FlowsMcpServersModal extends PlatformModal {
             this._listTab = 'installed';
             this._editing = null;
             this._formError = null;
-            this._saving = false;
             this._testFeedback = null;
             this._testingServerId = null;
             this._brandingError = null;
@@ -845,12 +847,11 @@ export class FlowsMcpServersModal extends PlatformModal {
 
     _renderInstalledEmptyState(messageKey: string) {
         return html`
-            <div class="mcp-empty">
-                <div>${this.t(messageKey)}</div>
+            <platform-empty-state icon="mcp" title=${this.t(messageKey)}>
                 <platform-button variant="primary" density="compact" @click=${() => { void this._switchListTab('catalog'); }}>
                     ${this.t('mcp_servers_modal.action_open_catalog')}
                 </platform-button>
-            </div>
+            </platform-empty-state>
         `;
     }
 
@@ -1297,7 +1298,6 @@ export class FlowsMcpServersModal extends PlatformModal {
             headers[key] = val;
         }
         this._formError = null;
-        this._saving = true;
         try {
             if (this._editing) {
                 this._servers.update(f.server_id, {
@@ -1320,7 +1320,6 @@ export class FlowsMcpServersModal extends PlatformModal {
             this._goList();
             await this._loadInstalled({ reset: true });
         } finally {
-            this._saving = false;
         }
     }
 
@@ -1481,11 +1480,11 @@ export class FlowsMcpServersModal extends PlatformModal {
             `;
         }
         if (this._installedLoading && (allItems).length === 0) {
-            return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if ((allItems).length === 0) {
             return (this._installedSearch.trim()).length > 0
-                ? html`<div class="mcp-empty">${this.t('mcp_servers_modal.empty_search')}</div>`
+                ? html`<platform-empty-state icon="search" title=${this.t('mcp_servers_modal.empty_search')}></platform-empty-state>`
                 : this._renderInstalledEmptyState('mcp_servers_modal.empty_none_installed');
         }
         return html`
@@ -1525,7 +1524,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                             aria-label=${this.t('mcp_servers_modal.action_test_aria')}
                         >
                             ${this._testingServerId === s.server_id
-                                ? html`<glass-spinner size="sm"></glass-spinner>`
+                                ? html`<platform-spinner size="sm"></platform-spinner>`
                                 : html`<platform-icon name="check" size="16"></platform-icon>`}
                         </platform-button>
                         <platform-button
@@ -1596,13 +1595,13 @@ export class FlowsMcpServersModal extends PlatformModal {
             `;
         }
         if (this._catalogLoading && (this._catalogItems.length) === 0) {
-            return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if ((this._catalogItems.length) === 0) {
             const msg = (this._catalogSearch.trim()).length > 0
                 ? this.t('mcp_servers_modal.catalog_empty_search')
                 : this.t('mcp_servers_modal.catalog_empty');
-            return html`<div class="mcp-empty">${msg}</div>`;
+            return html`<platform-empty-state icon="mcp" title=${msg}></platform-empty-state>`;
         }
         return html`
         ${this._catalogItems.map((entry) => {
@@ -1646,7 +1645,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                                         @click=${() => { void this._installCatalogEntry(entry); }}
                                     >
                                         ${installing
-                                            ? html`<glass-spinner size="sm"></glass-spinner>`
+                                            ? html`<platform-spinner size="sm"></platform-spinner>`
                                             : this.t('mcp_servers_modal.catalog_install')}
                                     </platform-button>
                                 `}
@@ -1699,7 +1698,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         return html`
             <div class="mcp-load-more">
                 <platform-button variant="ghost" density="compact" ?disabled=${loading} @click=${() => { void handler(); }}>
-                    ${loading ? html`<glass-spinner size="sm"></glass-spinner>` : this.t('mcp_servers_modal.load_more')}
+                    ${loading ? html`<platform-spinner size="sm"></platform-spinner>` : this.t('mcp_servers_modal.load_more')}
                 </platform-button>
             </div>
         `;
@@ -1725,7 +1724,7 @@ export class FlowsMcpServersModal extends PlatformModal {
 
     _renderBrandingView() {
         if (this._brandingLoading && (this._brandingItems.length) === 0) {
-            return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         const slugSuggestions = this._brandingSlugSuggestions;
         const selectedPreview = this._brandingItems.find((row) => row.server_id === this._brandingForm.server_id);
@@ -1800,7 +1799,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                 </section>
                 <section class="mcp-branding-gallery" aria-label=${this.t('mcp_servers_modal.branding_gallery_aria')}>
                     ${(this._brandingItems.length) === 0
-                        ? html`<div class="mcp-empty">${this.t(emptyKey)}</div>`
+                        ? html`<platform-empty-state icon="mcp" title=${this.t(emptyKey)}></platform-empty-state>`
                         : html`
                             <div class="mcp-branding-grid">
                                 ${repeat(
@@ -2083,7 +2082,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                         aria-label=${this.t('mcp_servers_modal.action_test_connection')}
                     >
                         ${this._testOp.busy
-                            ? html`<glass-spinner size="sm"></glass-spinner>`
+                            ? html`<platform-spinner size="sm"></platform-spinner>`
                             : html`<platform-icon name="check" size="16"></platform-icon>`}
                     </platform-button>
                 `

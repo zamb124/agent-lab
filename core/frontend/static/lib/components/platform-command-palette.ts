@@ -12,8 +12,8 @@
  * ></platform-command-palette>
  */
 
-import { css, html, nothing } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { css, html, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 
 import { PlatformElement } from '../platform-element/index.js';
@@ -208,21 +208,30 @@ export class PlatformCommandPalette extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('keydown', this._onGlobalKeyDown);
+        this.useDomEvent(document, 'keydown', this._onGlobalKeyDown);
     }
 
     override disconnectedCallback(): void {
         super.disconnectedCallback();
-        document.removeEventListener('keydown', this._onGlobalKeyDown);
         this._clearSearchTimer();
+    }
+
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate?.(changed);
+        if (changed.has('open') && this.open) {
+            this._query = '';
+            this._activeIndex = 0;
+        }
     }
 
     override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (changed.has('open') && this.open) {
-            this._query = '';
-            this._activeIndex = 0;
-            void this._runSearch('');
+            queueMicrotask(() => {
+                if (this.open) {
+                    void this._runSearch('');
+                }
+            });
             void this.updateComplete.then(() => {
                 this.renderRoot?.querySelector('input')?.focus();
             });

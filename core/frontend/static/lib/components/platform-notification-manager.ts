@@ -14,7 +14,7 @@
  */
 
 import { html, css, unsafeCSS } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
 import { NOTIFICATIONS_EVENTS } from '../events/reducers/notifications.js';

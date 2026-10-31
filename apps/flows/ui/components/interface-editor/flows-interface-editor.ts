@@ -25,6 +25,7 @@ import '@platform/lib/components/platform-popover.js';
 import '@platform/lib/components/platform-menu.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-empty-state.js';
 import {
     CONTAINER_TYPES,
     type CatalogEntry,
@@ -644,7 +645,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
 
     override render(): TemplateResult {
         const draft = this._draft;
-        if (draft === null || this._schema === null) return html`<div class="loading">${this.t('interface_editor.loading')}</div>`;
+        if (draft === null || this._schema === null) return html`<platform-empty-state loading></platform-empty-state>`;
         const ui = this._ui.value;
         const page = this._page;
         if (page === null) throw new Error('flows-interface-editor: page required');

@@ -293,22 +293,6 @@
             "data_table_export_xlsx": "Excel"
         }
     },
-    "namespace_modal": {
-        "header": "New workspace",
-        "label_template": "Template",
-        "label_name": "Name",
-        "label_description": "Description",
-        "template_hint": "Workspace is created with a preconfigured set of entity types.",
-        "template_no_description": "No description",
-        "templates_loading": "Loading templates…",
-        "templates_empty": "No templates available",
-        "name_placeholder": "e.g. personal, work, project_x",
-        "name_hint": "Latin letters, digits and underscore only. Must start with a letter.",
-        "description_placeholder": "Describe what this workspace is for",
-        "cancel": "Cancel",
-        "submit": "Create workspace",
-        "saving": "Creating…"
-    },
     "catalog_create_modal": {
         "header": "New catalog",
         "label_title": "Title",
@@ -335,6 +319,7 @@
         "remove_member": "Remove",
         "search_placeholder": "Search by name or user ID",
         "no_member_matches": "No matches",
+        "members_empty": "No members yet",
         "all_in_catalog": "All company users are already in this catalog",
         "members_company_visible_hint": "Visible to the whole company in this workspace. Member list invites are disabled.",
         "members_private_hint": "Only the owner and invited members. Add people below.",

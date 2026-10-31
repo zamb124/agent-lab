@@ -9,7 +9,7 @@
  */
 
 import { html, css } from 'lit';
-import type { PropertyValues } from '@platform/lib/lit-shim.js';
+import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -18,7 +18,7 @@ import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 interface RagDocument {
@@ -90,11 +90,7 @@ export class NamespacePage extends PlatformPage {
             .document-name { font-size: var(--text-base); font-weight: var(--font-semibold); color: var(--text-primary); }
             .document-meta { display: flex; gap: var(--space-4); font-size: var(--text-sm); color: var(--text-tertiary); }
             .document-actions { display: flex; gap: var(--space-2); }
-            .empty {
-                flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-                padding: var(--space-12); text-align: center;
-            }
-            .empty-text { font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--text-primary); margin-bottom: var(--space-2); }
+            platform-empty-state { flex: 1; margin-top: var(--space-6); }
             input[type="file"] { display: none; }
             .drop-zone {
                 margin-top: var(--space-6); padding: var(--space-12);
@@ -203,11 +199,7 @@ export class NamespacePage extends PlatformPage {
         const loading = this._docs.busy;
 
         if (!namespace && !this._namespaces.loading) {
-            return html`
-                <div class="empty">
-                    <div class="empty-text">${this.t('namespace_detail.not_found')}</div>
-                </div>
-            `;
+            return html`<platform-empty-state icon="folder" title=${this.t('namespace_detail.not_found')}></platform-empty-state>`;
         }
 
         const crumbLabel = namespace && typeof namespace.name === 'string' && namespace.name.length > 0
@@ -240,9 +232,7 @@ export class NamespacePage extends PlatformPage {
             <input type="file" @change=${(e: Event) => this._handleFileSelect(e)} accept=${ACCEPT_TYPES} />
 
             ${loading ? html`
-                <div class="empty">
-                    <glass-spinner size="lg"></glass-spinner>
-                </div>
+                <platform-empty-state loading></platform-empty-state>
             ` : documents.length === 0 ? html`
                 <div class="drop-zone ${this._dragOver ? 'drag-over' : ''}"
                      @click=${() => this._triggerFileInput()}

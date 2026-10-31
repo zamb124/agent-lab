@@ -8,6 +8,7 @@ import { COMPANIES_EVENTS, type CompanyRecord } from '@platform/lib/events/reduc
 import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 
@@ -58,25 +59,9 @@ export class SelectCompanyPage extends PlatformPage {
                 font-weight: 600;
                 letter-spacing: -0.02em;
             }
-            .empty {
+            platform-empty-state {
                 flex: 1 1 auto;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-                text-align: center;
-                margin: 0;
                 max-width: 28rem;
-                gap: var(--space-5);
-            }
-            .empty-text {
-                margin: 0;
-            }
-            .empty-actions {
-                display: flex;
-                align-items: center;
-                justify-content: center;
             }
             .grid-main {
                 flex: 1 1 auto;
@@ -173,10 +158,12 @@ export class SelectCompanyPage extends PlatformPage {
     constructor() {
         super();
         this._companiesSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._authSel = this.select((s) => s.auth.user);
         this._loaded = false;
     }
     private _companiesSel: SelectController<readonly CompanyRecord[]>;
+    private _companiesLoadingSel: SelectController<boolean>;
     private _authSel: SelectController<AuthUser | null>;
     private _loaded: boolean;
 
@@ -184,7 +171,11 @@ export class SelectCompanyPage extends PlatformPage {
     override updated() {
         if (!this._loaded) {
             this._loaded = true;
-            this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
+            queueMicrotask(() => {
+                if (this.isConnected) {
+                    this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
+                }
+            });
         }
     }
 
@@ -249,16 +240,15 @@ export class SelectCompanyPage extends PlatformPage {
 
         return html`
             <h1 class="page-title">${this.t('select_company.title')}</h1>
-            ${companies.length === 0
+            ${this._companiesLoadingSel.value && companies.length === 0
+                ? html`<platform-empty-state loading></platform-empty-state>`
+                : companies.length === 0
                 ? html`
-                    <div class="empty">
-                        <p class="empty-text">${this.t('select_company.empty_text')}</p>
-                        <div class="empty-actions">
-                            <button type="button" class="btn btn-primary" @click=${this._createCompany}>
-                                ${this.t('select_company.create_action')}
-                            </button>
-                        </div>
-                    </div>
+                    <platform-empty-state title=${this.t('select_company.empty_text')}>
+                        <button type="button" class="btn btn-primary" @click=${this._createCompany}>
+                            ${this.t('select_company.create_action')}
+                        </button>
+                    </platform-empty-state>
                 `
                 : cardsBlock}
         `;

@@ -16,7 +16,6 @@ from __future__ import annotations
 import sys
 import time
 import types
-from collections.abc import Iterator
 
 import numpy as np
 import pytest
@@ -25,6 +24,7 @@ from httpx2 import ASGITransport, AsyncClient
 
 import apps.provider_litserve.embedding.engines as embedding_engines
 import apps.provider_litserve.reranker.engines as reranker_engines
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.openai_server_contracts import (
     build_provider_litserve_v1_models_response,
 )
@@ -34,20 +34,10 @@ from apps.provider_litserve.provider_litserve_http_schemas import (
     RerankResponseBody,
     V1ModelsResponseBody,
 )
-from apps.provider_litserve.runtime_models import (
-    reset_runtime_catalog_for_tests,
-    runtime_api_model_ids,
-)
 from core.config.models import ProviderLitserveInfraConfig
+from core.models.provider_litserve_model import ProviderLitserveModelPair
 
 EMBEDDING_DIM = 4
-
-
-@pytest.fixture(autouse=True)
-def _reset_provider_litserve_runtime_catalog() -> Iterator[None]:
-    reset_runtime_catalog_for_tests()
-    yield
-    reset_runtime_catalog_for_tests()
 
 
 @pytest.fixture
@@ -74,7 +64,7 @@ def provider_litserve_infra(unique_id: str) -> ProviderLitserveInfraConfig:
         embedding_openai_model_id=f"baai/bge-m3-{unique_id}",
         embedding_model_id=f"BAAI/bge-m3-{unique_id}",
         rerank_openai_model_id=f"baai/rerank-{unique_id}",
-        model_id=f"BAAI/rerank-{unique_id}",
+        rerank_model_id=f"BAAI/rerank-{unique_id}",
     )
 
 
@@ -85,7 +75,6 @@ def provider_asgi_app(
 ) -> FastAPI:
     return create_provider_litserve_asgi_app(
         cfg=provider_litserve_infra,
-        embedding_dimension_for_models_list=EMBEDDING_DIM,
     )
 
 
@@ -95,19 +84,21 @@ async def test_get_v1_models_contract(
     provider_litserve_infra: ProviderLitserveInfraConfig,
 ) -> None:
     created = int(time.time())
+    catalog = ModelCatalog.from_seed(provider_litserve_infra)
     expected_body = build_provider_litserve_v1_models_response(
-        embedding_openai_model_id=provider_litserve_infra.embedding_openai_model_id,
-        embedding_model_ids=provider_litserve_infra.embedding_model_ids,
-        embedding_hf_model_id=provider_litserve_infra.embedding_model_id,
-        embedding_dimension=EMBEDDING_DIM,
-        embedding_context_length=8192,
-        rerank_openai_model_id=provider_litserve_infra.rerank_openai_model_id,
-        rerank_model_ids=provider_litserve_infra.rerank_model_ids,
-        rerank_hf_model_id=provider_litserve_infra.model_id,
-        rerank_context_length=8192,
-        stt_model_ids=runtime_api_model_ids("stt", provider_litserve_infra),
-        tts_model_ids=runtime_api_model_ids("tts", provider_litserve_infra),
-        vad_model_ids=runtime_api_model_ids("vad", provider_litserve_infra),
+        embedding_entries=[
+            e
+            for e in catalog.entries("embedding")
+            if isinstance(e, ProviderLitserveModelPair)
+        ],
+        rerank_entries=[
+            e
+            for e in catalog.entries("rerank")
+            if isinstance(e, ProviderLitserveModelPair)
+        ],
+        stt_model_ids=catalog.api_model_ids("stt"),
+        tts_model_ids=catalog.api_model_ids("tts"),
+        vad_model_ids=catalog.api_model_ids("vad"),
         created=created,
     )
     expected_ids = {m.id for m in expected_body.data}
@@ -265,11 +256,10 @@ async def test_post_v1_rerank_too_many_passages_422(
         embedding_openai_model_id=f"baai/bge-m3-{unique_id}",
         embedding_model_id=f"BAAI/bge-m3-{unique_id}",
         rerank_openai_model_id=f"baai/rerank-{unique_id}",
-        model_id=f"BAAI/rerank-{unique_id}",
+        rerank_model_id=f"BAAI/rerank-{unique_id}",
     )
     app = create_provider_litserve_asgi_app(
         cfg=cfg,
-        embedding_dimension_for_models_list=EMBEDDING_DIM,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post(
@@ -323,11 +313,10 @@ async def test_post_v1_rerank_flagllm_mocked_compute_score(
         embedding_openai_model_id=f"baai/bge-m3-{unique_id}",
         embedding_model_id=f"BAAI/bge-m3-{unique_id}",
         rerank_openai_model_id=f"baai/rerank-{unique_id}",
-        model_id=f"BAAI/rerank-{unique_id}",
+        rerank_model_id=f"BAAI/rerank-{unique_id}",
     )
     app = create_provider_litserve_asgi_app(
         cfg=cfg,
-        embedding_dimension_for_models_list=EMBEDDING_DIM,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post(

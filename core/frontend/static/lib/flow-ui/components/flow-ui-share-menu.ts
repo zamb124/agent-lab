@@ -4,7 +4,7 @@
  * события ``flow-ui-share-created``/``flow-ui-share-revoked`` всплывают наружу (composed) сквозь хост.
  */
 
-import { LitElement, css, html, nothing } from '../../lit-shim.js';
+import { LitElement, css, html, nothing } from 'lit';
 import type { FlowUiRecord } from '../runtime/flow-ui-store.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import { flowUIGlyph } from '../utils/glyph.js';

@@ -469,6 +469,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/rag/ui", context_type="anonymous", auth_required=False),
     RouteRule("/rag", context_type="frontend", auth_required=True),
     RouteRule("/rag/", context_type="frontend", auth_required=True),
+    RouteRule("/rag/*", context_type="frontend", auth_required=True),
 
     # Sync Service
     # Статика и SPA-оболочка — public; checkAuth() на стороне JS → redirectToAuth()
@@ -500,6 +501,15 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/stock", auth_required=False, context_type="anonymous"),
     RouteRule("/stock/", auth_required=False, context_type="anonymous"),
     RouteRule("/stock/*", auth_required=False, context_type="anonymous"),
+
+    # Shop Service: публичная витрина и агрегатор анонимны; админ-API — сессия
+    RouteRule("/shop/ui/static/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/shop/api/v1/public/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/shop/api/v1/*", context_type="api", auth_required=True),
+    RouteRule("/shop/s/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/shop", auth_required=False, context_type="anonymous"),
+    RouteRule("/shop/", auth_required=False, context_type="anonymous"),
+    RouteRule("/shop/*", auth_required=False, context_type="anonymous"),
 
     # Secrets Service
     RouteRule("/secrets/api/v1/*", context_type="api", auth_required=True),

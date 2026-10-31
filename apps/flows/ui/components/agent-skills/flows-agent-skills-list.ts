@@ -6,7 +6,8 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { AGENT_SKILL_ICON } from '../../_helpers/agent-skill-map.js';
 import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
@@ -175,11 +176,11 @@ export class FlowsAgentSkillsList extends PlatformElement {
                 @change=${this._onQuery}
             ></platform-field>
             ${this.loading
-                ? html`<div class="loading"><glass-spinner size="24"></glass-spinner></div>`
+                ? html`<div class="loading"><platform-spinner size="24"></platform-spinner></div>`
                 : html`
                     <div class="list">
                         ${filtered.length === 0
-                            ? html`<div class="empty">${this.t('agent_skills.list_empty')}</div>`
+                            ? html`<platform-empty-state icon="agent" title=${this.t('agent_skills.list_empty')}></platform-empty-state>`
                             : filtered.map((item) => {
                                 const id = skillId(item);
                                 const toolsCount = skillListLength(item, 'tool_refs');

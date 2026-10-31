@@ -20,11 +20,11 @@
  *   4. `disconnectedCallback` корректно убивает редактор и observers.
  */
 
-import { html, css, nothing } from '../lit-shim.js';
+import { html, css, nothing } from 'lit';
 import { guard } from 'lit/directives/guard.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { isPlainRecord } from '../events/payload.js';
-import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 interface OnlyOfficeDocEditor {
     destroyEditor?: () => void;
@@ -357,7 +357,6 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
     }
 
     _teardownOoDom(): void {
-        document.removeEventListener('scroll', this._onDocScrollCapture, true);
         this._detachOoBodyObserver();
         if (this._ooIframeAttrObserver) {
             this._ooIframeAttrObserver.disconnect();
@@ -550,7 +549,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         this._ooResizeObserver.observe(anchor);
         this._ooResizeObserver.observe(this);
         this._ooResizeObserver.observe(document.documentElement);
-        document.addEventListener('scroll', this._onDocScrollCapture, true);
+        this.useDomEvent(document, 'scroll', this._onDocScrollCapture, true);
         requestAnimationFrame(() => this._syncOoLayout());
     }
 

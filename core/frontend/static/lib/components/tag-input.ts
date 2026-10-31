@@ -2,8 +2,8 @@
  * TagInput — редактор тегов с поддержкой Enter, запятой и Backspace.
  * Pill-режим единственный (атрибут `flat` удалён в PHASE 1.5).
  */
-import { html, css } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
+import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 function inputElement(event: Event): HTMLInputElement {

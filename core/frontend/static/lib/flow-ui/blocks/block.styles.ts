@@ -4,7 +4,7 @@
  * ``.fu-prose`` — общая типографика Markdown: блок ``markdown`` и ответ агента в ленте.
  */
 
-import { css } from '../../lit-shim.js';
+import { css } from 'lit';
 
 export const blockStyles = css`
     .fu-block {

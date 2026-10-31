@@ -22,8 +22,8 @@ pytestmark = pytest.mark.timeout(15)
 
 
 def test_default_litserve_infra_uses_qwen_embedding_and_rerank(unique_id):
-    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
-    assert cfg.model_id == "Qwen/Qwen3-Reranker-0.6B"
+    cfg = ProviderLitserveInfraConfig()
+    assert cfg.rerank_model_id == "Qwen/Qwen3-Reranker-0.6B"
     assert cfg.embedding_model_id == "Qwen/Qwen3-Embedding-0.6B"
     assert cfg.embedding_openai_model_id == "qwen/qwen3-embedding-0.6b"
     assert cfg.rerank_openai_model_id == "qwen/qwen3-reranker-0.6b"
@@ -46,10 +46,10 @@ def test_rag_reranker_runtime_defaults_provider_litserve() -> None:
 
 
 def test_default_stt_entry_has_gigaam_backend_and_revision(unique_id):
-    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
+    cfg = ProviderLitserveInfraConfig()
     assert len(cfg.stt_models) >= 1
     default = next(
-        m for m in cfg.stt_models if m.api_model_id == cfg.stt_default_api_model_id
+        m for m in cfg.stt_models if m.api_model_id == cfg.stt_models[0].api_model_id
     )
     assert default.backend == "gigaam"
     assert default.hf_model_id == "ai-sage/GigaAM-v3"
@@ -57,9 +57,9 @@ def test_default_stt_entry_has_gigaam_backend_and_revision(unique_id):
 
 
 def test_default_tts_entry_has_silero_bundle_voice_sample_rate(unique_id):
-    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
+    cfg = ProviderLitserveInfraConfig()
     default = next(
-        m for m in cfg.tts_models if m.api_model_id == cfg.tts_default_api_model_id
+        m for m in cfg.tts_models if m.api_model_id == cfg.tts_models[0].api_model_id
     )
     assert default.backend == "silero"
     assert default.hf_model_id == "snakers4/silero-models"
@@ -96,9 +96,9 @@ def test_tts_entry_empty_input_steps_allowed(unique_id):
 
 
 def test_default_vad_entry_has_silero_threshold(unique_id):
-    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
+    cfg = ProviderLitserveInfraConfig()
     default = next(
-        m for m in cfg.vad_models if m.api_model_id == cfg.vad_default_api_model_id
+        m for m in cfg.vad_models if m.api_model_id == cfg.vad_models[0].api_model_id
     )
     assert default.backend == "silero"
     assert default.hf_model_id == "snakers4/silero-vad"
@@ -108,7 +108,6 @@ def test_default_vad_entry_has_silero_threshold(unique_id):
 
 def test_extra_models_in_list_are_kept(unique_id):
     cfg = ProviderLitserveInfraConfig(
-        sqlite_path=f"./data/test/{unique_id}.db",
         stt_models=[
             ProviderLitserveSTTModelEntry(
                 api_model_id=f"gigaam-{unique_id}",
@@ -122,8 +121,7 @@ def test_extra_models_in_list_are_kept(unique_id):
                 backend="whisper",
             ),
         ],
-        stt_default_api_model_id=f"gigaam-{unique_id}",
-    )
+        )
     api_ids = [m.api_model_id for m in cfg.stt_models]
     assert f"gigaam-{unique_id}" in api_ids
     assert f"whisper-large-{unique_id}" in api_ids

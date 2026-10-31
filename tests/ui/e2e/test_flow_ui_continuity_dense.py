@@ -167,7 +167,7 @@ async def test_flow_ui_runtime_multi_page_nav_after_publish(
         await flows_open_chat_page(page, flows_ui, flow_id)
         await flows_chat_wait_ready(page)
         await flows_dismiss_pwa_install_banner(page)
-        surface = page.locator("chat-page platform-flow-ui").first
+        surface = page.locator("flows-chat-page platform-flow-ui").first
         nav = surface.locator('nav[aria-label="Pages"]').first
         await expect(nav).to_be_visible(timeout=30_000)
         await expect(nav.locator("button.page")).to_have_count(2, timeout=15_000)
@@ -183,7 +183,7 @@ async def test_flow_ui_runtime_multi_page_nav_after_publish(
         # Навигация клиента не является ходом: после reload открывается стартовая страница.
         await page.reload(wait_until="domcontentloaded")
         await flows_chat_wait_ready(page)
-        surface_again = page.locator("chat-page platform-flow-ui").first
+        surface_again = page.locator("flows-chat-page platform-flow-ui").first
         nav_again = surface_again.locator('nav[aria-label="Pages"]').first
         await expect(
             nav_again.locator("button.page").filter(has_text=re.compile(r"^Conversation$"))

@@ -2,7 +2,7 @@
  * Inspector HTML-редактора: вкладки State / Events / Help (шпаргалка API и токенов).
  */
 
-import { css, html, nothing } from '../../lit-shim.js';
+import { css, html, nothing } from 'lit';
 import { FLOW_UI_HTML_THEME_TOKENS } from '../runtime/html-sandbox.js';
 import type { FlowUiRecord } from '../runtime/flow-ui-store.js';
 import { FLOW_UI_API, fieldControlKind, fieldEditorValue, parseFieldEditorValue, valueAtSimplePath } from './html-editor-api.js';

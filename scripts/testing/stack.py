@@ -129,7 +129,6 @@ COMMON_TEST_ENV: dict[str, str] = {
     "RAG__EMBEDDING__API__MODEL": "qwen/qwen3-embedding-0.6b",
     "RAG__EMBEDDING__API__DIMENSION": "1024",
     "RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION": "1024",
-    "PROVIDER_LITSERVE__API__BASE_URL": "http://localhost:9014/v1",
     "LLM__OPENROUTER__API_KEY": "sk-test-key",
 }
 
@@ -299,7 +298,6 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
             "PROVIDER_LITSERVE__INFRA__EMBEDDING_ACCELERATOR": "cpu",
             "PROVIDER_LITSERVE__INFRA__RERANK_ACCELERATOR": "cpu",
             "PROVIDER_LITSERVE__INFRA__GATEWAY_PORT": "9014",
-            "PROVIDER_LITSERVE__INFRA__SQLITE_PATH": "/tmp/platform_test_provider_litserve_registry.db",
         },
     ),
     GranianService(name="voice", app_path="apps.voice.main:app", port=9015, readiness_timeout=STACK_READINESS_TIMEOUT_SEC),

@@ -14,6 +14,7 @@ import { TEAM_EVENTS } from '@platform/lib/events/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/worktracker-work-item-card.js';
 import '../components/worktracker-list-section.js';
 import '../components/worktracker-page-header.js';
@@ -213,7 +214,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
     private _renderMembers() {
         const members = queueMemberUserIds(listOrEmpty(this._membersOp.state.items, 'worktracker queue members'));
         if (members.length === 0) {
-            return html`<div class="empty">${this.t('queue_detail_page.empty_members')}</div>`;
+            return html`<platform-empty-state icon="users" title=${this.t('queue_detail_page.empty_members')}></platform-empty-state>`;
         }
         return html`
             <div class="members">
@@ -233,7 +234,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         const candidates = this._candidateMembers();
         const teamLoading = this._teamLoadingSel.value;
         if (teamLoading && candidates.length === 0) {
-            return html`<p class="hint">${this.t('queue_detail_page.members_loading')}</p>`;
+            return html`<p class="hint"><platform-spinner size="xs"></platform-spinner> ${this.t('queue_detail_page.members_loading')}</p>`;
         }
         if (candidates.length === 0) {
             return html`<p class="hint">${this.t('queue_detail_page.no_candidates')}</p>`;
@@ -265,7 +266,9 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
                 breadcrumb-label=${queueLabel}
             ></worktracker-page-header>
             <div class="wt-page sections">
-                ${items.length > 0 ? html`
+                ${this._workItems.loading && items.length === 0
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                : items.length > 0 ? html`
                     <worktracker-list-section title=${this.t('queue_detail_page.inbox')} .count=${items.length}>
                         ${items.map((item) => html`
                             <div class="wt-list-row">
@@ -278,7 +281,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
                             </div>
                         `)}
                     </worktracker-list-section>
-                ` : html`<div class="empty">${this.t('queue_detail_page.empty_inbox')}</div>`}
+                ` : html`<platform-empty-state icon="inbox" title=${this.t('queue_detail_page.empty_inbox')}></platform-empty-state>`}
                 <section class="wt-section">
                     <h2 class="wt-section-title">${this.t('queue_detail_page.members')}</h2>
                     <p class="hint">${this.t('queue_detail_page.members_hint')}</p>

@@ -1,5 +1,5 @@
 /**
- * Структурные типы поверхности vendored prosemirror-bundle.
+ * Структурные типы поверхности lazy prosemirror-чанка.
  *
  * Бандл грузится по URL и не имеет деклараций — здесь описан только тот
  * минимум, который реально используют wiki-редактор и его nodeviews. Это не
@@ -169,7 +169,7 @@ export interface PmPluginApiLike {
 }
 
 /**
- * Весь vendored prosemirror-bundle: plugin API + конструкторы редактора,
+ * Весь lazy prosemirror-чанк: plugin API + конструкторы редактора,
  * selection, decorations, table-команды (доступ по имени — табличные хелперы
  * лежат прямо на объекте бандла).
  */

@@ -9,6 +9,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../components/worktracker-icon-action.js';
 
@@ -116,12 +117,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
                 color: var(--text-tertiary);
                 font-family: var(--font-mono);
             }
-            .empty {
-                padding: var(--space-8) var(--space-4);
-                color: var(--text-tertiary);
-                text-align: center;
-                font-size: var(--text-sm);
-            }
+            platform-empty-state { margin-top: var(--space-8); }
         `,
     ];
 
@@ -210,7 +206,8 @@ export class WorktrackerQueuesPage extends PlatformPage {
                     </div>
                 </section>
             ` : ''}
-            ${queues.length > 0 ? html`
+            ${this._queues.loading ? html`<platform-empty-state loading></platform-empty-state>`
+            : queues.length > 0 ? html`
                 <div class="queue-list">
                     ${queues.map((q: Record<string, unknown>) => html`
                         <button type="button" class="queue-row" @click=${() => this._openQueue(q.work_queue_id === undefined || q.work_queue_id === null ? '' : String(q.work_queue_id))}>
@@ -225,7 +222,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
                         </button>
                     `)}
                 </div>
-            ` : html`<div class="empty">${this.t('queues_page.empty')}</div>`}
+            ` : html`<platform-empty-state icon="layers" title=${this.t('queues_page.empty')}></platform-empty-state>`}
         `;
     }
 }

@@ -61,6 +61,21 @@ describe('drawer-geometry', () => {
         expect(() => createDefaultGeometry('top-right', DESKTOP)).toThrow(/invalid position/);
     });
 
+    it('lifts the launcher above the reserved bottom inset (bottom nav)', () => {
+        const viewport = { ...NARROW, bottomInset: 88 };
+        const stored = createDefaultGeometry('bottom-right', viewport);
+        expect(stored.launcherTop).toBe(
+            NARROW.height - NARROW.margin - 88 - LAUNCHER_SIZE_PX,
+        );
+        const clamped = clampCluster(
+            { launcherLeft: 0, launcherTop: NARROW.height - 10, panelWidth: 300, panelHeight: 400 },
+            viewport,
+        );
+        expect(clamped.launcherTop + LAUNCHER_SIZE_PX).toBeLessThanOrEqual(
+            NARROW.height - NARROW.margin - 88,
+        );
+    });
+
     it('opens the panel above a right-side launcher with matching right edges', () => {
         const stored = createDefaultGeometry('bottom-right', DESKTOP);
         const placed = placePanel(stored, DESKTOP);

@@ -95,8 +95,6 @@ SERVICES = {
             CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
             ("/crm/ui/static", "apps/crm/ui-dist"),
-            ("/crm/ui/vendor/3d-force-graph", "node_modules/3d-force-graph/dist"),
-            ("/crm/ui/vendor/three", "node_modules/three/build"),
         ],
     },
     "rag": {
@@ -167,6 +165,16 @@ SERVICES = {
             CORE_FRONTEND_EMBED,
             CORE_FRONTEND_STATIC,
             ("/stock/ui/static", "apps/stock/ui-dist"),
+        ],
+    },
+    "shop": {
+        "type": "granian",
+        "app": "apps.shop.main:app",
+        "port": "8027",
+        "static": [
+            CORE_FRONTEND_EMBED,
+            CORE_FRONTEND_STATIC,
+            ("/shop/ui/static", "apps/shop/ui-dist"),
         ],
     },
     "guest_runtime": {
@@ -266,6 +274,11 @@ SERVICES = {
     "stock_worker": {
         "type": "taskiq-worker",
         "worker_app": "apps.stock.worker:worker_app",
+        "workers": "1",
+    },
+    "shop_worker": {
+        "type": "taskiq-worker",
+        "worker_app": "apps.shop.worker:worker_app",
         "workers": "1",
     },
     "crm_worker": {

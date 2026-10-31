@@ -6,7 +6,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { getTestRunRequestClientId } from '../_helpers/flows-test-run-gate.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
@@ -108,6 +108,7 @@ export class FlowsNodeRunControl extends PlatformElement {
     ];
     private _wasBusy: boolean;
     private _portalEl: any;
+    private _globalUnsubs: Array<() => void> = [];
     private _bubbleZ: number;
 
     constructor() {
@@ -167,17 +168,19 @@ export class FlowsNodeRunControl extends PlatformElement {
     }
 
     _detachGlobalListeners() {
-        document.removeEventListener('pointerdown', this._onDocPointerDown, true);
-        window.removeEventListener('keydown', this._onGlobalKeydown, true);
-        window.removeEventListener('scroll', this._onGlobalScroll, true);
-        window.removeEventListener('resize', this._onGlobalScroll, true);
+        for (const unsub of this._globalUnsubs) {
+            unsub();
+        }
+        this._globalUnsubs = [];
     }
 
     _attachGlobalListeners() {
-        document.addEventListener('pointerdown', this._onDocPointerDown, true);
-        window.addEventListener('keydown', this._onGlobalKeydown, true);
-        window.addEventListener('scroll', this._onGlobalScroll, true);
-        window.addEventListener('resize', this._onGlobalScroll, true);
+        this._globalUnsubs = [
+            this.useDomEvent(document, 'pointerdown', this._onDocPointerDown, true),
+            this.useDomEvent(window, 'keydown', this._onGlobalKeydown, true),
+            this.useDomEvent(window, 'scroll', this._onGlobalScroll, true),
+            this.useDomEvent(window, 'resize', this._onGlobalScroll, true),
+        ];
     }
 
     _onGlobalScroll() {
@@ -325,7 +328,7 @@ export class FlowsNodeRunControl extends PlatformElement {
                     @click=${this._onPlay}
                 >
                     ${this.busy
-                        ? html`<glass-spinner size="sm" aria-hidden="true"></glass-spinner>`
+                        ? html`<platform-spinner size="sm" aria-hidden="true"></platform-spinner>`
                         : html`<platform-icon name="play" size="18"></platform-icon>`}
                 </platform-button>
             </div>

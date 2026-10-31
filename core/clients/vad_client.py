@@ -20,6 +20,10 @@ from contextlib import AbstractContextManager
 from importlib import import_module
 from typing import TYPE_CHECKING, Protocol, TypedDict, override
 
+from core.config.openai_v1_base_url import (
+    provider_litserve_api_key,
+    provider_litserve_service_url,
+)
 from core.http import get_httpx_client
 from core.imports import module_sdk
 from core.logging import get_logger
@@ -171,6 +175,7 @@ class LitserveVADClient(BaseVADClient):
         base_url: str,
         model: str,
         timeout: float,
+        api_key: str | None = None,
     ) -> None:
         if base_url == "":
             raise ValueError("VAD litserve base_url cannot be empty.")
@@ -181,6 +186,7 @@ class LitserveVADClient(BaseVADClient):
         self._base_url: str = base_url.rstrip("/")
         self._model: str = model
         self._timeout: float = timeout
+        self._api_key: str | None = api_key
 
     @override
     async def detect_segments(
@@ -204,8 +210,11 @@ class LitserveVADClient(BaseVADClient):
         if threshold is not None:
             payload["threshold"] = threshold
 
+        headers: dict[str, str] = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         async with get_httpx_client(timeout=self._timeout) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, json=payload, headers=headers)
         _ = response.raise_for_status()
 
         body = parse_json_object(response.content, "vad.response")
@@ -411,10 +420,14 @@ class VADClientFactory:
                     "VAD litserve: model is set neither in override nor in "
                     + "`voice.vad.default_model`."
                 )
+            resolved_base_url = backend.base_url
+            if resolved_base_url is None:
+                resolved_base_url = provider_litserve_service_url()
             return LitserveVADClient(
-                base_url=backend.base_url,
+                base_url=resolved_base_url,
                 model=chosen_model,
                 timeout=timeout_s if timeout_s is not None else backend.timeout_s,
+                api_key=provider_litserve_api_key(),
             )
         if provider_name == "silero_local":
             backend_local: LocalSileroVADBackendConfig = cfg.silero_local

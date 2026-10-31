@@ -31,7 +31,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
@@ -425,22 +425,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-            .center {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-3);
-                padding: var(--space-6);
-                color: var(--text-tertiary);
-            }
-
-            .empty {
-                padding: var(--space-3);
-                text-align: center;
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-            }
+            platform-empty-state { padding: var(--space-6); }
             .panel-title .panel-back {
                 flex-shrink: 0;
                 padding: var(--space-1);
@@ -999,16 +984,11 @@ export class CRMNamespaceDetailPage extends PlatformPage {
 
     override render(): TemplateResult {
         if (typeof this.itemId !== 'string' || this.itemId.length === 0) {
-            return html`
-                <div class="center">
-                    <platform-icon name="info" size="32"></platform-icon>
-                    <p>${this.t('namespace_detail_page.no_id')}</p>
-                </div>
-            `;
+            return html`<platform-empty-state icon="info" title=${this.t('namespace_detail_page.no_id')}></platform-empty-state>`;
         }
         const ns = this._namespace();
         if (ns === null) {
-            return html`<div class="center"><glass-spinner size="lg"></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
 
         return html`
@@ -1277,8 +1257,10 @@ export class CRMNamespaceDetailPage extends PlatformPage {
                         </button>
                     </span>
                 </div>
-                ${allTypes.length === 0
-                    ? html`<div class="empty">${this.t('namespace_detail_page.no_types')}</div>`
+                ${this._entityTypes.loading && allTypes.length === 0
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                    : allTypes.length === 0
+                    ? html`<platform-empty-state icon="columns" title=${this.t('namespace_detail_page.no_types')}></platform-empty-state>`
                     : html`
                         <div class="types-grid">
                             ${allTypes.map((item) => this._renderTypeCard(item))}

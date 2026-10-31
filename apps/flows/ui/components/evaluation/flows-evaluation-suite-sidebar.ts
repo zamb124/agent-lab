@@ -4,6 +4,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-modal-search-field.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { evaluationCatalogCategoryKey, evaluationCatalogNameKey } from '../../_helpers/evaluation-catalog-labels.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
@@ -540,7 +541,7 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
     }
 
     _renderEmpty(message: string) {
-        return html`<div class="empty">${message}</div>`;
+        return html`<platform-empty-state title=${message}></platform-empty-state>`;
     }
 
     _renderEmptyAction(message: string, label: string, handler: (this: FlowsEvaluationSuiteSidebar) => void) {

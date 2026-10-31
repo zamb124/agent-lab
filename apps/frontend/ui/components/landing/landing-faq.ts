@@ -27,7 +27,7 @@ export class LandingFaq extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0 0 60px 0;
                 text-align: center;
             }
@@ -39,14 +39,14 @@ export class LandingFaq extends PlatformElement {
             }
             
             .faq-item {
-                border-bottom: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                border-bottom: 1px solid var(--glass-border-medium);
                 padding: 24px 0;
                 cursor: pointer;
                 transition: var(--motion-transition-interactive);
             }
             
             .faq-item:hover {
-                background: rgba(87, 104, 254, 0.05);
+                background: color-mix(in srgb, var(--accent) 5%, transparent);
             }
             
             .faq-question {
@@ -57,7 +57,7 @@ export class LandingFaq extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 18px;
                 font-weight: 500;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0;
             }
             
@@ -68,7 +68,7 @@ export class LandingFaq extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                color: var(--landing-primary);
+                color: var(--marketing-product-accent);
                 transition: transform 0.3s;
                 font-size: 20px;
             }
@@ -95,7 +95,7 @@ export class LandingFaq extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.7;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
+                color: var(--text-secondary);
                 margin: 0;
             }
             

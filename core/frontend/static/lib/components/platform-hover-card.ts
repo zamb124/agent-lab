@@ -14,8 +14,8 @@
  * </platform-hover-card>
  */
 
-import { css, html } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { css, html } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-popover.js';

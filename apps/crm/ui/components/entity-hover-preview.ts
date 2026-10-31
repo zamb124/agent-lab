@@ -1,7 +1,7 @@
 import { html, css, nothing, unsafeCSS } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-hover-card.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import type {
@@ -215,7 +215,7 @@ export class CRMEntityHoverPreview extends PlatformElement {
             : html`
                 <div class="crm-entity-preview-portal__center">
                     ${this._entities.loading
-                        ? html`<glass-spinner size="xs"></glass-spinner>`
+                        ? html`<platform-spinner size="xs"></platform-spinner>`
                         : this.t('note_page.not_found_title')}
                 </div>
             `;

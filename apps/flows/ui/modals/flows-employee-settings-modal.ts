@@ -16,7 +16,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { TeamMemberRecord } from '@platform/lib/events/reducers/team.js';
@@ -391,7 +391,7 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
 
     override renderBody() {
         if (!this._hydrated) {
-            return html`<div class="members-empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         const candidates = this._humanMembers();
         const teamLoading = this._teamLoadingSel.value === true;
@@ -476,12 +476,10 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
                       </div>
                       <div class="members-list">
                           ${teamLoading && candidates.length === 0
-                              ? html`<div class="members-empty"><glass-spinner></glass-spinner></div>`
+                              ? html`<platform-empty-state loading></platform-empty-state>`
                               : nothing}
                           ${!teamLoading && candidates.length === 0
-                              ? html`<div class="members-empty">
-                                    ${this.t('employee_settings_modal.curators_empty')}
-                                </div>`
+                              ? html`<platform-empty-state icon="users" title=${this.t('employee_settings_modal.curators_empty')}></platform-empty-state>`
                               : nothing}
                           ${candidates.map(
                               (m) => html`

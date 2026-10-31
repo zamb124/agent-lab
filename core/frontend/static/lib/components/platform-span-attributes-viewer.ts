@@ -3,7 +3,7 @@
  */
 
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { buildSpanAttributeViewModel, prettyTraceJsonText, traceScalarText } from '../utils/trace-attribute-view-model.js';
 import { isJsonObject } from '../utils/json-object.js';

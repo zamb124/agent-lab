@@ -43,6 +43,7 @@ pytest_plugins = [
     "tests.fixtures.google_api_emulator.handle",
     "tests.fixtures.wiki",
     "tests.fixtures.stock",
+    "tests.fixtures.shop",
     "tests.fixtures.datasources",
     "tests.fixtures.search_platform",
     "tests.fixtures.capability_gateway",
@@ -119,7 +120,6 @@ os.environ.setdefault("RAG__EMBEDDING__PROVIDER", "provider_litserve")
 os.environ.setdefault("RAG__EMBEDDING__API__MODEL", "qwen/qwen3-embedding-0.6b")
 os.environ.setdefault("RAG__EMBEDDING__API__DIMENSION", "1024")
 os.environ.setdefault("RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION", "1024")
-os.environ["PROVIDER_LITSERVE__API__BASE_URL"] = "http://localhost:9014/v1"
 os.environ.setdefault("RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED", "true")
 os.environ.setdefault("LLM__OPENROUTER__API_KEY", "sk-test-key")
 import core.config.base  # noqa: E402

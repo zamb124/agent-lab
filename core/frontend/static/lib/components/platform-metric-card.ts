@@ -3,7 +3,7 @@
  */
 
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './platform-animated-number.js';
 

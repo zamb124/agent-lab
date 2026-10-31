@@ -123,7 +123,7 @@ export class WorktrackerActivityThread extends PlatformElement {
     private _renderComments() {
         const rows = Array.isArray(this.comments) ? this.comments : [];
         if (rows.length === 0) {
-            return html`<div class="wt-activity-empty">${this.t('detail_page.no_comments')}</div>`;
+            return html`<platform-empty-state icon="chat" title=${this.t('detail_page.no_comments')}></platform-empty-state>`;
         }
         return html`
             <div class="wt-comment-list">

@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import pytest
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.stt.api import STTLitAPI
 from apps.provider_litserve.stt.engines import STTTranscriptionInput
 from core.config.models import ProviderLitserveInfraConfig
 
 pytestmark = pytest.mark.timeout(15)
+
+_CFG = ProviderLitserveInfraConfig()
+_CATALOG = ModelCatalog.from_seed(_CFG)
 
 
 class _RecordingEngine:
@@ -27,7 +31,7 @@ class _RecordingEngine:
 
 def test_stt_lit_api_predict_wraps_single_decoded_dict() -> None:
     """Single-loop: ``predict`` получает один dict от ``decode_request``, не ``list``."""
-    api = STTLitAPI(ProviderLitserveInfraConfig())
+    api = STTLitAPI(_CFG, _CATALOG)
     engine = _RecordingEngine()
     api._engine = engine
 
@@ -43,7 +47,7 @@ def test_stt_lit_api_predict_wraps_single_decoded_dict() -> None:
 
 def test_stt_lit_api_predict_passes_list_from_batched_loop() -> None:
     """Batched-loop: после ``decode``+``batch`` в ``predict`` приходит ``list[dict]``."""
-    api = STTLitAPI(ProviderLitserveInfraConfig())
+    api = STTLitAPI(_CFG, _CATALOG)
     engine = _RecordingEngine()
     api._engine = engine
 

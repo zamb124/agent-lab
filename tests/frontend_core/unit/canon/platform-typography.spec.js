@@ -45,7 +45,17 @@ const SCAN_ROOTS = [
     path.join(ROOT, 'core/frontend/pwa'),
 ];
 
-const SKIP_DIRS = new Set(['vendor', 'node_modules', 'design', 'mermaid', '.lighthouseci']);
+const SKIP_DIRS = new Set([
+    'vendor',
+    'node_modules',
+    'design',
+    'mermaid',
+    '.lighthouseci',
+    // ui-dist/embed-dist — выход esbuild (npm lazy-чанки echarts/mermaid);
+    // канон проверяется по источникам, не по сборке.
+    'ui-dist',
+    'embed-dist',
+]);
 
 const LEGACY_PATTERNS = [
     /fira-sans/i,

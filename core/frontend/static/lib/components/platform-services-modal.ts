@@ -3,7 +3,7 @@
  */
 
 import { html, css } from 'lit';
-import type { CSSResultGroup, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, TemplateResult } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import './platform-services-launcher.js';

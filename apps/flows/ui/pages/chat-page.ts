@@ -290,4 +290,4 @@ export class ChatPage extends PlatformPage {
     }
 }
 
-if (!customElements.get('chat-page')) customElements.define('chat-page', ChatPage);
+customElements.define('flows-chat-page', ChatPage);

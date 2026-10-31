@@ -19,8 +19,8 @@
  * </platform-popover>
  */
 
-import { css, html } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { css, html } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 
 import { PlatformElement } from '../platform-element/index.js';
 import {
@@ -75,6 +75,8 @@ export class PlatformPopover extends PlatformElement {
     _resizeObserver: ResizeObserver | null;
     _hoverTimer: number | null;
     _outsideListenFrame: number | null;
+    private _trackingUnsubs: Array<() => void> = [];
+    private _anchorUnsubs: Array<() => void> = [];
     _ignoreOutsideUntil: number;
 
     static override styles: CSSResultGroup = [
@@ -334,11 +336,17 @@ export class PlatformPopover extends PlatformElement {
     // --- подписки ---
 
     _startTracking(): void {
-        window.addEventListener('scroll', this._onReposition, true);
-        window.addEventListener('resize', this._onReposition);
-        window.visualViewport?.addEventListener('resize', this._onReposition);
-        window.visualViewport?.addEventListener('scroll', this._onReposition);
-        document.addEventListener('keydown', this._onDocumentKeyDown, true);
+        this._trackingUnsubs = [
+            this.useDomEvent(window, 'scroll', this._onReposition, true),
+            this.useDomEvent(window, 'resize', this._onReposition),
+        ];
+        if (window.visualViewport) {
+            this._trackingUnsubs.push(
+                this.useDomEvent(window.visualViewport, 'resize', this._onReposition),
+                this.useDomEvent(window.visualViewport, 'scroll', this._onReposition),
+            );
+        }
+        this._trackingUnsubs.push(this.useDomEvent(document, 'keydown', this._onDocumentKeyDown, true));
 
         // Outside-dismiss после жеста открытия: иначе pointerdown/focus→open
         // в том же turn (или с null-anchor) сразу гасит слой.
@@ -352,7 +360,7 @@ export class PlatformPopover extends PlatformElement {
                 if (!this.open || !this.dismissOnOutside) {
                     return;
                 }
-                document.addEventListener('pointerdown', this._onDocumentPointerDown, true);
+                this._trackingUnsubs.push(this.useDomEvent(document, 'pointerdown', this._onDocumentPointerDown, true));
             });
         }
 
@@ -369,12 +377,10 @@ export class PlatformPopover extends PlatformElement {
     }
 
     _stopTracking(): void {
-        window.removeEventListener('scroll', this._onReposition, true);
-        window.removeEventListener('resize', this._onReposition);
-        window.visualViewport?.removeEventListener('resize', this._onReposition);
-        window.visualViewport?.removeEventListener('scroll', this._onReposition);
-        document.removeEventListener('pointerdown', this._onDocumentPointerDown, true);
-        document.removeEventListener('keydown', this._onDocumentKeyDown, true);
+        for (const unsub of this._trackingUnsubs) {
+            unsub();
+        }
+        this._trackingUnsubs = [];
         if (this._outsideListenFrame !== null) {
             cancelAnimationFrame(this._outsideListenFrame);
             this._outsideListenFrame = null;
@@ -425,14 +431,16 @@ export class PlatformPopover extends PlatformElement {
             return;
         }
         if (this.trigger === 'click') {
-            anchor.addEventListener('click', this._onAnchorClick);
+            this._anchorUnsubs.push(this.useDomEvent(anchor, 'click', this._onAnchorClick));
         } else if (this.trigger === 'contextmenu') {
-            anchor.addEventListener('contextmenu', this._onAnchorContextMenu);
+            this._anchorUnsubs.push(this.useDomEvent(anchor, 'contextmenu', this._onAnchorContextMenu));
         } else if (this.trigger === 'hover') {
-            anchor.addEventListener('pointerenter', this._onAnchorPointerEnter);
-            anchor.addEventListener('pointerleave', this._onAnchorPointerLeave);
-            anchor.addEventListener('focusin', this._onAnchorPointerEnter);
-            anchor.addEventListener('focusout', this._onAnchorPointerLeave);
+            this._anchorUnsubs.push(
+                this.useDomEvent(anchor, 'pointerenter', this._onAnchorPointerEnter),
+                this.useDomEvent(anchor, 'pointerleave', this._onAnchorPointerLeave),
+                this.useDomEvent(anchor, 'focusin', this._onAnchorPointerEnter),
+                this.useDomEvent(anchor, 'focusout', this._onAnchorPointerLeave),
+            );
         }
     }
 
@@ -440,12 +448,10 @@ export class PlatformPopover extends PlatformElement {
         if (!(anchor instanceof Element)) {
             return;
         }
-        anchor.removeEventListener('click', this._onAnchorClick);
-        anchor.removeEventListener('contextmenu', this._onAnchorContextMenu);
-        anchor.removeEventListener('pointerenter', this._onAnchorPointerEnter);
-        anchor.removeEventListener('pointerleave', this._onAnchorPointerLeave);
-        anchor.removeEventListener('focusin', this._onAnchorPointerEnter);
-        anchor.removeEventListener('focusout', this._onAnchorPointerLeave);
+        for (const unsub of this._anchorUnsubs) {
+            unsub();
+        }
+        this._anchorUnsubs = [];
     }
 
     _onAnchorClick(): void {

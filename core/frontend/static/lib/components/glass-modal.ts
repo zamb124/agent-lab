@@ -717,6 +717,7 @@ export class GlassModal extends PlatformElement {
     declare _fullscreenMotionRun: boolean;
 
     _dragStart: { x: number; y: number };
+    private _dragUnsubs: Array<() => void> = [];
     _boundMouseMove: (e: MouseEvent) => void;
     _boundMouseUp: () => void;
     _boundEscape: (e: KeyboardEvent) => void;
@@ -936,8 +937,8 @@ export class GlassModal extends PlatformElement {
             y: e.clientY - (this._position.y as number),
         };
 
-        document.addEventListener('mousemove', this._boundMouseMove);
-        document.addEventListener('mouseup', this._boundMouseUp);
+        this._dragUnsubs = [this.useDomEvent(document, 'mousemove', this._boundMouseMove),
+        this.useDomEvent(document, 'mouseup', this._boundMouseUp)];
     }
 
     _handleMouseMove(e: MouseEvent): void {
@@ -952,8 +953,10 @@ export class GlassModal extends PlatformElement {
 
     _handleMouseUp(): void {
         this._isDragging = false;
-        document.removeEventListener('mousemove', this._boundMouseMove);
-        document.removeEventListener('mouseup', this._boundMouseUp);
+        for (const unsub of this._dragUnsubs) {
+            unsub();
+        }
+        this._dragUnsubs = [];
     }
 
     _handlePanelEnterAnimationEnd(e: AnimationEvent): void {
@@ -1068,15 +1071,16 @@ export class GlassModal extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('keydown', this._boundEscape);
+        this.useDomEvent(document, 'keydown', this._boundEscape);
     }
 
     override disconnectedCallback(): void {
         super.disconnectedCallback();
         this._clearPortalCloseHooks();
-        document.removeEventListener('keydown', this._boundEscape);
-        document.removeEventListener('mousemove', this._boundMouseMove);
-        document.removeEventListener('mouseup', this._boundMouseUp);
+        for (const unsub of this._dragUnsubs) {
+            unsub();
+        }
+        this._dragUnsubs = [];
         if (this.parentNode === document.body && this._portalRestoreParent?.isConnected) {
             this._restorePortalToOriginalParent();
         }

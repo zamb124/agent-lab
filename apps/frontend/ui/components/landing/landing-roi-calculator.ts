@@ -42,19 +42,19 @@ export class LandingRoiCalculator extends PlatformElement {
                 margin: 0 auto;
                 padding: 40px 28px;
                 border-radius: 24px;
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
-                background: radial-gradient(circle at top right, rgba(87, 104, 254, 0.18), var(--landing-panel-bg-strong, rgba(15, 15, 15, 0.95)));
+                border: 1px solid var(--glass-border-medium);
+                background: radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 18%, transparent), var(--glass-bg-medium));
             }
             h2 {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: clamp(26px, 3.5vw, 36px);
                 margin: 0 0 12px;
-                color: var(--landing-secondary, #e8e8e8);
+                color: var(--text-secondary);
             }
             .sub {
                 margin: 0 0 32px;
                 font-size: 15px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
+                color: var(--text-secondary);
                 line-height: 1.5;
             }
             .field {
@@ -66,16 +66,16 @@ export class LandingRoiCalculator extends PlatformElement {
                 align-items: baseline;
                 font-family: var(--font-sans);
                 font-size: 14px;
-                color: var(--landing-secondary, #e8e8e8);
+                color: var(--text-secondary);
                 margin-bottom: 10px;
             }
             .value {
                 font-weight: 600;
-                color: var(--landing-primary, #5768fe);
+                color: var(--marketing-product-accent);
             }
             input[type='range'] {
                 width: 100%;
-                accent-color: var(--landing-primary, #5768fe);
+                accent-color: var(--marketing-product-accent);
             }
             .results {
                 display: grid;
@@ -91,27 +91,27 @@ export class LandingRoiCalculator extends PlatformElement {
             .tile {
                 padding: 16px 18px;
                 border-radius: 16px;
-                background: var(--landing-panel-bg, rgba(0, 0, 0, 0.35));
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.08));
+                background: var(--glass-bg-subtle);
+                border: 1px solid var(--glass-border-medium);
             }
             .tile span {
                 display: block;
                 font-size: 12px;
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
-                color: var(--landing-text-faint, rgba(232, 232, 232, 0.55));
+                color: var(--text-disabled);
                 margin-bottom: 6px;
             }
             .tile strong {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 22px;
-                color: var(--landing-secondary, #e8e8e8);
+                color: var(--text-secondary);
             }
             .disclaimer {
                 margin-top: 24px;
                 font-size: 12px;
                 line-height: 1.45;
-                color: var(--landing-text-faint, rgba(232, 232, 232, 0.5));
+                color: var(--text-disabled);
             }
         `,
     ];

@@ -17,6 +17,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-json-editor.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 
@@ -156,7 +157,7 @@ export class FlowsParametersSchemaForm extends PlatformElement {
     override render(): TemplateResult {
         const items = this._entries();
         if (items.length === 0) {
-            return html`<div class="empty">${this.t('parameters_schema_form.empty')}</div>`;
+            return html`<platform-empty-state title=${this.t('parameters_schema_form.empty')}></platform-empty-state>`;
         }
         return html`
             ${items.map((it) => html`

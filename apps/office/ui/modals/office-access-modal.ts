@@ -9,7 +9,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
@@ -57,7 +57,6 @@ export class OfficeAccessModal extends PlatformFormModal {
         _publicUrl: { state: true },
         _members: { state: true },
         _query: { state: true },
-        _loading: { state: true },
     }
     declare resourceKind: string;
     declare resourceId: string;
@@ -68,7 +67,6 @@ export class OfficeAccessModal extends PlatformFormModal {
     declare _publicUrl: string;
     declare _members: Array<{ user_id: string; relation: 'viewer' | 'editor' }>;
     declare _query: string;
-    declare _loading: unknown;
 
 
     static override styles: CSSResultGroup = [
@@ -203,7 +201,6 @@ export class OfficeAccessModal extends PlatformFormModal {
         this._publicUrl = '';
         this._members = [];
         this._query = '';
-        this._loading = true;
         this.size = 'md';
         this._accessGet = null;
         this._accessPatch = null;
@@ -211,6 +208,10 @@ export class OfficeAccessModal extends PlatformFormModal {
         this._companyMembers = null;
     }
     private _accessGet: OpController | null;
+
+    private get _loading(): boolean {
+        return this._accessGet === null || this._accessGet.busy;
+    }
     private _accessPatch: OpController | null;
     private _accessRotate: OpController | null;
     private _companyMembers: OpController | null;
@@ -256,7 +257,6 @@ export class OfficeAccessModal extends PlatformFormModal {
     }
 
     private async _loadAccess() {
-        this._loading = true;
         const payload = this.resourceKind === 'binding'
             ? { file_id: this.resourceId }
             : { catalog_id: this.resourceId };
@@ -287,7 +287,6 @@ export class OfficeAccessModal extends PlatformFormModal {
             }
             this._members = rows;
         }
-        this._loading = false;
     }
 
     private _isCatalog() {
@@ -429,7 +428,7 @@ export class OfficeAccessModal extends PlatformFormModal {
 
     override renderBody() {
         if (this._loading) {
-            return html`<div><glass-spinner></glass-spinner></div>`;
+            return html`<div><platform-spinner></platform-spinner></div>`;
         }
         const showMembers = this._isCatalog() ? !this._companyVisible : true;
         return html`

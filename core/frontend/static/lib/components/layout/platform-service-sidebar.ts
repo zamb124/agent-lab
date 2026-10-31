@@ -10,7 +10,7 @@
  * Методы: toggleMobile(), closeMobile() — для вызова из родительского App (меню).
  */
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import {
     readShellSidebarCollapsed,

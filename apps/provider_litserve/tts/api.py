@@ -16,6 +16,7 @@ import litserve as ls
 from fastapi import Request
 from starlette.responses import Response
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
@@ -57,10 +58,11 @@ class TTSEngine(Protocol):
 class TTSLitAPI(ls.LitAPI):
     """OpenAI-совместимый эндпоинт /v1/audio/speech."""
 
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         super().__init__(api_path="/v1/audio/speech")
         self._cfg: ProviderLitserveInfraConfig = cfg
-        self._engine: TTSEngine = get_local_tts_engine(cfg)
+        self._catalog = catalog
+        self._engine: TTSEngine = get_local_tts_engine(cfg, catalog)
 
     def setup(self, device: str | None) -> None:
         d = device if device is not None else resolve_torch_device(self._cfg)
@@ -78,7 +80,7 @@ class TTSLitAPI(ls.LitAPI):
         _ = kwargs
         return parse_tts_body(
             request,
-            default_api_model_id=self._cfg.tts_default_api_model_id,
+            default_api_model_id=self._catalog.default_api_model_id("tts"),
         )
 
     def predict(self, x: TTSSynthesisInput, **kwargs: JsonValue) -> bytes:

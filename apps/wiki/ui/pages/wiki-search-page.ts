@@ -17,7 +17,7 @@ interface WikiSearchHit {
     snippet?: unknown;
     [key: string]: unknown;
 }
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
 
@@ -264,7 +264,7 @@ export class WikiSearchPage extends PlatformPage {
             return html`<div class="state">${this.t('search.hint')}</div>`;
         }
         if (this._search.busy && this._items.length === 0) {
-            return html`<div class="state"><glass-spinner size="sm"></glass-spinner></div>`;
+            return html`<div class="state"><platform-spinner size="sm"></platform-spinner></div>`;
         }
         if (this._items.length === 0) {
             return html`<div class="state">${this.t('search.empty')}</div>`;

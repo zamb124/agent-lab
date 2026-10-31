@@ -146,6 +146,7 @@ TEST_DATABASE_ENV: dict[str, str] = {
     "DATABASE__WIKI_URL": f"{_POSTGRES_TEST}/platform_wiki",
     "DATABASE__REALTIME_URL": f"{_POSTGRES_TEST}/platform_realtime",
     "DATABASE__STOCK_URL": f"{_POSTGRES_TEST}/platform_stock",
+    "DATABASE__SHOP_URL": f"{_POSTGRES_TEST}/platform_shop",
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "AUTH__JWT_SECRET_KEY": TEST_HS256_JWT_SECRET,

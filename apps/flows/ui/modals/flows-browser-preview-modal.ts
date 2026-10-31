@@ -7,6 +7,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {CSSResultGroup, PropertyDeclarations} from 'lit';
 
@@ -117,13 +118,9 @@ export class FlowsBrowserPreviewModal extends PlatformModal {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        window.addEventListener('message', this._onPreviewMessage);
+        this.useDomEvent(window, 'message', this._onPreviewMessage);
     }
 
-    override disconnectedCallback(): void {
-        window.removeEventListener('message', this._onPreviewMessage);
-        super.disconnectedCallback();
-    }
 
     override renderHeader() {
         return html`
@@ -137,7 +134,7 @@ export class FlowsBrowserPreviewModal extends PlatformModal {
     override renderBody() {
         const viewerUrl = asString(this.viewerUrl);
         if (viewerUrl.length === 0) {
-            return html`<div class="browser-preview-empty">${this.t('browser_preview_modal.empty_url')}</div>`;
+            return html`<platform-empty-state icon="globe" title=${this.t('browser_preview_modal.empty_url')}></platform-empty-state>`;
         }
         const currentUrl = asString(this.currentUrl);
         const themedViewerUrl = withThemeParam(viewerUrl, this._themeSel.value);

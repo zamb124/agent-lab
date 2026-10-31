@@ -19,6 +19,7 @@ from core.ai.providers import PROVIDER_LITSERVE, AICapability
 from core.ai.resolver import resolve_ai_model
 from core.config.base import BaseSettings, get_settings
 from core.config.models import RAGProviderConfig
+from core.config.openai_v1_base_url import openai_v1_base_url
 from core.context import get_context
 from core.logging import get_logger
 from core.rag.embedding_runtime import RagEmbeddingRuntime, resolve_rag_embedding_runtime
@@ -75,7 +76,9 @@ def _runtime_from_company_embedding(
         base_url = (
             resolved.base_url.strip()
             if resolved.base_url is not None and resolved.base_url.strip()
-            else settings.provider_litserve.resolve_openai_v1_base_url()
+            else openai_v1_base_url(
+                settings.server.get_service_url("provider_litserve")
+            )
         )
     elif provider == CUSTOM_PROVIDER_SLUG:
         base_url = (resolved.base_url or "").strip()
@@ -91,7 +94,7 @@ def _runtime_from_company_embedding(
             base_url = resolve_rag_embedding_runtime(
                 emb_copy,
                 settings.llm,
-                settings.provider_litserve,
+                _litserve_v1_base_url(settings),
             ).base_url
     return RagEmbeddingRuntime(
         provider=provider,
@@ -104,6 +107,11 @@ def _runtime_from_company_embedding(
     )
 
 
+def _litserve_v1_base_url(settings: BaseSettings) -> str:
+    """Канонический OpenAI-корень provider_litserve: ``server.get_service_url`` + ``/v1``."""
+    return openai_v1_base_url(settings.server.get_service_url("provider_litserve"))
+
+
 def resolve_rag_provider_bundle(
     settings: BaseSettings,
     provider_name: str | None = None,
@@ -114,7 +122,6 @@ def resolve_rag_provider_bundle(
     embedding_runtime: RagEmbeddingRuntime | None = None
     if key == "pgvector":
         llm = settings.llm
-        pls = settings.provider_litserve
         emb = rag.embedding
         if provider_name is None:
             ctx = get_context()
@@ -134,7 +141,11 @@ def resolve_rag_provider_bundle(
                     embedding_runtime = _runtime_from_company_embedding(resolved, settings=settings)
 
         if embedding_runtime is None:
-            embedding_runtime = resolve_rag_embedding_runtime(emb, llm, pls)
+            embedding_runtime = resolve_rag_embedding_runtime(
+                emb,
+                llm,
+                _litserve_v1_base_url(settings),
+            )
     return ResolvedRagProvider(
         provider_key=key,
         provider_config=provider_config,

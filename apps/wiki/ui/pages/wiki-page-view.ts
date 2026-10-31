@@ -23,7 +23,7 @@ import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import { storageGet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
 import { buildWikiPageFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-emoji-picker.js';
@@ -34,7 +34,7 @@ import '@platform/lib/components/platform-rich-editor.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 import { WIKI_PANEL_TABS } from '../components/wiki-page-panel.js';
-import type { PropertyValues } from '@platform/lib/lit-shim.js';
+import type { PropertyValues } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { PlatformRichEditor } from '@platform/lib/components/platform-rich-editor.js';
@@ -997,7 +997,7 @@ export class WikiPageView extends PlatformPage {
         if (this._page === null) {
             return html`<div class="state">
                 ${this._read.busy
-                    ? html`<glass-spinner size="sm"></glass-spinner>`
+                    ? html`<platform-spinner size="sm"></platform-spinner>`
                     : this.t('page.not_found')}
             </div>`;
         }

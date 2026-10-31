@@ -3,8 +3,8 @@
  * Props: .plan = { agent_plan_id, title?, steps: [{ step_id, title, status }] }
  */
 
-import { html, css, nothing } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { isPlainRecord } from '../events/payload.js';
 import './platform-icon.js';

@@ -31,6 +31,8 @@ import { buildPlatformAuxiliaryFileCreateSpecJson } from '@platform/lib/utils/fi
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {
     TemplateResult,
     CSSResultGroup,
@@ -594,7 +596,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
             <div class="ki-step-body">
                 <p class="ki-step-desc">${this.t('knowledge_import_modal.step_types_desc')}</p>
                 ${types.length === 0
-                    ? html`<div class="ki-empty">${this.t('knowledge_import_modal.types_empty')}</div>`
+                    ? html`<platform-empty-state icon="database" title=${this.t('knowledge_import_modal.types_empty')}></platform-empty-state>`
                     : html`
                         <div class="ki-types-grid">
                             ${types.map((t: Record<string, any>) => {
@@ -646,7 +648,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                 </div>
 
                 ${this._uploading
-                    ? html`<div class="ki-uploading">${this.t('knowledge_import_modal.uploading')}</div>`
+                    ? html`<div class="ki-uploading"><platform-spinner size="sm"></platform-spinner>${this.t('knowledge_import_modal.uploading')}</div>`
                     : ''}
 
                 ${this._files.length > 0
@@ -799,7 +801,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
     override renderBody() {
         if (!this._hasNamespace()) {
             return html`
-                <div class="ki-empty">${this.t('knowledge_import_modal.no_namespace_warning')}</div>
+                <platform-empty-state icon="alert-triangle" title=${this.t('knowledge_import_modal.no_namespace_warning')}></platform-empty-state>
             `;
         }
         return html`

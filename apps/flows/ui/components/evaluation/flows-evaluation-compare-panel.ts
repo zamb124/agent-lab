@@ -5,6 +5,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-segmented-control.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -297,7 +298,7 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
                         ></platform-segmented-control>
                     </div>
                     <div class="diff-list">
-                        ${cases.length > 0 ? cases.map((item) => this._renderDiff(item)) : html`<div class="content-panel-empty">${this.t('evaluation.compare.empty')}</div>`}
+                        ${cases.length > 0 ? cases.map((item) => this._renderDiff(item)) : html`<platform-empty-state icon="chart" title=${this.t('evaluation.compare.empty')}></platform-empty-state>`}
                     </div>
                 </div>
             </section>

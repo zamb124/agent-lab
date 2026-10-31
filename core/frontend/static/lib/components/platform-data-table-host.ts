@@ -3,7 +3,7 @@
  * Rows come from office paging API; SQLite is never loaded in the browser.
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { isPlainRecord } from '../events/payload.js';
 import { httpRequest } from '../events/http.js';

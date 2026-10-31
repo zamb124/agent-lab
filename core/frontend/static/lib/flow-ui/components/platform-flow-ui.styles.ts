@@ -1,6 +1,6 @@
 /** Стили chrome ``<platform-flow-ui>``: тема (embed без tokens.css), topbar, статусбар, HITL. */
 
-import { css } from '../../lit-shim.js';
+import { css } from 'lit';
 
 export const platformFlowUIStyles = css`
         :host {

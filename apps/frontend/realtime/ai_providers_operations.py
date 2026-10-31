@@ -54,6 +54,7 @@ from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from core.models.provider_litserve_model import litserve_catalog_entries
 from core.models.voice_providers_catalog import build_voice_providers_catalog_dto
 from core.platform_brand.resolver import (
     resolve_brand_or_primary,
@@ -435,10 +436,10 @@ def _model_options(values: list[str], *, kind: str = "provider_model") -> list[J
     ]
 
 
-def _voice_model_options() -> dict[str, dict[str, list[JsonObject]]]:
-    settings = get_settings()
-    catalog = build_voice_providers_catalog_dto(settings.provider_litserve)
-    vad_models = [entry.api_model_id for entry in settings.provider_litserve.infra.vad_models]
+async def _voice_model_options() -> dict[str, dict[str, list[JsonObject]]]:
+    entries = await litserve_catalog_entries()
+    catalog = build_voice_providers_catalog_dto(entries)
+    vad_models = [entry.api_model_id for entry in entries.vad]
     return {
         AICapability.VOICE_STT.value: {
             "litserve": _model_options(catalog.stt_litserve_models, kind="voice_model"),
@@ -574,7 +575,7 @@ async def _build_rerank_override(
     )
 
 
-def _build_voice_override(
+async def _build_voice_override(
     capability: AICapability,
     payload: AIProvidersCapabilityUpdate,
 ) -> CompanyVoiceOverride:
@@ -593,7 +594,7 @@ def _build_voice_override(
         raise_invalid(ValueError(f"capability {capability.value}: provider {provider!r} does not accept BYOK/base_url"))
     if payload.model:
         allowed_models: set[str] = set()
-        for item in _voice_model_options().get(capability.value, {}).get(provider, []):
+        for item in (await _voice_model_options()).get(capability.value, {}).get(provider, []):
             value = item.get("value")
             if isinstance(value, str):
                 allowed_models.add(value)
@@ -680,7 +681,7 @@ async def op_ai_providers_snapshot(
             humanitec_llms_models=humanitec_llms_models,
             provider_models=await _provider_model_options(),
             embedding_models=await _embedding_model_options(),
-            voice_models=_voice_model_options(),
+            voice_models=await _voice_model_options(),
         ),
         "llm_context": _public_llm_context(aip),
     }
@@ -734,7 +735,7 @@ async def op_ai_providers_capability_update(
         elif cap == AICapability.RERANK:
             updated_override = await _build_rerank_override(payload)
         elif cap in _VOICE_CAPABILITIES:
-            updated_override = _build_voice_override(cap, payload)
+            updated_override = await _build_voice_override(cap, payload)
         else:
             raise_invalid(ValueError(f"capability {payload.capability} is not supported"))
         updated_aip = _validated_ai_providers(aip.model_copy(update={cap.value: updated_override}))

@@ -1506,17 +1506,11 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('keydown', this._onDocKeyDown);
-        document.addEventListener('keyup', this._onDocKeyUp);
-        document.addEventListener('dragend', this._onDocumentDragEnd);
+        this.useDomEvent(document, 'keydown', this._onDocKeyDown);
+        this.useDomEvent(document, 'keyup', this._onDocKeyUp);
+        this.useDomEvent(document, 'dragend', this._onDocumentDragEnd);
     }
 
-    override disconnectedCallback(): void {
-        document.removeEventListener('keydown', this._onDocKeyDown);
-        document.removeEventListener('keyup', this._onDocKeyUp);
-        document.removeEventListener('dragend', this._onDocumentDragEnd);
-        super.disconnectedCallback();
-    }
 
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);

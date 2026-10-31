@@ -10,8 +10,9 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/common/flows-code-language-segment.js';
 import { markdownToHtml } from '@platform/lib/utils/markdown.js';
 import {
@@ -329,7 +330,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
     override renderBody() {
         const result = this._docsOp.lastResult;
         if (this._docsOp.busy) {
-            return html`<glass-spinner></glass-spinner>`;
+            return html`<platform-spinner></platform-spinner>`;
         }
         const md = getDocsMarkdown(result);
         const htmlStr = markdownToHtml(md);
@@ -349,7 +350,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
                     </div>
                     <nav class="docs-toc">
                         ${shown.length === 0
-                            ? html`<div class="docs-toc-empty">${this.t('code_docs_modal.toc_empty')}</div>`
+                            ? html`<platform-empty-state icon="list" title=${this.t('code_docs_modal.toc_empty')}></platform-empty-state>`
                             : shown.map(
                                 (it) => html`
                                 <platform-button

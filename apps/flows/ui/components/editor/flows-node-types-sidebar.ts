@@ -32,7 +32,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-modal-search-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../_helpers/node-icons.js';
 import { getTriggerTypeRowVisual } from '../../_helpers/trigger-types.js';
 import { asArray, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
@@ -484,7 +484,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                     </platform-button>
                 </div>
                 ${triggerItems.length === 0
-                    ? html`<div class="triggers-empty glass-subtle">${this.t('node_types_sidebar.no_triggers')}</div>`
+                    ? html`<platform-empty-state title=${this.t('node_types_sidebar.no_triggers')}></platform-empty-state>`
                     : triggerItems.map((tr) => {
                         if (!isPlainObject(tr)) {
                             throw new Error('flows/triggers_list: trigger must be an object');
@@ -681,7 +681,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
             ${filteredResources.length > 0 ? html`<div class="category-divider"></div>` : ''}
             ${this._renderCategory('node_types_sidebar.category_resources', filteredResources, this._onDragResourceType, 'resources')}
             ${this._nodeTypesOp.busy && nodeTypes.length === 0
-                ? html`<div class="empty-row"><glass-spinner></glass-spinner></div>`
+                ? html`<platform-empty-state loading></platform-empty-state>`
                 : ''}
             ${(filteredNodes.length === 0 && filteredResources.length === 0 && nodeTypes.length > 0)
                 ? html`<div class="empty-row">${this.t('node_types_sidebar.empty_search')}</div>`

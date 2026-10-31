@@ -5,11 +5,13 @@
  * транзитивно через `frontend-app.js`.
  */
 
-import '@platform/lib/components/app-loader.js';
+import '@platform/lib/utils/viewport-app-vh.js';
+import '@platform/lib/utils/platform-deeplink-init.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user.js';

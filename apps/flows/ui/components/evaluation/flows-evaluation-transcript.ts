@@ -5,6 +5,7 @@ import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 function asArray(value: unknown): unknown[] {
@@ -486,9 +487,9 @@ export class FlowsEvaluationTranscript extends PlatformElement {
                     ${caseRun ? html`
                         ${dialog.length > 0 ? dialog.map((message) => this._renderMessage(message)) : this._renderSyntheticDialog(caseRun)}
                         <div class="events">
-                            ${events.length > 0 ? events.map((event) => this._renderEvent(event)) : html`<div class="event-empty">${this.t('evaluation.transcript.no_events')}</div>`}
+                            ${events.length > 0 ? events.map((event) => this._renderEvent(event)) : html`<platform-empty-state title=${this.t('evaluation.transcript.no_events')}></platform-empty-state>`}
                         </div>
-                    ` : html`<div class="content-panel-empty">${this.t('evaluation.transcript.empty')}</div>`}
+                    ` : html`<platform-empty-state title=${this.t('evaluation.transcript.empty')}></platform-empty-state>`}
                 </div>
             </section>
         `;

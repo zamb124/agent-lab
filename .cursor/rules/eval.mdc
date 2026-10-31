@@ -34,7 +34,7 @@ alwaysApply: false
 
 ### LSP редактора
 
-1. Редактор `flows-code-editor` — vendored CodeMirror + `@codemirror/lsp-client` (`scripts/build/bundles/codemirror.mjs`); intelligence — language-native stubs из `CapabilityManifest` + allowlist → language servers в `code-runner-*` (basedpyright, tsserver, gopls, csharp-ls) на изолированной vfs (`core/capabilities/lsp_workspace.py`).
+1. Редактор `flows-code-editor` — npm CodeMirror + `@codemirror/lsp-client` (lazy-чанк `core/frontend/static/lib/codemirror/codemirror-lazy.ts`); intelligence — language-native stubs из `CapabilityManifest` + allowlist → language servers в `code-runner-*` (basedpyright, tsserver, gopls, csharp-ls) на изолированной vfs (`core/capabilities/lsp_workspace.py`).
 2. Bootstrap — `POST /flows/api/v1/code/lsp/session` (фабрика `flows/code_lsp_session`); кадры — `WS /flows/api/v1/code/lsp/ws/{language}/{session_id}`: flows проверяет `GET {runner}/lsp/session/{id}` и проксирует через `core/clients/service_websocket.py`; нет сессии или cookie — close `1008`.
 3. Language server живёт в bridge-процессе `core.capabilities.lsp_bridge` (сессии — `core/capabilities/lsp_session.py`), не в памяти granian worker; аргументы процесса — `session_id`, корень vfs и JSON команды (`bridge_invocation`); REST-зеркало кадров не требуется.
 4. `GET /flows/api/v1/code/documentation` — markdown для человека, редактор его не читает.

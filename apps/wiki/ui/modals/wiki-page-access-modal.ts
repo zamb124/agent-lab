@@ -43,6 +43,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
@@ -410,7 +411,7 @@ export class WikiPageAccessModal extends PlatformModal {
 
     override renderBody() {
         if (!this._accessState()) {
-            return html`<div class="muted">${this.t('access.loading')}</div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         return html`
             <div class="grid">

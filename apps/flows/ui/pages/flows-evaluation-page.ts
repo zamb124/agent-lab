@@ -6,6 +6,7 @@ import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/evaluation/flows-evaluation-suite-sidebar.js';
 import '../components/evaluation/flows-evaluation-run-toolbar.js';
 import '../components/evaluation/flows-evaluation-results-matrix.js';
@@ -528,13 +529,9 @@ export class FlowsEvaluationPage extends PlatformPage {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        window.addEventListener('keydown', this._handleFullscreenKeydown);
+        this.useDomEvent(window, 'keydown', this._handleFullscreenKeydown);
     }
 
-    override disconnectedCallback(): void {
-        window.removeEventListener('keydown', this._handleFullscreenKeydown);
-        super.disconnectedCallback();
-    }
 
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
@@ -1372,7 +1369,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         if (activePanel === 'monitoring') {
             return this._renderMonitoringPanel(run);
         }
-        return html`<div class="empty">${this.t('evaluation.panels.unknown')}</div>`;
+        return html`<platform-empty-state icon="help" title=${this.t('evaluation.panels.unknown')}></platform-empty-state>`;
     }
 
     _renderMonitoringPanel(run: unknown) {
@@ -1396,7 +1393,7 @@ export class FlowsEvaluationPage extends PlatformPage {
                     </div>
                     <span class="pill"><platform-icon name="shield" size="13"></platform-icon>${active ? this.t('evaluation.monitoring.active_run') : this.t('evaluation.monitoring.ready')}</span>
                 </div>
-                ${monitors.length > 0 ? monitors.map((monitor) => this._renderMonitor(monitor)) : html`<div class="empty">${this.t('evaluation.monitoring.empty')}</div>`}
+                ${monitors.length > 0 ? monitors.map((monitor) => this._renderMonitor(monitor)) : html`<platform-empty-state icon="chart" title=${this.t('evaluation.monitoring.empty')}></platform-empty-state>`}
             </section>
         `;
     }

@@ -276,7 +276,7 @@ Cookies из [`browser_auth.py`](../../../tests/ui/browser_auth.py): `auth_token
 
 ## Embed / ESM
 
-- В embed-closure разрешены только relative imports и `lit-shim`; `@platform/...` проверяет [`check_embed_esm_closure.py`](../../../scripts/gates/frontend/embed_esm_closure.py).
+- Embed-бандлы собираются self-contained; [`check_embed_esm_closure.py`](../../../scripts/gates/frontend/embed_esm_closure.py) проверяет, что в `embed-dist` нет bare-спецификаторов и внешних URL.
 - `embed_browser_http_stack_ready` должен зависеть от `secrets_service`, если flow использует переменные.
 - Host page и API base должны использовать согласованный origin `localhost:9004`.
 

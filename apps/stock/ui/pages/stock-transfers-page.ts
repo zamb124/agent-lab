@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 export class StockTransfersPage extends PlatformPage {
     static i18nNamespace = 'stock';
@@ -25,7 +26,7 @@ export class StockTransfersPage extends PlatformPage {
             th { color: var(--text-tertiary); font-weight: var(--font-medium); }
             tr[data-id] { cursor: pointer; }
             tr[data-id]:hover td { background: var(--surface-hover); }
-            .empty { padding: var(--space-8); text-align: center; color: var(--text-tertiary); }
+            platform-empty-state { margin-top: var(--space-8); }
         `,
     ];
 
@@ -54,8 +55,10 @@ export class StockTransfersPage extends PlatformPage {
         return html`
             <div class="wrap">
                 <h1>${this.t('transfers.title')}</h1>
-                ${items.length === 0
-                    ? html`<div class="empty">${this.t('transfers.empty')}</div>`
+                ${this._transfers.loading
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                    : items.length === 0
+                    ? html`<platform-empty-state icon="truck" title=${this.t('transfers.empty')}></platform-empty-state>`
                     : html`
                         <table>
                             <thead><tr>

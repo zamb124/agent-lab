@@ -21,10 +21,11 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-picker-card.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { getBlankCodeNodeConfig } from '../_helpers/code-node-defaults.js';
 import {
     resolveFlowCoverGradient,
@@ -381,7 +382,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             <div class="section-title">${this.t('flow_create_modal.section_scratch')}</div>
             <div class="grid">
                 ${presets.length === 0
-                    ? html`<div class="empty-row">${this.t('flow_create_modal.empty_search')}</div>`
+                    ? html`<platform-empty-state icon="search" title=${this.t('flow_create_modal.empty_search')}></platform-empty-state>`
                     : presets.map((p) => html`
                         <platform-picker-card
                             value=${p.id}
@@ -403,10 +404,10 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
 
     _renderStore(bundles: readonly FlowBundle[]) {
         if (this._bundlesOp.busy && bundles.length === 0) {
-            return html`<div style="padding: var(--space-4); text-align: center"><glass-spinner></glass-spinner></div>`;
+            return html`<div style="padding: var(--space-4); text-align: center"><platform-spinner></platform-spinner></div>`;
         }
         if (bundles.length === 0) {
-            return html`<div class="grid"><div class="empty-row">${this.t('flow_create_modal.store_empty')}</div></div>`;
+            return html`<div class="grid"><platform-empty-state icon="apps" title=${this.t('flow_create_modal.store_empty')}></platform-empty-state></div>`;
         }
         return html`
             <div class="grid">

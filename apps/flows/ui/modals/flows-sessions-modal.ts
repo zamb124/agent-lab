@@ -14,7 +14,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-date-picker.js';
 import { PlatformSearchableCombobox } from '@platform/lib/components/platform-searchable-combobox.js';
@@ -530,7 +530,7 @@ export class FlowsSessionsModal extends PlatformModal {
     _renderRows() {
         const items = asArray(this._sessions.items);
         if (this._sessions.loading && items.length === 0) {
-            return html`<tr><td colspan="4" class="flows-sessions-loading"><glass-spinner></glass-spinner></td></tr>`;
+            return html`<tr><td colspan="4" class="flows-sessions-loading"><platform-spinner></platform-spinner></td></tr>`;
         }
         if (items.length === 0) {
             return html`<tr><td colspan="4" class="flows-sessions-empty">${this.t('sessions_modal.empty')}</td></tr>`;

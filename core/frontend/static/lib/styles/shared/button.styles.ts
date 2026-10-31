@@ -3,7 +3,7 @@
  * Humanitec UI Kit — фиолетовый primary, оранжевый accent, форма pill
  * Поддержка темной и светлой темы
  */
-import { css } from '../../../assets/js/lit/lit.min.js';
+import { css } from 'lit';
 
 export const buttonStyles = css`
     .btn {

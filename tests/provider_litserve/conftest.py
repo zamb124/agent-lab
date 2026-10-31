@@ -36,7 +36,6 @@ def shared_silero_vad_engine():
 
     api_id = "silero-shared"
     cfg = ProviderLitserveInfraConfig(
-        sqlite_path="./data/test/silero-shared.db",
         vad_models=[
             ProviderLitserveVADModelEntry(
                 api_model_id=api_id,
@@ -45,9 +44,11 @@ def shared_silero_vad_engine():
                 threshold=0.5,
             ),
         ],
-        vad_default_api_model_id=api_id,
     )
-    engine = LocalVADEngine(cfg)
+    from apps.provider_litserve.catalog import ModelCatalog
+
+    catalog = ModelCatalog.from_seed(cfg)
+    engine = LocalVADEngine(cfg, catalog)
     engine.setup("cpu")
 
     try:

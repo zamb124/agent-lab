@@ -3,7 +3,7 @@
  * изменение — ``ctx.onFieldChange(field, value)``; ``action`` поля отправляется по Enter/изменению.
  */
 
-import { html, nothing } from '../../lit-shim.js';
+import { html, nothing } from 'lit';
 import { blockText as text } from '../runtime/templating.js';
 import { flowUIText } from '../utils/text.js';
 import { formatFileSize } from '../../utils/format-file-size.js';

@@ -21,7 +21,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
@@ -369,7 +369,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
             </div>
             <div class="body">
                 ${loading && items.length === 0
-                    ? html`<div class="center"><glass-spinner size="lg"></glass-spinner></div>`
+                    ? html`<div class="center"><platform-spinner size="lg"></platform-spinner></div>`
                     : items.length === 0
                         ? html`
                             <div class="center">

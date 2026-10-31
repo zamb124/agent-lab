@@ -84,7 +84,7 @@ def test_silero_vad_unknown_model_raises_value_error(
 ):
     engine, _cfg, _api_id = shared_silero_vad_engine
     pcm = _generate_pcm16_silence(sample_rate=16000, duration_s=0.2)
-    with pytest.raises(ValueError, match="неизвестная модель"):
+    with pytest.raises(ValueError, match="unknown model"):
         engine.detect_segments(
             audio_bytes=pcm,
             api_model_id=f"unknown-{unique_id}",

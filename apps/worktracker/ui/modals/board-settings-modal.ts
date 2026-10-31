@@ -7,7 +7,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '../components/worktracker-icon-action.js';
 import { reorderByInsertIndex } from '@platform/lib/utils/reorder-by-insert-index.js';
 import type { CSSResultGroup, PropertyValues, TemplateResult } from 'lit';
@@ -74,11 +74,12 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
     declare boardId: string;
     declare _boardName: string;
     declare _columns: BoardColumnDraft[];
-    declare _loading: boolean;
-    declare _saving: boolean;
     declare _dragColumnIndex: number;
     declare _columnInsertIndex: number;
     private _boards: ResourceController;
+
+    private get _loading(): boolean { return this._boards.isBusy(this.boardId); }
+    private get _saving(): boolean { return this._boards.isBusy(this.boardId); }
     private _snapshotName: string;
     private _snapshotColumns: BoardColumnDraft[];
 
@@ -87,8 +88,6 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         boardId: { type: String },
         _boardName: { state: true },
         _columns: { state: true },
-        _loading: { state: true },
-        _saving: { state: true },
         _dragColumnIndex: { state: true },
         _columnInsertIndex: { state: true },
     };
@@ -193,8 +192,6 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this.boardId = '';
         this._boardName = '';
         this._columns = [];
-        this._loading = false;
-        this._saving = false;
         this._dragColumnIndex = -1;
         this._columnInsertIndex = -1;
         this._boards = this.useResource(BOARDS_NAME);
@@ -213,11 +210,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
             this._applyBoard(item);
         });
         this.useEvent(this._boards.resource.events.UPDATED, () => {
-            this._saving = false;
             this.closeAfterSave();
-        });
-        this.useEvent(this._boards.resource.events.UPDATE_FAILED, () => {
-            this._saving = false;
         });
         this._resetAndLoad();
     }
@@ -237,7 +230,6 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._columns = [];
         this._snapshotName = '';
         this._snapshotColumns = [];
-        this._loading = true;
         this._boards.get(this.boardId);
     }
 
@@ -260,7 +252,6 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
                 position: optionalZero(column.position),
             }));
         this._snapshotColumns = this._columns.map((column) => ({ ...column }));
-        this._loading = false;
     }
 
     override willUpdate(changed: PropertyValues<this>) {
@@ -503,7 +494,6 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
                 position,
             };
         });
-        this._saving = true;
         this._boards.update(this.boardId, { name, columns });
     }
 
@@ -522,7 +512,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
 
     override renderBody() {
         if (this._loading) {
-            return html`<div><glass-spinner></glass-spinner></div>`;
+            return html`<div><platform-spinner></platform-spinner></div>`;
         }
         return html`
             <form class="form-grid" @submit=${(e: SubmitEvent) => { e.preventDefault(); void this._performSave(); }}>

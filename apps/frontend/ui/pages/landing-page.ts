@@ -20,8 +20,8 @@ export class LandingPage extends PlatformPage {
                 width: 100%;
                 max-width: 100%;
                 box-sizing: border-box;
-                background: var(--landing-bg, #0F0F0F);
-                color: var(--landing-text, #FFFFFF);
+                background: var(--marketing-page-bg);
+                color: var(--text-primary);
             }
             .landing-container {
                 max-width: 100%;

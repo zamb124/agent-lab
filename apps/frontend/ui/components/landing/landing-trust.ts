@@ -14,7 +14,7 @@ export class LandingTrust extends PlatformElement {
             :host {
                 display: block;
                 padding: 72px 20px 40px;
-                background: var(--landing-bg, #0f0f0f);
+                background: var(--marketing-page-bg);
             }
             .wrap {
                 max-width: 1200px;
@@ -24,7 +24,7 @@ export class LandingTrust extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: clamp(28px, 4vw, 44px);
                 font-weight: 500;
-                color: var(--landing-secondary, #e8e8e8);
+                color: var(--text-secondary);
                 text-align: center;
                 margin: 0 0 48px;
             }
@@ -41,22 +41,22 @@ export class LandingTrust extends PlatformElement {
             article {
                 padding: 28px 24px;
                 border-radius: 20px;
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.03));
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-bg-subtle);
                 backdrop-filter: blur(12px);
             }
             h3 {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 20px;
                 margin: 0 0 12px;
-                color: var(--landing-primary, #5768fe);
+                color: var(--marketing-product-accent);
             }
             p {
                 margin: 0;
                 font-family: var(--font-sans);
                 font-size: 15px;
                 line-height: 1.55;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.85));
+                color: var(--text-secondary);
             }
         `,
     ];

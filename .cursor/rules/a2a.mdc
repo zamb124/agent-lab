@@ -22,7 +22,7 @@ alwaysApply: false
 3. Part — oneof `text`/`raw`/`url`/`data` (+ `filename`, `mediaType`); SSE `result` — `StreamResponse` (`task`/`message`/`statusUpdate`/`artifactUpdate`) в camelCase ProtoJSON; enums `ROLE_*`, `TASK_STATE_*`. Внутри платформы — kebab `task_state` (`core.a2a.task_states`).
 4. Agent Card: `supportedInterfaces[]` (`JSONRPC`, `"1.0"`), capabilities `streaming=true`, `pushNotifications=true`, `extendedAgentCard=false`; `skills` обязательны (ветки flow); extensions платформы `branches`, `variables` их не заменяют.
 5. `SendMessageConfiguration.returnImmediately`: `false` — блокирует до terminal (`COMPLETED`/`FAILED`/`CANCELED`/`REJECTED`) или interrupted (`INPUT_REQUIRED`/`AUTH_REQUIRED`); `true` — сразу `Task` `TASK_STATE_SUBMITTED`, дальше `GetTask`/`SubscribeToTask`/push.
-6. Artifacts материализует один `core.a2a.ArtifactAccumulator` во всех consumers (blocking Task, stream, `GetTask`, `ListTasks`, `SubscribeToTask`, outbound client); клиентский аналог — `protocol/a2a-task-accumulator.js`. `artifactId` стабилен и непуст на логический поток: `append=false` заменяет, `append=true` добавляет Parts, `lastChunk=true` закрывает; дубль события идемпотентен только при идентичном payload; names, Parts, metadata сохраняются lossless.
+6. Artifacts материализует один `core.a2a.ArtifactAccumulator` во всех consumers (blocking Task, stream, `GetTask`, `ListTasks`, `SubscribeToTask`, outbound client); клиентский аналог — `core/frontend/static/lib/a2a/a2a-task-accumulator.ts`. `artifactId` стабилен и непуст на логический поток: `append=false` заменяет, `append=true` добавляет Parts, `lastChunk=true` закрывает; дубль события идемпотентен только при идентичном payload; names, Parts, metadata сохраняются lossless.
 7. Текст задачи — производное (`extract_text_from_task_json`): `status.message` текущего хода, затем history `ROLE_AGENT` с конца, затем artifacts; пересборка Artifact из текста запрещена.
 8. Flow UI — обычные артефакты `state` и `ui` и `data` Part `ui-action` в `Message`, без extension и negotiation → `flow_ui.mdc`.
 
@@ -45,7 +45,7 @@ alwaysApply: false
 
 ### Клиенты
 
-- Вход: `apps/flows/src/api/a2a.py` + `A2AChannel`; UI — `core/frontend/static/lib/flow-ui/protocol/` + `<platform-flow-ui>`, у host-страниц своего transport нет.
+- Вход: `apps/flows/src/api/a2a.py` + `A2AChannel`; UI — `core/frontend/static/lib/a2a/` + `<platform-flow-ui>`, у host-страниц своего transport нет.
 - Выход: `core.clients.a2a_client.A2AClient` — structured Task/Artifacts/Parts; `send_task` — text Part, `returnImmediately=true`, ожидание terminal через `GetTask`, без чтения Agent Card; `send_message` — готовые Parts, `task_id`, `accepted_output_modes`; `cancel_task`; контекст — signed `X-Platform-Context-*` при `active_company` → `integrations.mdc`. Flow UI поверх — `core.clients.flow_ui_client.FlowUIClient`.
 - `RemoteFlowNode` сохраняет артефакты удалённого агента как есть (URL, Skill ID = `branch_id` → `metadata.branch`, `metadata_template` → `params.metadata`).
 

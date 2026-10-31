@@ -60,6 +60,7 @@ import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-tree.js';
 import '@platform/lib/components/platform-user.js';
@@ -252,17 +253,7 @@ export class WikiSidebar extends PlatformElement {
                 padding: 0 var(--space-2) var(--space-4);
             }
 
-            .empty {
-                padding: var(--space-4) var(--space-3);
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-            }
-
-            .empty-hint {
-                margin-top: var(--space-1);
-                color: var(--text-disabled);
-                font-size: var(--text-xs);
-            }
+            platform-empty-state { padding: var(--space-4) var(--space-3); }
 
             /* В свёрнутой полосе 72px дерево и селектор пространства не читаются:
                оставляем только логотип, пользователя и кнопку разворота. */
@@ -595,12 +586,11 @@ export class WikiSidebar extends PlatformElement {
                 <div class="section-title">${this.t('sidebar.pages')}</div>
                 <div class="tree-wrap">
                     ${nodes.length === 0
-                        ? html`<div class="empty">
-                              ${this._filter === '' ? this.t('sidebar.empty') : this.t('sidebar.no_matches')}
-                              ${this._filter === ''
-                                  ? html`<div class="empty-hint">${this.t('sidebar.empty_hint')}</div>`
-                                  : ''}
-                          </div>`
+                        ? html`<platform-empty-state
+                              icon="book-open"
+                              title=${this._filter === '' ? this.t('sidebar.empty') : this.t('sidebar.no_matches')}
+                              hint=${this._filter === '' ? this.t('sidebar.empty_hint') : ''}
+                          ></platform-empty-state>`
                         : html`<platform-tree
                               .nodes=${nodes}
                               selected-id=${this.activePageId}

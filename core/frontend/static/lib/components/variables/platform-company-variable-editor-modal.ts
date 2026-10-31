@@ -3,7 +3,7 @@
  */
 
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { isPlainRecord } from '../../events/payload.js';
 import { PlatformFormModal } from '../glass-form-modal.js';
 import { registerModalKind } from '../../utils/modal-registry.js';

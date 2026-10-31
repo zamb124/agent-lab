@@ -3,7 +3,7 @@
  * реплика пользователя — нейтральный пузырь справа. Токены ``--flow-ui-*`` только.
  */
 
-import { css } from '../../lit-shim.js';
+import { css } from 'lit';
 
 export const conversationStyles = css`
     :host { display: flex; flex-direction: column; min-height: 0; height: 100%; }

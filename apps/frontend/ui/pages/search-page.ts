@@ -17,6 +17,7 @@ import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { marketingPageHostStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import { bindInputVisibleInVisualViewport } from '@platform/lib/utils/ensure-input-visible-in-visual-viewport.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
@@ -293,8 +294,8 @@ export class PublicSearchPage extends PlatformPage {
             :host {
                 display: block;
                 min-height: var(--app-vh, 100vh);
-                color: var(--landing-text, var(--text-primary));
-                background: var(--landing-bg, var(--marketing-page-bg));
+                color: var(--text-primary);
+                background: var(--marketing-page-bg);
             }
 
             .marketing-page-container {
@@ -321,9 +322,9 @@ export class PublicSearchPage extends PlatformPage {
                 justify-content: space-between;
                 padding: 0 clamp(18px, 4vw, 56px);
                 box-sizing: border-box;
-                background: rgba(15, 15, 15, 0.72);
+                background: var(--glass-solid-subtle);
                 backdrop-filter: blur(22px);
-                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+                border-bottom: 1px solid var(--glass-border-subtle);
                 position: sticky;
                 top: 0;
                 z-index: 20;
@@ -338,7 +339,7 @@ export class PublicSearchPage extends PlatformPage {
                 gap: 10px;
                 border: 0;
                 background: transparent;
-                color: #f5f5f3;
+                color: var(--text-primary);
                 font: inherit;
                 cursor: pointer;
                 padding: 0;
@@ -357,8 +358,8 @@ export class PublicSearchPage extends PlatformPage {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                background: #5768fe;
-                color: #fff;
+                background: var(--accent);
+                color: var(--text-on-accent);
                 font-weight: 700;
                 letter-spacing: 0;
             }
@@ -374,14 +375,14 @@ export class PublicSearchPage extends PlatformPage {
                 min-height: 40px;
                 padding: 0 14px;
                 border-radius: 999px;
-                color: rgba(245, 245, 243, 0.74);
-                background: rgba(255, 255, 255, 0.06);
+                color: var(--text-secondary);
+                background: var(--glass-tint-medium);
                 transition: background 180ms ease, color 180ms ease, transform 180ms ease;
             }
 
             .back-link:hover {
-                background: rgba(255, 255, 255, 0.12);
-                color: #fff;
+                background: var(--glass-tint-strong);
+                color: var(--text-primary);
                 transform: translateY(-1px);
             }
 
@@ -392,8 +393,8 @@ export class PublicSearchPage extends PlatformPage {
                 gap: 2px;
                 padding: 3px;
                 border-radius: 999px;
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: var(--glass-tint-medium);
+                border: 1px solid var(--glass-border-subtle);
             }
 
             .locale-option {
@@ -401,15 +402,15 @@ export class PublicSearchPage extends PlatformPage {
                 min-height: 28px;
                 justify-content: center;
                 border-radius: 999px;
-                color: rgba(245, 245, 243, 0.58);
+                color: var(--text-secondary);
                 font-size: 13px;
                 line-height: 1;
                 transition: background 180ms ease, color 180ms ease;
             }
 
             .locale-option[aria-pressed='true'] {
-                color: #fff;
-                background: rgba(87, 104, 254, 0.36);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 36%, transparent);
             }
 
             .theme-toggle {
@@ -417,15 +418,15 @@ export class PublicSearchPage extends PlatformPage {
                 height: 38px;
                 justify-content: center;
                 border-radius: 50%;
-                color: rgba(245, 245, 243, 0.74);
-                background: rgba(255, 255, 255, 0.06);
+                color: var(--text-secondary);
+                background: var(--glass-tint-medium);
                 transition: background 180ms ease, color 180ms ease, transform 180ms ease;
             }
 
             .theme-toggle:hover,
             .locale-option:hover {
-                color: #fff;
-                background: rgba(255, 255, 255, 0.12);
+                color: var(--text-primary);
+                background: var(--glass-tint-strong);
                 transform: translateY(-1px);
             }
 
@@ -440,7 +441,7 @@ export class PublicSearchPage extends PlatformPage {
                 position: static;
                 z-index: 16;
                 padding: 12px clamp(18px, 4vw, 56px) 8px;
-                background: var(--landing-bg, var(--marketing-page-bg));
+                background: var(--marketing-page-bg);
                 border-bottom: 0;
                 backdrop-filter: none;
                 pointer-events: none;
@@ -460,7 +461,7 @@ export class PublicSearchPage extends PlatformPage {
                 line-height: 0.96;
                 letter-spacing: 0;
                 text-align: center;
-                color: rgba(245, 245, 243, 0.95);
+                color: var(--text-primary);
             }
 
             .search-head.is-active .search-title {
@@ -478,9 +479,9 @@ export class PublicSearchPage extends PlatformPage {
             .search-shell {
                 width: min(920px, calc(100vw - 32px));
                 border-radius: 30px;
-                background: var(--landing-search-bg, var(--glass-bg-strong));
-                border: 1px solid var(--landing-panel-border, var(--glass-border-medium));
-                box-shadow: var(--landing-search-shadow, var(--glass-shadow-ultra));
+                background: var(--glass-bg-strong);
+                border: 1px solid var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-ultra);
                 backdrop-filter: blur(28px);
                 padding: 10px;
                 box-sizing: border-box;
@@ -502,7 +503,7 @@ export class PublicSearchPage extends PlatformPage {
                 width: min(980px, calc(100vw - 32px));
                 border-radius: 24px;
                 padding: 8px;
-                box-shadow: var(--landing-elevated-shadow, var(--glass-shadow-strong));
+                box-shadow: var(--glass-shadow-strong);
                 pointer-events: auto;
             }
 
@@ -543,7 +544,7 @@ export class PublicSearchPage extends PlatformPage {
             .search-icon {
                 display: grid;
                 place-items: center;
-                color: var(--landing-text-subtle, var(--text-tertiary));
+                color: var(--text-secondary);
             }
 
             input[type='search'] {
@@ -552,7 +553,7 @@ export class PublicSearchPage extends PlatformPage {
                 border: 0;
                 outline: none;
                 background: transparent;
-                color: var(--landing-text, var(--text-primary));
+                color: var(--text-primary);
                 font: 500 20px/1.25 var(--font-sans);
                 letter-spacing: 0;
             }
@@ -563,7 +564,7 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             input[type='search']::placeholder {
-                color: var(--landing-text-faint, var(--text-disabled));
+                color: var(--text-disabled);
             }
 
             .send-button,
@@ -574,15 +575,15 @@ export class PublicSearchPage extends PlatformPage {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: var(--landing-on-primary, var(--text-inverse));
-                background: var(--landing-primary, var(--accent));
+                color: var(--text-on-accent);
+                background: var(--marketing-product-accent);
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease, opacity 180ms ease;
             }
 
             .send-button:hover,
             .icon-tool:hover {
-                background: color-mix(in srgb, var(--landing-primary, var(--accent)) 88%, white);
+                background: color-mix(in srgb, var(--marketing-product-accent) 88%, white);
                 transform: translateY(-1px);
             }
 
@@ -626,8 +627,8 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 gap: 8px;
                 padding: 0 13px;
-                color: var(--landing-text-subtle, var(--text-tertiary));
-                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
+                color: var(--text-secondary);
+                background: var(--glass-bg-medium);
                 font: 500 14px/1 var(--font-sans);
                 cursor: pointer;
                 transition: background 180ms ease, color 180ms ease, transform 180ms ease;
@@ -642,27 +643,27 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .mode-chip:hover {
-                background: var(--landing-panel-border-strong, var(--glass-border-strong));
-                color: var(--landing-text, var(--text-primary));
+                background: var(--glass-border-strong);
+                color: var(--text-primary);
                 transform: translateY(-1px);
             }
 
             .mode-chip[aria-pressed='true'] {
-                color: var(--landing-on-primary, var(--text-inverse));
-                background: color-mix(in srgb, var(--landing-primary, var(--accent)) 36%, transparent);
-                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-primary, var(--accent)) 36%, transparent);
+                color: var(--text-on-accent);
+                background: color-mix(in srgb, var(--marketing-product-accent) 36%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--marketing-product-accent) 36%, transparent);
             }
 
             .icon-tool {
                 width: 36px;
                 height: 36px;
-                color: var(--landing-text-subtle, var(--text-tertiary));
-                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
+                color: var(--text-secondary);
+                background: var(--glass-bg-medium);
             }
 
             .icon-tool:hover {
-                background: var(--landing-panel-border-strong, var(--glass-border-strong));
-                color: var(--landing-text, var(--text-primary));
+                background: var(--glass-border-strong);
+                color: var(--text-primary);
                 transform: translateY(-1px);
             }
 
@@ -709,9 +710,9 @@ export class PublicSearchPage extends PlatformPage {
                 gap: 8px;
                 padding: 0 7px 0 10px;
                 border-radius: 999px;
-                color: rgba(245, 245, 243, 0.86);
-                background: rgba(255, 255, 255, 0.075);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                color: var(--text-primary);
+                background: var(--glass-tint-strong);
+                border: 1px solid var(--glass-border-subtle);
                 box-sizing: border-box;
             }
 
@@ -733,7 +734,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .file-size {
                 flex-shrink: 0;
-                color: rgba(245, 245, 243, 0.48);
+                color: var(--text-tertiary);
                 font-size: 12px;
                 line-height: 1;
             }
@@ -745,15 +746,15 @@ export class PublicSearchPage extends PlatformPage {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: rgba(245, 245, 243, 0.58);
+                color: var(--text-secondary);
                 background: transparent;
                 cursor: pointer;
                 transition: color 160ms ease, background 160ms ease;
             }
 
             .file-remove:hover {
-                color: #fff;
-                background: rgba(255, 255, 255, 0.10);
+                color: var(--text-primary);
+                background: var(--glass-tint-strong);
             }
 
             .results-wrap {
@@ -776,8 +777,8 @@ export class PublicSearchPage extends PlatformPage {
             .sources-panel,
             .suggest-panel,
             .provider-panel {
-                border: 1px solid var(--landing-panel-border, var(--glass-border-medium));
-                background: var(--landing-panel-bg, var(--glass-bg-subtle));
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-bg-subtle);
                 backdrop-filter: blur(20px);
                 border-radius: 20px;
                 box-sizing: border-box;
@@ -797,8 +798,8 @@ export class PublicSearchPage extends PlatformPage {
                 padding: 18px;
                 min-height: 96px;
                 background:
-                    linear-gradient(135deg, color-mix(in srgb, var(--landing-primary, var(--accent)) 8%, transparent), transparent 46%),
-                    var(--landing-panel-bg, var(--glass-bg-subtle));
+                    linear-gradient(135deg, color-mix(in srgb, var(--marketing-product-accent) 8%, transparent), transparent 46%),
+                    var(--glass-bg-subtle);
             }
 
             .answer-collapse {
@@ -821,7 +822,7 @@ export class PublicSearchPage extends PlatformPage {
                 background: linear-gradient(
                     to bottom,
                     transparent,
-                    var(--landing-panel-bg, var(--glass-bg-subtle))
+                    var(--glass-bg-subtle)
                 );
             }
 
@@ -834,15 +835,15 @@ export class PublicSearchPage extends PlatformPage {
                 border: 0;
                 border-radius: 999px;
                 padding: 0 13px;
-                color: var(--landing-text, var(--text-primary));
-                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
+                color: var(--text-primary);
+                background: var(--glass-bg-medium);
                 font: 600 13px/1 var(--font-sans);
                 cursor: pointer;
                 transition: background 180ms ease, transform 180ms ease;
             }
 
             .answer-toggle:hover {
-                background: var(--landing-panel-border-strong, var(--glass-border-strong));
+                background: var(--glass-border-strong);
                 transform: translateY(-1px);
             }
 
@@ -856,9 +857,9 @@ export class PublicSearchPage extends PlatformPage {
                 padding: 0 5px;
                 border-radius: 6px;
                 vertical-align: text-top;
-                color: #c6ccff;
-                background: rgba(137, 149, 255, 0.18);
-                box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.28);
+                color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 18%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
                 font-size: 11px;
                 font-weight: 700;
                 line-height: 1;
@@ -867,16 +868,16 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .answer-citation:hover {
-                color: #fff;
-                background: rgba(137, 149, 255, 0.42);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 42%, transparent);
                 transform: translateY(-1px);
             }
 
             .answer-panel[data-state='error'] {
-                border-color: rgba(255, 132, 132, 0.20);
+                border-color: color-mix(in srgb, var(--error) 20%, transparent);
                 background:
-                    linear-gradient(135deg, rgba(255, 132, 132, 0.10), rgba(22, 22, 22, 0.82) 48%),
-                    rgba(22, 22, 22, 0.82);
+                    linear-gradient(135deg, color-mix(in srgb, var(--error) 10%, transparent), var(--glass-solid-medium) 48%),
+                    var(--glass-solid-medium);
             }
 
             .panel-label {
@@ -884,7 +885,7 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 gap: 8px;
                 margin: 0 0 10px;
-                color: var(--landing-text-muted, var(--text-tertiary));
+                color: var(--text-tertiary);
                 font-size: 12px;
                 font-weight: 600;
                 line-height: 1;
@@ -904,8 +905,8 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 border-radius: 999px;
                 padding: 0 7px;
-                color: rgba(245, 245, 243, 0.68);
-                background: rgba(255, 255, 255, 0.07);
+                color: var(--text-secondary);
+                background: var(--glass-tint-strong);
                 font-size: 12px;
                 line-height: 1;
                 text-transform: none;
@@ -915,7 +916,7 @@ export class PublicSearchPage extends PlatformPage {
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                color: var(--landing-text-muted, var(--text-tertiary));
+                color: var(--text-tertiary);
                 font-size: 11px;
                 font-weight: 500;
                 letter-spacing: 0.02em;
@@ -926,7 +927,7 @@ export class PublicSearchPage extends PlatformPage {
             .answer-text {
                 margin: 0;
                 overflow-wrap: anywhere;
-                color: var(--landing-text, var(--text-primary));
+                color: var(--text-primary);
                 font-size: 16px;
                 line-height: 1.56;
             }
@@ -955,7 +956,7 @@ export class PublicSearchPage extends PlatformPage {
             .source-ai-markdown h3,
             .source-ai-markdown h4 {
                 margin: 18px 0 10px;
-                color: #fff;
+                color: var(--text-primary);
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-weight: 600;
                 line-height: 1.18;
@@ -1005,20 +1006,20 @@ export class PublicSearchPage extends PlatformPage {
             .source-ai-markdown th,
             .source-ai-markdown td {
                 padding: 9px 10px;
-                border: 1px solid rgba(255, 255, 255, 0.10);
+                border: 1px solid var(--glass-border-subtle);
                 vertical-align: top;
             }
 
             .answer-text th,
             .source-ai-markdown th {
-                color: #fff;
-                background: rgba(255, 255, 255, 0.06);
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
                 font-weight: 600;
             }
 
             .answer-text a,
             .source-ai-markdown a {
-                color: #9aa3ff;
+                color: var(--accent);
                 text-decoration: none;
             }
 
@@ -1031,19 +1032,19 @@ export class PublicSearchPage extends PlatformPage {
             .source-ai-markdown code {
                 border-radius: var(--radius-sm, 8px);
                 padding: 2px 6px;
-                background: rgba(255, 255, 255, 0.08);
+                background: var(--glass-tint-strong);
                 font-family: var(--font-mono);
                 font-size: 0.88em;
             }
 
             .answer-text[data-error='true'] {
-                color: #ffb8b8;
+                color: var(--error);
             }
 
             .answer-error {
                 display: grid;
                 gap: 12px;
-                color: rgba(245, 245, 243, 0.84);
+                color: var(--text-primary);
             }
 
             .answer-error-main {
@@ -1059,9 +1060,9 @@ export class PublicSearchPage extends PlatformPage {
                 display: grid;
                 place-items: center;
                 border-radius: 50%;
-                color: #ffb8b8;
-                background: rgba(255, 132, 132, 0.12);
-                box-shadow: inset 0 0 0 1px rgba(255, 132, 132, 0.20);
+                color: var(--error);
+                background: color-mix(in srgb, var(--error) 12%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 20%, transparent);
             }
 
             .answer-error-copy {
@@ -1072,7 +1073,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .answer-error-title {
                 margin: 0;
-                color: rgba(255, 255, 255, 0.94);
+                color: var(--text-primary);
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 22px;
                 font-weight: 600;
@@ -1082,7 +1083,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .answer-error-text {
                 margin: 0;
-                color: rgba(245, 245, 243, 0.66);
+                color: var(--text-secondary);
                 font-size: 15px;
                 line-height: 1.48;
             }
@@ -1093,9 +1094,9 @@ export class PublicSearchPage extends PlatformPage {
                 border: 0;
                 border-radius: 999px;
                 padding: 0 14px;
-                color: #fff;
-                background: rgba(137, 149, 255, 0.28);
-                box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.28);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 28%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
                 font: 600 13px/1 var(--font-sans);
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease;
@@ -1103,12 +1104,12 @@ export class PublicSearchPage extends PlatformPage {
 
             .answer-error-action:hover {
                 transform: translateY(-1px);
-                background: rgba(137, 149, 255, 0.38);
+                background: color-mix(in srgb, var(--accent) 38%, transparent);
             }
 
             .answer-error-details {
                 margin: 2px 0 0 46px;
-                color: rgba(245, 245, 243, 0.52);
+                color: var(--text-secondary);
                 font-size: 13px;
                 line-height: 1.45;
             }
@@ -1122,7 +1123,7 @@ export class PublicSearchPage extends PlatformPage {
                 margin: 8px 0 0;
                 white-space: pre-wrap;
                 overflow-wrap: anywhere;
-                color: rgba(245, 245, 243, 0.62);
+                color: var(--text-secondary);
                 font: 12px/1.45 var(--font-mono);
             }
 
@@ -1130,7 +1131,7 @@ export class PublicSearchPage extends PlatformPage {
                 min-height: 54px;
                 display: grid;
                 align-items: center;
-                color: var(--landing-text-faint, var(--text-disabled));
+                color: var(--text-disabled);
                 font-size: 16px;
                 line-height: 1.5;
             }
@@ -1139,8 +1140,8 @@ export class PublicSearchPage extends PlatformPage {
                 width: 9px;
                 height: 9px;
                 border-radius: 50%;
-                background: #8f9bff;
-                box-shadow: 0 0 0 0 rgba(143, 155, 255, 0.42);
+                background: var(--accent);
+                box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 42%, transparent);
                 animation: streamPulse 1.1s ease infinite;
             }
 
@@ -1168,8 +1169,8 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .source-card.is-cited {
-                background: color-mix(in srgb, var(--landing-primary, var(--accent)) 14%, transparent);
-                border-color: color-mix(in srgb, var(--landing-primary, var(--accent)) 42%, transparent);
+                background: color-mix(in srgb, var(--marketing-product-accent) 14%, transparent);
+                border-color: color-mix(in srgb, var(--marketing-product-accent) 42%, transparent);
             }
 
             .source-card-inner {
@@ -1190,7 +1191,7 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 gap: 8px;
                 min-width: 0;
-                color: rgba(245, 245, 243, 0.72);
+                color: var(--text-secondary);
                 font-size: 12px;
                 line-height: 1.2;
             }
@@ -1201,7 +1202,7 @@ export class PublicSearchPage extends PlatformPage {
                 border-radius: 4px;
                 flex-shrink: 0;
                 object-fit: cover;
-                background: rgba(255, 255, 255, 0.08);
+                background: var(--glass-tint-strong);
             }
 
             .source-site-name {
@@ -1210,7 +1211,7 @@ export class PublicSearchPage extends PlatformPage {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                color: rgba(245, 245, 243, 0.86);
+                color: var(--text-primary);
             }
 
             .source-site-sep {
@@ -1223,7 +1224,7 @@ export class PublicSearchPage extends PlatformPage {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                color: rgba(154, 163, 255, 0.92);
+                color: color-mix(in srgb, var(--accent) 92%, transparent);
             }
 
             .source-thumb {
@@ -1231,13 +1232,13 @@ export class PublicSearchPage extends PlatformPage {
                 height: 72px;
                 border-radius: 12px;
                 object-fit: cover;
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: var(--glass-tint-medium);
+                border: 1px solid var(--glass-border-subtle);
             }
 
             .source-results-meta {
                 margin: 2px 0 0;
-                color: rgba(245, 245, 243, 0.52);
+                color: var(--text-secondary);
                 font-size: 12px;
                 line-height: 1.3;
             }
@@ -1248,8 +1249,8 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .source-card:hover {
-                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
-                border-color: var(--landing-panel-border, var(--glass-border-subtle));
+                background: var(--glass-bg-medium);
+                border-color: var(--glass-border-medium);
             }
 
             .source-header {
@@ -1274,16 +1275,16 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 gap: 7px;
                 padding: 0 10px;
-                color: #fff;
-                background: rgba(137, 149, 255, 0.20);
-                box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.22);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 20%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
                 font: 600 13px/1 var(--font-sans);
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease, opacity 180ms ease;
             }
 
             .source-ai-button:hover {
-                background: rgba(137, 149, 255, 0.30);
+                background: color-mix(in srgb, var(--accent) 30%, transparent);
                 transform: translateY(-1px);
             }
 
@@ -1297,9 +1298,9 @@ export class PublicSearchPage extends PlatformPage {
                 margin-top: 2px;
                 padding: 12px;
                 border-radius: 14px;
-                border: 1px solid color-mix(in srgb, var(--landing-primary, var(--accent)) 14%, transparent);
+                border: 1px solid color-mix(in srgb, var(--marketing-product-accent) 14%, transparent);
                 background: transparent;
-                color: rgba(245, 245, 243, 0.84);
+                color: var(--text-primary);
                 animation: resultIn 220ms ease both;
             }
 
@@ -1308,7 +1309,7 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 gap: 7px;
                 margin: 0 0 9px;
-                color: rgba(245, 245, 243, 0.62);
+                color: var(--text-secondary);
                 font-size: 12px;
                 line-height: 1;
                 text-transform: uppercase;
@@ -1322,7 +1323,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .source-title {
                 margin: 0;
-                color: #fff;
+                color: var(--text-primary);
                 font-size: 18px;
                 line-height: 1.28;
                 overflow-wrap: anywhere;
@@ -1337,13 +1338,13 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             a.source-title:hover {
-                color: #c6ccff;
+                color: var(--accent);
                 text-decoration: underline;
             }
 
             .source-url {
                 margin: 0;
-                color: #9aa3ff;
+                color: var(--accent);
                 font-size: 12px;
                 line-height: 1.3;
                 overflow-wrap: anywhere;
@@ -1364,7 +1365,7 @@ export class PublicSearchPage extends PlatformPage {
             .source-snippet,
             .source-insight {
                 margin: 0;
-                color: rgba(245, 245, 243, 0.68);
+                color: var(--text-secondary);
                 font-size: 13px;
                 line-height: 1.42;
                 display: -webkit-box;
@@ -1375,8 +1376,8 @@ export class PublicSearchPage extends PlatformPage {
 
             .source-insight {
                 padding-top: 6px;
-                border-top: 1px solid rgba(255, 255, 255, 0.07);
-                color: rgba(245, 245, 243, 0.78);
+                border-top: 1px solid var(--glass-border-subtle);
+                color: var(--text-secondary);
                 -webkit-line-clamp: 1;
             }
 
@@ -1394,8 +1395,8 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 border-radius: 999px;
                 padding: 0 9px;
-                background: rgba(255, 255, 255, 0.07);
-                color: rgba(245, 245, 243, 0.72);
+                background: var(--glass-tint-strong);
+                color: var(--text-secondary);
                 font-size: 12px;
                 line-height: 1;
             }
@@ -1404,7 +1405,7 @@ export class PublicSearchPage extends PlatformPage {
                 display: grid;
                 gap: 10px;
                 position: sticky;
-                top: calc(var(--landing-header-height, 72px) + 16px);
+                top: calc(var(--marketing-header-height) + 16px);
             }
 
             .provider-panel,
@@ -1432,13 +1433,13 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 gap: 7px;
                 padding: 0 11px;
-                color: rgba(245, 245, 243, 0.78);
-                background: rgba(255, 255, 255, 0.06);
+                color: var(--text-secondary);
+                background: var(--glass-tint-medium);
                 font: 500 13px/1 var(--font-sans);
             }
 
             .provider-count {
-                color: rgba(245, 245, 243, 0.48);
+                color: var(--text-tertiary);
             }
 
             .suggest-chip {
@@ -1449,8 +1450,8 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .suggest-chip:hover {
-                color: #fff;
-                background: rgba(87, 104, 254, 0.26);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 26%, transparent);
                 transform: translateY(-1px);
             }
 
@@ -1464,21 +1465,17 @@ export class PublicSearchPage extends PlatformPage {
                 width: 7px;
                 height: 7px;
                 border-radius: 50%;
-                background: #f5b64d;
+                background: var(--warning);
             }
 
             .provider-chip[data-ok='true'] .provider-state {
-                background: #5fd493;
+                background: var(--success);
             }
 
             .empty-shell {
                 width: min(780px, calc(100vw - 32px));
                 margin: 0 auto;
                 padding: 26px 0 70px;
-                display: grid;
-                place-items: center;
-                color: rgba(245, 245, 243, 0.56);
-                font-size: 16px;
             }
 
             .skeleton {
@@ -1504,7 +1501,7 @@ export class PublicSearchPage extends PlatformPage {
                     opacity: 0;
                     transform: translateY(42vh) scale(1.045);
                     filter: blur(10px);
-                    box-shadow: 0 38px 120px rgba(0, 0, 0, 0.54);
+                    box-shadow: 0 38px 120px color-mix(in srgb, var(--bg-primary) 54%, transparent);
                 }
                 58% {
                     opacity: 1;
@@ -1572,8 +1569,8 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             @keyframes streamPulse {
-                0% { box-shadow: 0 0 0 0 rgba(143, 155, 255, 0.42); }
-                100% { box-shadow: 0 0 0 13px rgba(143, 155, 255, 0); }
+                0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 42%, transparent); }
+                100% { box-shadow: 0 0 0 13px color-mix(in srgb, var(--accent) 0%, transparent); }
             }
 
             @keyframes skeleton {
@@ -1582,26 +1579,26 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .search-shell {
-                background: rgba(255, 255, 255, 0.86);
-                border-color: rgba(16, 20, 34, 0.12);
-                box-shadow: 0 24px 70px rgba(35, 43, 82, 0.14);
+                background: var(--bg-surface);
+                border-color: color-mix(in srgb, var(--text-inverse) 12%, transparent);
+                box-shadow: 0 24px 70px color-mix(in srgb, var(--accent) 14%, transparent);
             }
 
             :host-context([data-theme="light"]) .search-head.is-active .search-shell {
-                box-shadow: 0 18px 54px rgba(35, 43, 82, 0.14);
+                box-shadow: 0 18px 54px color-mix(in srgb, var(--accent) 14%, transparent);
             }
 
             :host-context([data-theme="light"]) .search-icon,
             :host-context([data-theme="light"]) .icon-tool {
-                color: rgba(30, 34, 48, 0.56);
+                color: color-mix(in srgb, var(--text-inverse) 56%, transparent);
             }
 
             :host-context([data-theme="light"]) input[type='search'] {
-                color: #12131a;
+                color: var(--marketing-page-bg);
             }
 
             :host-context([data-theme="light"]) input[type='search']::placeholder {
-                color: rgba(30, 34, 48, 0.46);
+                color: color-mix(in srgb, var(--text-inverse) 46%, transparent);
             }
 
             :host-context([data-theme="light"]) .mode-chip,
@@ -1611,28 +1608,28 @@ export class PublicSearchPage extends PlatformPage {
             :host-context([data-theme="light"]) .provider-badge,
             :host-context([data-theme="light"]) .panel-count,
             :host-context([data-theme="light"]) .file-chip {
-                color: rgba(30, 34, 48, 0.72);
-                background: rgba(16, 20, 34, 0.06);
-                border-color: rgba(16, 20, 34, 0.08);
+                color: color-mix(in srgb, var(--text-inverse) 72%, transparent);
+                background: color-mix(in srgb, var(--text-inverse) 6%, transparent);
+                border-color: color-mix(in srgb, var(--text-inverse) 8%, transparent);
             }
 
             :host-context([data-theme="light"]) .mode-chip:hover,
             :host-context([data-theme="light"]) .suggest-chip:hover {
-                color: #12131a;
-                background: rgba(87, 104, 254, 0.14);
+                color: var(--marketing-page-bg);
+                background: color-mix(in srgb, var(--accent) 14%, transparent);
             }
 
             :host-context([data-theme="light"]) .mode-chip[aria-pressed='true'] {
-                color: #fff;
-                background: rgba(87, 104, 254, 0.86);
-                box-shadow: inset 0 0 0 1px rgba(87, 104, 254, 0.24);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 86%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-panel,
             :host-context([data-theme="light"]) .suggest-panel,
             :host-context([data-theme="light"]) .provider-panel {
-                background: rgba(255, 255, 255, 0.78);
-                border-color: rgba(16, 20, 34, 0.10);
+                background: var(--bg-surface);
+                border-color: color-mix(in srgb, var(--text-inverse) 10%, transparent);
             }
 
             :host-context([data-theme="light"]) .sources-panel {
@@ -1645,47 +1642,47 @@ export class PublicSearchPage extends PlatformPage {
             :host-context([data-theme="light"]) .source-list > .skeleton {
                 background: linear-gradient(
                     90deg,
-                    rgba(16, 20, 34, 0.05),
-                    rgba(16, 20, 34, 0.10),
-                    rgba(16, 20, 34, 0.05)
+                    color-mix(in srgb, var(--text-inverse) 5%, transparent),
+                    color-mix(in srgb, var(--text-inverse) 10%, transparent),
+                    color-mix(in srgb, var(--text-inverse) 5%, transparent)
                 );
                 background-size: 220% 100%;
             }
 
             :host-context([data-theme="light"]) .answer-panel[data-state='error'] {
-                border-color: rgba(210, 67, 67, 0.18);
+                border-color: color-mix(in srgb, var(--error) 18%, transparent);
                 background:
-                    linear-gradient(135deg, rgba(210, 67, 67, 0.08), rgba(255, 255, 255, 0.80) 48%),
-                    rgba(255, 255, 255, 0.78);
+                    linear-gradient(135deg, color-mix(in srgb, var(--error) 8%, transparent), var(--text-secondary) 48%),
+                    var(--text-secondary);
             }
 
             :host-context([data-theme="light"]) .answer-error-icon {
-                color: #b33a3a;
-                background: rgba(210, 67, 67, 0.10);
-                box-shadow: inset 0 0 0 1px rgba(210, 67, 67, 0.16);
+                color: var(--error);
+                background: color-mix(in srgb, var(--error) 10%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 16%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-error-title {
-                color: rgba(18, 19, 26, 0.94);
+                color: color-mix(in srgb, var(--text-inverse) 94%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-error-text {
-                color: rgba(30, 34, 48, 0.66);
+                color: color-mix(in srgb, var(--text-inverse) 66%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-error-action {
-                color: #fff;
-                background: rgba(87, 104, 254, 0.86);
-                box-shadow: inset 0 0 0 1px rgba(87, 104, 254, 0.24);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 86%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-error-action:hover {
-                background: rgba(74, 90, 232, 0.92);
+                background: color-mix(in srgb, var(--accent-active) 92%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-error-details,
             :host-context([data-theme="light"]) .answer-error-code {
-                color: rgba(30, 34, 48, 0.54);
+                color: color-mix(in srgb, var(--text-inverse) 54%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-card {
@@ -1694,112 +1691,112 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .source-card:hover {
-                background: rgba(16, 20, 34, 0.04);
-                border-color: rgba(16, 20, 34, 0.08);
+                background: color-mix(in srgb, var(--text-inverse) 4%, transparent);
+                border-color: color-mix(in srgb, var(--text-inverse) 8%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-card.is-cited {
-                background: rgba(87, 104, 254, 0.10);
-                border-color: rgba(87, 104, 254, 0.32);
+                background: color-mix(in srgb, var(--accent) 10%, transparent);
+                border-color: color-mix(in srgb, var(--accent) 32%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-citation {
-                color: #3f49d7;
-                background: rgba(87, 104, 254, 0.14);
-                box-shadow: inset 0 0 0 1px rgba(87, 104, 254, 0.26);
+                color: var(--accent-active);
+                background: color-mix(in srgb, var(--accent) 14%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-citation:hover {
-                color: #fff;
-                background: rgba(87, 104, 254, 0.86);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 86%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-toggle {
-                color: rgba(18, 19, 26, 0.9);
-                background: rgba(16, 20, 34, 0.06);
+                color: color-mix(in srgb, var(--text-inverse) 90%, transparent);
+                background: color-mix(in srgb, var(--text-inverse) 6%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-collapse.is-collapsed::after {
-                background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.9));
+                background: linear-gradient(to bottom, transparent, var(--bg-surface));
             }
 
             :host-context([data-theme="light"]) .panel-label,
             :host-context([data-theme="light"]) .answer-placeholder,
             :host-context([data-theme="light"]) .provider-count {
-                color: rgba(30, 34, 48, 0.54);
+                color: color-mix(in srgb, var(--text-inverse) 54%, transparent);
             }
 
             :host-context([data-theme="light"]) .sources-panel .panel-label {
-                color: rgba(30, 34, 48, 0.44);
+                color: color-mix(in srgb, var(--text-inverse) 44%, transparent);
             }
 
             :host-context([data-theme="light"]) .answer-text,
             :host-context([data-theme="light"]) .source-title,
             :host-context([data-theme="light"]) .source-ai-markdown {
-                color: rgba(18, 19, 26, 0.92);
+                color: color-mix(in srgb, var(--text-inverse) 92%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-snippet,
             :host-context([data-theme="light"]) .source-insight {
-                color: rgba(30, 34, 48, 0.70);
+                color: color-mix(in srgb, var(--text-inverse) 70%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-url,
             :host-context([data-theme="light"]) .answer-text a,
             :host-context([data-theme="light"]) .source-ai-markdown a,
             :host-context([data-theme="light"]) a.source-title {
-                color: #4E5DE8;
+                color: var(--accent-hover);
             }
 
             :host-context([data-theme="light"]) .source-ai-button {
-                color: #3f49d7;
-                background: rgba(87, 104, 254, 0.16);
+                color: var(--accent-active);
+                background: color-mix(in srgb, var(--accent) 16%, transparent);
                 box-shadow:
-                    inset 0 0 0 1px rgba(87, 104, 254, 0.26),
-                    0 8px 20px rgba(87, 104, 254, 0.10);
+                    inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent),
+                    0 8px 20px color-mix(in srgb, var(--accent) 10%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-ai-button:hover {
-                color: #fff;
-                background: rgba(87, 104, 254, 0.86);
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--accent) 86%, transparent);
                 box-shadow:
-                    inset 0 0 0 1px rgba(87, 104, 254, 0.30),
-                    0 10px 24px rgba(87, 104, 254, 0.18);
+                    inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+                    0 10px 24px color-mix(in srgb, var(--accent) 18%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-ai-button:disabled {
-                color: rgba(63, 73, 215, 0.78);
-                background: rgba(87, 104, 254, 0.14);
-                box-shadow: inset 0 0 0 1px rgba(87, 104, 254, 0.22);
+                color: color-mix(in srgb, var(--accent-active) 78%, transparent);
+                background: color-mix(in srgb, var(--accent) 14%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
                 opacity: 0.86;
             }
 
             :host-context([data-theme="light"]) .source-ai-panel {
-                color: rgba(18, 19, 26, 0.84);
-                background: color-mix(in srgb, var(--landing-primary, var(--accent)) 8%, transparent);
-                border-color: color-mix(in srgb, var(--landing-primary, var(--accent)) 22%, transparent);
+                color: color-mix(in srgb, var(--text-inverse) 84%, transparent);
+                background: color-mix(in srgb, var(--marketing-product-accent) 8%, transparent);
+                border-color: color-mix(in srgb, var(--marketing-product-accent) 22%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-site-row {
-                color: rgba(30, 34, 48, 0.62);
+                color: color-mix(in srgb, var(--text-inverse) 62%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-site-name {
-                color: rgba(18, 19, 26, 0.88);
+                color: color-mix(in srgb, var(--text-inverse) 88%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-display-url {
-                color: #4E5DE8;
+                color: var(--accent-hover);
             }
 
             :host-context([data-theme="light"]) .source-results-meta {
-                color: rgba(30, 34, 48, 0.54);
+                color: color-mix(in srgb, var(--text-inverse) 54%, transparent);
             }
 
             :host-context([data-theme="light"]) .source-favicon,
             :host-context([data-theme="light"]) .source-thumb {
-                background: rgba(16, 20, 34, 0.06);
-                border-color: rgba(16, 20, 34, 0.10);
+                background: color-mix(in srgb, var(--text-inverse) 6%, transparent);
+                border-color: color-mix(in srgb, var(--text-inverse) 10%, transparent);
             }
 
             @media (min-width: 768px) {
@@ -1848,7 +1845,7 @@ export class PublicSearchPage extends PlatformPage {
                     padding: 0;
                     margin: 0;
                     width: 100%;
-                    background: var(--marketing-header-bg, var(--landing-search-bg));
+                    background: var(--marketing-header-bg, var(--glass-bg-strong));
                 }
 
                 .search-head.is-active .search-shell {
@@ -1860,7 +1857,7 @@ export class PublicSearchPage extends PlatformPage {
                     background: transparent;
                     box-shadow: none;
                     border: 0;
-                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-medium));
+                    border-bottom: 1px solid var(--glass-border-medium);
                 }
 
                 .page[data-entry='landing'] .search-head.is-active .search-shell {
@@ -1898,8 +1895,8 @@ export class PublicSearchPage extends PlatformPage {
                     padding: 8px 12px;
                     box-shadow: none;
                     border: 0;
-                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-medium));
-                    background: var(--marketing-header-bg, var(--landing-search-bg));
+                    border-bottom: 1px solid var(--glass-border-medium);
+                    background: var(--marketing-header-bg, var(--glass-bg-strong));
                 }
 
                 .search-head.is-active {
@@ -1917,7 +1914,7 @@ export class PublicSearchPage extends PlatformPage {
                     padding: 8px 12px;
                     box-shadow: none;
                     border: 0;
-                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-medium));
+                    border-bottom: 1px solid var(--glass-border-medium);
                     background: transparent;
                 }
 
@@ -1985,10 +1982,10 @@ export class PublicSearchPage extends PlatformPage {
                     border-left: 0;
                     border-right: 0;
                     border-top: 0;
-                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-medium));
+                    border-bottom: 1px solid var(--glass-border-medium);
                     box-shadow: none;
                     backdrop-filter: none;
-                    background: var(--landing-bg, var(--marketing-page-bg));
+                    background: var(--marketing-page-bg);
                 }
 
                 .answer-panel {
@@ -1997,8 +1994,8 @@ export class PublicSearchPage extends PlatformPage {
                 }
 
                 .answer-panel[data-state='error'] {
-                    background: var(--landing-bg, var(--marketing-page-bg));
-                    border-color: rgba(255, 132, 132, 0.22);
+                    background: var(--marketing-page-bg);
+                    border-color: color-mix(in srgb, var(--error) 22%, transparent);
                 }
 
                 .sources-panel,
@@ -2010,7 +2007,7 @@ export class PublicSearchPage extends PlatformPage {
                 .source-ai-panel {
                     border-radius: 0;
                     border: 0;
-                    border-top: 1px solid color-mix(in srgb, var(--landing-primary, var(--accent)) 14%, transparent);
+                    border-top: 1px solid color-mix(in srgb, var(--marketing-product-accent) 14%, transparent);
                     padding: 12px 0 0;
                     background: transparent;
                 }
@@ -2041,7 +2038,7 @@ export class PublicSearchPage extends PlatformPage {
                 .source-card {
                     border-radius: 0;
                     border: 0;
-                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-subtle));
+                    border-bottom: 1px solid var(--glass-border-medium);
                     background: transparent;
                     padding: 14px 0;
                     box-shadow: none;
@@ -2053,7 +2050,7 @@ export class PublicSearchPage extends PlatformPage {
 
                 .source-card:hover {
                     transform: none;
-                    background: rgba(255, 255, 255, 0.03);
+                    background: var(--glass-tint-subtle);
                 }
 
                 .empty-shell {
@@ -2076,7 +2073,7 @@ export class PublicSearchPage extends PlatformPage {
 
                 :host-context(html[data-theme="light"]) .search-shell,
                 :host-context(html[data-theme="light"]) .search-head.is-active .search-shell {
-                    border-bottom-color: rgba(16, 20, 34, 0.10);
+                    border-bottom-color: color-mix(in srgb, var(--text-inverse) 10%, transparent);
                     box-shadow: none;
                 }
 
@@ -2084,26 +2081,26 @@ export class PublicSearchPage extends PlatformPage {
                 :host-context(html[data-theme="light"]) .sources-panel,
                 :host-context(html[data-theme="light"]) .suggest-panel,
                 :host-context(html[data-theme="light"]) .provider-panel {
-                    border-bottom-color: rgba(16, 20, 34, 0.10);
+                    border-bottom-color: color-mix(in srgb, var(--text-inverse) 10%, transparent);
                 }
 
                 :host-context(html[data-theme="light"]) .answer-panel[data-state='error'] {
-                    background: var(--landing-bg, var(--marketing-page-bg));
-                    border-color: rgba(210, 67, 67, 0.22);
+                    background: var(--marketing-page-bg);
+                    border-color: color-mix(in srgb, var(--error) 22%, transparent);
                 }
 
                 :host-context(html[data-theme="light"]) .source-card {
-                    border-bottom-color: rgba(16, 20, 34, 0.08);
+                    border-bottom-color: color-mix(in srgb, var(--text-inverse) 8%, transparent);
                     background: transparent;
                 }
 
                 :host-context(html[data-theme="light"]) .source-ai-panel {
-                    border-top-color: color-mix(in srgb, var(--landing-primary, var(--accent)) 18%, transparent);
+                    border-top-color: color-mix(in srgb, var(--marketing-product-accent) 18%, transparent);
                     background: transparent;
                 }
 
                 :host-context(html[data-theme="light"]) .source-card:hover {
-                    background: rgba(16, 20, 34, 0.03);
+                    background: color-mix(in srgb, var(--text-inverse) 3%, transparent);
                 }
             }
 
@@ -2111,7 +2108,7 @@ export class PublicSearchPage extends PlatformPage {
                 margin: 0 0 14px;
                 font-size: 15px;
                 line-height: 1.55;
-                color: var(--landing-text, var(--text-primary));
+                color: var(--text-primary);
             }
 
             .research-timeline {
@@ -2126,17 +2123,17 @@ export class PublicSearchPage extends PlatformPage {
                 gap: 10px;
                 font-size: 13px;
                 line-height: 1.4;
-                color: var(--landing-text-dim, var(--text-secondary));
+                color: var(--text-secondary);
             }
 
             .research-step .step-icon {
                 flex: 0 0 auto;
                 margin-top: 1px;
-                color: var(--landing-accent, #5768fe);
+                color: var(--marketing-product-accent);
             }
 
             .research-step[data-active="true"] {
-                color: var(--landing-text, var(--text-primary));
+                color: var(--text-primary);
                 font-weight: 600;
             }
 
@@ -2154,7 +2151,7 @@ export class PublicSearchPage extends PlatformPage {
                 padding-left: 16px;
                 font-size: 13px;
                 line-height: 1.45;
-                color: var(--landing-text-dim, var(--text-secondary));
+                color: var(--text-secondary);
             }
 
             .research-subquestions li::before {
@@ -2165,7 +2162,7 @@ export class PublicSearchPage extends PlatformPage {
                 width: 5px;
                 height: 5px;
                 border-radius: 50%;
-                background: var(--landing-accent, #5768fe);
+                background: var(--marketing-product-accent);
             }
 
             .research-report .answer-text {
@@ -2182,7 +2179,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .research-report th,
             .research-report td {
-                border: 1px solid rgba(255, 255, 255, 0.12);
+                border: 1px solid var(--glass-border-medium);
                 padding: 6px 10px;
                 text-align: left;
             }
@@ -2273,7 +2270,7 @@ export class PublicSearchPage extends PlatformPage {
         super.connectedCallback();
         this._lastScrollY = window.scrollY;
         this._scrollAnchorY = this._lastScrollY;
-        window.addEventListener('scroll', this._handleWindowScroll, { passive: true });
+        this.useDomEvent(window, 'scroll', this._handleWindowScroll, { passive: true });
         const pendingFiles = takePendingPublicSearchFiles();
         if (pendingFiles.length > 0) {
             this._selectedFiles = pendingFiles;
@@ -2283,7 +2280,6 @@ export class PublicSearchPage extends PlatformPage {
 
     override disconnectedCallback(): void {
         super.disconnectedCallback();
-        window.removeEventListener('scroll', this._handleWindowScroll);
         if (this._releaseSearchInputViewport !== null) {
             this._releaseSearchInputViewport();
             this._releaseSearchInputViewport = null;
@@ -3472,7 +3468,7 @@ export class PublicSearchPage extends PlatformPage {
     _renderBody(stream: PublicSearchStream) {
         const active = this._isStreamActive(stream);
         if (!active) {
-            return html`<div class="empty-shell">${this.t('search_page.empty_hint')}</div>`;
+            return html`<platform-empty-state class="empty-shell" icon="search" title=${this.t('search_page.empty_hint')}></platform-empty-state>`;
         }
         if (stream.mode === 'research') {
             return this._renderResearch(stream);

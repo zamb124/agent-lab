@@ -9,6 +9,7 @@ export interface DrawerViewport {
     width: number;
     height: number;
     margin: number;
+    bottomInset?: number;
 }
 
 export interface StoredDrawerGeometry {
@@ -40,6 +41,7 @@ export const DRAG_THRESHOLD_PX = 6;
 export const MOBILE_MAX_WIDTH_PX = 520;
 export const VIEWPORT_MARGIN_DESKTOP_PX = 22;
 export const VIEWPORT_MARGIN_MOBILE_PX = 10;
+export const LAUNCHER_NAV_GAP_PX = 8;
 
 const STORED_KEYS = Object.freeze([
     'launcherLeft',
@@ -167,7 +169,8 @@ export function createDefaultGeometry(position: LauncherPosition, viewport: Draw
     const limits = panelSizeLimits(viewport);
     const panelWidth = Math.min(DEFAULT_PANEL_WIDTH_PX, limits.maxWidth);
     const panelHeight = Math.min(DEFAULT_PANEL_HEIGHT_PX, limits.maxHeight);
-    const launcherTop = viewport.height - viewport.margin - LAUNCHER_SIZE_PX;
+    const bottomInset = viewport.bottomInset ?? 0;
+    const launcherTop = viewport.height - viewport.margin - bottomInset - LAUNCHER_SIZE_PX;
     const launcherLeft = position === 'bottom-left'
         ? viewport.margin
         : viewport.width - viewport.margin - LAUNCHER_SIZE_PX;
@@ -217,7 +220,7 @@ export function placePanel(geometry: StoredDrawerGeometry, viewport: DrawerViewp
     let panelPlacement: PanelPlacement = 'above';
     if (panelTop < viewport.margin) {
         const belowTop = stored.launcherTop + LAUNCHER_SIZE_PX + PANEL_GAP_PX;
-        if (belowTop + stored.panelHeight <= viewport.height - viewport.margin) {
+        if (belowTop + stored.panelHeight <= viewport.height - viewport.margin - (viewport.bottomInset ?? 0)) {
             panelTop = belowTop;
             panelPlacement = 'below';
         }
@@ -241,8 +244,9 @@ export function clampCluster(geometry: StoredDrawerGeometry, viewport: DrawerVie
     const limits = panelSizeLimits(viewport);
     const panelWidth = clampNumber(stored.panelWidth, limits.minWidth, limits.maxWidth);
     const panelHeight = clampNumber(stored.panelHeight, limits.minHeight, limits.maxHeight);
+    const bottomInset = viewport.bottomInset ?? 0;
     const maxLauncherLeft = viewport.width - viewport.margin - LAUNCHER_SIZE_PX;
-    const maxLauncherTop = viewport.height - viewport.margin - LAUNCHER_SIZE_PX;
+    const maxLauncherTop = viewport.height - viewport.margin - bottomInset - LAUNCHER_SIZE_PX;
     const launcherLeft = clampNumber(
         stored.launcherLeft,
         viewport.margin,
@@ -283,8 +287,8 @@ export function clampCluster(geometry: StoredDrawerGeometry, viewport: DrawerVie
     if (top < viewport.margin) {
         dy = viewport.margin - top;
     }
-    if (bottom + dy > viewport.height - viewport.margin) {
-        dy = viewport.height - viewport.margin - bottom;
+    if (bottom + dy > viewport.height - viewport.margin - bottomInset) {
+        dy = viewport.height - viewport.margin - bottomInset - bottom;
     }
     return Object.freeze({
         launcherLeft: placed.launcherLeft + dx,
@@ -328,7 +332,7 @@ export function resizeFromSouthEast(geometry: StoredDrawerGeometry, seX: number,
     const placed = placePanel(toStoredGeometry(geometry), viewport);
     const limits = panelSizeLimits(viewport);
     const maxRight = viewport.width - viewport.margin;
-    const maxBottom = viewport.height - viewport.margin;
+    const maxBottom = viewport.height - viewport.margin - (viewport.bottomInset ?? 0);
     let panelLeft = placed.panelLeft;
     let panelTop = placed.panelTop;
     let targetSeX = seX;

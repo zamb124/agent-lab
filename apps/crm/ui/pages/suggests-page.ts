@@ -13,7 +13,7 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import type {
@@ -864,7 +864,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
                     >
                         <platform-icon name="refresh" size="14"></platform-icon>
                         ${loading
-                            ? html`<glass-spinner size="xs"></glass-spinner>`
+                            ? html`<platform-spinner size="xs"></platform-spinner>`
                             : this.t('suggests_page.refresh')}
                     </button>
                 </div>
@@ -881,7 +881,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
                     : error !== null
                         ? this._renderError()
                         : loading && items.length === 0
-                            ? html`<div class="center"><glass-spinner size="lg"></glass-spinner></div>`
+                            ? html`<div class="center"><platform-spinner size="lg"></platform-spinner></div>`
                             : items.length === 0
                                 ? this._renderEmpty()
                                 : html`<div class="list">${items.map((suggest) => this._renderSuggest(suggest))}</div>`}

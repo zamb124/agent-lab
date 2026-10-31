@@ -73,7 +73,7 @@ export class CookieConsentBanner extends PlatformElement {
                 border-bottom: none;
                 border-radius: var(--radius-lg, 16px) var(--radius-lg, 16px) 0 0;
                 color: var(--text);
-                box-shadow: var(--shadow-lg, 0 -8px 32px rgba(0, 0, 0, 0.24));
+                box-shadow: var(--glass-shadow-medium);
             }
             .title {
                 margin: 0 0 var(--space-2);

@@ -13,7 +13,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-log-viewer.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -781,7 +781,7 @@ export class FlowsLogsModal extends PlatformModal {
                 @click=${() => this._manualReload()}
             >
                 ${busy
-                    ? html`<glass-spinner size="xs"></glass-spinner>`
+                    ? html`<platform-spinner size="xs"></platform-spinner>`
                     : html`<platform-icon name="refresh" size="16"></platform-icon>`}
             </platform-button>
         `;
@@ -809,7 +809,7 @@ export class FlowsLogsModal extends PlatformModal {
                         ${waiting
                             ? html`
                                   <div class="logs-loading">
-                                      <glass-spinner></glass-spinner>
+                                      <platform-spinner></platform-spinner>
                                       <div>${this.t('logs_modal.waiting')}</div>
                                   </div>
                               `
@@ -870,7 +870,7 @@ export class FlowsLogsModal extends PlatformModal {
                     ${waiting
                         ? html`
                               <div class="logs-loading">
-                                  <glass-spinner></glass-spinner>
+                                  <platform-spinner></platform-spinner>
                                   <div>${this.t('logs_modal.waiting')}</div>
                               </div>
                           `

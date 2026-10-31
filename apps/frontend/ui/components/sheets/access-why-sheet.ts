@@ -4,7 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformBottomSheet } from '@platform/lib/components/layout/platform-bottom-sheet.js';
 import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-button.js';
@@ -88,16 +88,16 @@ export class FrontendAccessWhySheet extends PlatformBottomSheet {
     override renderBody() {
         const result = this._why.lastResult;
         if (this._why.busy && !result) {
-            return html`<glass-spinner></glass-spinner>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (this._why.error) {
-            return html`<div class="why-empty">${this.t('access_page.why_error')}</div>`;
+            return html`<platform-empty-state icon="alert-triangle" title=${this.t('access_page.why_error')}></platform-empty-state>`;
         }
         if (!result) {
-            return html`<div class="why-empty">${this.t('access_page.why_empty')}</div>`;
+            return html`<platform-empty-state icon="help" title=${this.t('access_page.why_empty')}></platform-empty-state>`;
         }
         if (!isPlainRecord(result)) {
-            return html`<div class="why-empty">${this.t('access_page.why_empty')}</div>`;
+            return html`<platform-empty-state icon="help" title=${this.t('access_page.why_empty')}></platform-empty-state>`;
         }
         const reasonsValue = result.reasons;
         const reasons = Array.isArray(reasonsValue) ? reasonsValue : [];
@@ -123,7 +123,7 @@ export class FrontendAccessWhySheet extends PlatformBottomSheet {
                         : this.t('access_page.why_denied')}
                 </div>
                 ${reasons.length === 0
-                    ? html`<div class="why-empty">${this.t('access_page.why_empty')}</div>`
+                    ? html`<platform-empty-state icon="help" title=${this.t('access_page.why_empty')}></platform-empty-state>`
                     : reasons.map((reason: string) => html`
                         <div class="why-item">${this.t(`access_page.why_${reason}`)}</div>
                     `)}

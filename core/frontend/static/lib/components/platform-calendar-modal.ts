@@ -1,5 +1,5 @@
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
@@ -474,6 +474,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _dragOrigin: { x: number; y: number; started: boolean } | null = null;
     _dragPointerId: number | null = null;
     _dragJustFinished = false;
+    private _dragSessionUnsubs: Array<() => void> = [];
     _onDragMoveBound: EventListener;
     _onDragUpBound: EventListener;
     _onDocumentClickBound: ((event: Event) => void) | null = null;
@@ -2449,14 +2450,11 @@ export class PlatformCalendarModal extends PlatformModal {
                 }
             };
         }
-        document.addEventListener('click', this._onDocumentClickBound);
+        this.useDomEvent(document, 'click', this._onDocumentClickBound);
         this._kickInitialLoad();
     }
 
     _onModalClosed() {
-        if (this._onDocumentClickBound) {
-            document.removeEventListener('click', this._onDocumentClickBound);
-        }
         this._dateSheetOpen = false;
         this._integrationsMenuOpen = false;
         this._integrationModalProvider = null;
@@ -2573,9 +2571,6 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     override disconnectedCallback(): void {
-        if (this._onDocumentClickBound) {
-            document.removeEventListener('click', this._onDocumentClickBound);
-        }
         super.disconnectedCallback();
     }
 
@@ -2670,9 +2665,11 @@ export class PlatformCalendarModal extends PlatformModal {
         this._dragPointerId = pointerEvent.pointerId;
         this._dragOrigin = { x: pointerEvent.clientX, y: pointerEvent.clientY, started: false };
         this._dragEvent = event;
-        target.addEventListener('pointermove', this._onDragMoveBound);
-        target.addEventListener('pointerup', this._onDragUpBound);
-        target.addEventListener('pointercancel', this._onDragUpBound);
+        this._dragSessionUnsubs = [
+            this.useDomEvent(target, 'pointermove', this._onDragMoveBound),
+            this.useDomEvent(target, 'pointerup', this._onDragUpBound),
+            this.useDomEvent(target, 'pointercancel', this._onDragUpBound),
+        ];
     }
 
     _onDragMove(pointerEvent: PointerEvent): void {
@@ -2696,9 +2693,10 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _onDragUp(pointerEvent: PointerEvent): void {
         const target = pointerTarget(pointerEvent);
-        target.removeEventListener('pointermove', this._onDragMoveBound);
-        target.removeEventListener('pointerup', this._onDragUpBound);
-        target.removeEventListener('pointercancel', this._onDragUpBound);
+        for (const unsub of this._dragSessionUnsubs) {
+            unsub();
+        }
+        this._dragSessionUnsubs = [];
         if (this._dragPointerId !== null) {
             target.releasePointerCapture(this._dragPointerId);
             this._dragPointerId = null;

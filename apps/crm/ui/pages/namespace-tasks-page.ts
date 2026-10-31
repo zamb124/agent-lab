@@ -29,7 +29,8 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import type {
@@ -234,13 +235,6 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
             .reload-btn:disabled {
                 opacity: 0.5;
                 cursor: not-allowed;
-            }
-
-            .empty {
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-                text-align: center;
-                padding: var(--space-6) var(--space-3);
             }
 
             .table-shell {
@@ -610,7 +604,7 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
                         >
                             <platform-icon name="refresh" size="14"></platform-icon>
                             ${loading
-                                ? html`<glass-spinner size="xs"></glass-spinner>`
+                                ? html`<platform-spinner size="xs"></platform-spinner>`
                                 : this.t('namespace_tasks_page.refresh')}
                         </button>
                     </div>
@@ -622,7 +616,7 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
                 </div>
                 ${tasks.length > 0
                     ? this._renderTable(tasks)
-                    : html`<div class="empty">${this.t('namespace_tasks_page.empty')}</div>`}
+                    : html`<platform-empty-state icon="checklist" title=${this.t('namespace_tasks_page.empty')}></platform-empty-state>`}
             </div>
         `;
     }

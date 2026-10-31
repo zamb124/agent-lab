@@ -153,13 +153,7 @@ dev = [
 docs = [
     { name = "zensical" },
 ]
-llm-model = [
-    { name = "accelerate" },
-    { name = "bitsandbytes" },
-    { name = "torch" },
-    { name = "transformers" },
-]
-rag = [
+litserve = [
     { name = "flagembedding" },
     { name = "hydra-core" },
     { name = "litserve" },
@@ -169,8 +163,16 @@ rag = [
     { name = "silero" },
     { name = "silero-vad" },
     { name = "soundfile" },
-    { name = "tiktoken" },
     { name = "transformers" },
+]
+llm-model = [
+    { name = "accelerate" },
+    { name = "bitsandbytes" },
+    { name = "torch" },
+    { name = "transformers" },
+]
+rag = [
+    { name = "tiktoken" },
 ]
 rag-worker = [
     { name = "beautifulsoup4" },
@@ -287,13 +289,7 @@ dev = [
     { name = "xlwt", specifier = ">=1.3.0" },
 ]
 docs = [{ name = "zensical", specifier = ">=0.0.73" }]
-llm-model = [
-    { name = "accelerate", specifier = ">=1.15.0" },
-    { name = "bitsandbytes", specifier = ">=0.50.2" },
-    { name = "torch", specifier = ">=2.15.0" },
-    { name = "transformers", specifier = ">=5.21.0" },
-]
-rag = [
+litserve = [
     { name = "flagembedding", specifier = ">=1.4.2" },
     { name = "hydra-core", specifier = ">=1.3.8" },
     { name = "litserve", specifier = ">=0.2.19" },
@@ -303,9 +299,15 @@ rag = [
     { name = "silero", specifier = ">=0.5.5" },
     { name = "silero-vad", specifier = ">=6.2.3" },
     { name = "soundfile", specifier = ">=0.14.0" },
-    { name = "tiktoken", specifier = ">=0.14.0" },
     { name = "transformers", specifier = ">=5.21.0" },
 ]
+llm-model = [
+    { name = "accelerate", specifier = ">=1.15.0" },
+    { name = "bitsandbytes", specifier = ">=0.50.2" },
+    { name = "torch", specifier = ">=2.15.0" },
+    { name = "transformers", specifier = ">=5.21.0" },
+]
+rag = [{ name = "tiktoken", specifier = ">=0.14.0" }]
 rag-worker = [
     { name = "beautifulsoup4", specifier = ">=4.15.0" },
     { name = "tiktoken", specifier = ">=0.14.0" },

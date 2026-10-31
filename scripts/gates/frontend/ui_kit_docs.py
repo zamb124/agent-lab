@@ -17,7 +17,8 @@ CATALOG_PATH = DS_ROOT / "catalog.yaml"
 MANIFEST_SCHEMA_PATH = DS_ROOT / "manifest.schema.json"
 LIB_COMPONENTS = ROOT / "core" / "frontend" / "static" / "lib" / "components"
 
-REQUIRED_FILES = ("README.md", "README.en.md", "manifest.yaml", "contract.spec.js", "playwright.spec.py")
+REQUIRED_FILES = ("README.md", "README.en.md", "manifest.yaml", "playwright.spec.py")
+CONTRACT_SPEC_NAMES = ("contract.spec.ts", "contract.spec.js")
 
 _DEFINE_RE = re.compile(
     r"customElements\.define\s*\(\s*['\"](platform-[a-z0-9-]+)['\"]",
@@ -106,6 +107,8 @@ def main() -> int:
         for filename in REQUIRED_FILES:
             if not (folder / filename).is_file():
                 fail(f"#31 {component}: missing {filename}")
+        if not any((folder / name).is_file() for name in CONTRACT_SPEC_NAMES):
+            fail(f"#31 {component}: missing contract.spec.ts/.js")
         manifest_path = folder / "manifest.yaml"
         if manifest_path.is_file():
             manifest_raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))

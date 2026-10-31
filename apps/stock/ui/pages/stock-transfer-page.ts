@@ -22,6 +22,7 @@ function isTransferDetail(value: unknown): value is TransferDetail {
     return isPlainRecord(value);
 }
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 export class StockTransferPage extends PlatformPage {
     static i18nNamespace = 'stock';
@@ -87,7 +88,7 @@ export class StockTransferPage extends PlatformPage {
     override render() {
         const detail = this._detail;
         if (!detail || !detail.transfer) {
-            return html`<div class="wrap"><h1>${this.t('transfer.loading')}</h1></div>`;
+            return html`<div class="wrap"><platform-empty-state loading></platform-empty-state></div>`;
         }
         const transfer = detail.transfer;
         const lines: NonNullable<TransferDetail['lines']> = detail.lines === undefined ? [] : detail.lines;

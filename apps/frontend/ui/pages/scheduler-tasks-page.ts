@@ -46,7 +46,8 @@ function shownCount(value: unknown): number | string {
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { FrontendCreateSchedulerTaskModal } from '../modals/create-scheduler-task-modal.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
@@ -128,15 +129,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
                 margin: 0; color: var(--text-primary);
                 max-height: 240px; overflow: auto;
             }
-
-            .empty {
-                padding: var(--space-8) var(--space-6);
-                text-align: center; color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: 1px dashed var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-            }
-            .empty .empty-title { color: var(--text-primary); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
+            platform-empty-state { margin-top: var(--space-4); }
         `,
         frontendIslandPageBodyStyles,
     ];
@@ -298,10 +291,11 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
 
     _renderEmpty() {
         return html`
-            <div class="empty">
-                <div class="empty-title">${this.t('scheduler_page.empty_title')}</div>
-                <div>${this.t('scheduler_page.empty_description')}</div>
-            </div>
+            <platform-empty-state
+                icon="schedule"
+                title=${this.t('scheduler_page.empty_title')}
+                hint=${this.t('scheduler_page.empty_description')}
+            ></platform-empty-state>
         `;
     }
 
@@ -325,7 +319,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         }
         const loading = loadingFlag === true;
         const data = !snapshot && loading
-            ? html`<div><glass-spinner></glass-spinner></div>`
+            ? html`<div><platform-spinner></platform-spinner></div>`
             : snapshot
                 ? html`<pre>${JSON.stringify(snapshot, null, 2)}</pre>`
                 : html`<div>${this.t('scheduler_page.redis_empty')}</div>`;
@@ -385,7 +379,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
             <div class="page-body">
             ${this._renderFilters()}
             ${loading && list.length === 0
-                ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
+                ? html`<platform-empty-state loading></platform-empty-state>`
                 : list.length === 0
                     ? this._renderEmpty()
                     : html`

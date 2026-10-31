@@ -13,6 +13,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-variable-input.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 interface HeaderRow {
@@ -214,7 +215,7 @@ export class FlowsHttpHeadersEditor extends PlatformElement {
         return html`
             <p class="hint">${this.t('http_headers_editor.hint')}</p>
             ${rows.length === 0 && this.readOnly
-                ? html`<div class="empty">${this.t('http_headers_editor.empty')}</div>`
+                ? html`<platform-empty-state title=${this.t('http_headers_editor.empty')}></platform-empty-state>`
                 : nothing}
             ${rows.map(
                 (row, idx) => html`

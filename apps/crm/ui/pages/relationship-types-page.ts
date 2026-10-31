@@ -14,7 +14,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/fields/platform-field-shell.js';
@@ -60,11 +60,9 @@ export class CRMRelationshipTypesPage extends PlatformPage {
     static override properties: PropertyDeclarations = {
         _showForm: { state: true },
         _draft: { state: true },
-        _saving: { state: true },
     };
     declare _showForm: boolean;
     declare _draft: RelTypeDraft;
-    declare _saving: boolean;
 
     static override styles: CSSResultGroup = [
         PlatformPage.styles,
@@ -252,13 +250,6 @@ export class CRMRelationshipTypesPage extends PlatformPage {
                 border-color: rgba(255, 149, 0, 0.3);
             }
 
-            .empty {
-                text-align: center;
-                padding: var(--space-6);
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-            }
-
             @media (max-width: 767px) {
                 .scroll {
                     padding: var(--space-3);
@@ -273,24 +264,22 @@ export class CRMRelationshipTypesPage extends PlatformPage {
     ];
 
     private _resource: ResourceController;
+    private get _saving(): boolean { return this._resource.createInFlight; }
 
     constructor() {
         super();
         this._showForm = false;
         this._draft = _emptyDraft();
-        this._saving = false;
         this._resource = this.useResource('crm/relationship_types', { autoload: true });
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
         this.useEvent(this._resource.resource.events.CREATED, () => {
-            this._saving = false;
             this._showForm = false;
             this._draft = _emptyDraft();
         });
         this.useEvent(this._resource.resource.events.CREATE_FAILED, () => {
-            this._saving = false;
             this.toast('relationship_types_page.err_create', { type: 'error' });
         });
     }
@@ -320,7 +309,6 @@ export class CRMRelationshipTypesPage extends PlatformPage {
             this.toast('relationship_types_page.err_name_required', { type: 'warning' });
             return;
         }
-        this._saving = true;
         const description = draft.description.trim();
         const inverse = draft.inverse_type_id.trim();
         const color = draft.color.trim();
@@ -429,10 +417,10 @@ export class CRMRelationshipTypesPage extends PlatformPage {
     _renderList() {
         const items = this._resource.items;
         if (this._resource.loading && items.length === 0) {
-            return html`<div class="section"><div class="empty"><glass-spinner size="lg"></glass-spinner></div></div>`;
+            return html`<div class="section"><platform-empty-state loading></platform-empty-state></div>`;
         }
         if (items.length === 0) {
-            return html`<div class="section"><div class="empty">${this.t('relationship_types_page.empty')}</div></div>`;
+            return html`<div class="section"><platform-empty-state icon="circular-connection" title=${this.t('relationship_types_page.empty')}></platform-empty-state></div>`;
         }
         return html`
             <div class="section">

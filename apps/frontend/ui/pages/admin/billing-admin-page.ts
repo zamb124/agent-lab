@@ -5,7 +5,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/fields/platform-field-shell.js';
 import '@platform/lib/components/platform-help-hint.js';
@@ -496,21 +496,6 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 font-size: var(--text-xs);
                 margin-top: var(--space-1);
             }
-            .empty-block,
-            .state {
-                padding: var(--space-6);
-                text-align: center;
-                border: 1px dashed var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                color: var(--text-tertiary);
-            }
-            .state.forbidden,
-            .state.unavailable { border-color: var(--warning); }
-            .state-title {
-                color: var(--text-primary);
-                font-weight: var(--font-semibold);
-                margin-bottom: var(--space-2);
-            }
             .rules-error {
                 color: var(--error);
                 font-size: var(--text-sm);
@@ -836,14 +821,10 @@ export class FrontendBillingAdminPage extends PlatformPage {
     _renderForbiddenOrUnavailable() {
         const terminal = this._companies.state && this._companies.state.terminal;
         if (terminal === 'forbidden') {
-            return html`<div class="state forbidden">
-                <div class="state-title">${this.t('platform_billing_page.forbidden')}</div>
-            </div>`;
+            return html`<platform-empty-state icon="lock" title=${this.t('platform_billing_page.forbidden')}></platform-empty-state>`;
         }
         if (terminal === 'unavailable') {
-            return html`<div class="state unavailable">
-                <div class="state-title">${this.t('platform_billing_page.unavailable')}</div>
-            </div>`;
+            return html`<platform-empty-state icon="alert-triangle" title=${this.t('platform_billing_page.unavailable')}></platform-empty-state>`;
         }
         return null;
     }
@@ -935,7 +916,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         const forbidden = this._renderForbiddenOrUnavailable();
         if (forbidden) return forbidden;
         if (busy && records.length === 0) {
-            return html`<div class="state"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         return html`
             <section>
@@ -946,7 +927,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                     </div>
                 </div>
                 ${records.length === 0
-                    ? html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`
+                    ? html`<platform-empty-state icon="table" title=${this.t('platform_billing_page.empty')}></platform-empty-state>`
                     : html`
                         <div class="table-wrap">
                             <table>
@@ -1117,7 +1098,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
     _renderReadonlyPriceTable(rows: ReadonlyArray<PriceRow & { source?: string }>, showSource: boolean) {
         if (rows.length === 0) {
-            return html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`;
+            return html`<platform-empty-state icon="table" title=${this.t('platform_billing_page.empty')}></platform-empty-state>`;
         }
         return html`
             <div class="table-wrap">
@@ -1145,7 +1126,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
     _renderPricingLayerTable(rows: readonly PricingLayerRow[], showCompanyPricing: boolean) {
         if (rows.length === 0) {
-            return html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`;
+            return html`<platform-empty-state icon="table" title=${this.t('platform_billing_page.empty')}></platform-empty-state>`;
         }
         return html`
             <div class="table-wrap">
@@ -1183,7 +1164,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
     _renderPricesEditor(rows: PriceRow[], onChange: (rows: PriceRow[]) => void) {
         return html`
-            ${rows.length === 0 ? html`<div class="empty-block">${this.t('platform_billing_page.price_override_empty')}</div>` : html`
+            ${rows.length === 0 ? html`<platform-empty-state icon="table" title=${this.t('platform_billing_page.price_override_empty')}></platform-empty-state>` : html`
                 <div class="table-wrap compact-table">
                     <table>
                         <thead><tr>
@@ -1317,7 +1298,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         const companyPrices = isPlainRecord(companyPricesResult) && companyPricesResult.company_id === this._companyId ? companyPricesResult : null;
         const sourceData = this._companyId && companyPrices ? companyPrices : pricesData;
         if (!sourceData && (this._pricesGlobal.busy || this._companyPrices.busy)) {
-            return html`<section><div class="state"><glass-spinner></glass-spinner></div></section>`;
+            return html`<section><platform-empty-state loading></platform-empty-state></section>`;
         }
         const showCompanyPricing = !!(this._companyId && companyPrices);
         const staticBase = nestedRecord(sourceData, 'static_base');
@@ -1398,7 +1379,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                 </button>
                             </div>
                         `
-                        : html`<div class="empty-block">${this.t('platform_billing_page.billing_company_required')}</div>`}
+                        : html`<platform-empty-state icon="table" title=${this.t('platform_billing_page.billing_company_required')}></platform-empty-state>`}
                 </section>
             </div>
         `;
@@ -1770,7 +1751,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     _renderRulesSummary(doc: BillingRulesDoc) {
         const rules = doc && Array.isArray(doc.rules) ? doc.rules : [];
         if (rules.length === 0) {
-            return html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`;
+            return html`<platform-empty-state icon="table" title=${this.t('platform_billing_page.empty')}></platform-empty-state>`;
         }
         return html`
             <div class="table-wrap">
@@ -2164,7 +2145,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 </button>
             </div>
             ${rules.length === 0
-                ? html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`
+                ? html`<platform-empty-state icon="table" title=${this.t('platform_billing_page.empty')}></platform-empty-state>`
                 : html`<div class="rule-list">${rules.map((rule, idx) => this._renderRuleCard(rule, idx))}</div>`}
         `;
     }
@@ -2199,12 +2180,12 @@ export class FrontendBillingAdminPage extends PlatformPage {
             return html`
                 <section>
                     <div class="section-title">${this.t('platform_billing_page.section_settlement_rules')}</div>
-                    <div class="empty-block">${this.t('platform_billing_page.billing_company_required')}</div>
+                    <platform-empty-state icon="table" title=${this.t('platform_billing_page.billing_company_required')}></platform-empty-state>
                 </section>
             `;
         }
         if (this._rules.busy && !this._rulesDraft) {
-            return html`<section><div class="state"><glass-spinner></glass-spinner></div></section>`;
+            return html`<section><platform-empty-state loading></platform-empty-state></section>`;
         }
         const parsedDoc = this._rulesDocFromDraft();
         const doc = parsedDoc || this._emptyRulesDoc();
@@ -2220,7 +2201,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         : null}
                 </div>
                 ${parsedDoc ? this._renderRulesBuilder(doc) : html`
-                    <div class="empty-block">${this.t('platform_billing_page.rules_parse_error')}</div>
+                    <platform-empty-state icon="table" title=${this.t('platform_billing_page.rules_parse_error')}></platform-empty-state>
                 `}
                 ${this._rulesDraftError ? html`<div class="rules-error">${this._rulesDraftError}</div>` : null}
                 <details class="json-details">
@@ -2429,9 +2410,9 @@ export class FrontendBillingAdminPage extends PlatformPage {
             <section>
                 ${this._renderUsageSummary(summary)}
                 ${this._usage.busy
-                    ? html`<div class="state"><glass-spinner></glass-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : (items.length === 0
-                        ? html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`
+                        ? html`<platform-empty-state icon="table" title=${this.t('platform_billing_page.empty')}></platform-empty-state>`
                         : html`
                             <div class="table-wrap">
                                 <table>

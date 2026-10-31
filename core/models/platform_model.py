@@ -283,10 +283,11 @@ def _require_database_alias(model_name: str, database: str | None) -> None:
         "crm",
         "sync",
         "stock",
+        "shop",
     }:
         return
     raise RuntimeError(
-        f"{model_name} __database_alias__ must be 'shared', 'flows', 'tracing', 'rag', 'secrets', 'realtime', 'office', 'worktracker', 'wiki', 'search', 'crm', 'sync', 'stock' or None"
+        f"{model_name} __database_alias__ must be 'shared', 'flows', 'tracing', 'rag', 'secrets', 'realtime', 'office', 'worktracker', 'wiki', 'search', 'crm', 'sync', 'stock', 'shop' or None"
     )
 
 

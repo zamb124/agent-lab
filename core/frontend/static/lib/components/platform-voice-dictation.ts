@@ -4,7 +4,7 @@
  * Событие `transcribed` detail: { text, provider }.
  */
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import type { SelectController } from '../events/select-controller.js';
 import { hasGetUserMediaApi } from '../utils/voice-recording.js';

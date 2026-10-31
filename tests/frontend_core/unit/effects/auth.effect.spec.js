@@ -48,6 +48,23 @@ describe('authEffect: USER_LOAD_REQUESTED', () => {
         expect(failed.payload.message).toBe('HTTP 500');
     });
 
+    it('nullable-поля null → AUTH_USER_LOADED (str | None на wire)', async () => {
+        fetchMock.respondJson('GET', '/svc/api/auth/me', {
+            user_id: 'u1',
+            name: 'Alice',
+            email: null,
+            avatar_url: null,
+            company_id: 'c1',
+            roles: ['owner'],
+            can_admin: true,
+        });
+        const dispatched = [];
+        await createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.USER_LOAD_REQUESTED), buildCtx(() => ({}), dispatched));
+        const loaded = dispatched.find((d) => d.type === CoreEvents.AUTH_USER_LOADED);
+        expect(loaded).toBeTruthy();
+        expect(loaded.payload.user.user_id).toBe('u1');
+    });
+
     it('без can_admin → AUTH_USER_FAILED (fail-closed)', async () => {
         fetchMock.respondJson('GET', '/svc/api/auth/me', {
             user_id: 'u1',

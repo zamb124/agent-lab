@@ -41,13 +41,13 @@ export class LandingFloatingCta extends PlatformElement {
                 margin-left: auto;
                 padding: 14px 16px;
                 border-radius: 16px;
-                border: 1px solid var(--landing-panel-border-strong, rgba(255, 255, 255, 0.14));
-                background: var(--landing-dropdown-bg, rgba(15, 15, 15, 0.92));
+                border: 1px solid var(--glass-border-strong);
+                background: var(--glass-solid-strong);
                 backdrop-filter: blur(12px);
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
-                box-shadow: var(--landing-elevated-shadow, 0 12px 40px rgba(0, 0, 0, 0.45));
+                box-shadow: var(--glass-shadow-strong);
             }
             .row {
                 display: flex;
@@ -59,7 +59,7 @@ export class LandingFloatingCta extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 15px;
                 line-height: 1.45;
-                color: var(--landing-secondary, #e8e8e8);
+                color: var(--text-secondary);
                 margin: 0;
             }
             .actions {
@@ -74,8 +74,8 @@ export class LandingFloatingCta extends PlatformElement {
                 justify-content: center;
                 padding: 10px 18px;
                 border-radius: 999px;
-                background: var(--landing-primary, #5768fe);
-                color: #fff;
+                background: var(--marketing-product-accent);
+                color: var(--text-on-accent);
                 font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 600;
@@ -84,7 +84,7 @@ export class LandingFloatingCta extends PlatformElement {
             button.dismiss {
                 border: none;
                 background: transparent;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.65));
+                color: var(--text-secondary);
                 font-family: var(--font-sans);
                 font-size: 13px;
                 cursor: pointer;
@@ -111,7 +111,7 @@ export class LandingFloatingCta extends PlatformElement {
     override connectedCallback(): void {
         super.connectedCallback();
         if (typeof window === 'undefined') return;
-        window.addEventListener('scroll', this._onScroll, { passive: true });
+        this.useDomEvent(window, 'scroll', this._onScroll, { passive: true });
         this._timerId = window.setTimeout(() => {
             this._timerElapsed = true;
             this._timerId = null;
@@ -123,7 +123,6 @@ export class LandingFloatingCta extends PlatformElement {
     override disconnectedCallback(): void {
         super.disconnectedCallback();
         if (typeof window === 'undefined') return;
-        window.removeEventListener('scroll', this._onScroll);
         if (this._timerId !== null) {
             window.clearTimeout(this._timerId);
             this._timerId = null;

@@ -10,13 +10,13 @@ import torch
 from pydantic import BaseModel, ValidationError
 from sentence_transformers import SentenceTransformer
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.openai_server_contracts import (
     OpenAIEmbeddingsRequest,
     build_openai_embeddings_response,
     normalize_embedding_inputs,
 )
 from apps.provider_litserve.provider_litserve_http_schemas import OpenAIEmbeddingsResponseBody
-from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
 from core.types import JsonValue
@@ -75,8 +75,9 @@ def parse_embedding_body(raw: BaseModel | JsonValue) -> OpenAIEmbeddingsRequest:
 class LocalEmbeddingEngine:
     """SentenceTransformer; ответ совпадает с тем, что парсит ``AIEmbeddingClient``."""
 
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         self._cfg: ProviderLitserveInfraConfig = cfg
+        self._catalog: ModelCatalog = catalog
         self._models: dict[str, SentenceEmbeddingModel] = {}
         self._device: str = "cpu"
 
@@ -112,11 +113,11 @@ class LocalEmbeddingEngine:
         return model
 
     def allowed_model_ids(self) -> frozenset[str]:
-        return allowed_api_model_ids("embedding", self._cfg)
+        return self._catalog.allowed_ids("embedding")
 
     def embed(self, requested_model: str, inp: str | list[str]) -> OpenAIEmbeddingsResponseBody:
         rid = requested_model.strip()
-        hf_model_id = resolve_hf_model_id("embedding", rid, self._cfg)
+        hf_model_id = self._catalog.hf_model_id("embedding", rid)
         if hf_model_id is None:
             allowed = sorted(self.allowed_model_ids())
             logger.warning("provider_litserve.post.v1.embeddings.unknown_embedding_model.request", request=requested_model, allowed=allowed)

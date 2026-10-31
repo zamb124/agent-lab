@@ -2,7 +2,7 @@
  * Тело письма: sanitized HTML в iframe или plaintext pre-wrap.
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
 import {

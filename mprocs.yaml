@@ -29,6 +29,8 @@ procs:
     shell: "uv run python -m scripts.dev.run wiki"
   stock:
     shell: "uv run python -m scripts.dev.run stock"
+  shop:
+    shell: "uv run python -m scripts.dev.run shop"
   guest_runtime:
     shell: "uv run python -m scripts.dev.run guest_runtime"
   realtime:
@@ -65,6 +67,8 @@ procs:
     shell: "uv run python -m scripts.dev.run sync_worker"
   stock_worker:
     shell: "uv run python -m scripts.dev.run stock_worker"
+  shop_worker:
+    shell: "uv run python -m scripts.dev.run shop_worker"
   crm_worker:
     shell: "uv run python -m scripts.dev.run crm_worker"
   crm_summary_worker:

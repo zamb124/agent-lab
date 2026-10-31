@@ -7,7 +7,7 @@ import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/ma
 import '@platform/lib/flow-ui/shell/drawer.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '@platform/lib/voice/voice-http-origin.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
@@ -254,7 +254,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                     <p class="marketing-digital-workers-disclaimer">${this.t('digital_workers.disclaimer')}</p>
 
                     ${busy && items.length === 0
-                        ? html`<div class="marketing-digital-workers-state"><glass-spinner></glass-spinner></div>`
+                        ? html`<div class="marketing-digital-workers-state"><platform-spinner></platform-spinner></div>`
                         : ''}
                     ${err !== null && items.length === 0
                         ? html`<div class="marketing-digital-workers-state is-error">${this.t('digital_workers.load_error')}</div>`

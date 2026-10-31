@@ -7,7 +7,6 @@
  * парность проверяется тестом схемы.
  */
 
-export const PROSEMIRROR_BUNDLE_URL = '/static/core/assets/prosemirror/prosemirror-bundle.js';
 import type { PmAttrs, PmBundleLike, PmSchemaLike } from './pm-types.js';
 import { isPlainRecord } from '../events/payload.js';
 
@@ -367,7 +366,7 @@ function attrsFromSpec(specAttrs?: Record<string, { required?: boolean; default?
 
 /**
  * @param {object} schemaJson — содержимое wiki-schema.json
- * @param {object} pm — модуль prosemirror-bundle
+ * @param {object} pm — модуль prosemirror-lazy
  * @returns {object} Schema
  */
 export function buildWikiSchema(schemaJson: WikiSchemaJson, pm: PmBundleLike): PmSchemaLike {
@@ -485,7 +484,7 @@ let cachedRuntime: WikiEditorRuntime | null = null;
 export async function loadWikiEditorRuntime(): Promise<WikiEditorRuntime> {
     if (cachedRuntime) return cachedRuntime;
     const [pm, response] = await Promise.all([
-        import(PROSEMIRROR_BUNDLE_URL),
+        import('./prosemirror-lazy.js'),
         fetch(WIKI_SCHEMA_URL),
     ]);
     if (!response.ok) {

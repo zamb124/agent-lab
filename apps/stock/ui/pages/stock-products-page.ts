@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 export class StockProductsPage extends PlatformPage {
     static i18nNamespace = 'stock';
@@ -25,7 +26,7 @@ export class StockProductsPage extends PlatformPage {
             }
             th { color: var(--text-tertiary); font-weight: var(--font-medium); }
             .num { text-align: right; font-variant-numeric: tabular-nums; }
-            .empty { padding: var(--space-8); text-align: center; color: var(--text-tertiary); }
+            platform-empty-state { margin-top: var(--space-8); }
         `,
     ];
 
@@ -43,8 +44,10 @@ export class StockProductsPage extends PlatformPage {
         return html`
             <div class="wrap">
                 <h1>${this.t('products.title')}</h1>
-                ${items.length === 0
-                    ? html`<div class="empty">${this.t('products.empty')}</div>`
+                ${this._products.loading
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                    : items.length === 0
+                    ? html`<platform-empty-state icon="tag" title=${this.t('products.empty')}></platform-empty-state>`
                     : html`
                         <table>
                             <thead><tr>

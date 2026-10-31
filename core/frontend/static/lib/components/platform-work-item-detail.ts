@@ -4,7 +4,7 @@
  * Мутации — worktracker/work_item_* фабрики.
  */
 
-import { html, css, nothing } from '../lit-shim.js';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { openWorkItemDetail, navigateToWorkItemPage } from '../utils/work-item-deeplink.js';
@@ -15,8 +15,8 @@ import './platform-button.js';
 import './fields/platform-field.js';
 import './platform-markdown-editor.js';
 import './platform-file-attachments.js';
-import './glass-spinner.js';
-import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
+import './platform-spinner.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { OpController, ResourceController } from '../base/use-resource.js';
 import type { SelectController } from '../events/select-controller.js';
 import { isPlainRecord } from '../events/payload.js';
@@ -290,7 +290,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
                 display: flex;
                 align-items: center;
             }
-            .inspector-control glass-spinner {
+            .inspector-control platform-spinner {
                 width: 16px;
                 height: 16px;
             }
@@ -571,7 +571,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         const loading = Boolean(this._teamLoadingSel.value);
 
         if (teamOptions.length === 0 && loading) {
-            return html`<glass-spinner></glass-spinner>`;
+            return html`<platform-spinner></platform-spinner>`;
         }
 
         return html`
@@ -671,7 +671,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         if (!item) {
             const loading = Boolean(this._getOp && this._getOp.busy);
             return loading
-                ? html`<div class="loading"><glass-spinner></glass-spinner></div>`
+                ? html`<div class="loading"><platform-spinner></platform-spinner></div>`
                 : html`<div class="empty">${this.t('work_item_badge.loading')}</div>`;
         }
         const entityId = _crmEntityId(item);

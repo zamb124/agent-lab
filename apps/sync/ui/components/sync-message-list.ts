@@ -24,8 +24,9 @@ import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import './sync-message-bubble.js';
 import { groupMessagesForRender } from '../_helpers/sync-day-grouping.js';
 
@@ -95,11 +96,7 @@ export class SyncMessageList extends PlatformElement {
             border-radius: var(--radius-full, 999px);
             font-weight: var(--font-medium);
         }
-        .empty {
-            margin: auto;
-            color: var(--text-secondary);
-            font-size: var(--text-sm);
-        }
+        platform-empty-state { margin: auto; }
         .loading-banner {
             text-align: center;
             padding: var(--space-2);
@@ -412,7 +409,7 @@ export class SyncMessageList extends PlatformElement {
             `;
         }
         if (items.length === 0) {
-            return html`<div class="scroll"><div class="empty">${this.t('message_list.empty')}</div></div>`;
+            return html`<div class="scroll"><platform-empty-state icon="chat" title=${this.t('message_list.empty')}></platform-empty-state></div>`;
         }
         const grouped = groupMessagesForRender(items, (k: string) => this.t(k));
         const pinnedSet = this._pinnedIdsSet();
@@ -422,7 +419,7 @@ export class SyncMessageList extends PlatformElement {
         const showJump = unread > 0 && !this._stickToBottom;
         return html`
             <div class="scroll">
-                ${loadingOlder ? html`<div class="loading-banner"><glass-spinner size="xs"></glass-spinner></div>` : ''}
+                ${loadingOlder ? html`<div class="loading-banner"><platform-spinner size="xs"></platform-spinner></div>` : ''}
                 ${!hasOlder && items.length > 0 ? '' : ''}
                 ${grouped.map((entry) => entry.kind === 'day'
                     ? html`<div class="day" data-day-key=${entry.key}><span class="day-pill">${entry.label}</span></div>`

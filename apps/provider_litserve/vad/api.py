@@ -13,6 +13,7 @@ from typing import Protocol
 import litserve as ls
 from fastapi import Request
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.provider_litserve_http_schemas import VADSegmentsResponseBody
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
@@ -39,10 +40,11 @@ class VADEngine(Protocol):
 class VADLitAPI(ls.LitAPI):
     """Эндпоинт /v1/audio/vad для batch-определения сегментов речи."""
 
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         super().__init__(api_path="/v1/audio/vad")
         self._cfg: ProviderLitserveInfraConfig = cfg
-        self._engine: VADEngine = LocalVADEngine(cfg)
+        self._catalog = catalog
+        self._engine: VADEngine = LocalVADEngine(cfg, catalog)
 
     def setup(self, device: str | None) -> None:
         d = device if device is not None else resolve_torch_device(self._cfg)
@@ -52,7 +54,7 @@ class VADLitAPI(ls.LitAPI):
         _ = kwargs
         return parse_vad_body(
             request,
-            default_api_model_id=self._cfg.vad_default_api_model_id,
+            default_api_model_id=self._catalog.default_api_model_id("vad"),
         )
 
     def predict(self, x: VADDetectionInput, **kwargs: JsonValue) -> list[VADSegment]:

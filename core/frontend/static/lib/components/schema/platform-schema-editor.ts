@@ -3,7 +3,7 @@
  * Presentational: value object in, schema-change { value, valid, error? } out.
  */
 
-import { html, css, nothing } from '../../lit-shim.js';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../platform-segmented-control.js';
 import '../platform-button.js';
@@ -12,7 +12,7 @@ import '../platform-json-editor.js';
 import './platform-schema-parameter-card.js';
 import { isPlainRecord } from '../../events/payload.js';
 import { formatJsonPretty } from '../../utils/json-format.js';
-import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../../lit-shim.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import {
     createEmptyParameterRow,
     detectAdvancedSchemaFeatures,

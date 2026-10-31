@@ -14,7 +14,7 @@
  * в рантайме не рендерится, а на холсте показывает заглушку — иначе автор не смог бы его выбрать.
  */
 
-import { html, nothing } from '../../lit-shim.js';
+import { html, nothing } from 'lit';
 import { isPlainRecord } from '../../events/payload.js';
 import { isVisible, type VisibleWhen } from '../runtime/templating.js';
 import type { FlowUiBlock, FlowUiBlockRenderer, FlowUiRenderContext } from '../runtime/flow-ui-store.js';

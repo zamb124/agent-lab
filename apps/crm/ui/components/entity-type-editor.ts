@@ -32,7 +32,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
@@ -374,7 +374,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
 
     override render(): TemplateResult {
         if (this.typeDraft === null) {
-            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         const editing = typeof this.editingTypeId === 'string' && this.editingTypeId.length > 0;
         const schemaReady = this.schemaOptions !== null
@@ -405,7 +405,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
                             : ''}
                     </div>
                 `}
-                ${!schemaReady ? html`<div class="empty"><glass-spinner></glass-spinner></div>` : ''}
+                ${!schemaReady ? html`<platform-empty-state loading></platform-empty-state>` : ''}
                 <div class="grid-2">
                     <platform-field
                         type="string"
@@ -589,7 +589,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
                                 .schemaOptions=${this.schemaOptions}
                                 @rows-changed=${(e: CustomEvent<{ rows: SchemaFieldRow[] }>) => this._onSchemaRowsChanged('required_fields_rows', e.detail.rows)}
                             ></crm-schema-field-builder>
-                        ` : html`<div class="empty"><glass-spinner></glass-spinner></div>`}
+                        ` : html`<platform-empty-state loading></platform-empty-state>`}
                     </div>
                     <div class="schema-section">
                         <div class="schema-section-title-row">
@@ -606,7 +606,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
                                 .schemaOptions=${this.schemaOptions}
                                 @rows-changed=${(e: CustomEvent<{ rows: SchemaFieldRow[]}>) => this._onSchemaRowsChanged('optional_fields_rows', e.detail.rows)}
                             ></crm-schema-field-builder>
-                        ` : html`<div class="empty"><glass-spinner></glass-spinner></div>`}
+                        ` : html`<platform-empty-state loading></platform-empty-state>`}
                     </div>
                 </div>
                 <details>

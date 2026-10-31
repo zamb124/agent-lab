@@ -88,17 +88,6 @@
         "about_title": "О RAG Service",
         "about_text": "Retrieval Augmented Generation: документы разбиваются на чанки, векторизуются и сохраняются для семантического поиска по корпоративным данным."
     },
-    "namespace_create_modal": {
-        "header": "Создать неймспейс",
-        "label_name": "Название",
-        "name_placeholder": "my-namespace",
-        "name_hint": "Латиница, цифры, дефис; до 64 символов",
-        "label_description": "Описание",
-        "description_placeholder": "Опишите назначение неймспейса...",
-        "submit": "Создать",
-        "submitting": "Создание...",
-        "cancel": "Отмена"
-    },
     "toast": {
         "namespace_created": "Неймспейс создан",
         "namespace_create_failed": "Не удалось создать неймспейс",

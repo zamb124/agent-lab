@@ -293,22 +293,6 @@
             "data_table_export_xlsx": "Excel"
         }
     },
-    "namespace_modal": {
-        "header": "Новое пространство",
-        "label_template": "Шаблон",
-        "label_name": "Название",
-        "label_description": "Описание",
-        "template_hint": "Пространство создаётся с преднастроенным набором типов сущностей.",
-        "template_no_description": "Без описания",
-        "templates_loading": "Загружаем шаблоны…",
-        "templates_empty": "Шаблоны не найдены",
-        "name_placeholder": "Например: personal, work, project_x",
-        "name_hint": "Только латиница, цифры и нижнее подчёркивание. Должно начинаться с буквы.",
-        "description_placeholder": "Опишите назначение пространства",
-        "cancel": "Отмена",
-        "submit": "Создать пространство",
-        "saving": "Создаём…"
-    },
     "catalog_create_modal": {
         "header": "Новый каталог",
         "label_title": "Название",
@@ -335,6 +319,7 @@
         "remove_member": "Исключить",
         "search_placeholder": "Поиск по имени или ID",
         "no_member_matches": "Никого не найдено",
+        "members_empty": "Пока нет участников",
         "all_in_catalog": "Все пользователи компании уже в каталоге",
         "members_company_visible_hint": "Каталог доступен всей компании в текущем пространстве. Добавление участников по списку недоступно.",
         "members_private_hint": "Только владелец и добавленные участники. Ниже можно пригласить пользователей.",

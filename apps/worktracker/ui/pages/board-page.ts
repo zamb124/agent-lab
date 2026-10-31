@@ -7,6 +7,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { worktrackerKanbanStyles } from '../styles/worktracker-kanban.styles.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/worktracker-work-item-card.js';
 import '../components/worktracker-icon-action.js';
 import '../components/worktracker-board-picker.js';
@@ -173,18 +174,7 @@ export class WorktrackerBoardPage extends PlatformPage {
             .cards { display: flex; flex-direction: column; gap: var(--space-2); min-height: 40px; }
             .card-wrap { cursor: grab; }
             .card-wrap:active { cursor: grabbing; }
-            .empty {
-                padding: var(--space-8) var(--space-4);
-                color: var(--text-tertiary);
-                text-align: center;
-                font-size: var(--text-sm);
-            }
-            .empty-actions {
-                display: flex;
-                justify-content: center;
-                gap: var(--space-2);
-                margin-top: var(--space-4);
-            }
+            platform-empty-state { margin-top: var(--space-8); }
         `,
     ];
 
@@ -583,17 +573,16 @@ export class WorktrackerBoardPage extends PlatformPage {
                     ${this._renderColumnInsertMarker(columns.length)}
                 </div>
                 `;
-            })() : html`
-                <div class="empty">
-                    ${this.t('board_page.empty')}
-                    <div class="empty-actions">
-                        <worktracker-icon-action
-                            icon="layers"
-                            .title=${this.t('board_page.create_board')}
-                            @action=${() => this._openCreateBoard()}
-                        ></worktracker-icon-action>
-                    </div>
-                </div>
+            })() : this._boards.loading ? html`
+                <platform-empty-state loading></platform-empty-state>
+            ` : html`
+                <platform-empty-state icon="columns" title=${this.t('board_page.empty')}>
+                    <worktracker-icon-action
+                        icon="layers"
+                        .title=${this.t('board_page.create_board')}
+                        @action=${() => this._openCreateBoard()}
+                    ></worktracker-icon-action>
+                </platform-empty-state>
             `}
         `;
     }

@@ -38,7 +38,7 @@ function installCapacitorAppUrlOpenListener(): void {
 
     void import('@capacitor/app').then(({ App }) => {
         // Холодный старт: URL, которым запустили приложение из закрытого состояния
-        App.getLaunchUrl().then((result: { url?: string }) => {
+        App.getLaunchUrl().then((result) => {
             if (result?.url) {
                 _handleDeepLink(result.url);
             }
@@ -47,7 +47,7 @@ function installCapacitorAppUrlOpenListener(): void {
         });
 
         // Тёплый старт: ссылки после того, как приложение уже открыто
-        App.addListener('appUrlOpen', (event: { url?: string }) => {
+        App.addListener('appUrlOpen', (event) => {
             if (!event?.url) {
                 return;
             }

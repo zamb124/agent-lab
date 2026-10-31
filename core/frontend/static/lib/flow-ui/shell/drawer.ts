@@ -1,4 +1,4 @@
-import { LitElement, html, nothing, type PropertyValues } from '../../lit-shim.js';
+import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import '../components/platform-flow-ui.js';
 import { resolveAgentIdentityImageSrc } from '../runtime/agent-identity-image.js';
 import {
@@ -6,6 +6,7 @@ import {
     createDefaultGeometry,
     DRAG_THRESHOLD_PX,
     gesturesAllowed,
+    LAUNCHER_NAV_GAP_PX,
     MOBILE_MAX_WIDTH_PX,
     moveCluster,
     resizeFromSouthEast,
@@ -246,7 +247,19 @@ export class FlowUIDrawer extends LitElement {
             margin: width <= MOBILE_MAX_WIDTH_PX
                 ? VIEWPORT_MARGIN_MOBILE_PX
                 : VIEWPORT_MARGIN_DESKTOP_PX,
+            bottomInset: this._bottomNavInset(),
         };
+    }
+
+    private _bottomNavInset(): number {
+        const root = this.getRootNode();
+        const nav = root instanceof Document || root instanceof ShadowRoot
+            ? root.querySelector('platform-bottom-nav')
+            : null;
+        if (!(nav instanceof HTMLElement)) return 0;
+        const rect = nav.getBoundingClientRect();
+        if (rect.height <= 0 || rect.top >= globalThis.innerHeight) return 0;
+        return globalThis.innerHeight - rect.top + LAUNCHER_NAV_GAP_PX;
     }
 
     _gesturesEnabled() {
@@ -333,6 +346,7 @@ export class FlowUIDrawer extends LitElement {
     }
 
     _applyClusterCssVars() {
+        this.style.setProperty('--drawer-bottom-inset', `${this._bottomNavInset()}px`);
         const cluster = this._cluster;
         if (cluster === null) return;
         this.style.setProperty('--drawer-panel-width', `${cluster.panelWidth}px`);

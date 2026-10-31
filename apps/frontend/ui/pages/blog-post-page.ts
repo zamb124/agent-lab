@@ -7,7 +7,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
@@ -128,7 +128,7 @@ export class BlogPostPage extends PlatformPage {
                             ${this.t('blog_page.back')}
                         </button>
                     </p>
-                    ${busy ? html`<glass-spinner></glass-spinner>` : null}
+                    ${busy ? html`<platform-spinner></platform-spinner>` : null}
                     ${err && post === null ? html`<p class="marketing-text-error">${this.t('blog_page.post_error')}</p>` : null}
                     ${post
                         ? html`

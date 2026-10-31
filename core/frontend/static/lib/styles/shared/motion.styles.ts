@@ -4,7 +4,7 @@
  * Motion по умолчанию сначала идёт через compositor: opacity + transform. Компоненты могут включать
  * семантические классы, но layout-свойства по умолчанию никогда не анимируются.
  */
-import { css } from '../../../assets/js/lit/lit.min.js';
+import { css } from 'lit';
 
 export const motionStyles = css`
     :host {

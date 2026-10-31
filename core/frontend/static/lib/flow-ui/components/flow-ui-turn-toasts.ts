@@ -2,7 +2,7 @@
  * Chrome toast stack for Flow UI turn activity on non-conversation pages.
  * Presentational only — no document mutation, no platform EventBus toast bus.
  */
-import { LitElement, css, html, nothing, type PropertyValues } from '../../lit-shim.js';
+import { LitElement, css, html, nothing, type PropertyValues } from 'lit';
 import type { TurnToast } from '../runtime/turn-activity.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
 

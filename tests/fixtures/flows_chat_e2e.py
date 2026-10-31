@@ -1,4 +1,4 @@
-"""pytest fixture: echo/slow code-flow для UI E2E flows chat-page."""
+"""pytest fixture: echo/slow code-flow для UI E2E flows flows-chat-page."""
 
 from __future__ import annotations
 

@@ -4,7 +4,7 @@
 import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
@@ -62,7 +62,7 @@ export class BlogListPage extends PlatformPage {
                         <h1 class="marketing-content-title">${this.t('blog_page.title')}</h1>
                         <p class="marketing-content-lede">${this.t('blog_page.subtitle')}</p>
                     </header>
-                    ${busy ? html`<glass-spinner></glass-spinner>` : null}
+                    ${busy ? html`<platform-spinner></platform-spinner>` : null}
                     ${err ? html`<p class="marketing-text-error">${this.t('blog_page.load_error')}</p>` : null}
                     ${!busy && !err && items.length === 0
                         ? html`<p class="marketing-text-muted">${this.t('blog_page.empty')}</p>`

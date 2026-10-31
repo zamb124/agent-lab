@@ -1,4 +1,4 @@
-import { LitElement, css, html } from '../../lit-shim.js';
+import { LitElement, css, html } from 'lit';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
 
 export class FlowUIErrorBoundary extends LitElement {

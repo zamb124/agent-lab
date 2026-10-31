@@ -12,6 +12,7 @@ import {
     pathExistsInValues,
     unwrapVariableNode,
 } from '../variables/variable-refs.js';
+import { isPlainRecord } from '../events/payload.js';
 
 export type VariableSyntaxMode = 'at-ref' | 'brace' | 'both';
 
@@ -24,7 +25,7 @@ export interface VariableExtensionsOptions {
     t: (key: string) => string;
 }
 
-/** Minimal structural surface of the vendored codemirror-bundle.js used by this module. */
+/** Minimal structural surface of the lazy codemirror chunk used by this module. */
 export interface CmRange {
     from: number;
 }
@@ -164,6 +165,38 @@ export interface CmModule {
     syntaxHighlighting(style: unknown, options?: { fallback?: boolean }): unknown;
     defaultHighlightStyle: unknown;
     oneDark?: unknown;
+}
+
+/** Экспорты, которые lazy-чанк обязан предоставить для контракта CmModule. */
+const CM_REQUIRED_EXPORTS = [
+    'EditorState',
+    'EditorView',
+    'Compartment',
+    'keymap',
+    'history',
+    'autocompletion',
+    'oneDark',
+    'syntaxHighlighting',
+    'defaultHighlightStyle',
+    'lineNumbers',
+    'highlightActiveLine',
+    'highlightActiveLineGutter',
+    'defaultKeymap',
+    'historyKeymap',
+] as const;
+
+/** Проверка формы lazy-чанка CodeMirror у границы динамического import. */
+export function isCmModule(value: unknown): value is CmModule {
+    if (!isPlainRecord(value)) return false;
+    return CM_REQUIRED_EXPORTS.every((name) => value[name] !== undefined && value[name] !== null);
+}
+
+/** Narrowing у границы: возвращает типизированный CmModule или бросает. */
+export function requireCmModule(value: unknown): CmModule {
+    if (!isCmModule(value)) {
+        throw new TypeError('codemirror-lazy: module shape mismatch (missing required exports)');
+    }
+    return value;
 }
 
 interface HighlighterContext {

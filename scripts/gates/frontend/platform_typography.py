@@ -47,6 +47,10 @@ SKIP_DIR_NAMES = {
     "design",
     "mermaid",
     ".lighthouseci",
+    # ui-dist/embed-dist — выход esbuild (npm lazy-чанки echarts/mermaid);
+    # канон проверяется по источникам, не по сборке.
+    "ui-dist",
+    "embed-dist",
 }
 
 FORBIDDEN_FONT_LITERALS = (

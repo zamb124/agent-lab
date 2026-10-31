@@ -426,7 +426,7 @@ async def hitl_return_to_chat_session(
         flow_id,
     )
     await page.goto(session_url, wait_until="domcontentloaded")
-    await expect(page.locator("chat-page")).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-chat-page")).to_be_visible(timeout=30_000)
     await hitl_wait_chat_resume(page, expect_operator_text=expect_operator_text)
 
 
@@ -478,9 +478,9 @@ async def hitl_operator_claim_and_complete(
 
 
 async def hitl_wait_chat_resume(page: Page, *, expect_operator_text: str | None = None) -> None:
-    await expect(page.locator("chat-page .input-required-banner")).to_be_hidden(timeout=90_000)
+    await expect(page.locator("flows-chat-page .input-required-banner")).to_be_hidden(timeout=90_000)
     if expect_operator_text:
-        chat = page.locator("chat-page").first
+        chat = page.locator("flows-chat-page").first
         if "Марина" in expect_operator_text:
             reply = chat.get_by_text(re.compile(r"Марина|Marina|поддержк", re.I)).first
         else:
@@ -530,7 +530,7 @@ def hitl_user_flow_ui(
     surface: Literal["spa", "embed", "run"],
 ) -> Locator:
     if surface == "spa":
-        return page.locator("chat-page platform-flow-ui").first
+        return page.locator("flows-chat-page platform-flow-ui").first
     if surface == "embed":
         return page.locator(
             "flow-ui-drawer platform-flow-ui, flow-ui-page-host platform-flow-ui, platform-flow-ui"

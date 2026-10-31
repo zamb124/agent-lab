@@ -3,7 +3,7 @@
  * Один layout (vertical left) на desktop и mobile — mail и calendar единообразны.
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import { MAIL_EVENTS } from '../events/reducers/mail.js';

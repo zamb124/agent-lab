@@ -1,5 +1,5 @@
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 function formatDuration(seconds: number): string {
     if (!Number.isFinite(seconds) || seconds < 0) {

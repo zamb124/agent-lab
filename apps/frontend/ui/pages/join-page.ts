@@ -8,7 +8,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
@@ -151,7 +151,7 @@ export class JoinPage extends PlatformPage {
         if (busy && !res) {
             return html`
                 <div class="checking">
-                    <glass-spinner></glass-spinner>
+                    <platform-spinner></platform-spinner>
                 </div>
             `;
         }
@@ -222,7 +222,7 @@ export class JoinPage extends PlatformPage {
                 <div class="card">
                     ${this._renderInvitePreview()}
                     <div class="checking">
-                        <glass-spinner></glass-spinner>
+                        <platform-spinner></platform-spinner>
                         <p>${this.t('join_page.session_checking')}</p>
                     </div>
                 </div>

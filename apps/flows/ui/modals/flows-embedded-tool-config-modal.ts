@@ -9,7 +9,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import { renderFlowsNodeEditorSurface } from '../components/editor/flows-node-editor-surface.js';
 import {
     effectiveFlowNodesMap,
@@ -519,7 +519,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
 
     override renderBody() {
         if (this._loadPhase === 'loading' || this._loadPhase === 'idle') {
-            return html`<div class="body-wrap graph-modal-body"><glass-spinner></glass-spinner></div>`;
+            return html`<div class="body-wrap graph-modal-body"><platform-spinner></platform-spinner></div>`;
         }
         const node = this._node;
         if (this._loadPhase === 'error' || node === null) {

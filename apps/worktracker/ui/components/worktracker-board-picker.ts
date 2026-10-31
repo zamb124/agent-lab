@@ -127,13 +127,9 @@ export class WorktrackerBoardPicker extends PlatformElement {
 
     override connectedCallback() {
         super.connectedCallback();
-        document.addEventListener('click', this._onDocClick);
+        this.useDomEvent(document, 'click', this._onDocClick);
     }
 
-    override disconnectedCallback() {
-        document.removeEventListener('click', this._onDocClick);
-        super.disconnectedCallback();
-    }
 
     private _onDocClick(event: Event) {
         if (!this.menuOpen) {

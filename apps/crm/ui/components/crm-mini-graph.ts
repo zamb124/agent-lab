@@ -14,7 +14,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import {
     aggregateIncidentWeightsByNode,
     computeGraphNodeDisplaySize,
@@ -662,20 +662,20 @@ export class CRMMiniGraph extends PlatformElement {
     }
 
     /**
-     * Кастомные узлы (sphere + спрайты подписей) берут THREE с window.
-     * Инициализация графа идёт после отложенного import three в index.html —
-     * при первом открытии вкладки к моменту _initGraph окно может быть ещё без THREE.
+     * Кастомные узлы (sphere + спрайты подписей) берут THREE с window —
+     * тот же инстанс, что внутри ForceGraph3D (один чанк `three` в сборке).
+     * Ленивый импорт: three.js не грузится до первого открытия графа.
      */
     async _ensureThree() {
         if (typeof window === 'undefined') {
             throw new Error('CRMMiniGraph._ensureThree: window is not available');
         }
-        if (window.THREE && typeof window.THREE.SphereGeometry === 'function') {
+        if (window.THREE && typeof window.THREE.SphereGeometry === 'function' && typeof window.ForceGraph3D === 'function') {
             return;
         }
-        const threeUrl = '/crm/ui/vendor/three/three.module.min.js';
-        const mod = await import(threeUrl);
+        const [mod, fg] = await Promise.all([import('three'), import('3d-force-graph')]);
         window.THREE = mod;
+        window.ForceGraph3D = fg.default;
     }
 
     async _loadGraph() {
@@ -1163,7 +1163,7 @@ export class CRMMiniGraph extends PlatformElement {
         if (this._graphOp.busy) {
             return html`
                 <div class=${boxClass}>
-                    <div class="mini-empty" style="flex:1;min-height:0;"><glass-spinner></glass-spinner></div>
+                    <div class="mini-empty" style="flex:1;min-height:0;"><platform-spinner></platform-spinner></div>
                     ${footerBar}
                 </div>
             `;

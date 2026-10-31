@@ -23,14 +23,14 @@ export class LandingCases extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: clamp(26px, 3.5vw, 40px);
                 margin: 0 0 12px;
-                color: var(--landing-secondary, #e8e8e8);
+                color: var(--text-secondary);
                 text-align: center;
             }
             .sub {
                 text-align: center;
                 margin: 0 0 48px;
                 font-size: 16px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
+                color: var(--text-secondary);
             }
             .grid {
                 display: grid;
@@ -45,27 +45,27 @@ export class LandingCases extends PlatformElement {
             article {
                 padding: 24px;
                 border-radius: 20px;
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.04));
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-bg-subtle);
             }
             .metric {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 14px;
                 font-weight: 600;
-                color: var(--landing-primary, #5768fe);
+                color: var(--marketing-product-accent);
                 margin-bottom: 10px;
             }
             h3 {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 20px;
                 margin: 0 0 10px;
-                color: var(--landing-secondary, #e8e8e8);
+                color: var(--text-secondary);
             }
             p {
                 margin: 0;
                 font-size: 15px;
                 line-height: 1.55;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.82));
+                color: var(--text-secondary);
             }
         `,
     ];

@@ -686,7 +686,8 @@
         "filter_personal": "Личные",
         "toast_created": "Пространство создано",
         "toast_create_failed": "Не удалось создать пространство",
-        "open_crm": "Настройки CRM и grants"
+        "open_crm": "Настройки CRM и grants",
+        "empty": "Пространства пока нет"
     },
     "team_page": {
         "title": "Команда",
@@ -872,6 +873,7 @@
         "saving": "Сохранение...",
         "oauth_title": "OAuth Провайдеры",
         "oauth_info": "Настройте методы авторизации для вашей команды",
+        "oauth_empty": "Провайдеры не настроены",
         "provider_active": "Активен",
         "sessions_placeholder": "Список активных сессий будет доступен в следующей версии",
         "integrations_title": "Доступные интеграции",

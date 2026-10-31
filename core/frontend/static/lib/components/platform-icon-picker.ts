@@ -1,5 +1,5 @@
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './platform-popover.js';
@@ -126,9 +126,9 @@ export class PlatformIconPicker extends PlatformElement {
         this._anchor = null;
     }
 
-    override updated(changed: PropertyValues<this>): void {
-        super.updated?.(changed);
-        if (this._anchor === null) {
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate?.(changed);
+        if (this._anchor === null && this.hasUpdated) {
             const trigger = this.renderRoot?.querySelector?.('.trigger');
             if (trigger instanceof HTMLElement) {
                 this._anchor = trigger;

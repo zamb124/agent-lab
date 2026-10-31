@@ -568,11 +568,11 @@ export class FlowsApp extends PlatformApp {
                             ?safe-bottom=${this._flowsMobile}
                             ?content-no-scroll=${true}
                         >
-                            <chat-page
+                            <flows-chat-page
                                 .flowId=${params.flowId}
                                 .branchId=${typeof params.branchId === 'string' && params.branchId.length > 0 ? params.branchId : 'base'}
                                 .sessionId=${asString(params.sessionId)}
-                            ></chat-page>
+                            ></flows-chat-page>
                         </platform-island>
                     </div>
                 `;

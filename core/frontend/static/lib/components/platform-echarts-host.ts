@@ -2,70 +2,18 @@
  * platform-echarts-host — Apache ECharts в Lit (lazy script, ResizeObserver, dispose).
  */
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import { isPlainRecord } from '../events/payload.js';
 
-const ECHARTS_URL = '/static/core/assets/js/echarts/echarts.min.js';
-
-interface EchartsInstance {
-    setOption(option: unknown, opts?: { notMerge?: boolean }): void;
-    resize(): void;
-    dispose(): void;
-    getDataURL(opts: { type: string; pixelRatio?: number; backgroundColor?: string }): string;
-}
-
-interface EchartsApi {
-    init(el: HTMLElement, theme?: unknown, opts?: { renderer?: string }): EchartsInstance;
-}
+type EchartsApi = typeof import('echarts');
+type EchartsInstance = ReturnType<EchartsApi['init']>;
 
 let _echartsPromise: Promise<EchartsApi> | null = null;
 
-function isEchartsApi(value: unknown): value is EchartsApi {
-    return isPlainRecord(value) && typeof value.init === 'function';
-}
-
-function windowEcharts(): EchartsApi | null {
-    const host: unknown = window;
-    if (!isPlainRecord(host)) return null;
-    const api = host.echarts;
-    if (api === undefined) return null;
-    if (!isEchartsApi(api)) {
-        throw new Error('echarts global is not an API');
-    }
-    return api;
-}
-
 function loadEcharts(): Promise<EchartsApi> {
-    const ready = windowEcharts();
-    if (ready !== null) {
-        return Promise.resolve(ready);
+    if (!_echartsPromise) {
+        _echartsPromise = import('echarts');
     }
-    if (_echartsPromise) {
-        return _echartsPromise;
-    }
-    _echartsPromise = new Promise<EchartsApi>((resolve, reject) => {
-        const existing = document.querySelector(`script[data-platform-echarts="1"]`);
-        const already = windowEcharts();
-        if (existing && already !== null) {
-            resolve(already);
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = ECHARTS_URL;
-        script.async = true;
-        script.dataset.platformEcharts = '1';
-        script.onload = () => {
-            const loaded = windowEcharts();
-            if (loaded === null) {
-                reject(new Error('echarts global missing after load'));
-                return;
-            }
-            resolve(loaded);
-        };
-        script.onerror = () => reject(new Error(`echarts load failed: ${ECHARTS_URL}`));
-        document.head.appendChild(script);
-    });
     return _echartsPromise;
 }
 

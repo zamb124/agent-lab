@@ -3,8 +3,8 @@
  * Данные: prop `.item` (полный WorkItem) или lazy через work-item-id.
  */
 
-import { html, css } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { openWorkItemDetail, isMobileViewport } from '../utils/work-item-deeplink.js';
 import type { OpController } from '../base/use-resource.js';

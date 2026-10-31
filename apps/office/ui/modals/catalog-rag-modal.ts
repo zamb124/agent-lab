@@ -17,7 +17,7 @@ import {
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/rag/platform-rag-retrieval-panel.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
@@ -286,7 +286,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         const busy = this._status.busy || this._enable.busy || this._disable.busy
             || this._rebuild.busy || this._settings.busy;
         if (this._status.busy && !status) {
-            return html`<div class="loading-row"><glass-spinner></glass-spinner></div>`;
+            return html`<div class="loading-row"><platform-spinner></platform-spinner></div>`;
         }
         const enabled = status && status.enabled === true;
         const includeSubcatalogs = status && status.include_subcatalogs === true;

@@ -18,7 +18,7 @@ import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '../components/sync-chat-header.js';
 import '../components/sync-pin-strip.js';
 import '../components/sync-selection-bar.js';

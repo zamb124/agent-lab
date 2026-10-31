@@ -42,7 +42,7 @@
 
 import { isPlainRecord } from '../events/payload.js';
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformFormModal } from './glass-form-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
@@ -471,8 +471,8 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         return this._sharedChannelsOp;
     }
 
-    override updated(changed: PropertyValues<this>): void {
-        super.updated(changed);
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate(changed);
         const auth = this._authSel.value;
         const team = this._teamSel.value;
         const members = team === undefined || !Array.isArray(team.members) ? [] : team.members;

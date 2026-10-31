@@ -6,7 +6,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-user-chip.js';
@@ -102,6 +102,7 @@ export class FrontendNamespacesPage extends PlatformPage {
             .crm-link:hover {
                 text-decoration: underline;
             }
+            platform-empty-state { margin-top: var(--space-8); }
         `,
     ];
 
@@ -212,7 +213,11 @@ export class FrontendNamespacesPage extends PlatformPage {
                 </form>
             ` : nothing}
 
-            ${loading ? html`<glass-spinner></glass-spinner>` : nothing}
+            ${loading
+                ? html`<platform-empty-state loading></platform-empty-state>`
+                : items.length === 0
+                  ? html`<platform-empty-state icon="folder" title=${t('namespaces_page.empty')}></platform-empty-state>`
+                  : nothing}
 
             <div class="grid">
                 ${items.map((item) => html`

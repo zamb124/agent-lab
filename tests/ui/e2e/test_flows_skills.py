@@ -440,7 +440,7 @@ async def test_flows_skills_unlock_in_chat(
 
     page = ui_page_system
     await flows_open_chat_page(page, flows_ui, flow_id)
-    chat = page.locator("chat-page platform-flow-ui").first
+    chat = page.locator("flows-chat-page platform-flow-ui").first
     await expect(chat).to_be_visible(timeout=30_000)
     await scenario.step(
         "Откройте чат с агентом",

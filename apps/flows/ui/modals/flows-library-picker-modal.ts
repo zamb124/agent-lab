@@ -17,8 +17,9 @@ import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-picker-card.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/common/flows-code-language-segment.js';
 import '../components/common/flows-code-language-icon.js';
 import {
@@ -1496,12 +1497,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (flat.length === 0) {
             return html`
                 ${showTabs ? this._renderToolCategoryTabs() : nothing}
-                <div class="lib-empty">${this.t('tool_picker_modal.mcp_empty_search')}</div>
+                <platform-empty-state icon="search" title=${this.t('tool_picker_modal.mcp_empty_search')}></platform-empty-state>
                 ${this._pickerHasMore(this._currentPickerCategory())
                     ? html`
                         <div data-picker-scroll-sentinel class="picker-scroll-sentinel" aria-hidden="true"></div>
                         ${this._pickerLoadingMore
-                            ? html`<glass-spinner></glass-spinner>`
+                            ? html`<platform-spinner></platform-spinner>`
                             : nothing}
                     `
                     : nothing}
@@ -1517,7 +1518,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 ? html`
                     <div data-picker-scroll-sentinel class="picker-scroll-sentinel" aria-hidden="true"></div>
                     ${this._pickerLoadingMore
-                        ? html`<glass-spinner></glass-spinner>`
+                        ? html`<platform-spinner></platform-spinner>`
                         : nothing}
                 `
                 : nothing}
@@ -1732,7 +1733,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                             }}
                         >
                             ${isSyncing
-                                ? html`<glass-spinner size="sm"></glass-spinner>`
+                                ? html`<platform-spinner size="sm"></platform-spinner>`
                                 : html`<platform-icon name="rotate-ccw" size="16"></platform-icon>`}
                         </platform-button>
                         <platform-button
@@ -1748,7 +1749,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                             }}
                         >
                             ${isTesting
-                                ? html`<glass-spinner size="sm"></glass-spinner>`
+                                ? html`<platform-spinner size="sm"></platform-spinner>`
                                 : html`<platform-icon name="check" size="16"></platform-icon>`}
                         </platform-button>
                     </div>
@@ -1756,7 +1757,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 <div class="content-panel-body">
                     ${this._renderMcpTestFeedback(serverId)}
                     ${tools.length === 0
-                        ? html`<div class="mcp-picker-server-empty">${this.t('tool_picker_modal.mcp_server_empty')}</div>`
+                        ? html`<platform-empty-state icon="mcp" title=${this.t('tool_picker_modal.mcp_server_empty')}></platform-empty-state>`
                         : html`
                             <div class="mcp-picker-tools-grid" role="list">
                                 ${tools.map((t) => this._renderMcpToolCard(t))}
@@ -1780,7 +1781,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (this._mcpGroupedInitialBusy()) {
             return html`
                 ${showTabs ? this._renderToolCategoryTabs() : nothing}
-                <glass-spinner></glass-spinner>
+                <platform-spinner></platform-spinner>
             `;
         }
         if (this._mcpSearchActive()) {
@@ -1792,7 +1793,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             const hasServers = asArray(this._mcpServers.items).length > 0;
             const emptyContent = (!hasMcpTools && !hasServers)
                 ? this._renderMcpEmptyState()
-                : html`<div class="lib-empty">${this.t('tool_picker_modal.empty')}</div>`;
+                : html`<platform-empty-state icon="tool" title=${this.t('tool_picker_modal.empty')}></platform-empty-state>`;
             return html`
                 ${showTabs ? this._renderToolCategoryTabs() : nothing}
                 ${emptyContent}
@@ -1807,7 +1808,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 ? html`
                     <div data-picker-scroll-sentinel class="picker-scroll-sentinel" aria-hidden="true"></div>
                     ${this._pickerLoadingMore
-                        ? html`<glass-spinner></glass-spinner>`
+                        ? html`<platform-spinner></platform-spinner>`
                         : nothing}
                 `
                 : nothing}
@@ -2087,7 +2088,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (templatesLoading || toolsLoading) {
             return html`
                 ${this._renderToolPickerToolbar()}
-                <glass-spinner></glass-spinner>
+                <platform-spinner></platform-spinner>
             `;
         }
         const rows = this._pickModeRows();
@@ -2097,7 +2098,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (rows.length === 0) {
             return html`
                 ${this._renderToolPickerToolbar()}
-                <div class="lib-empty">${this.t(emptyKey)}</div>
+                <platform-empty-state icon="box" title=${this.t(emptyKey)}></platform-empty-state>
             `;
         }
         const locale = this._pickerLocale();
@@ -2109,7 +2110,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (groups.length === 0) {
             return html`
                 ${this._renderToolPickerToolbar()}
-                <div class="lib-empty">${this.t(emptyKey)}</div>
+                <platform-empty-state icon="box" title=${this.t(emptyKey)}></platform-empty-state>
             `;
         }
         const searchActive = _lower(this._pickerSearchQuery()).length > 0;
@@ -2123,7 +2124,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 ? html`
                     <div data-picker-scroll-sentinel class="picker-scroll-sentinel" aria-hidden="true"></div>
                     ${this._pickerLoadingMore
-                        ? html`<glass-spinner></glass-spinner>`
+                        ? html`<platform-spinner></platform-spinner>`
                         : nothing}
                 `
                 : nothing}

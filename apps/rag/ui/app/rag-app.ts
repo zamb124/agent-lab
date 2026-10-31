@@ -14,7 +14,7 @@
  */
 
 import { html, css } from 'lit';
-import type { PropertyValues } from '@platform/lib/lit-shim.js';
+import type { PropertyValues } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';

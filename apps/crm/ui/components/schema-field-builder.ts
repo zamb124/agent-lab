@@ -14,6 +14,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
     CSSResultGroup,
@@ -470,7 +471,7 @@ export class SchemaFieldBuilder extends PlatformElement {
                         </div>
                     </div>
                 `;
-                }) : html`<div class="empty">${this.t('schema_builder.no_fields')}</div>`}
+                }) : html`<platform-empty-state icon="text-fields" title=${this.t('schema_builder.no_fields')}></platform-empty-state>`}
             </div>
             <div class="add-row">
                 <button

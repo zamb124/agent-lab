@@ -13,6 +13,16 @@
         "products": "Products",
         "profile": "Profile"
     },
+    "sidebar": {
+        "title": "Stock",
+        "nav": {
+            "stock_home": "Pulse",
+            "stock_transfers": "Transfers",
+            "stock_products": "Products",
+            "stock_locations": "Locations",
+            "stock_valuation": "Valuation"
+        }
+    },
     "home": {
         "title": "Warehouse pulse",
         "empty": "No warehouse configured",
@@ -69,5 +79,45 @@
         "unit_cost": "Unit cost",
         "qty_after": "Qty after",
         "value_after": "Value after"
+    },
+    "toast": {
+        "product_created": "Product created",
+        "product_create_failed": "Failed to create product",
+        "product_updated": "Product updated",
+        "product_update_failed": "Failed to update product",
+        "location_created": "Location created",
+        "location_create_failed": "Failed to create location",
+        "location_updated": "Location updated",
+        "location_update_failed": "Failed to update location",
+        "warehouse_created": "Warehouse created",
+        "warehouse_create_failed": "Failed to create warehouse",
+        "operation_type_updated": "Operation type updated",
+        "operation_type_update_failed": "Failed to update operation type",
+        "transfer_created": "Transfer created",
+        "transfer_create_failed": "Failed to create transfer",
+        "transfer_confirmed": "Transfer confirmed",
+        "transfer_confirm_failed": "Failed to confirm transfer",
+        "transfer_assigned": "Reserved",
+        "transfer_assign_failed": "Failed to reserve",
+        "transfer_validated": "Transfer validated",
+        "transfer_validate_failed": "Failed to validate transfer",
+        "transfer_cancelled": "Transfer cancelled",
+        "transfer_cancel_failed": "Failed to cancel transfer",
+        "transfer_returned": "Return registered",
+        "transfer_return_failed": "Failed to register return",
+        "move_line_updated": "Move line updated",
+        "move_line_update_failed": "Failed to update move line",
+        "move_decision_applied": "Decision applied",
+        "move_decision_apply_failed": "Failed to apply decision",
+        "inventory_set": "Inventory recorded",
+        "inventory_set_failed": "Failed to record inventory",
+        "inventory_applied": "Inventory applied",
+        "inventory_apply_failed": "Failed to apply inventory",
+        "valuation_revalued": "Revaluation done",
+        "valuation_revalue_failed": "Failed to revalue",
+        "valuation_correction_done": "Correction applied",
+        "valuation_correction_failed": "Failed to apply correction",
+        "lot_created": "Lot created",
+        "lot_create_failed": "Failed to create lot"
     }
 }

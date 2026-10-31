@@ -14,7 +14,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-metric-card.js';
 import { marketingHeroStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import '../components/flows-catalog-list.js';
@@ -645,19 +645,7 @@ export class FlowsHomePage extends PlatformPage {
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
-            .empty-panel {
-                min-height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-md);
-                color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                text-align: center;
-                padding: var(--space-4);
-                box-sizing: border-box;
-            }
+            platform-empty-state { min-height: 120px; }
             @media (max-width: 1200px) {
                 .metric-grid,
                 .action-grid,
@@ -1242,13 +1230,9 @@ export class FlowsHomePage extends PlatformPage {
             <section>
                 ${this._renderSectionHead('flows_home.flows_title', 'flows_home.flows_subtitle', '', 'flows_home.flows_help')}
                 ${this._flows.loading && visibleFlows.length === 0
-                    ? html`<div class="empty-panel"><glass-spinner></glass-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : visibleFlows.length === 0
-                        ? html`
-                            <div class="empty-panel">
-                                <span>${this.t('flows_home.flows_empty')}</span>
-                            </div>
-                        `
+                        ? html`<platform-empty-state icon="workflow" title=${this.t('flows_home.flows_empty')}></platform-empty-state>`
                         : html`
                             <div class="flow-grid">
                                 ${repeat(visibleFlows, (flow) => {
@@ -1437,9 +1421,9 @@ export class FlowsHomePage extends PlatformPage {
                 <div class="activity-layout">
                     <div class="session-list">
                         ${this._sessions.loading && sessions.length === 0
-                            ? html`<div class="empty-panel"><glass-spinner></glass-spinner></div>`
+                            ? html`<platform-empty-state loading></platform-empty-state>`
                             : sessions.length === 0
-                                ? html`<div class="empty-panel">${this.t('flows_home.sessions_empty')}</div>`
+                                ? html`<platform-empty-state icon="chat" title=${this.t('flows_home.sessions_empty')}></platform-empty-state>`
                                 : repeat(sessions, (session) => {
                                     if (!isPlainObject(session) || typeof session.session_id !== 'string' || session.session_id.length === 0) {
                                         throw new Error('flows-home-page: session_id required');

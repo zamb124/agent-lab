@@ -6,6 +6,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-empty-state.js';
 import './branch-item.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { resolveFlowCoverGradient } from '../_helpers/flow-cover-gradients.js';
@@ -492,7 +493,7 @@ export class FlowCard extends PlatformElement {
                                     `)}
                                 </div>
                             ` : html`
-                                <div class="branches-empty">${this.t('flow_card.no_branches')}</div>
+                                <platform-empty-state icon="git-branch" title=${this.t('flow_card.no_branches')}></platform-empty-state>
                             `}
                         </div>
                     </div>

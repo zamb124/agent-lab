@@ -1,6 +1,6 @@
 /** Стили ``<flow-ui-drawer>``: launcher-кластер, панель, resize-handle, mobile fullscreen. */
 
-import { css } from '../../lit-shim.js';
+import { css } from 'lit';
 
 export const flowUIDrawerStyles = css`
         :host {
@@ -13,10 +13,10 @@ export const flowUIDrawerStyles = css`
             pointer-events: none;
         }
         :host(:not([data-drawer-gestures='on'])) {
-            inset: auto 22px 22px auto;
+            inset: auto 22px calc(22px + var(--drawer-bottom-inset, 0px)) auto;
         }
         :host(:not([data-drawer-gestures='on'])[data-embed-position='bottom-left']) {
-            inset: auto auto 22px 22px;
+            inset: auto auto calc(22px + var(--drawer-bottom-inset, 0px)) 22px;
         }
         .launcher {
             width: 58px; height: 58px; padding: 0; border: 1px solid var(--flow-ui-logo-disc-border, rgba(255, 255, 255, 0.14));
@@ -125,7 +125,7 @@ export const flowUIDrawerStyles = css`
             display: none;
         }
         @media (max-width: 520px) {
-            :host { inset: auto 10px 10px 10px; pointer-events: none; }
+            :host { inset: auto 10px calc(10px + var(--drawer-bottom-inset, 0px)) 10px; pointer-events: none; }
             .panel {
                 position: fixed;
                 inset: 0;

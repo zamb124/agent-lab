@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from core.config import get_settings
 from core.di.platform import PlatformDi
 from core.models.identity_models import User
+from core.models.provider_litserve_model import litserve_catalog_entries
 from core.models.voice_providers_catalog import (
     VoiceProvidersCatalogDTO,
     VoiceProvidersCatalogPayload,
@@ -19,4 +19,4 @@ async def op_voice_providers_catalog(
     di: PlatformDi,
 ) -> VoiceProvidersCatalogDTO:
     _ = payload, user, di
-    return build_voice_providers_catalog_dto(get_settings().provider_litserve)
+    return build_voice_providers_catalog_dto(await litserve_catalog_entries())

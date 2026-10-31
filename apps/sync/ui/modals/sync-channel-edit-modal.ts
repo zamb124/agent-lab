@@ -17,7 +17,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import { buildSyncChannelAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
@@ -543,7 +543,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
             <div class="form-group">
                 <label class="form-label">${this.t('channel_settings.section_members')}</label>
                 ${this._membersOp.busy
-                    ? html`<div class="form-hint"><glass-spinner></glass-spinner></div>`
+                    ? html`<div class="form-hint"><platform-spinner></platform-spinner></div>`
                     : html`<div class="members-list">
                           ${this._members.map(
                               (member) => html`

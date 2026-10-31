@@ -1,5 +1,5 @@
 /**
- * graph-canvas — обёртка над оффлайновым `ForceGraph3D` (window.ForceGraph3D).
+ * graph-canvas — обёртка над `3d-force-graph` (window.ForceGraph3D, lazy npm-чанк).
  *
  * Презентационный компонент: всё состояние графа приходит через properties,
  * взаимодействие наружу — DOM-события `node-click`, `node-dblclick`,
@@ -194,9 +194,10 @@ export class CRMGraphCanvas extends PlatformElement {
     }
 
     override firstUpdated(changed: PropertyValues<this>): void {
-        this._assertOfflineVendorSetup();
-        this._initGraph();
-        this._syncGraph();
+        void this._ensureGraphVendor().then(() => {
+            this._initGraph();
+            this._syncGraph();
+        });
         this._themeSelect = this.select((state) => state.theme.mode);
         const canvasEl = this.renderRoot?.querySelector('#graph-canvas');
         if (canvasEl) {
@@ -654,18 +655,17 @@ export class CRMGraphCanvas extends PlatformElement {
         this._autoFitPending = true;
     }
 
-    _assertOfflineVendorSetup() {
-        const expectedSrc = '/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js';
-        const hasExpectedScript = Array.from(document.scripts).some((script) => {
-            if (typeof script.src !== 'string') return false;
-            return script.src.includes(expectedSrc);
-        });
-        if (!hasExpectedScript) {
-            throw new Error(`Offline vendor script is required: ${expectedSrc}`);
+    /**
+     * Ленивая загрузка three.js и 3d-force-graph из npm-чанков: тот же
+     * инстанс `three` внутри ForceGraph3D — один shared-чанк в сборке.
+     */
+    async _ensureGraphVendor(): Promise<void> {
+        if (typeof window.ForceGraph3D === 'function' && window.THREE) {
+            return;
         }
-        if (typeof window.ForceGraph3D !== 'function') {
-            throw new Error('ForceGraph3D is not loaded from offline vendor script');
-        }
+        const [three, fg] = await Promise.all([import('three'), import('3d-force-graph')]);
+        window.THREE = three;
+        window.ForceGraph3D = fg.default;
     }
 
     _onCanvasNodeClick(node: Record<string, unknown>, event: unknown): void {

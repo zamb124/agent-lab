@@ -4,7 +4,7 @@
  * хост переводит в ``flow-ui-drawer-expand-toggle``/``flow-ui-drawer-close`` для ``<flow-ui-drawer>``.
  */
 
-import { LitElement, css, html, nothing } from '../../lit-shim.js';
+import { LitElement, css, html, nothing } from 'lit';
 import { flowUIGlyph } from '../utils/glyph.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
 import { chromeIconButtonStyles } from './chrome-icon-button.styles.js';

@@ -11,7 +11,8 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-badge.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/editors/flows-code-editor.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
@@ -1211,7 +1212,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         const selected = this._selectedEvent();
         const selectedEventId = selected === null ? '' : selected.event_id;
         if (events.length === 0) {
-            return html`<div class="durable-history-empty">${this.t('durable_history_modal.empty')}</div>`;
+            return html`<platform-empty-state icon="scroll-text" title=${this.t('durable_history_modal.empty')}></platform-empty-state>`;
         }
         return html`
             <div class="timeline-list">
@@ -1466,7 +1467,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
     _renderDetail() {
         const event = this._selectedEvent();
         if (event === null) {
-            return html`<div class="durable-history-empty">${this.t('durable_history_modal.empty')}</div>`;
+            return html`<platform-empty-state icon="scroll-text" title=${this.t('durable_history_modal.empty')}></platform-empty-state>`;
         }
         return html`
             <section class="detail-panel">
@@ -1513,7 +1514,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 @click=${() => this._loadAll()}
             >
                 ${this._busy()
-                    ? html`<glass-spinner></glass-spinner>`
+                    ? html`<platform-spinner></platform-spinner>`
                     : html`<platform-icon name="refresh" size="16"></platform-icon>`}
             </platform-button>
         `;
@@ -1522,7 +1523,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
     override renderBody() {
         const sessionId = this._sessionId();
         if (sessionId.length === 0) {
-            return html`<div class="durable-history-empty">${this.t('durable_history_modal.session_required')}</div>`;
+            return html`<platform-empty-state icon="info" title=${this.t('durable_history_modal.session_required')}></platform-empty-state>`;
         }
         const error = this._historyOp.error || this._branchesOp.error || this._stateAtOp.error || this._forkOp.error || this._rewindOp.error || this._retryOp.error || this._manualPatchOp.error;
         if (error) {
@@ -1530,7 +1531,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         }
         const events = this._historyEvents();
         if (this._historyOp.busy && events.length === 0) {
-            return html`<div class="durable-history-loading"><glass-spinner></glass-spinner></div>`;
+            return html`<div class="durable-history-loading"><platform-spinner></platform-spinner></div>`;
         }
         return html`
             <div class="durable-history-body">

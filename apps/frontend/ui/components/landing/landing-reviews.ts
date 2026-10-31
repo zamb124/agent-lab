@@ -14,7 +14,7 @@ export class LandingReviews extends PlatformElement {
             :host {
                 display: block;
                 padding: 80px 20px;
-                background: var(--landing-reviews-gradient, linear-gradient(180deg, #0F0F0F 0%, #16213e 100%));
+                background: linear-gradient(180deg, var(--marketing-page-bg) 0%, var(--bg-primary) 100%);
             }
             
             .reviews-container {
@@ -27,14 +27,14 @@ export class LandingReviews extends PlatformElement {
                 font-size: 32px;
                 font-weight: 500;
                 line-height: 1.3;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 text-align: center;
                 margin: 0 0 60px 0;
             }
             
             .review-card {
-                background: radial-gradient(circle at top left, rgba(87, 104, 254, 0.15), var(--landing-panel-bg, rgba(255, 255, 255, 0.03)));
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                background: radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 15%, transparent), var(--glass-bg-subtle));
+                border: 1px solid var(--glass-border-medium);
                 border-radius: 24px;
                 padding: 40px;
                 backdrop-filter: blur(20px);
@@ -66,7 +66,7 @@ export class LandingReviews extends PlatformElement {
                 width: 60px;
                 height: 60px;
                 border-radius: 50%;
-                background: linear-gradient(135deg, var(--landing-primary), #8b9dff);
+                background: linear-gradient(135deg, var(--marketing-product-accent), var(--accent));
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -84,14 +84,14 @@ export class LandingReviews extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 18px;
                 font-weight: 600;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0 0 4px 0;
             }
             
             .review-position {
                 font-family: var(--font-sans);
                 font-size: 14px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
+                color: var(--text-secondary);
                 margin: 0;
             }
             
@@ -99,7 +99,7 @@ export class LandingReviews extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.7;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.9));
+                color: var(--text-secondary);
                 margin: 0;
                 flex: 1;
             }
@@ -115,18 +115,18 @@ export class LandingReviews extends PlatformElement {
                 width: 12px;
                 height: 12px;
                 border-radius: 50%;
-                background: rgba(255, 255, 255, 0.2);
+                background: var(--glass-tint-strong);
                 cursor: pointer;
                 transition: var(--motion-transition-interactive);
             }
             
             .dot.active {
-                background: var(--landing-primary);
+                background: var(--marketing-product-accent);
                 transform: scale(1.2);
             }
             
             .dot:hover:not(.active) {
-                background: rgba(255, 255, 255, 0.4);
+                background: var(--glass-tint-strong);
             }
             
             @media (min-width: 768px) {

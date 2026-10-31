@@ -1,47 +1,39 @@
 #!/usr/bin/env python3
 """Статическая проверка автономного embed (внешний сайт без import map).
 
-Строится замыкание относительных импортов от Flow UI embed entrypoints
-``core/frontend/static/lib/embed-flow-ui/`` и публичного CDN shim
-``embed-chat/humanitec-embed-autoload.ts``. Любой файл в замыкании
-не должен содержать bare ``from 'lit'`` / ``from 'lit/...`` или
-``from '@platform/...``. Иначе в браузере на чужом origin —
-``Failed to resolve module specifier``.
+Embed-бандлы ``core/frontend/embed-dist/**/*.js`` отдаются на чужие origin
+целиком: единственные разрешённые импорты — относительные пути к чанкам
+того же каталога. Bare-спецификатор (``from 'lit'``) или абсолютный URL
+(``import('/static/…')``) в выходе означает утечку несобранного модуля —
+на внешнем сайте это ``Failed to resolve module specifier`` или 404.
+
+Источники при этом используют канонические npm-спецификаторы: гарантию
+self-contained даёт esbuild, поэтому гейт проверяет собранный выход,
+а не дерево исходников.
 
 Запуск:
     uv run python -m scripts.gates.frontend.embed_esm_closure
 
 Вызывается из ``make check-core-frontend-canon`` (слой перед browser-тестами).
+Требует свежий ``node scripts/build/ui.mjs``.
 """
 
 from __future__ import annotations
 
 import re
 import sys
-from collections import deque
 from pathlib import Path
 
 from scripts.gates.kit import REPO_ROOT as ROOT
 
-STATIC_ROOT = ROOT / "core" / "frontend" / "static"
-LIB = STATIC_ROOT / "lib"
+EMBED_DIST = ROOT / "core" / "frontend" / "embed-dist"
 
-ENTRYPOINTS = tuple(
-    LIB / rel
-    for rel in (
-        Path("embed-flow-ui/flow-ui-embed-autoload.ts"),
-        Path("flow-ui/shell/embed-autoload.ts"),
-        Path("embed-chat/humanitec-embed-autoload.ts"),
-    )
-)
-
-FROM_SPEC_RE = re.compile(r"""\bfrom\s+(['"])([^'"]+)\1""")
-IMPORT_SIDE_RE = re.compile(r"""^\s*import\s+['"]([^'"]+)['"]\s*;?\s*$""", re.MULTILINE)
-
-BARE_LIT_RE = re.compile(r"""\bfrom\s+['"]lit(?:/[^'"]*)?['"]""")
-IMPORT_TYPE_RE = re.compile(r"""^\s*(?:import|export)\s+type\b""")
-BARE_PLATFORM_FROM_RE = re.compile(r"""\bfrom\s+['"]@platform/[^'"]+['"]""")
-BARE_PLATFORM_SIDE_RE = re.compile(r"""^\s*import\s+['"]@platform/[^'"]+['"]\s*;?\s*$""", re.MULTILINE)
+STATIC_IMPORT_RE = re.compile(r"""(?:from|import)\s*['"]([^'"]+)['"]""")
+DYNAMIC_IMPORT_RE = re.compile(r"""import\(\s*['"]([^'"]+)['"]\s*\)""")
+# Спецификатор модуля: ./x ../x /x https://x или bare (@scope/pkg, pkg/sub).
+# Минифицированный код полон похожих подстрок (`,import:`, `,t.from),f.attr(`) —
+# без формы спецификатора это не импорт, а фрагмент кода.
+SPECIFIER_RE = re.compile(r"^(?:\.{0,2}/|/|https?://|@?[\w-]+(?:/[\w./@-]+)*)[\w./@-]*$")
 
 ERRORS: list[str] = []
 
@@ -50,106 +42,29 @@ def fail(message: str) -> None:
     ERRORS.append(message)
 
 
-def _strip_comments(text: str) -> str:
-    def _block(match: re.Match[str]) -> str:
-        return "\n" * match.group(0).count("\n")
-
-    text = re.sub(r"/\*.*?\*/", _block, text, flags=re.S)
-    text = re.sub(r"(^|[^:\\])//[^\n]*", lambda m: m.group(1), text)
-    return text
-
-
-def _collect_relative_specs(text: str) -> list[str]:
-    specs: list[str] = []
-    clean = _strip_comments(text)
-    for m in FROM_SPEC_RE.finditer(clean):
-        specs.append(m.group(2))
-    for m in IMPORT_SIDE_RE.finditer(clean):
-        specs.append(m.group(1))
-    return specs
-
-
-def _resolve_import(importer: Path, spec: str) -> Path | None:
-    if spec.startswith(("http://", "https://")):
-        return None
-    if not spec.startswith((".", "/")):
-        return None
-    tgt = (importer.parent / spec).resolve()
-    try:
-        tgt.relative_to(STATIC_ROOT.resolve())
-    except ValueError:
-        fail(f"{importer.relative_to(ROOT)}: импорт вне {STATIC_ROOT.name}: {spec!r}")
-        return None
-    return tgt
-
-
-def _visit_target(importer: Path, spec: str, tgt: Path) -> Path | None:
-    if not tgt.exists() and tgt.suffix.lower() == ".js":
-        ts_sibling = tgt.with_suffix(".ts")
-        if ts_sibling.exists():
-            tgt = ts_sibling
-    if not tgt.exists():
-        fail(f"{importer.relative_to(ROOT)}: нет файла по импорту {spec!r} -> {tgt.relative_to(ROOT)}")
-        return None
-    if tgt.suffix.lower() not in (".js", ".ts"):
-        fail(f"{tgt.relative_to(ROOT)}: замыкание embed ожидает только *.js/*.ts (импорт из {importer.relative_to(ROOT)})")
-        return None
-    return tgt.resolve()
-
-
-def _scan_closure() -> None:
-    visited: set[Path] = set()
-    q: deque[Path] = deque()
-
-    for ep in ENTRYPOINTS:
-        if not ep.is_file():
-            fail(f"{ep.relative_to(ROOT)}: entrypoint отсутствует")
-            continue
-        rp = ep.resolve()
-        visited.add(rp)
-        q.append(rp)
-
-    while q:
-        cur = q.popleft()
-        raw = cur.read_text(encoding="utf-8")
-        clean = _strip_comments(raw)
-        # import type / export type стираются при сборке — модульных запросов не создают.
-        runtime_lines = [
-            line for line in clean.splitlines() if not IMPORT_TYPE_RE.match(line)
-        ]
-        runtime_text = "\n".join(runtime_lines)
-        if BARE_LIT_RE.search(runtime_text):
-            for i, line in enumerate(runtime_lines, start=1):
-                if BARE_LIT_RE.search(line):
-                    fail(
-                        f"{cur.relative_to(ROOT)}:{i}: bare import lit "
-                        "(нужны относительные пути к assets/js/lit или общему lib/lit-shim)"
-                    )
-                    break
-        if BARE_PLATFORM_FROM_RE.search(runtime_text) or BARE_PLATFORM_SIDE_RE.search(runtime_text):
-            for i, line in enumerate(runtime_lines, start=1):
-                if BARE_PLATFORM_FROM_RE.search(line) or BARE_PLATFORM_SIDE_RE.search(line):
-                    fail(
-                        f"{cur.relative_to(ROOT)}:{i}: bare import @platform "
-                        "(на внешнем сайте нужен только ./ ../ к статике)"
-                    )
-                    break
-
-        for spec in _collect_relative_specs(raw):
-            tgt = _resolve_import(cur, spec)
-            if tgt is None:
+def _check_file(path: Path, text: str) -> None:
+    for i, line in enumerate(text.splitlines(), start=1):
+        for spec in STATIC_IMPORT_RE.findall(line) + DYNAMIC_IMPORT_RE.findall(line):
+            if not SPECIFIER_RE.match(spec) or spec.startswith("."):
                 continue
-            resolved = _visit_target(cur, spec, tgt)
-            if resolved is None:
-                continue
-            if resolved in visited:
-                continue
-            visited.add(resolved)
-            q.append(resolved)
+            kind = "bare specifier" if not spec.startswith(("http://", "https://", "/")) else "external URL"
+            fail(
+                f"{path.relative_to(ROOT)}:{i}: embed-бандл не self-contained "
+                f"({kind} {spec!r} — на внешнем сайте нет import map)"
+            )
 
 
 def main() -> int:
-    _scan_closure()
+    if not EMBED_DIST.is_dir():
+        fail(f"embed-dist отсутствует: запустить node scripts/build/ui.mjs")
+    else:
+        js_files = sorted(EMBED_DIST.rglob("*.js"))
+        if not js_files:
+            fail(f"embed-dist пуст: запустить node scripts/build/ui.mjs")
+        for path in js_files:
+            if path.suffix != ".js" or path.name.endswith(".map.js"):
+                continue
+            _check_file(path, path.read_text(encoding="utf-8", errors="replace"))
     if ERRORS:
         for e in ERRORS:
             print(e, file=sys.stderr)
@@ -160,4 +75,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

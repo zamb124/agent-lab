@@ -3,7 +3,7 @@
  * modalKind: platform.mail
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
@@ -352,6 +352,7 @@ export class PlatformMailModal extends PlatformModal {
     _searchDebounceTimer: ReturnType<typeof setTimeout> | null;
     _draftSaveTimer: ReturnType<typeof setTimeout> | null;
     _onMailKeydown: (event: KeyboardEvent) => void;
+    private _composePointerUnsubs: Array<() => void> = [];
     _boundComposePointerMove: EventListener;
     _boundComposePointerUp: EventListener;
 
@@ -1927,11 +1928,10 @@ export class PlatformMailModal extends PlatformModal {
             this._closeCompose();
             this.toast('toast_sent', { type: 'success' });
         });
-        window.addEventListener('keydown', this._onMailKeydown);
+        this.useDomEvent(window, 'keydown', this._onMailKeydown);
     }
 
     override disconnectedCallback(): void {
-        window.removeEventListener('keydown', this._onMailKeydown);
         this._endComposePointerSession();
         super.disconnectedCallback();
     }
@@ -2117,9 +2117,10 @@ export class PlatformMailModal extends PlatformModal {
         this._composeResizing = false;
         this._composeDragState = null;
         this._composeResizeState = null;
-        window.removeEventListener('pointermove', this._boundComposePointerMove);
-        window.removeEventListener('pointerup', this._boundComposePointerUp);
-        window.removeEventListener('pointercancel', this._boundComposePointerUp);
+        for (const unsub of this._composePointerUnsubs) {
+            unsub();
+        }
+        this._composePointerUnsubs = [];
     }
 
     _onComposeHeaderPointerDown(event: PointerEvent): void {
@@ -2136,9 +2137,11 @@ export class PlatformMailModal extends PlatformModal {
             width: size.w,
             height: size.h,
         };
-        window.addEventListener('pointermove', this._boundComposePointerMove);
-        window.addEventListener('pointerup', this._boundComposePointerUp);
-        window.addEventListener('pointercancel', this._boundComposePointerUp);
+        this._composePointerUnsubs = [
+            this.useDomEvent(window, 'pointermove', this._boundComposePointerMove),
+            this.useDomEvent(window, 'pointerup', this._boundComposePointerUp),
+            this.useDomEvent(window, 'pointercancel', this._boundComposePointerUp),
+        ];
         event.preventDefault();
     }
 
@@ -2158,9 +2161,11 @@ export class PlatformMailModal extends PlatformModal {
             left: pos.x,
             top: pos.y,
         };
-        window.addEventListener('pointermove', this._boundComposePointerMove);
-        window.addEventListener('pointerup', this._boundComposePointerUp);
-        window.addEventListener('pointercancel', this._boundComposePointerUp);
+        this._composePointerUnsubs = [
+            this.useDomEvent(window, 'pointermove', this._boundComposePointerMove),
+            this.useDomEvent(window, 'pointerup', this._boundComposePointerUp),
+            this.useDomEvent(window, 'pointercancel', this._boundComposePointerUp),
+        ];
         event.preventDefault();
         event.stopPropagation();
     }

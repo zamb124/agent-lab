@@ -8,8 +8,9 @@ import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-button.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../../components/sheets/access-why-sheet.js';
@@ -265,16 +266,6 @@ export class FrontendAccessPage extends PlatformPage {
             .grant-row:focus-within .grant-actions {
                 opacity: 1;
             }
-            .empty {
-                padding: var(--space-8) var(--space-6);
-                text-align: center;
-                color: var(--text-tertiary);
-            }
-            .empty-title {
-                color: var(--text-primary);
-                font-weight: var(--font-semibold);
-                margin-bottom: var(--space-2);
-            }
             .skeleton-row {
                 height: 3rem;
                 border-radius: var(--radius-md);
@@ -315,7 +306,6 @@ export class FrontendAccessPage extends PlatformPage {
                 cursor: pointer;
                 padding: 0;
             }
-            .forbidden { padding: var(--space-8); text-align: center; }
 
             @media (max-width: 767px) {
                 .layout { grid-template-columns: 1fr; }
@@ -644,9 +634,12 @@ export class FrontendAccessPage extends PlatformPage {
                     title=${this.t('access_page.title')}
                     subtitle=${this.t('access_page.subtitle')}
                 ></page-header>
-                <div class="page-body forbidden">
-                    <div class="empty-title">${this.t('access_page.forbidden_title')}</div>
-                    <div>${this.t('access_page.forbidden_description')}</div>
+                <div class="page-body">
+                    <platform-empty-state
+                        icon="lock"
+                        title=${this.t('access_page.forbidden_title')}
+                        hint=${this.t('access_page.forbidden_description')}
+                    ></platform-empty-state>
                 </div>
             `;
         }
@@ -710,12 +703,11 @@ export class FrontendAccessPage extends PlatformPage {
                 : nothing}
             ${!this._members.loading && members.length === 0
                 ? html`
-                    <div class="empty">
-                        <div class="empty-title">${this.t('access_page.search_empty')}</div>
+                    <platform-empty-state icon="search" title=${this.t('access_page.search_empty')}>
                         <button type="button" class="chip" @click=${() => this._ui.resetPickerSearch(null)}>
                             ${this.t('access_page.reset_filters')}
                         </button>
-                    </div>
+                    </platform-empty-state>
                 `
                 : html`
                     <div class="picker-list">
@@ -780,21 +772,16 @@ export class FrontendAccessPage extends PlatformPage {
                 }}
             ></platform-field>
             ${!canSearch
-                ? html`
-                    <div class="empty">
-                        <div class="empty-title">${this.t('access_page.search_hint')}</div>
-                    </div>
-                `
+                ? html`<platform-empty-state icon="search" title=${this.t('access_page.search_hint')}></platform-empty-state>`
                 : this._objects.busy && items.length === 0
                     ? html`<div class="skeleton-row"></div><div class="skeleton-row"></div>`
                     : !this._objects.busy && items.length === 0
                         ? html`
-                            <div class="empty">
-                                <div class="empty-title">${this.t('access_page.search_empty')}</div>
+                            <platform-empty-state icon="search" title=${this.t('access_page.search_empty')}>
                                 <button type="button" class="chip" @click=${() => this._ui.resetPickerSearch(null)}>
                                     ${this.t('access_page.reset_filters')}
                                 </button>
-                            </div>
+                            </platform-empty-state>
                         `
                         : html`
                             <div class="picker-list">
@@ -869,10 +856,11 @@ export class FrontendAccessPage extends PlatformPage {
         const selected = ui.mode === 'people' ? ui.userId !== '' : ui.objectType !== '' && ui.objectKey !== '';
         if (!selected) {
             return html`
-                <div class="empty">
-                    <div class="empty-title">${this.t('access_page.pick_title')}</div>
-                    <div>${this.t('access_page.pick_description')}</div>
-                </div>
+                <platform-empty-state
+                    icon="user-shield"
+                    title=${this.t('access_page.pick_title')}
+                    hint=${this.t('access_page.pick_description')}
+                ></platform-empty-state>
             `;
         }
         return html`
@@ -988,7 +976,7 @@ export class FrontendAccessPage extends PlatformPage {
         const payload = ui.mode === 'people' ? this._byUser.lastResult : this._byObject.lastResult;
         const error = ui.mode === 'people' ? this._byUser.error : this._byObject.error;
         if (error) {
-            return html`<div class="empty">${this.t('access_page.load_error')}</div>`;
+            return html`<platform-empty-state icon="alert-triangle" title=${this.t('access_page.load_error')}></platform-empty-state>`;
         }
         const rows = this._currentRows();
         if (payload === null || payload === undefined) {
@@ -1011,30 +999,33 @@ export class FrontendAccessPage extends PlatformPage {
         const ui = readExplorerUi(this._ui.value);
         if (ui.mode === 'people') {
             return html`
-                <div class="empty">
-                    <div class="empty-title">${this.t('access_page.empty_user_title')}</div>
-                    <div>${this.t('access_page.empty_user_description')}</div>
+                <platform-empty-state
+                    icon="users"
+                    title=${this.t('access_page.empty_user_title')}
+                    hint=${this.t('access_page.empty_user_description')}>
                     ${payload.company_visible ? html`
                         <div class="summary">
                             <span class="chip">${this.t('access_page.summary_company_visible')}</span>
                         </div>
                     ` : nothing}
-                </div>
+                </platform-empty-state>
             `;
         }
         if (payload.company_visible) {
             return html`
-                <div class="empty">
-                    <div class="empty-title">${this.t('access_page.empty_object_company_title')}</div>
-                    <div>${this.t('access_page.empty_object_company_description')}</div>
-                </div>
+                <platform-empty-state
+                    icon="building"
+                    title=${this.t('access_page.empty_object_company_title')}
+                    hint=${this.t('access_page.empty_object_company_description')}
+                ></platform-empty-state>
             `;
         }
         return html`
-            <div class="empty">
-                <div class="empty-title">${this.t('access_page.empty_object_title')}</div>
-                <div>${this.t('access_page.empty_object_description')}</div>
-            </div>
+            <platform-empty-state
+                icon="key"
+                title=${this.t('access_page.empty_object_title')}
+                hint=${this.t('access_page.empty_object_description')}
+            ></platform-empty-state>
         `;
     }
 
@@ -1156,9 +1147,9 @@ export class FrontendAccessPage extends PlatformPage {
                     >${this.t('access_page.why_copy_id')}</platform-button>
                 </div>
                 ${this._why.busy && why === null
-                    ? html`<glass-spinner></glass-spinner>`
+                    ? html`<platform-spinner></platform-spinner>`
                     : this._why.error
-                        ? html`<div class="empty">${this.t('access_page.why_error')}</div>`
+                        ? html`<platform-empty-state icon="alert-triangle" title=${this.t('access_page.why_error')}></platform-empty-state>`
                         : why
                             ? html`
                                 <div class="why-item">
@@ -1170,7 +1161,7 @@ export class FrontendAccessPage extends PlatformPage {
                                     <div class="why-item">${this.t(`access_page.why_${reason}`)}</div>
                                 `)}
                             `
-                            : html`<div class="empty">${this.t('access_page.why_empty')}</div>`}
+                            : html`<platform-empty-state icon="help" title=${this.t('access_page.why_empty')}></platform-empty-state>`}
             </aside>
         `;
     }

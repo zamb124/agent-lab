@@ -15,7 +15,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -404,7 +404,7 @@ export class FlowsIntegrationsModal extends PlatformModal {
     _renderRows() {
         const items = this._filteredItems();
         if (this._listOp.busy && items.length === 0 && this._query.trim().length === 0) {
-            return html`<tr><td colspan="3"><glass-spinner></glass-spinner></td></tr>`;
+            return html`<tr><td colspan="3"><platform-spinner></platform-spinner></td></tr>`;
         }
         if (items.length === 0) {
             return html`<tr><td colspan="3" class="int-empty">${this.t('integrations_modal.empty')}</td></tr>`;

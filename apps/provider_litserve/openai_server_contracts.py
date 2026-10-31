@@ -6,25 +6,21 @@
 
 from __future__ import annotations
 
-import time
-import uuid
-from typing import ClassVar, Literal
+from collections.abc import Sequence
+from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from apps.provider_litserve.provider_litserve_http_schemas import (
-    ChatCompletionChoiceBody,
-    ChatCompletionMessageBody,
     EmbeddingDataItem,
     ModelArchitectureSchema,
     ModelPricingSchema,
-    OpenAIChatCompletionsResponseBody,
     OpenAIEmbeddingsResponseBody,
     TopProviderSchema,
     V1ModelItemSchema,
     V1ModelsResponseBody,
 )
-from core.types import JsonObject
+from core.models.provider_litserve_model import ProviderLitserveModelPair
 
 
 def _openrouter_like_model_object(
@@ -76,15 +72,8 @@ def _openrouter_like_model_object(
 
 def build_provider_litserve_v1_models_response(
     *,
-    embedding_openai_model_id: str,
-    embedding_model_ids: list[str],
-    embedding_hf_model_id: str,
-    embedding_dimension: int,
-    embedding_context_length: int,
-    rerank_openai_model_id: str,
-    rerank_model_ids: list[str],
-    rerank_hf_model_id: str,
-    rerank_context_length: int,
+    embedding_entries: Sequence[ProviderLitserveModelPair],
+    rerank_entries: Sequence[ProviderLitserveModelPair],
     stt_model_ids: list[str],
     tts_model_ids: list[str],
     vad_model_ids: list[str],
@@ -94,7 +83,7 @@ def build_provider_litserve_v1_models_response(
     Тело GET ``/v1/models`` для провайдера: модели эмбеддингов, реранка и речи,
     те же поля верхнего уровня, что у OpenRouter ``/models``.
     """
-    def _uniq(ids: list[str]) -> list[str]:
+    def _uniq(ids: Sequence[str]) -> list[str]:
         seen: set[str] = set()
         ordered: list[str] = []
         for model_id in ids:
@@ -105,45 +94,56 @@ def build_provider_litserve_v1_models_response(
             ordered.append(normalized)
         return ordered
 
-    embedding_ids = _uniq([embedding_openai_model_id, *embedding_model_ids])
-    rerank_ids = _uniq([rerank_openai_model_id, *rerank_model_ids])
     stt_ids = _uniq(stt_model_ids)
     tts_ids = _uniq(tts_model_ids)
     vad_ids = _uniq(vad_model_ids)
 
     data: list[V1ModelItemSchema] = []
 
-    for emb_id in embedding_ids:
+    seen_embedding: set[str] = set()
+    for entry in embedding_entries:
+        emb_id = entry.api_model_id.strip()
+        if not emb_id or emb_id in seen_embedding:
+            continue
+        seen_embedding.add(emb_id)
+        dimension_text = (
+            f"vector dimension {entry.dimension}. " if entry.dimension is not None else ""
+        )
         data.append(
             _openrouter_like_model_object(
                 model_id=emb_id,
                 name=emb_id,
                 description=(
-                    f"Local embedding model (HF: {embedding_hf_model_id}), "
-                    f"vector dimension {embedding_dimension}. "
+                    f"Local embedding model (HF: {entry.hf_model_id}), "
+                    f"{dimension_text}"
                     "Use POST /v1/embeddings."
                 ),
                 created=created,
-                context_length=embedding_context_length,
+                context_length=entry.context_length or 8192,
                 output_modalities=["embeddings"],
                 capabilities=["embedding"],
-                native_dimension=embedding_dimension,
-                storage_dimension=embedding_dimension,
+                native_dimension=entry.dimension,
+                storage_dimension=entry.dimension,
             )
         )
 
-    for rerank_id in rerank_ids:
+    seen_rerank: set[str] = set()
+    for entry in rerank_entries:
+        rerank_id = entry.api_model_id.strip()
+        if not rerank_id or rerank_id in seen_rerank:
+            continue
+        seen_rerank.add(rerank_id)
         data.append(
             _openrouter_like_model_object(
                 model_id=rerank_id,
                 name=rerank_id,
                 description=(
-                    f"Local cross-encoder reranker (HF: {rerank_hf_model_id}). "
+                    f"Local cross-encoder reranker (HF: {entry.hf_model_id}). "
                     "API: JSON query + passages; response scores[]. "
                     "Use POST /v1/rerank."
                 ),
                 created=created,
-                context_length=rerank_context_length,
+                context_length=entry.context_length or 8192,
                 output_modalities=["text"],
                 capabilities=["rerank"],
             )
@@ -208,57 +208,6 @@ class OpenAIEmbeddingsRequest(BaseModel):
 
     model: str
     input: str | list[str]
-
-
-class OpenAIChatMessage(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    role: str
-    content: str
-
-
-class OpenAIChatJsonSchemaSpec(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
-
-    name: str | None = None
-    strict: bool | None = None
-    schema_body: JsonObject | None = Field(default=None, alias="schema")
-
-
-class OpenAIChatResponseFormat(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
-
-    type: Literal["json_object", "text", "json_schema"]
-    json_schema: OpenAIChatJsonSchemaSpec | None = None
-
-
-class OpenAIChatCompletionsRequest(BaseModel):
-    """Тело POST ``/v1/chat/completions`` (совместимо с OpenAI)."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
-
-    model: str
-    messages: list[OpenAIChatMessage]
-    temperature: float | None = None
-    max_tokens: int | None = None
-    response_format: OpenAIChatResponseFormat | None = None
-
-
-def build_openai_chat_completions_response(
-    *,
-    model_id: str,
-    content: str,
-) -> OpenAIChatCompletionsResponseBody:
-    return OpenAIChatCompletionsResponseBody(
-        id=f"chatcmpl-{uuid.uuid4().hex}",
-        created=int(time.time()),
-        model=model_id,
-        choices=[
-            ChatCompletionChoiceBody(
-                message=ChatCompletionMessageBody(content=content),
-            )
-        ],
-    )
 
 
 class RerankQueryPassagesRequest(BaseModel):

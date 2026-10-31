@@ -4,6 +4,7 @@ LitServe API реранкера: POST ``/v1/rerank``, тело ``{query, passage
 
 import litserve as ls
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.openai_server_contracts import RerankQueryPassagesRequest
 from apps.provider_litserve.provider_litserve_http_schemas import RerankResponseBody
 from apps.provider_litserve.shared import resolve_rerank_device, resolve_torch_device
@@ -14,10 +15,10 @@ from .engines import LocalRerankerEngine, parse_rerank_body
 
 
 class RerankerLitAPI(ls.LitAPI):
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         super().__init__(api_path="/v1/rerank")
         self._cfg: ProviderLitserveInfraConfig = cfg
-        self._engine: LocalRerankerEngine = LocalRerankerEngine(cfg)
+        self._engine: LocalRerankerEngine = LocalRerankerEngine(cfg, catalog)
 
     def setup(self, device: str | None) -> None:
         litserve_device = device if device is not None else resolve_torch_device(self._cfg)

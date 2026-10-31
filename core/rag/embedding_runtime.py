@@ -17,7 +17,7 @@ from core.config.llm_openai_compat import resolve_provider_openai_v1_base_url
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 
 if TYPE_CHECKING:
-    from core.config.models import EmbeddingConfig, LLMConfig, ProviderLitserveConfig
+    from core.config.models import EmbeddingConfig, LLMConfig
 
 
 @dataclass(frozen=True)
@@ -36,14 +36,14 @@ class RagEmbeddingRuntime:
 def resolve_rag_embedding_runtime(
     embedding: "EmbeddingConfig",
     llm: "LLMConfig",
-    provider_litserve: "ProviderLitserveConfig",
+    litserve_v1_base_url: str,
 ) -> RagEmbeddingRuntime:
     """
     ``embedding.api`` + источник ``base_url``:
 
     - OpenAI-compatible provider: ``api.base_url`` или корень из соответствующего ``llm.<provider>``.
     - ``provider_litserve``: ``api.base_url`` при непустом значении, иначе
-      ``provider_litserve.resolve_openai_v1_base_url()`` из настроек процесса LitServe.
+      ``litserve_v1_base_url`` — канонический ``server.get_service_url('provider_litserve')`` + ``/v1``.
     """
     api = embedding.api
     provider = validate_platform_provider_for_capability(embedding.provider, AICapability.EMBEDDING)
@@ -53,7 +53,7 @@ def resolve_rag_embedding_runtime(
         if explicit is not None and str(explicit).strip():
             bu = normalize_openai_v1_base_url(str(explicit).strip())
         else:
-            bu = provider_litserve.resolve_openai_v1_base_url()
+            bu = litserve_v1_base_url
     else:
         explicit = api.base_url
         if explicit is not None and str(explicit).strip():

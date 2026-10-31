@@ -4,7 +4,7 @@
  * иначе ``<rect>``/``<path>`` оказываются в HTML-namespace и не рисуются.
  */
 
-import { html, svg } from '../../lit-shim.js';
+import { html, svg } from 'lit';
 import { platformStaticSrc } from '../shell/brand-logo.js';
 
 const GLYPHS = Object.freeze(new Set([

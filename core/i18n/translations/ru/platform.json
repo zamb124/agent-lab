@@ -1,4 +1,19 @@
 {
+    "namespace_modal": {
+        "header": "Новое пространство",
+        "label_template": "Шаблон",
+        "label_name": "Название",
+        "label_description": "Описание",
+        "template_hint": "Пространство создаётся с преднастроенным набором типов сущностей.",
+        "template_no_description": "Без описания",
+        "templates_empty": "Шаблоны не найдены",
+        "name_placeholder": "Например: personal, work, project_x",
+        "name_hint": "Только латиница, цифры и нижнее подчёркивание. Должно начинаться с буквы.",
+        "description_placeholder": "Опишите назначение пространства",
+        "cancel": "Отмена",
+        "submit": "Создать пространство",
+        "saving": "Создаём…"
+    },
     "notifications": {
         "title": "Уведомления",
         "dismiss_all": "Очистить все",

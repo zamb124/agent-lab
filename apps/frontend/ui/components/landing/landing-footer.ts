@@ -18,8 +18,8 @@ export class LandingFooter extends PlatformElement {
             :host {
                 display: block;
                 padding: 60px 20px;
-                background: var(--landing-footer-bg, linear-gradient(180deg, #0F0F0F 0%, #0a0a0a 100%));
-                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                background: linear-gradient(180deg, var(--marketing-page-bg) 0%, var(--bg-primary) 100%);
+                border-top: 1px solid var(--glass-border-medium);
             }
             
             .footer-container {
@@ -43,7 +43,7 @@ export class LandingFooter extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 28px;
                 font-weight: 700;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0 0 24px 0;
                 text-decoration: none;
                 display: inline-block;
@@ -74,14 +74,14 @@ export class LandingFooter extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 18px;
                 margin: 0 0 12px;
-                color: var(--landing-secondary, #e8e8e8);
+                color: var(--text-secondary);
             }
 
             .footer-requisites p {
                 font-family: var(--font-sans);
                 font-size: 14px;
                 line-height: 1.55;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
+                color: var(--text-secondary);
                 margin: 0 0 8px;
             }
             
@@ -94,7 +94,7 @@ export class LandingFooter extends PlatformElement {
             .footer-link {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 18px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 text-decoration: underline;
                 transition: color 0.3s;
             }
@@ -105,7 +105,7 @@ export class LandingFooter extends PlatformElement {
             
             .footer-bottom {
                 padding-top: 32px;
-                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                border-top: 1px solid var(--glass-border-medium);
                 display: flex;
                 flex-direction: column;
                 gap: 16px;
@@ -114,7 +114,7 @@ export class LandingFooter extends PlatformElement {
             .footer-copy {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 16px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
+                color: var(--text-secondary);
                 margin: 0;
             }
             
@@ -127,7 +127,7 @@ export class LandingFooter extends PlatformElement {
             .footer-legal-link {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 14px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 text-decoration: underline;
                 transition: color 0.3s;
             }

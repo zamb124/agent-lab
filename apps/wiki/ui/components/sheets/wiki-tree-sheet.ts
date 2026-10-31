@@ -28,6 +28,7 @@ interface WikiTreeMenuItem {
 }
 import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
 import '@platform/lib/components/platform-tree.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
@@ -55,11 +56,6 @@ export class WikiTreeSheet extends PlatformBottomSheet {
                 width: 100%;
             }
 
-            .empty {
-                padding: var(--space-4);
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-            }
         `,
     ];
 
@@ -124,7 +120,7 @@ export class WikiTreeSheet extends PlatformBottomSheet {
     override renderBody() {
         const nodes = this._nodes();
         if (nodes.length === 0) {
-            return html`<div class="empty">${this.t('sidebar.empty')}</div>`;
+            return html`<platform-empty-state icon="book-open" title=${this.t('sidebar.empty')}></platform-empty-state>`;
         }
         return html`
             <platform-tree

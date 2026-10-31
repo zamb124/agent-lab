@@ -105,7 +105,7 @@ async def test_branch_chat_sends_turns_on_its_branch(
 
         branches.clear()
         await page.reload(wait_until="domcontentloaded")
-        await expect(page.locator("chat-page platform-flow-ui")).to_be_visible(timeout=30_000)
+        await expect(page.locator("flows-chat-page platform-flow-ui")).to_be_visible(timeout=30_000)
         await flows_chat_wait_ready(page)
         await expect(page.get_by_text(f"chat-ok:{first_line}", exact=True)).to_be_visible(
             timeout=60_000

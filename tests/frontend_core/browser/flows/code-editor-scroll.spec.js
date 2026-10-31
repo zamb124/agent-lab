@@ -28,8 +28,8 @@ describe('flows-code-editor scroll sizing', () => {
         fixtureCleanup();
     });
 
-    it('codemirror bundle exposes all isolated runner language modes', async () => {
-        const cm = await import('/static/core/assets/codemirror/codemirror-bundle.js');
+    it('codemirror lazy chunk exposes all isolated runner language modes', async () => {
+        const cm = await import('@platform/lib/codemirror/codemirror-lazy.js');
         expect(cm.python).to.be.a('function');
         expect(cm.javascript).to.be.a('function');
         expect(cm.go).to.be.a('function');

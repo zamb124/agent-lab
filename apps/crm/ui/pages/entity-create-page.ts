@@ -11,7 +11,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import { CRMEntityCard } from '../components/entity-card.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
@@ -116,24 +116,14 @@ export class CRMEntityCreatePage extends PlatformPage {
         super();
         this._saveDisabled = true;
         this._submitting = false;
-        this._onCardToolbarStateBound = this._onCardToolbarState.bind(this);
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
         if (this.shadowRoot) {
-            this.shadowRoot.addEventListener('crm-entity-card-toolbar-state', this._onCardToolbarStateBound);
+            this.useDomEvent(this.shadowRoot, 'crm-entity-card-toolbar-state', (e) => this._onCardToolbarState(e));
         }
     }
-
-    override disconnectedCallback(): void {
-        if (this.shadowRoot) {
-            this.shadowRoot.removeEventListener('crm-entity-card-toolbar-state', this._onCardToolbarStateBound);
-        }
-        super.disconnectedCallback();
-    }
-
-    private declare _onCardToolbarStateBound: (ev: Event) => void;
 
     _onCardToolbarState(ev: Event) {
         if (!(ev instanceof CustomEvent) || !isPlainRecord(ev.detail)) {
@@ -191,7 +181,7 @@ export class CRMEntityCreatePage extends PlatformPage {
                                 @click=${() => this._onToolbarSave()}
                             >
                                 ${this._submitting
-                                    ? html`<glass-spinner size="xs"></glass-spinner>`
+                                    ? html`<platform-spinner size="xs"></platform-spinner>`
                                     : nothing}
                                 ${this._submitting
                                     ? this.t('entity_modal.action_saving')

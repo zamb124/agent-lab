@@ -232,7 +232,7 @@ async def test_worktracker_hitl_single_reply_complete(
     user_page = ui_page_system
     await flows_open_chat_page(user_page, flows_ui, EXAMPLE_GRAPH_ID)
     work_item_id = await hitl_trigger_deterministic(user_page, GREEN_GARDEN_HITL_MESSAGE)
-    user_composer = user_page.locator("chat-page textarea[data-canon='composer']").first
+    user_composer = user_page.locator("flows-chat-page textarea[data-canon='composer']").first
     await expect(user_composer).to_have_attribute("readonly", "", timeout=20_000)
     await hitl_api_wait_conversation_text(
         flows_ui.origin,

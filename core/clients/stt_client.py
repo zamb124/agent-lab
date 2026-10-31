@@ -20,6 +20,10 @@ from typing import TYPE_CHECKING, override
 import httpx2
 from pydantic import BaseModel, Field
 
+from core.config.openai_v1_base_url import (
+    provider_litserve_api_key,
+    provider_litserve_service_url,
+)
 from core.files.models import AudioTranscriptionStatus
 from core.http import get_httpx_client, http_header_text
 from core.logging import get_logger
@@ -382,6 +386,7 @@ class LitserveSTTClient(BaseSTTClient):
         model: str,
         default_language: str,
         timeout: float,
+        api_key: str | None = None,
     ) -> None:
         if base_url == "":
             raise ValueError("STT litserve base_url cannot be empty.")
@@ -396,6 +401,7 @@ class LitserveSTTClient(BaseSTTClient):
         self._model: str = model
         self._default_language: str = default_language
         self._timeout: float = timeout
+        self._api_key: str | None = api_key
 
     @override
     async def transcribe_audio(
@@ -435,8 +441,11 @@ class LitserveSTTClient(BaseSTTClient):
             "file": list(audio_bytes),
         }
 
+        headers: dict[str, str] = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         async with get_httpx_client(timeout=self._timeout) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, json=payload, headers=headers)
         _ = response.raise_for_status()
 
         body_json = parse_json_value(response.content, "stt.litserve.response")
@@ -579,11 +588,15 @@ class STTClientFactory:
                 raise ValueError(
                     message
                 )
+            resolved_base_url = backend.base_url
+            if resolved_base_url is None:
+                resolved_base_url = provider_litserve_service_url()
             return LitserveSTTClient(
-                base_url=backend.base_url,
+                base_url=resolved_base_url,
                 model=chosen_model,
                 default_language=language,
                 timeout=timeout_s if timeout_s is not None else backend.timeout_s,
+                api_key=provider_litserve_api_key(),
             )
         if provider_name == "cloud_ru":
             backend = cfg.cloud_ru

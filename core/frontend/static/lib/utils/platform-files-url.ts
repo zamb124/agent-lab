@@ -18,6 +18,7 @@ export const PLATFORM_FILES_ROUTE_SEGMENTS = Object.freeze(
         'wiki',
         'worktracker',
         'litserve',
+        'stock',
         'search',
         'voice',
         'browser',

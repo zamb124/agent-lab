@@ -70,8 +70,8 @@ from core.clients.voice_resolver import (
 )
 from core.config import get_settings
 from core.config.llm_openai_compat import resolve_provider_api_key_for_openai_compatible_calls
+from core.config.openai_v1_base_url import provider_litserve_sdk_api_key
 from core.config.testing import is_testing
-from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.types import JsonObject
 
 
@@ -316,7 +316,7 @@ def create_embedding_client_from_runtime(
     resolved_api_key = api_key
     if resolved_api_key is None or not resolved_api_key.strip():
         if provider == PROVIDER_LITSERVE:
-            resolved_api_key = PROVIDER_LITSERVE_PLACEHOLDER_BEARER
+            resolved_api_key = provider_litserve_sdk_api_key()
         else:
             resolved_api_key = resolve_provider_api_key_for_openai_compatible_calls(
                 get_settings().llm,

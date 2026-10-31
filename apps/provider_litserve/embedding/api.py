@@ -4,6 +4,7 @@ LitServe API эмбеддера: POST ``/v1/embeddings`` (OpenAI-совмест�
 
 import litserve as ls
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.openai_server_contracts import OpenAIEmbeddingsRequest
 from apps.provider_litserve.provider_litserve_http_schemas import OpenAIEmbeddingsResponseBody
 from apps.provider_litserve.shared import resolve_embedding_device, resolve_torch_device
@@ -14,10 +15,10 @@ from .engines import LocalEmbeddingEngine, parse_embedding_body
 
 
 class EmbeddingLitAPI(ls.LitAPI):
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         super().__init__(api_path="/v1/embeddings")
         self._cfg: ProviderLitserveInfraConfig = cfg
-        self._engine: LocalEmbeddingEngine = LocalEmbeddingEngine(cfg)
+        self._engine: LocalEmbeddingEngine = LocalEmbeddingEngine(cfg, catalog)
 
     def setup(self, device: str | None) -> None:
         litserve_device = device if device is not None else resolve_torch_device(self._cfg)

@@ -8,12 +8,12 @@ import torch
 from FlagEmbedding import FlagLLMReranker
 from pydantic import BaseModel, ValidationError
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.openai_server_contracts import (
     RerankQueryPassagesRequest,
     placeholder_rerank_scores,
 )
 from apps.provider_litserve.provider_litserve_http_schemas import RerankResponseBody
-from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
 from core.types import JsonObject, JsonValue
@@ -60,8 +60,9 @@ def parse_rerank_body(raw: BaseModel | JsonValue) -> RerankQueryPassagesRequest:
 class LocalRerankerEngine:
     """FlagLLMReranker или placeholder; ответ ``{scores}`` как у ``AIRerankerHTTPClient``."""
 
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         self._cfg: ProviderLitserveInfraConfig = cfg
+        self._catalog: ModelCatalog = catalog
         self._backend: Backend = "placeholder"
         self._models: dict[str, FlagLLMReranker] = {}
         self._device: str = "cpu"
@@ -76,7 +77,7 @@ class LocalRerankerEngine:
         self._device = device
 
     def allowed_model_ids(self) -> frozenset[str]:
-        return allowed_api_model_ids("rerank", self._cfg)
+        return self._catalog.allowed_ids("rerank")
 
     def _ensure_model(self, hf_model_id: str) -> FlagLLMReranker:
         if hf_model_id in self._models:
@@ -107,7 +108,7 @@ class LocalRerankerEngine:
 
     def rerank(self, query: str, passages: list[str], requested_model: str | None = None) -> RerankResponseBody:
         canonical_model = requested_model.strip() if requested_model is not None else self._cfg.rerank_openai_model_id
-        hf_model_id = resolve_hf_model_id("rerank", canonical_model, self._cfg)
+        hf_model_id = self._catalog.hf_model_id("rerank", canonical_model)
         if hf_model_id is None:
             detail: JsonObject = {"reason": "unknown_rerank_model", "model": canonical_model}
             if requested_model is not None:

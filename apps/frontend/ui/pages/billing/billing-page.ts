@@ -15,7 +15,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-user-chip.js';
 import { isI18nBundleReady } from '@platform/lib/events/effects/i18n.effect.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
@@ -184,13 +184,6 @@ export class FrontendBillingPage extends PlatformPage {
             .status-tag.cancelled { background: var(--text-tertiary); color: white; }
             .status-tag.refunded { background: var(--warning); color: white; }
 
-            .empty {
-                padding: var(--space-6);
-                text-align: center; color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: 1px dashed var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-            }
         `,
         frontendIslandPageBodyStyles,
     ];
@@ -362,7 +355,7 @@ export class FrontendBillingPage extends PlatformPage {
             <section>
                 <h3>${this.t('resources.title')}</h3>
                 ${resourceRows.length === 0
-                    ? html`<div class="empty">${this.t('resources.no_data')}</div>`
+                    ? html`<platform-empty-state icon="database" title=${this.t('resources.no_data')}></platform-empty-state>`
                     : html`
                         <table>
                             <thead><tr>
@@ -387,7 +380,7 @@ export class FrontendBillingPage extends PlatformPage {
             <section>
                 <h3>${this.t('users.title')}</h3>
                 ${userRows.length === 0
-                    ? html`<div class="empty">${this.t('users.no_data')}</div>`
+                    ? html`<platform-empty-state icon="users" title=${this.t('users.no_data')}></platform-empty-state>`
                     : html`
                         <table>
                             <thead><tr>
@@ -445,10 +438,11 @@ export class FrontendBillingPage extends PlatformPage {
             return html`
                 <section>
                     <h3>${this.t('payment_history.title')}</h3>
-                    <div class="empty">
-                        <div>${this.t('payment_history.empty_title')}</div>
-                        <div>${this.t('payment_history.empty_description')}</div>
-                    </div>
+                    <platform-empty-state
+                        icon="list-check"
+                        title=${this.t('payment_history.empty_title')}
+                        hint=${this.t('payment_history.empty_description')}
+                    ></platform-empty-state>
                 </section>
             `;
         }
@@ -502,7 +496,7 @@ export class FrontendBillingPage extends PlatformPage {
             </page-header>
             <div class="page-body">
             ${loading
-                ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
+                ? html`<platform-empty-state loading></platform-empty-state>`
                 : html`
                     ${this._renderSubscription(subscription)}
                     ${this._renderUsage(usage)}

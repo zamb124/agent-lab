@@ -255,6 +255,7 @@
     --spinner-size: 48px;
     --spinner-duration: 1.2s;
     --spinner-overlay-bg: rgba(15, 15, 15, 0.55);
+    --spinner-fullscreen-bg: #0F0F0F;
     
     --text-xs: 0.75rem;
     --text-sm: 0.8125rem;
@@ -1300,6 +1301,11 @@
     --documents-explorer-toolbar-height: 3rem;
     --documents-explorer-control-height: 2.25rem;
     --documents-explorer-btn-radius: var(--radius-md);
+}
+
+/* ========== Палитра Landing / Marketing (layout-only, theme-agnostic) ========== */
+:root {
+    --marketing-header-height: 4.5rem;
 }
 
 /* ========== УТИЛИТЫ ========== */

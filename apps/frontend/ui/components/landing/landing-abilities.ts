@@ -23,7 +23,7 @@ export class LandingAbilities extends PlatformElement {
             :host {
                 display: block;
                 padding: 80px 20px;
-                background: var(--landing-section-gradient, linear-gradient(180deg, #0F0F0F 0%, #1a1a2e 50%, #0F0F0F 100%));
+                background: var(--bg-gradient);
             }
             
             .abilities-container {
@@ -35,7 +35,7 @@ export class LandingAbilities extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0 0 60px 0;
                 text-align: center;
             }
@@ -54,12 +54,12 @@ export class LandingAbilities extends PlatformElement {
             .ability-image {
                 width: 100%;
                 aspect-ratio: 16 / 9;
-                background: var(--landing-panel-bg-strong, rgba(20, 22, 34, 0.6));
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                background: var(--glass-bg-medium);
+                border: 1px solid var(--glass-border-medium);
                 border-radius: 20px;
                 overflow: hidden;
                 order: -1;
-                box-shadow: var(--landing-elevated-shadow, 0 20px 56px rgba(0, 0, 0, 0.35));
+                box-shadow: var(--glass-shadow-strong);
             }
 
             .ability-image img {
@@ -91,7 +91,7 @@ export class LandingAbilities extends PlatformElement {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 28px;
                 font-weight: 500;
-                color: var(--landing-primary);
+                color: var(--marketing-product-accent);
                 margin: 0 0 16px 0;
             }
             
@@ -99,7 +99,7 @@ export class LandingAbilities extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.6;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
+                color: var(--text-secondary);
                 margin: 0 0 20px 0;
             }
             
@@ -112,7 +112,7 @@ export class LandingAbilities extends PlatformElement {
             .ability-features li {
                 font-family: var(--font-sans);
                 font-size: 14px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 padding-left: 24px;
                 position: relative;
                 margin-bottom: 8px;
@@ -122,7 +122,7 @@ export class LandingAbilities extends PlatformElement {
                 content: '✓';
                 position: absolute;
                 left: 0;
-                color: var(--landing-primary);
+                color: var(--marketing-product-accent);
                 font-weight: bold;
             }
             

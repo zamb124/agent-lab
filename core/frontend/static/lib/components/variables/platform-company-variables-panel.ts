@@ -3,14 +3,14 @@
  */
 
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { isPlainRecord } from '../../events/payload.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import type { OpController, ResourceController } from '../../base/use-resource.js';
 import { platformConfirm } from '../platform-confirm-modal.js';
 import '../platform-button.js';
 import '../platform-icon.js';
-import '../glass-spinner.js';
+import '../platform-spinner.js';
 import './platform-company-variable-editor-modal.js';
 import './platform-system-variables-catalog.js';
 
@@ -376,7 +376,7 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
                         </platform-button>
                     </div>
                     ${this._variables.loading && items.length === 0
-                        ? html`<glass-spinner></glass-spinner>`
+                        ? html`<platform-spinner></platform-spinner>`
                         : items.length === 0
                             ? html`<div class="empty">${this.t('empty')}</div>`
                             : html`

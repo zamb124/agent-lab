@@ -88,6 +88,8 @@ def database_url_for_migration_key(
             return database.realtime_url
         case "stock_url":
             return database.stock_url
+        case "shop_url":
+            return database.shop_url
 
 
 def migration_entry_is_active(entry: MigrationServiceEntry) -> bool:

@@ -9,7 +9,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { ResourceController } from '@platform/lib/base/use-resource.js';
 
@@ -89,7 +89,7 @@ export class FrontendEditApiKeyModal extends PlatformFormModal {
     }
 
     override renderBody() {
-        if (!this.item) return html`<glass-spinner></glass-spinner>`;
+        if (!this.item) return html`<platform-spinner></platform-spinner>`;
         const prefix = this.item.key_prefix || this.item.key_id;
         return html`
             <div class="key-info">${prefix}</div>

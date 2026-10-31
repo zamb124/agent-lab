@@ -2,7 +2,7 @@
  * platform-picker-card — selectable glass card для picker modals (policy, preset, library).
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { glassStyles } from '../styles/shared/glass.styles.js';
 import './platform-icon.js';

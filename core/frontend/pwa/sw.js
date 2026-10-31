@@ -18,7 +18,7 @@ const STATIC_ASSETS = [
   '/offline.html',
   '/static/core/assets/css/tokens.css',
   '/static/core/assets/css/reset.css',
-  '/static/core/assets/js/lit/lit.min.js',
+  '/static/core/assets/js/platform-brand-sync-bootstrap.js',
   '/static/core/pwa/icons/icon-192x192.png',
   '/static/core/pwa/icons/icon-512x512.png',
 ];

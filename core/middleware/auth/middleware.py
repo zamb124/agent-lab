@@ -162,18 +162,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if log_fields:
                 bind_log_context(**log_fields)
 
-            if (
-                rule.context_type == "frontend"
-                and path.startswith("/litserve")
-                and not path.startswith("/litserve/ui/static")
-            ):
-                ac = context.active_company
-                if ac is None or ac.company_id != "system":
-                    raise HTTPException(
-                        status_code=403,
-                        detail='LitServe interface is available only when the active company is system.',
-                    )
-
             response = await call_next(request)
             reissue_auth_token = read_reissue_auth_token(request)
             if reissue_auth_token is not None:

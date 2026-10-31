@@ -31,6 +31,7 @@ default-groups = [
     "rag-worker",
     "crm",
     "rag",
+    "litserve",
     "sync",
     "dev",
 ]
@@ -144,10 +145,15 @@ crm = [
 ]
 
 rag = [
+    "tiktoken>=0.14.0",
+]
+
+# Зависимости GPU-пода provider_litserve (локальный инференс embedding/rerank/STT/TTS/VAD).
+# В Dockerfile.base они не входят — общий образ их не тянет; в Dockerfile.base.gpu — да.
+litserve = [
     "flagembedding>=1.4.2",
     "litserve>=0.2.19",
     "sentence-transformers>=6.2.0",
-    "tiktoken>=0.14.0",
     "transformers>=5.21.0",
     "silero>=0.5.5",
     "silero-vad>=6.2.3",

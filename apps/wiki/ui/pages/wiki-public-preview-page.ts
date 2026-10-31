@@ -12,7 +12,7 @@
  */
 
 import { html, css, nothing } from 'lit';
-import type { PropertyValues } from '@platform/lib/lit-shim.js';
+import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -41,7 +41,7 @@ interface WikiPublicTree {
     root_page_id?: string;
     [key: string]: unknown;
 }
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-rich-editor.js';
@@ -405,7 +405,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
             </div>`;
         }
         if (this._page === null) {
-            return html`<div class="state"><glass-spinner size="sm"></glass-spinner></div>`;
+            return html`<div class="state"><platform-spinner size="sm"></platform-spinner></div>`;
         }
         return html`
             <div class="site">

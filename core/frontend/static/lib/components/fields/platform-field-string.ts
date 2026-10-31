@@ -1,5 +1,5 @@
-import { html, css, nothing } from '../../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
+import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 
 const ALLOWED_INPUT_TYPES = Object.freeze(['text', 'email', 'password', 'url', 'tel', 'search']) as readonly string[];

@@ -167,6 +167,17 @@ spec:
                   number: {{ $stock.port }}
           {{- end }}
 
+          {{- $shop := index $.Values.applications "shop" }}
+          {{- if and $shop $shop.enabled }}
+          - path: /shop
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $shop.serviceName }}
+                port:
+                  number: {{ $shop.port }}
+          {{- end }}
+
           {{- $sched := index $.Values.applications "scheduler-api" }}
           {{- if $sched.enabled }}
           - path: /scheduler

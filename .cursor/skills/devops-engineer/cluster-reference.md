@@ -13,7 +13,7 @@
 
 - `templates/`: `01-platform-secrets.yaml`, `02-configmap-app-conf.yaml`, `10-postgres/`, `11-redis/`, `30-apps/`, `40-workers/`, `50-gpu/litserve.yaml`, `60-external/` (livekit, livekit-egress, coturn, onlyoffice), `61-centrifugo/` (Centrifugo v6 + `redis-realtime` noeviction), `70-observability/`, `80-ingress/`; источники ConfigMap — `files/`.
 - `values.yaml`: `applications.<name>` (порт, реплики, command), `workers.<name>`, `litserve`, `livekit`, `coturn`, `onlyoffice`, `observability.*`, `ingress.*`, `platformSecrets`; общий env — `_helpers.tpl::agentlab.appEnv`.
-- Frontend — initContainer `extract-static` копирует `/app/static/` в `emptyDir` `shared-static`; CRM отдаёт `/crm/ui/vendor/...` из `/app/node_modules` (three.js, 3d-force-graph).
+- Frontend — initContainer `extract-static` копирует `/app/static/` в `emptyDir` `shared-static`; npm lazy-чанки (three, echarts и др.) отдаются внутри `apps/<svc>/ui-dist/chunks/`.
 - Browser — sidecar `chromium-cdp` (`zenika/alpine-chrome`, CDP `127.0.0.1:9222`), без Ingress, ClusterIP `http://browser:8009`.
 
 ## Ingress и TLS

@@ -27,7 +27,7 @@ import { CRMNamespacePage } from './crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import { CRM_NOTE_UPDATED, CRM_TASK_UPDATED } from '../events/types.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/note-card-view.js';
@@ -796,7 +796,7 @@ export class CRMNotePage extends CRMNamespacePage {
                 ${this._renderMobilePageHeader(false)}
                 <div class="body">
                     <div class="center">
-                        <glass-spinner size="lg"></glass-spinner>
+                        <platform-spinner size="lg"></platform-spinner>
                     </div>
                 </div>
             `;
@@ -826,7 +826,7 @@ export class CRMNotePage extends CRMNamespacePage {
                 ${this._renderMobilePageHeader(false)}
                 <div class="body">
                     <div class="center">
-                        <glass-spinner size="lg"></glass-spinner>
+                        <platform-spinner size="lg"></platform-spinner>
                     </div>
                 </div>
             `;

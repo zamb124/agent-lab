@@ -3,7 +3,7 @@
  * browser_preview, skill_activity, action_preview, action_result, reflection, activity.
  */
 
-import { html, nothing } from '../../lit-shim.js';
+import { html, nothing } from 'lit';
 import { flowUIMediaSrc, resolveAgentIdentityImageSrc } from '../runtime/agent-identity-image.js';
 import { taskActivity } from '../runtime/conversation.js';
 import { blockText as text, blockUrl } from '../runtime/templating.js';

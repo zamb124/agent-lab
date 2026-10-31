@@ -109,6 +109,15 @@ class TestSettingsAPI:
         assert "name" in data
         assert "monthly_budget" in data
 
+        from apps.provider_litserve.catalog import sync_seed_entries
+        from core.config import get_settings
+        from core.models.provider_litserve_model import (
+            reset_litserve_catalog_cache_for_tests,
+        )
+
+        await sync_seed_entries(get_settings().provider_litserve.infra)
+        reset_litserve_catalog_cache_for_tests()
+
         ai = await frontend_client.get(
             "/frontend/api/settings/ai-providers",
             headers=auth_headers,
@@ -189,8 +198,8 @@ class TestSettingsAPI:
         assert humanitec_voice_tts["label"] == brand.voice_product_name
         assert humanitec_voice_tts["byok_allowed"] is False
         assert {
-            "value": settings.provider_litserve.infra.tts_default_api_model_id,
-            "label": settings.provider_litserve.infra.tts_default_api_model_id,
+            "value": settings.provider_litserve.infra.tts_models[0].api_model_id,
+            "label": settings.provider_litserve.infra.tts_models[0].api_model_id,
             "kind": "voice_model",
         } in humanitec_voice_tts["models"]
         cloud_ru_tts = next(item for item in voice_tts if item["value"] == "cloud_ru")
@@ -206,8 +215,8 @@ class TestSettingsAPI:
         assert humanitec_voice_vad["label"] == brand.voice_product_name
         assert humanitec_voice_vad["byok_allowed"] is False
         assert {
-            "value": settings.provider_litserve.infra.vad_default_api_model_id,
-            "label": settings.provider_litserve.infra.vad_default_api_model_id,
+            "value": settings.provider_litserve.infra.vad_models[0].api_model_id,
+            "label": settings.provider_litserve.infra.vad_models[0].api_model_id,
             "kind": "voice_model",
         } in humanitec_voice_vad["models"]
         assert body["llm_context"]["configured"] is False

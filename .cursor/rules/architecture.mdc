@@ -17,11 +17,11 @@ alwaysApply: true
 | Долгая сессия | A2A SSE, voice WS, LSP WS | свой протокол | `a2a.mdc`, `voice.mdc`, `eval.mdc` |
 | Тяжёлая работа | `declare_task` + `enqueue` | TaskIQ | `taskiq.mdc` |
 
-1. Владелец команды — первый сегмент `type` (`_OWNER_BY_SCOPE`, `core/realtime/command_owners.py`); владелец ⇔ непустой `<SVC>_OPERATIONS`.
+1. Владелец команды — первый сегмент `type`; владелец ⇔ непустой `<SVC>_OPERATIONS`.
 2. Push — факт изменения мира, а не ответ; у команды push может не быть.
 3. Имя push не совпадает с именем команды без суффикса: `sync/messages/send_requested` — команда, `sync/message/created` — push. `[без гейта]`
 4. Ручная публикация в Redis, вторая шина, HTTP «сервис → flows» для запуска flow и TaskIQ как транспорт команды запрещены.
-5. Сервис из `COMMAND_WS_SERVICES` (`scripts/gates/backend/command_rest_mirror.py`) объявляет UI-фабрики на `transport: 'ws'` → `ui_factories.mdc`.
+5. Сервис из `COMMAND_WS_SERVICES` объявляет UI-фабрики на `transport: 'ws'` → `ui_factories.mdc`.
 
 ## Операция op_*
 
@@ -31,7 +31,7 @@ alwaysApply: true
 4. Команда без аргументов принимает `core.websocket.EmptyPayload`; свой `<Svc>EmptyPayload` запрещён.
 5. `op_*`, общий для нескольких сервисов, живёт в `core/` и регистрируется каталогами сервисов: `core/namespace/operations.py::op_namespaces_list`, `core/identity/team_operations.py::op_team_members_list`.
 6. `op_*` ставит тяжёлую работу через `enqueue`; сама команда исполняется in-process. Шаблон `op_*` → `main.mdc` § Куда писать код.
-7. Команда с эффектом в леджере (остатки, деньги, счётчики) несёт `idempotency_key` в payload и исполняется через `run_in_lanes` → `database.mdc` § Полосы.
+7. Команда с эффектом в леджере несёт `idempotency_key` в payload и исполняется через `run_in_lanes` → `database.mdc` § Полосы.
 
 ### Исключения
 
@@ -39,7 +39,7 @@ alwaysApply: true
 
 ## REST-зеркало
 
-1. Каждая команда имеет HTTP-зеркало в `apps/<svc>/api/**` с тем же payload и response, что WS-исход: для SDK, CLI, интеграций, pre-WS сценариев и API-тестов.
+1. Каждая команда имеет HTTP-зеркало в `apps/<svc>/api/**` с тем же payload и response, что WS-исход: для SDK, CLI, интеграций и API-тестов.
 2. REST-хендлер собирает тот же Pydantic payload и зовёт тот же `op_*`; path-id совпадает с полем payload, иначе `raise_invalid`. Twin-модели `_FooBody`, ручная сборка `OffsetPage` и `{"status": ...}` запрещены.
 3. REST делает ровно то, что команда; push REST-зеркала не имеет; fallback WS → HTTP в коде запрещён.
 4. Контракт `restMirror` UI-фабрики → `ui_factories.mdc`.
@@ -47,24 +47,24 @@ alwaysApply: true
 ### Исключения
 
 - Исключение: протокольный хендлер без `op_*` (байты или HTML наружу, внешний протокол, webhook, анонимный вход до сессии) — только из `PROTOCOL_HANDLERS` (`scripts/gates/backend/rest_handlers_call_ops.py`).
-- Исключение: фабрика сервиса из `COMMAND_WS_SERVICES` на `transport: 'http'` (гость, pre-WS, chunked upload, redirect) — только из `COMMAND_WS_HTTP_ALLOWLIST` (`scripts/gates/backend/command_rest_mirror.py`).
+- Исключение: фабрика сервиса из `COMMAND_WS_SERVICES` на `transport: 'http'` (гость, chunked upload, redirect) — только из `COMMAND_WS_HTTP_ALLOWLIST` (`scripts/gates/backend/command_rest_mirror.py`).
 
 ## WS request-reply
 
 1. У пользователя один сокет: Centrifugo `wss://{host}/realtime/connection/websocket`; кадр — `PlatformEvent`.
-2. Путь команды: RPC `platform.event` → `POST /realtime/api/v1/internal/centrifugo/inbound` → `RealtimeBusService.ingest` (`apps/realtime/services/bus_service.py`: `platform_event_log` идемпотентно по `event_id`, XADD `platform:events`, publish) → `POST /{owner}/api/internal/realtime/command` (`core/realtime/command_http.py`) → `dispatch_ws_command` → `op_*`.
-3. Команда — не UI-доставляемое событие: `delivery=None` всегда (inbound), `_publish_to_centrifugo` не публикует `*_requested`, клиент не диспатчит `*_requested`-кадры в bus (`ws.effect.ts`). Иначе эхо команды редиспатчится как новый запрос — петля.
+2. Путь команды: RPC `platform.event` → `POST /realtime/api/v1/internal/centrifugo/inbound` → `RealtimeBusService.ingest` (`platform_event_log` идемпотентно по `event_id`, XADD `platform:events`, publish) → `POST /{owner}/api/internal/realtime/command` → `dispatch_ws_command` → `op_*`.
+3. Команда — не UI-доставляемое событие: `delivery=None` всегда (inbound), `_publish_to_centrifugo` не публикует `*_requested`, клиент не диспатчит `*_requested`-кадры в bus (`ws.effect.ts`). Иначе — петля эхо команды.
 4. Команда без исхода за `realtime.command_deadline_seconds` получает синтетический `*_failed` `deadline_exceeded` (`sweep_expired_commands`).
 5. Connection JWT — это SESSION JWT (cookie `auth_token`, `iss=platform.session`, `channels`, `meta.company_id`); connect-proxy и `connection_token` запрещены.
 6. Клиент — `core/frontend/static/lib/events/effects/ws.effect.ts` (`centrifuge-js`); `wsTimeoutMs` обязателен. Обрыв или timeout RPC ≠ `*_failed`: клиент читает `GET /realtime/api/v1/events/{event_id}/terminal`; повтор команды через HTTP запрещён.
 
 ## Ошибки границы
 
-1. Исход границы в `op_*` и REST — только `core.websocket.raise_forbidden`, `raise_not_found(exc, detail=None)`, `raise_invalid`, `raise_conflict`, `raise_internal`, `raise_upstream`, `raise_unavailable` (`WsCommandError`); локальные `_forbidden`/`_not_found` запрещены.
+1. Исход границы в `op_*` и REST — только `core.websocket.raise_forbidden`, `raise_not_found(exc, detail=None)`, `raise_invalid`, `raise_conflict`, `raise_internal`, `raise_upstream`, `raise_unavailable` ; локальные `_forbidden`/`_not_found` запрещены.
 2. `HTTPException` в `apps/` запрещён. Гейт: ratchet `http_exception_in_services`.
 3. Доменные ошибки сервисов — `core/errors/boundary.py` (`PlatformNotFoundError`, `PlatformConflictError`, `PlatformAccessDeniedError`); `dispatch_ws_command` и REST-фабрика превращают их в `not_found`/`conflict`/`forbidden`; `op_*` ловит их только ради своего `detail`. Свой `*NotFoundError`/`*ConflictError` — только подкласс с дополнительными атрибутами.
 4. `WsCommandError.code` → HTTP по `WS_COMMAND_ERROR_HTTP_STATUS` (`core/websocket/operation.py`); неизвестный code — `raise` в `ws_command_error_status`.
-5. Тело `*_failed` и JSON-ошибка REST: `error_code` (ключ `platform:errors.*`, по умолчанию равен `code`), `error_detail`, `error_params`, `request_id`, `trace_id`, `service`; для компании `system` — `observability.logs_explore_url`. Реализация — `core/realtime/command_http.py`, `PlatformHttpErrorEnvelopeMiddleware` (`core/middleware/platform_error_envelope.py`); UI — `formatPlatformError` (`core/frontend/static/lib/events/http.ts`).
+5. Тело `*_failed` и JSON-ошибка REST: `error_code` (ключ `platform:errors.*`, по умолчанию равен `code`), `error_detail`, `error_params`, `request_id`, `trace_id`, `service`; для компании `system` — `observability.logs_explore_url`. Реализация — `core/realtime/command_http.py` + `core/middleware/platform_error_envelope.py`; UI — `formatPlatformError`.
 6. Кириллица в аргументах `raise`, `raise_*`, `Platform*Error` запрещена; каждый `error_code` есть в `platform:errors` ru и en. Гейт: `scripts/gates/backend/backend_error_i18n.py`.
 
 ## App-level поведение
@@ -85,10 +85,10 @@ Di = Annotated[WikiDi, http_di(WikiDi), task_di(WikiDi)]
 ### Модель
 
 1. Имя класса — `<Process>Di` от каталога (`idle` → `IdleDi`). Поле — компонент, который boundary читает как `di.<field>`; только аннотированные поля без defaults, методов и properties; поле без чтения запрещено.
-2. Воркер — `worker.py` в каталоге владельца (второй процесс — `worker_<name>.py`) и запускается с DI этого каталога (`build_worker(..., di_class=FlowsDi)`). Задачи — `apps/<svc>/tasks/` (flows — `apps/flows/src/tasks/`, sync — `apps/sync/realtime/`). Процесс без HTTP (`idle`) держит `IdleDi` в `apps/idle/di.py`. Entrypoints одного каталога делят один `<Process>Di`.
+2. Воркер — `worker.py` в каталоге владельца (второй процесс — `worker_<name>.py`) и запускается с DI этого каталога (`build_worker(..., di_class=FlowsDi)`). Задачи — `apps/<svc>/tasks/` (flows — `apps/flows/src/tasks/`). Процесс без HTTP (`idle`) держит `IdleDi` в `apps/idle/di.py`. Entrypoints одного каталога делят один `<Process>Di`.
 3. Kit находит зависимости по аннотациям `__init__`: параметр без default — зависимость, с default — настройка класса.
-4. Один ключ — один экземпляр на процесс; ключ — класс или `NewType` (`SharedStorage = NewType("SharedStorage", Storage)`).
-5. Корни графа даёт runner: settings процесса (каждый класс MRO — наследник core `BaseSettings`), каждая уникальная секция core `BaseSettings` (`DatabaseConfig`, `OpenFGAConfig`, `BillingConfig`, …) и `ProcessIdentity(service_name, files_route_segment)`. Компонент принимает нужную секцию, а не весь settings.
+4. Один ключ — один экземпляр на процесс; ключ — класс или `NewType`.
+5. Корни графа даёт runner: settings процесса (каждый класс MRO — наследник core `BaseSettings`), каждая уникальная секция core `BaseSettings` и `ProcessIdentity(service_name, files_route_segment)`. Компонент принимает нужную секцию, а не весь settings.
 6. Готовый DI — frozen snapshot без `get`, `resolve`, lazy и late binding.
 
 ### @recipe и lifecycle
@@ -98,7 +98,7 @@ Di = Annotated[WikiDi, http_di(WikiDi), task_di(WikiDi)]
 3. Recipes объявляются в классе `recipes=(...)`; recipe подкласса перекрывает родителя; два recipe одного ключа и ненужный графу recipe — ошибка.
 4. Lifecycle — `@recipe` с `-> None` или `AsyncIterator[None]` в `lifecycle=(...)` runner'а (фоновая петля, регистрация handler'а, seed); не поле DI.
 5. Recipe, lifecycle, конструктор и поле не зависят от `<Process>Di`: шаг объявляет конкретные компоненты.
-6. Сборка eager: до обслуживания runner инициализирует Oxyde и строит граф. Отсутствующий компонент, цикл, лишний recipe, аннотация под `TYPE_CHECKING` — `DiError` с путём (`WikiDi.wiki_service -> WikiService(authz) -> ...`) на старте; `check_di(<Process>Di)` — та же проверка без сборки.
+6. Сборка eager: до обслуживания runner инициализирует Oxyde и строит граф. Отсутствующий компонент, цикл, лишний recipe, аннотация под `TYPE_CHECKING` — `DiError` с путём на старте; `check_di(<Process>Di)` — та же проверка без сборки.
 
 ### PlatformDi
 
@@ -117,31 +117,31 @@ Di = Annotated[WikiDi, http_di(WikiDi), task_di(WikiDi)]
 1. Второй объект композиции, module-global DI, `dependencies.py`, гранулярные `get_*_service()`.
 2. Передача `di` или bag сервисов в доменный код; Protocol, зеркалящий поля DI.
 3. Recipe для класса, который Kit собирает из `__init__`; ручная сборка компонента в runner или boundary.
-4. `dependency=None` с fallback к global getter, property/setter injection, provider callback ради разрыва цикла; `Callable[[], Service]` — только когда отложенное создание — доменный контракт фабрики.
+4. `dependency=None` с fallback к global getter, property/setter injection, provider callback ради разрыва цикла; `Callable[[], Service]` — только как доменный контракт фабрики.
 5. Второй DI runtime (Dishka, dependency-injector, punq); process-scoped клиент в handler; импорт `di.py` другого процесса. Исключение: воркер импортирует recipe-кортеж из `di.py` владельца.
 6. `*Deps`, `*Context`, `*Runtime`, прячущий длинный constructor; допустим только cohesive контракт одного lifecycle домена (`FlowExecutionContext`), не раздающий сервисы.
-7. Маскировка цикла импортов или object graph через `TYPE_CHECKING`, lazy, provider, setter: цикл чинится слоями — contracts, enums, Pydantic-типы ниже, orchestration выше.
+7. Маскировка цикла импортов или object graph через `TYPE_CHECKING`, lazy, provider, setter: цикл чинится слоями.
 
 ### Исключения
 
-- Исключение: runner привязывает process-global `set_billing_service(di.billing_service)` (`core/billing/__init__.py`) для settlement spans; других process-global компонентов нет. `[без гейта]`
+- Исключение: runner привязывает process-global `set_billing_service(di.billing_service)` для settlement spans; других process-global компонентов нет. `[без гейта]`
 
 ## Межсервисный доступ
 
 1. Модель владельца приоритетнее: процесс с доступом к БД peer-домена читает `await Model.method(...)`, а не REST за теми же строками и не поле DI.
-2. `ServiceClient` (`core/clients/service_client.py`) — только когда контракт намеренно REST или БД недоступна; он и outbound `A2AClient` передают `X-Trace-Id`, `Authorization`, `X-Request-Id` и signed `X-Platform-Context-*` при `active_company`. `AuthMiddleware` применяет валидные internal headers на любом пути.
+2. `ServiceClient` — только когда контракт намеренно REST или БД недоступна; он и outbound `A2AClient` передают `X-Trace-Id`, `Authorization`, `X-Request-Id` и signed `X-Platform-Context-*` при `active_company`. `AuthMiddleware` применяет валидные internal headers на любом пути.
 3. Прямой `httpx2.AsyncClient` между сервисами, самодельный HTTP-клиент к peer за теми же таблицами и «тонкий» прокси без причины запрещены → `integrations.mdc`.
 
 ## Контекст запроса
 
 1. `core.context.get_context()` даёт `user`, `active_company`, `trace_id`; модели берут `company_id` из контекста сами.
 2. Временный scope: `token = set_context(...)` → `reset_context(token)`; `clear_context()` для выхода запрещён.
-3. `Host` company subdomain главнее `token.company_id`: для `SESSION` члена компании Host `AuthMiddleware` вызывает `rebind_session_to_company` (`core/utils/auth_session_rebind.py`) — новый `active_company_id`, новый JWT, `Set-Cookie auth_token`, без редиректа; не член компании Host — 403.
+3. `Host` company subdomain главнее `token.company_id`: для `SESSION` члена компании Host `AuthMiddleware` вызывает `rebind_session_to_company` — новый `active_company_id`, новый JWT, `Set-Cookie auth_token`, без редиректа; не член компании Host — 403.
 
 ## Пагинация
 
-1. Коллекции — только `CursorPage[T]`, `OffsetPage[T]`, `ListResponse[T]` (`core/pagination.py`); поле коллекции — `items`; ad-hoc `*Response` и голый `list[T]` как `response_model` запрещены.
-2. `CursorPage` (`items`, `next_cursor`, `prev_cursor`, `has_more`) — коллекции больше 1K, realtime, ленты, экспорт; `has_more` через `limit+1`, `COUNT(*)` запрещён; курсор — opaque `base64url(json({"ts": created_at, "id": entity_id}))`, keyset `(created_at, id)`; `limit` не больше 1000.
+1. Коллекции — только `CursorPage[T]`, `OffsetPage[T]`, `ListResponse[T]` ; поле коллекции — `items`; ad-hoc `*Response` и голый `list[T]` как `response_model` запрещены.
+2. `CursorPage` (`items`, `next_cursor`, `prev_cursor`, `has_more`) — коллекции больше 1K, realtime, ленты, экспорт; `has_more` через `limit+1`, `COUNT(*)` запрещён; курсор — opaque `base64url(json({"ts": created_at, "id": entity_id}))`, `limit` не больше 1000.
 3. `OffsetPage` (`items`, `total`, `limit`, `offset`) — admin UI, поиск с прыжком, таблицы меньше 10K; `limit` не больше 200.
 
 ### Исключения

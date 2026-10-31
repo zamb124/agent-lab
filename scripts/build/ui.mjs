@@ -10,11 +10,10 @@
  * Файлы ui/, не попавшие в граф бандла (ассеты, vendor, html, css), копируются
  * в ui-dist/ как есть — mount продолжает отдавать их по тем же URL.
  *
- * Vendored модули, импортированные относительным путём (`assets/js/lit/…`,
- * `marked.esm.min.js`, `centrifuge.esm.min.js`), редиректятся в npm-пакеты —
- * иначе в бандл попали бы две копии Lit и customElements.define упал бы.
- * URL-импорты (`import('/static/…')`, `import('/crm/ui/vendor/…')`) остаются
- * external — это осознанный lazy-load тяжёлых вендоров (CodeMirror, three).
+ * Единый канон зависимостей — npm: `lit`, `marked`, `centrifuge`, CodeMirror,
+ * ProseMirror, three, echarts, mermaid, livekit-client, @capacitor/*.
+ * Динамические `import('pkg')` становятся lazy-чанками `chunks/` (splitting).
+ * URL-импорты (`import('/static/…')`) остаются external — только data-ассеты.
  *
  * Embed-виджеты (внешние сайты, стабильные URL `/static/core/lib/embed-…`)
  * собираются в self-contained бандлы `core/frontend/embed-dist/`: внешний сайт
@@ -61,34 +60,10 @@ const PAGE_ENTRYPOINTS = [
 const DESIGN_SYSTEM_MANIFESTS_DIR = path.join(ROOT, 'tests', 'ui', 'design-system', 'components');
 const DESIGN_SYSTEM_IMPORT_PREFIX = '@platform/lib/';
 
-/** Единый lit/@capacitor/vendored-resolver: предотвращает дубли модулей в бандле. */
-const vendoredDedupPlugin = {
-    name: 'platform-vendored-dedup',
+/** Абсолютные URL (/static/…data-ассеты) — внешние; всё остальное резолвится в npm. */
+const urlExternalPlugin = {
+    name: 'platform-url-external',
     setup(build) {
-        const vendoredToNpm = [
-            [/assets\/js\/lit\/lit\.min\.js$/, 'lit'],
-            [/assets\/js\/lit\/decorators\.min\.js$/, 'lit/decorators.js'],
-            [/assets\/js\/lit\/directives\/class-map\.min\.js$/, 'lit/directives/class-map.js'],
-            [/assets\/js\/lit\/directives\/repeat\.min\.js$/, 'lit/directives/repeat.js'],
-            [/assets\/js\/lit\/directives\/unsafe-html\.min\.js$/, 'lit/directives/unsafe-html.js'],
-            [/assets\/js\/lit\/directives\/guard\.min\.js$/, 'lit/directives/guard.js'],
-            [/assets\/js\/lit\/directives\/when\.min\.js$/, 'lit/directives/when.js'],
-            [/assets\/js\/marked\/marked\.esm\.min\.js$/, 'marked'],
-            [/assets\/js\/centrifuge\/centrifuge\.esm\.min\.js$/, 'centrifuge'],
-        ];
-        for (const [filter, target] of vendoredToNpm) {
-            build.onResolve({ filter }, (args) =>
-                build.resolve(target, { resolveDir: args.resolveDir, kind: args.kind }),
-            );
-        }
-        // @capacitor/* не в package.json — vendored под core/frontend/static/assets/js/vendor/.
-        const capacitorVendor = path.join(CORE_STATIC, 'assets', 'js', 'vendor', '@capacitor');
-        for (const pkg of ['core', 'app', 'push-notifications', 'splash-screen']) {
-            build.onResolve({ filter: new RegExp(`^@capacitor/${pkg}$`) }, () => ({
-                path: path.join(capacitorVendor, pkg, 'index.js'),
-            }));
-        }
-        // Абсолютные URL (/static/…, /<svc>/ui/vendor/…) — внешние lazy/ассеты.
         build.onResolve({ filter: /^\// }, (args) =>
             args.kind === 'entry-point' ? undefined : { path: args.path, external: true },
         );
@@ -102,6 +77,8 @@ function discoverApps() {
         if (!existsSync(uiDir) || !statSync(uiDir).isDirectory()) continue;
         const entry = path.join(uiDir, 'index.ts');
         if (!existsSync(entry)) {
+            const hasSources = readdirSync(uiDir, { recursive: true }).some((f) => /\.tsx?$/.test(String(f)));
+            if (!hasSources) continue;
             throw new Error(`[build-ui] ${svc}: нет точки входа ${path.relative(ROOT, entry)}`);
         }
         if (!APPS_FILTER || APPS_FILTER.has(svc)) {
@@ -163,7 +140,7 @@ function buildOptions({ uiDir, entry, outDir }) {
         alias: {
             '@platform/lib': path.join(CORE_STATIC, 'lib'),
         },
-        plugins: [vendoredDedupPlugin],
+        plugins: [urlExternalPlugin],
     };
 }
 
@@ -212,7 +189,7 @@ async function buildEmbed() {
             alias: {
                 '@platform/lib': LIB_DIR,
             },
-            plugins: [vendoredDedupPlugin],
+            plugins: [urlExternalPlugin],
         });
         console.log(`[build-ui] embed: ${rel}`);
     }
@@ -271,7 +248,7 @@ async function buildPageModules() {
         alias: {
             '@platform/lib': LIB_DIR,
         },
-        plugins: [vendoredDedupPlugin],
+        plugins: [urlExternalPlugin],
     });
     console.log(`[build-ui] page modules: ${entries.length}`);
 }

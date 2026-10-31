@@ -236,14 +236,6 @@ applications:
       - /crm/ui/static
       - --static-path-mount
       - apps/crm/ui-dist
-      - --static-path-route
-      - /crm/ui/vendor/3d-force-graph
-      - --static-path-mount
-      - node_modules/3d-force-graph/dist
-      - --static-path-route
-      - /crm/ui/vendor/three
-      - --static-path-mount
-      - node_modules/three/build
     resources:
       requests:
         cpu: 200m
@@ -429,6 +421,43 @@ applications:
       - /stock/ui/static
       - --static-path-mount
       - apps/stock/ui-dist
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  shop:
+    nodeName: master
+    enabled: true
+    port: 8027
+    replicas: 2
+    serviceName: shop
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.shop.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8027"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core/lib
+      - --static-path-mount
+      - core/frontend/embed-dist
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /shop/ui/static
+      - --static-path-mount
+      - apps/shop/ui-dist
     resources:
       requests:
         cpu: 100m
@@ -960,6 +989,26 @@ workers:
       limits:
         cpu: "2"
         memory: 6Gi
+  shop-worker:
+    nodeName: master
+    enabled: true
+    replicas: 1
+    terminationGracePeriodSeconds: 300
+    command:
+      [
+        "taskiq",
+        "worker",
+        "apps.shop.worker:worker_app",
+        "--workers",
+        "2",
+      ]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
 
 litserve:
   enabled: true
@@ -978,13 +1027,8 @@ litserve:
   # Qwen3-Embedding-0.6B, Qwen3-Reranker-0.6B + запас
   # (gigaam/silero-tts/silero-vad/qwen/flagllm) → берём 100Gi.
   modelCacheSize: 100Gi
-  modelId: Qwen/Qwen3-Reranker-0.6B
+  rerankModelId: Qwen/Qwen3-Reranker-0.6B
   embeddingModelId: Qwen/Qwen3-Embedding-0.6B
-  # API id дефолтных моделей (поля stt_default_api_model_id и т.д. в
-  # ProviderLitserveInfraConfig). ENV: PROVIDER_LITSERVE__INFRA__STT_DEFAULT_API_MODEL_ID и т.д.
-  sttDefaultApiModelId: gigaam-v3-rnnt-ru
-  ttsDefaultApiModelId: silero-tts-v5-5-ru
-  vadDefaultApiModelId: silero-vad-v5
   # Загружать embedding-модель в bfloat16 (экономия ~50% VRAM на RTX A2000 6GB).
   # Отключить: embeddingUseBf16: "false"
   embeddingUseBf16: "true"

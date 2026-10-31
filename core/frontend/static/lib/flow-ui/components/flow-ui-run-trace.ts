@@ -4,7 +4,7 @@
  * блок ``run_trace``). Автономен от i18n-шины (embed): подписи — ``flowUIText``.
  */
 
-import { LitElement, css, html, nothing } from '../../lit-shim.js';
+import { LitElement, css, html, nothing } from 'lit';
 import { isPlainRecord } from '../../events/payload.js';
 import type { FlowUiTask } from '../runtime/conversation.js';
 import type { FlowUiRecord } from '../runtime/flow-ui-store.js';

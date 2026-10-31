@@ -4,7 +4,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { markdownToHtml } from '@platform/lib/utils/markdown.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '../components/crawl-report/crawl-report-metadata-panels.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
@@ -254,14 +254,14 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         const { busy, error } = this._detailOp.state;
         const detail = this._detailForCurrentUrl();
         if (busy && !detail) {
-            return html`<div class="loading"><glass-spinner size="sm"></glass-spinner></div>`;
+            return html`<div class="loading"><platform-spinner size="sm"></platform-spinner></div>`;
         }
         if (error && error.includes('404')) {
             return html`<div class="state">${this.t('crawl_report_page.url_detail_not_found')}</div>`;
         }
         if (!detail) {
             if (busy) {
-                return html`<div class="loading"><glass-spinner size="sm"></glass-spinner></div>`;
+                return html`<div class="loading"><platform-spinner size="sm"></platform-spinner></div>`;
             }
             return html`<div class="state">${this.t('crawl_report_page.url_detail_unavailable')}</div>`;
         }

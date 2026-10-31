@@ -7,7 +7,7 @@
  * - ссылки и картинки — только ``http(s)``/``mailto``, ссылки открываются в новой вкладке.
  */
 
-import { Marked } from '../../assets/js/marked/marked.esm.min.js';
+import { Marked } from 'marked';
 
 import { escapeHtml } from './escape-html.js';
 

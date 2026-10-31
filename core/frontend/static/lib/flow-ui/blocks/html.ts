@@ -5,7 +5,7 @@
  * поэтому ``connectedCallback`` заново ставит ``srcdoc`` (иначе кадр остаётся пустым).
  */
 
-import { css, html, LitElement, type PropertyValues } from '../../lit-shim.js';
+import { css, html, LitElement, type PropertyValues } from 'lit';
 import type { FlowUiBlock, FlowUiBlockRenderer } from '../runtime/flow-ui-store.js';
 import {
     FLOW_UI_HTML_MIN_HEIGHT,

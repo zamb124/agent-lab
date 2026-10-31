@@ -243,8 +243,6 @@ export class CRMApp extends PlatformApp {
     private _companiesLoadingSel: SelectController<boolean>;
     private _laraActiveCompanySel: SelectController<string | null>;
     private _laraSummary: OpController;
-    private _crmMql: MediaQueryList | null;
-    private _onCrmMobileMql: (() => void) | null;
     private _crmMobile: boolean;
 
     constructor() {
@@ -253,8 +251,6 @@ export class CRMApp extends PlatformApp {
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._laraActiveCompanySel = this.select((s: Record<string, any>) => s.auth.activeCompanyId);
         this._laraSummary = this.useOp('crm/lara_summary');
-        this._crmMql = null;
-        this._onCrmMobileMql = null;
         this._crmMobile =
             typeof window !== 'undefined' &&
             typeof window.matchMedia === 'function' &&
@@ -267,16 +263,14 @@ export class CRMApp extends PlatformApp {
             return;
         }
         const mql = window.matchMedia('(max-width: 767px)');
-        this._crmMql = mql;
-        this._onCrmMobileMql = () => {
+        this.useDomEvent(mql, 'change', () => {
             const next = mql.matches;
             if (next !== this._crmMobile) {
                 this._crmMobile = next;
                 this.requestUpdate();
             }
-        };
-        this._crmMql.addEventListener('change', this._onCrmMobileMql);
-        const next = this._crmMql.matches;
+        });
+        const next = mql.matches;
         if (next !== this._crmMobile) {
             this._crmMobile = next;
             this.requestUpdate();
@@ -284,9 +278,6 @@ export class CRMApp extends PlatformApp {
     }
 
     override disconnectedCallback(): void {
-        if (this._crmMql && this._onCrmMobileMql) {
-            this._crmMql.removeEventListener('change', this._onCrmMobileMql);
-        }
         super.disconnectedCallback();
     }
 

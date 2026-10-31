@@ -154,12 +154,11 @@ export class WorktrackerWorkItemCard extends PlatformElement {
 
     override connectedCallback() {
         super.connectedCallback();
-        document.addEventListener('click', this._onDocClick, true);
+        this.useDomEvent(document, 'click', this._onDocClick, true);
     }
 
     override disconnectedCallback() {
         super.disconnectedCallback();
-        document.removeEventListener('click', this._onDocClick, true);
         this._closeMenuPortal();
     }
 
@@ -278,8 +277,8 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         document.body.appendChild(portal);
         this._menuPortal = portal;
         this._menuContent = content;
-        window.addEventListener('resize', this._onWindowReposition);
-        window.addEventListener('scroll', this._onWindowReposition, true);
+        this.useDomEvent(window, 'resize', this._onWindowReposition);
+        this.useDomEvent(window, 'scroll', this._onWindowReposition, true);
     }
 
     private _menuPositionStyle() {
@@ -317,8 +316,6 @@ export class WorktrackerWorkItemCard extends PlatformElement {
     }
 
     private _closeMenuPortal() {
-        window.removeEventListener('resize', this._onWindowReposition);
-        window.removeEventListener('scroll', this._onWindowReposition, true);
         if (this._menuContent !== null) {
             render(html``, this._menuContent);
             this._menuContent = null;

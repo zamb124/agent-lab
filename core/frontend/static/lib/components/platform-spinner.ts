@@ -1,9 +1,9 @@
 /**
  * Единый спиннер платформы.
- * Вращающийся логотип Linnex. Заменяет glass-spinner и app-loader.
+ * Вращающийся логотип Linnex. Единственный спиннер платформы.
  */
-import { html, css } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
+import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 const SPINNER_LOGO_SRC = '/static/core/assets/service_logos/linnex_spinner_logo.png';
@@ -55,7 +55,7 @@ export class PlatformSpinner extends PlatformElement {
                 inset: 0;
                 z-index: 9999;
                 flex-direction: column;
-                background: #0F0F0F;
+                background: var(--spinner-fullscreen-bg, #0F0F0F);
                 transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             }
 

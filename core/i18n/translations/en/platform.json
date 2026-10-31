@@ -1,4 +1,20 @@
 {
+    "namespace_modal": {
+        "header": "New workspace",
+        "label_template": "Template",
+        "label_name": "Name",
+        "label_description": "Description",
+        "template_hint": "Workspace is created with a preconfigured set of entity types.",
+        "template_no_description": "No description",
+        "templates_empty": "No templates available",
+        "name_placeholder": "e.g. personal, work, project_x",
+        "name_hint": "Latin letters, digits and underscore only. Must start with a letter.",
+        "description_placeholder": "Describe what this workspace is for",
+        "cancel": "Cancel",
+        "submit": "Create workspace",
+        "saving": "Creating…"
+    },
+
     "notifications": {
         "title": "Notifications",
         "dismiss_all": "Clear all",

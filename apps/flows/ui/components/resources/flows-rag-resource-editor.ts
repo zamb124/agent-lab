@@ -12,7 +12,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/rag/platform-rag-retrieval-panel.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
@@ -713,7 +713,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
                         @click=${() => this._triggerFileInput()}
                     >
                         ${uploading
-                            ? html`<glass-spinner size="sm" aria-hidden="true"></glass-spinner>`
+                            ? html`<platform-spinner size="sm" aria-hidden="true"></platform-spinner>`
                             : html`<platform-icon name="paperclip" size="16"></platform-icon>`}
                     </platform-button>
                 </div>
@@ -726,7 +726,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
                 ${!enabled
                     ? html`<p class="hint">${this.t('rag_resource_editor.documents_disabled')}</p>`
                     : loading
-                        ? html`<p class="hint">${this.t('rag_resource_editor.documents_loading')}</p>`
+                        ? html`<p class="hint"><platform-spinner size="xs"></platform-spinner> ${this.t('rag_resource_editor.documents_loading')}</p>`
                         : items.length === 0
                             ? html`
                                 <div

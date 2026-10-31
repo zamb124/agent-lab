@@ -194,7 +194,7 @@ async def test_flows_home_tour(
         ),
     )
     await chat_button.click(force=True)
-    await expect(page.locator("chat-page platform-flow-ui")).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-chat-page platform-flow-ui")).to_be_visible(timeout=30_000)
     await scenario.step(
         "Откройте чат агента",
         page,

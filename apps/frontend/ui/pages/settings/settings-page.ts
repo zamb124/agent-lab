@@ -15,7 +15,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../../components/company-storage-settings.js';
@@ -1227,7 +1227,7 @@ export class FrontendSettingsPage extends PlatformPage {
     _renderAiProvidersTab() {
         const data = this._aiLoad.lastResult;
         if (!data) {
-            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (!isPlainRecord(data)) {
             throw new Error('settings: ai providers payload must be an object');
@@ -1247,7 +1247,7 @@ export class FrontendSettingsPage extends PlatformPage {
                 </div>
                 <div class="section-help">${this.t('settings_page.ai_providers.section_custom_providers_help')}</div>
                 ${customProviders.length === 0
-                    ? html`<div class="empty">${this.t('settings_page.ai_providers.no_custom_providers')}</div>`
+                    ? html`<platform-empty-state icon="llm_node" title=${this.t('settings_page.ai_providers.no_custom_providers')}></platform-empty-state>`
                     : html`
                           <div class="custom-provider-list">
                               ${customProviders.map((raw) => {
@@ -1591,7 +1591,7 @@ export class FrontendSettingsPage extends PlatformPage {
     _renderSearchProvidersTab() {
         const data = this._searchLoad.lastResult;
         if (!data) {
-            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         const providers = isPlainRecord(data) && Array.isArray(data.providers) ? data.providers : [];
         const providerRecords = providers.filter((provider): provider is Record<string, unknown> => isPlainRecord(provider) && typeof provider.provider_id === 'string');
@@ -1799,7 +1799,7 @@ export class FrontendSettingsPage extends PlatformPage {
     _renderModelScoringTab() {
         const result = this._scoreLoad.lastResult;
         if (!result) {
-            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (!isPlainRecord(result)) {
             throw new Error('model scoring: payload must be an object');
@@ -1848,9 +1848,9 @@ export class FrontendSettingsPage extends PlatformPage {
                 <llm-provider-status-strip .providers=${result.providers}></llm-provider-status-strip>
                 <div class="section-help">${this.t('settings_page.model_scoring.providers_help')}</div>
                 ${items.length === 0
-                    ? html`<div class="empty">${this.t('settings_page.model_scoring.empty')}</div>`
+                    ? html`<platform-empty-state icon="chart" title=${this.t('settings_page.model_scoring.empty')}></platform-empty-state>`
                     : visibleItems.length === 0
-                    ? html`<div class="empty">${this.t('settings_page.model_scoring.empty_blocked')}</div>`
+                    ? html`<platform-empty-state icon="chart" title=${this.t('settings_page.model_scoring.empty_blocked')}></platform-empty-state>`
                     : html`
                         <div class="scores-table-wrap">
                             <table class="scores-table">
@@ -2053,12 +2053,12 @@ export class FrontendSettingsPage extends PlatformPage {
                 <section>
                     <h3>${this.t('settings_page.security_title')}</h3>
                     <div class="section-help">${this.t('settings_page.security_info')}</div>
-                    <div class="empty">${this.t('settings_page.sessions_placeholder')}</div>
+                    <platform-empty-state icon="smartphone" title=${this.t('settings_page.sessions_placeholder')}></platform-empty-state>
                 </section>
                 <section>
                     <h3>${this.t('settings_page.oauth_title')}</h3>
                     <div class="section-help">${this.t('settings_page.oauth_info')}</div>
-                    <div class="empty">—</div>
+                    <platform-empty-state icon="key" title=${this.t('settings_page.oauth_empty')}></platform-empty-state>
                 </section>
             </div>
         `;
@@ -2090,7 +2090,7 @@ export class FrontendSettingsPage extends PlatformPage {
             return html`
                 <page-header title=${this.t('settings_page.title')}></page-header>
                 <div class="page-body">
-                <div class="empty"><glass-spinner></glass-spinner></div>
+                <platform-empty-state loading></platform-empty-state>
                 </div>
             `;
         }

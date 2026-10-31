@@ -11,7 +11,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { FrontendCreateApiKeyModal } from '../../modals/create-api-key-modal.js';
 import { FrontendEditApiKeyModal } from '../../modals/edit-api-key-modal.js';
@@ -82,15 +82,7 @@ export class FrontendApiKeysPage extends PlatformPage {
             td { color: var(--text-primary); font-size: var(--text-sm); vertical-align: middle; }
             code { font-family: var(--font-mono); color: var(--text-secondary); }
 
-            .empty {
-                padding: var(--space-8) var(--space-6);
-                text-align: center; color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: 1px dashed var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                margin-top: var(--space-4);
-            }
-            .empty .empty-title { color: var(--text-primary); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
+            platform-empty-state { margin-top: var(--space-4); }
 
             .scopes-cell { display: flex; flex-wrap: wrap; gap: var(--space-1); }
             .scope-tag {
@@ -179,10 +171,11 @@ export class FrontendApiKeysPage extends PlatformPage {
 
     _renderEmpty() {
         return html`
-            <div class="empty">
-                <div class="empty-title">${this.t('api_keys_page.empty_title')}</div>
-                <div>${this.t('api_keys_page.empty_description')}</div>
-            </div>
+            <platform-empty-state
+                icon="key"
+                title=${this.t('api_keys_page.empty_title')}
+                hint=${this.t('api_keys_page.empty_description')}
+            ></platform-empty-state>
         `;
     }
 
@@ -226,7 +219,7 @@ export class FrontendApiKeysPage extends PlatformPage {
             ${this._renderInfoBanner()}
             ${this._renderSecretBanner(lastSecret)}
             ${loading && list.length === 0
-                ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
+                ? html`<platform-empty-state loading></platform-empty-state>`
                 : list.length === 0
                     ? this._renderEmpty()
                     : html`

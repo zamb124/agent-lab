@@ -1,0 +1,232 @@
+"""REST-тесты Shop Admin API: CRUD магазина, каталога, изоляция компаний.
+
+`shop_client` — владелец `system`; `shop_client_company2` — чужая компания.
+Продовый путь: реальный Postgres (platform_shop), настоящий AuthMiddleware.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from httpx2 import AsyncClient
+
+from tests.fixtures.shop import API_PREFIX
+
+_SHOPS = f"{API_PREFIX}/shops"
+
+
+async def _make_shop(
+    client: AsyncClient, slug: str, **overrides: Any
+) -> dict[str, Any]:
+    payload = {"slug": slug, "name": f"Shop {slug}", "kind": "restaurant", **overrides}
+    resp = await client.post(_SHOPS, json=payload)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+async def _make_category(client: AsyncClient, shop_id: str, name: str) -> dict[str, Any]:
+    resp = await client.post(f"{_SHOPS}/{shop_id}/categories", json={"name": name})
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+async def _make_product(
+    client: AsyncClient, shop_id: str, name: str, price: int, **overrides: Any
+) -> dict[str, Any]:
+    resp = await client.post(
+        f"{_SHOPS}/{shop_id}/products",
+        json={"name": name, "price_minor": price, **overrides},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+class TestShopCrud:
+    async def test_create_list_get_shop(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"test-{unique_id[:8]}"
+        created = await _make_shop(shop_client, slug)
+        assert created["slug"] == slug
+        assert created["status"] == "draft"
+        assert created["storefront_url"].startswith(f"https://{slug}.")
+        listed = (await shop_client.get(_SHOPS)).json()
+        assert any(s["shop_id"] == created["shop_id"] for s in listed["items"])
+        got = (await shop_client.get(f"{_SHOPS}/{created['shop_id']}")).json()
+        assert got["name"] == f"Shop {slug}"
+
+    async def test_slug_conflict(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"dup-{unique_id[:8]}"
+        await _make_shop(shop_client, slug)
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": slug, "name": "Other"}
+        )
+        assert resp.status_code == 409
+
+    async def test_slug_reserved_rejected(self, shop_client: AsyncClient) -> None:
+        for slug in ("grafana", "www", "api", "shop"):
+            resp = await shop_client.post(
+                _SHOPS, json={"slug": slug, "name": "Bad"}
+            )
+            assert resp.status_code == 409, slug
+
+    async def test_slug_invalid_rejected(self, shop_client: AsyncClient) -> None:
+        for slug in ("AB", "up-case", "-lead", "trail-", "a" * 41, "с луг"):
+            resp = await shop_client.post(
+                _SHOPS, json={"slug": slug, "name": "Bad"}
+            )
+            assert resp.status_code in (409, 422), slug
+
+    async def test_update_shop_fields(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop = await _make_shop(shop_client, f"upd-{unique_id[:8]}")
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}",
+            json={
+                "name": "Новое имя",
+                "description": "Описание",
+                "phone": "+79990001122",
+                "city": "Москва",
+                "delivery_fee_minor": 19900,
+                "min_order_minor": 50000,
+                "theme": {"accent_color": "#00ff88", "preset": "grid"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["name"] == "Новое имя"
+        assert body["delivery_fee_minor"] == 19900
+        assert body["theme"]["accent_color"] == "#00ff88"
+
+    async def test_publish_and_suspend(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop = await _make_shop(shop_client, f"pub-{unique_id[:8]}")
+        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "published"
+        resp = await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/suspend")
+        assert resp.json()["status"] == "suspended"
+
+    async def test_delete_shop_excluded_from_list(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop = await _make_shop(shop_client, f"del-{unique_id[:8]}")
+        resp = await shop_client.delete(f"{_SHOPS}/{shop['shop_id']}")
+        assert resp.status_code == 200
+        listed = (await shop_client.get(_SHOPS)).json()
+        assert all(s["shop_id"] != shop["shop_id"] for s in listed["items"])
+        resp = await shop_client.get(f"{_SHOPS}/{shop['shop_id']}")
+        assert resp.status_code == 404
+
+
+class TestTenantIsolation:
+    async def test_company2_cannot_see_system_shops(
+        self,
+        shop_client: AsyncClient,
+        shop_client_company2: AsyncClient,
+        unique_id: str,
+    ) -> None:
+        shop = await _make_shop(shop_client, f"iso-{unique_id[:8]}")
+        resp = await shop_client_company2.get(f"{_SHOPS}/{shop['shop_id']}")
+        assert resp.status_code == 404
+        listed = (await shop_client_company2.get(_SHOPS)).json()
+        assert all(s["shop_id"] != shop["shop_id"] for s in listed["items"])
+        for method, url in (
+            ("patch", f"{_SHOPS}/{shop['shop_id']}"),
+            ("delete", f"{_SHOPS}/{shop['shop_id']}"),
+            ("post", f"{_SHOPS}/{shop['shop_id']}/publish"),
+        ):
+            resp = await shop_client_company2.request(
+                method, url, json={"name": "hack"} if method == "patch" else None
+            )
+            assert resp.status_code == 404, method
+
+    async def test_anonymous_cannot_use_admin_api(
+        self, shop_public_client: AsyncClient
+    ) -> None:
+        resp = await shop_public_client.get(_SHOPS)
+        assert resp.status_code in (401, 403, 302)
+
+
+class TestCatalog:
+    async def test_category_crud_and_sort(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop = await _make_shop(shop_client, f"cat-{unique_id[:8]}")
+        first = await _make_category(shop_client, shop["shop_id"], "Пицца")
+        second = await _make_category(shop_client, shop["shop_id"], "Напитки")
+        assert second["sort"] > first["sort"]
+        listed = (
+            await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/categories")
+        ).json()
+        assert [c["name"] for c in listed["items"]] == ["Пицца", "Напитки"]
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}/categories/{first['shop_category_id']}",
+            json={"name": "Пицца итальянская", "is_active": False},
+        )
+        assert resp.json()["is_active"] is False
+        resp = await shop_client.delete(
+            f"{_SHOPS}/{shop['shop_id']}/categories/{first['shop_category_id']}"
+        )
+        assert resp.status_code == 200
+
+    async def test_product_crud(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop = await _make_shop(shop_client, f"prod-{unique_id[:8]}")
+        cat = await _make_category(shop_client, shop["shop_id"], "Пицца")
+        product = await _make_product(
+            shop_client,
+            shop["shop_id"],
+            "Маргарита",
+            55000,
+            category_id=cat["shop_category_id"],
+            description="Томат, моцарелла, базилик",
+        )
+        assert product["category_id"] == cat["shop_category_id"]
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
+            json={"price_minor": 59000, "is_available": False},
+        )
+        body = resp.json()
+        assert body["price_minor"] == 59000
+        assert body["is_available"] is False
+        resp = await shop_client.delete(
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}"
+        )
+        assert resp.status_code == 200
+
+    async def test_product_foreign_category_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop_a = await _make_shop(shop_client, f"a-{unique_id[:8]}")
+        shop_b = await _make_shop(shop_client, f"b-{unique_id[:8]}")
+        cat_b = await _make_category(shop_client, shop_b["shop_id"], "Чужая")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop_a['shop_id']}/products",
+            json={
+                "name": "X",
+                "price_minor": 100,
+                "category_id": cat_b["shop_category_id"],
+            },
+        )
+        assert resp.status_code == 404
+
+    async def test_catalog_isolation(
+        self,
+        shop_client: AsyncClient,
+        shop_client_company2: AsyncClient,
+        unique_id: str,
+    ) -> None:
+        shop = await _make_shop(shop_client, f"ciso-{unique_id[:8]}")
+        for url in (
+            f"{_SHOPS}/{shop['shop_id']}/categories",
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            f"{_SHOPS}/{shop['shop_id']}/orders",
+        ):
+            resp = await shop_client_company2.get(url)
+            assert resp.status_code == 404, url

@@ -347,6 +347,7 @@ export class FlowsExecutionPanel extends PlatformElement {
     private _resizeState: PanelPointerState | null;
     private _restorePanelHeight: number;
     private _boundPanelPointerUp: () => void;
+    private _panelPointerUnsubs: Array<() => void> = [];
     private _boundPanelViewportResize: () => void;
 
     constructor() {
@@ -376,16 +377,11 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        if (typeof window !== 'undefined') {
-            window.addEventListener('resize', this._boundPanelViewportResize);
-        }
+        this.useDomEvent(window, 'resize', this._boundPanelViewportResize);
     }
 
     override disconnectedCallback(): void {
         this._endPanelPointerInteraction();
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('resize', this._boundPanelViewportResize);
-        }
         super.disconnectedCallback();
     }
 
@@ -670,9 +666,15 @@ export class FlowsExecutionPanel extends PlatformElement {
             startRect: { ...rect },
         };
         this.setAttribute('data-dragging', '');
-        window.addEventListener('pointermove', this._boundPanelPointerMove);
-        window.addEventListener('pointerup', this._boundPanelPointerUp);
-        window.addEventListener('pointercancel', this._boundPanelPointerUp);
+        this._listenPanelPointer();
+    }
+
+    private _listenPanelPointer() {
+        this._panelPointerUnsubs = [
+            this.useDomEvent(window, 'pointermove', this._boundPanelPointerMove),
+            this.useDomEvent(window, 'pointerup', this._boundPanelPointerUp),
+            this.useDomEvent(window, 'pointercancel', this._boundPanelPointerUp),
+        ];
     }
 
     _onResizePointerDown(e: MouseEvent) {
@@ -696,9 +698,7 @@ export class FlowsExecutionPanel extends PlatformElement {
             startRect: { ...rect },
         };
         this.setAttribute('data-resizing', '');
-        window.addEventListener('pointermove', this._boundPanelPointerMove);
-        window.addEventListener('pointerup', this._boundPanelPointerUp);
-        window.addEventListener('pointercancel', this._boundPanelPointerUp);
+        this._listenPanelPointer();
     }
 
     _onPanelPointerMove(e: MouseEvent) {
@@ -729,9 +729,10 @@ export class FlowsExecutionPanel extends PlatformElement {
         this.removeAttribute('data-dragging');
         this.removeAttribute('data-resizing');
         if (typeof window !== 'undefined') {
-            window.removeEventListener('pointermove', this._boundPanelPointerMove);
-            window.removeEventListener('pointerup', this._boundPanelPointerUp);
-            window.removeEventListener('pointercancel', this._boundPanelPointerUp);
+            for (const unsub of this._panelPointerUnsubs) {
+                unsub();
+            }
+            this._panelPointerUnsubs = [];
         }
     }
 

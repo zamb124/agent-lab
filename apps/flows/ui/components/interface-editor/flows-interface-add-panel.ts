@@ -10,6 +10,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { BLOCK_TYPE_MIME } from '@platform/lib/flow-ui/editor/drop-zones.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-modal-search-field.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 const GROUP_ORDER = Object.freeze(['layout', 'content', 'input', 'action', 'data', 'platform', 'custom']);
@@ -79,7 +80,7 @@ export class FlowsInterfaceAddPanel extends PlatformElement {
                     @change=${(event: CustomEvent) => { this._query = event.detail.value; }}></platform-modal-search-field>
             </div>
             <div class="groups">
-                ${groups.length === 0 ? html`<div class="empty">${this.t('interface_editor.palette_empty')}</div>` : nothing}
+                ${groups.length === 0 ? html`<platform-empty-state title=${this.t('interface_editor.palette_empty')}></platform-empty-state>` : nothing}
                 ${groups.map((group) => html`
                     <div class="group-title">${this.t(`interface_editor.group_${group}`)}</div>
                     <div class="grid">

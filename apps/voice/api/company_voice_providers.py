@@ -34,7 +34,6 @@ from core.clients.speech_provider_catalog import (
     cloud_ru_stt_model_ids,
     cloud_ru_tts_model_ids,
 )
-from core.config import get_settings
 from core.context import require_context
 from core.logging import get_logger
 from core.models.company_voice_provider_secrets import (
@@ -42,6 +41,7 @@ from core.models.company_voice_provider_secrets import (
     merge_secrets,
     unset_secrets_sentinel,
 )
+from core.models.provider_litserve_model import litserve_catalog_entries
 from core.models.voice_models import CompanyVoiceProvider, VoiceKind
 from core.platform_brand.resolver import resolve_brand_or_primary
 from core.websocket import WsCommandError, raise_invalid
@@ -160,7 +160,7 @@ def _validate_provider(kind: VoiceKind, provider: str) -> None:
         )
 
 
-def _validate_model_for_voice(
+async def _validate_model_for_voice(
     *,
     kind: VoiceKind,
     provider: str,
@@ -206,11 +206,11 @@ def _validate_model_for_voice(
     if model_value is None or model_value == "":
         return
 
-    infra = get_settings().provider_litserve.infra
+    entries = await litserve_catalog_entries()
     if kind == "stt":
-        allowed = frozenset(m.api_model_id for m in infra.stt_models)
+        allowed = frozenset(m.api_model_id for m in entries.stt)
     else:
-        allowed = frozenset(m.api_model_id for m in infra.tts_models)
+        allowed = frozenset(m.api_model_id for m in entries.tts)
 
     if model_value not in allowed:
         raise WsCommandError(
@@ -315,14 +315,14 @@ async def upsert_company_voice_provider(
         effective_model = None
 
     if payload.provider == "litserve":
-        _validate_model_for_voice(
+        await _validate_model_for_voice(
             kind=voice_kind,
             provider=payload.provider,
             model_value=effective_model,
             voice_product_name=voice_product_name,
         )
     elif payload.provider == "cloud_ru":
-        _validate_model_for_voice(
+        await _validate_model_for_voice(
             kind=voice_kind,
             provider=payload.provider,
             model_value=effective_model,
@@ -330,7 +330,7 @@ async def upsert_company_voice_provider(
         )
     elif _credential_providers_needing_optional_model(payload.provider):
         if effective_model is not None:
-            _validate_model_for_voice(
+            await _validate_model_for_voice(
                 kind=voice_kind,
                 provider=payload.provider,
                 model_value=effective_model,

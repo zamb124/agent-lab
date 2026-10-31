@@ -45,10 +45,13 @@ from core.config.models import (
     YandexLLMProviderConfig,
     ZAIProviderConfig,
 )
+from core.config.openai_v1_base_url import (
+    openai_v1_base_url,
+    provider_litserve_sdk_api_key,
+)
 from core.http import ProxyStrategy
 from core.http.client import http_header_text, request_with_strategy
 from core.logging import get_logger
-from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.types import JsonArray, JsonObject, JsonValue, parse_json_value, require_json_object
 
 logger = get_logger(__name__)
@@ -627,15 +630,16 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
     def embedding_probe_timeout_seconds(self) -> float:
         return _EMBEDDING_PROBE_TIMEOUT_SECONDS
 
-    @staticmethod
-    def _provider_litserve_model_list_headers() -> dict[str, str]:
+    def _provider_litserve_model_list_headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {PROVIDER_LITSERVE_PLACEHOLDER_BEARER}",
+            "Authorization": f"Bearer {provider_litserve_sdk_api_key()}",
             "Content-Type": "application/json",
         }
 
     def _provider_litserve_openai_v1_base_url(self) -> str:
-        return self._settings.provider_litserve.resolve_openai_v1_base_url()
+        return openai_v1_base_url(
+            self._settings.server.get_service_url("provider_litserve")
+        )
 
     @staticmethod
     def _huggingface_feature_extraction_probe_url(model_id: str) -> str:

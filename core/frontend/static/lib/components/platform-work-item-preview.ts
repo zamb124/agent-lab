@@ -1,8 +1,8 @@
-import { html, css, nothing, unsafeCSS } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { html, css, nothing, unsafeCSS } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
-import './glass-spinner.js';
+import './platform-spinner.js';
 import './platform-hover-card.js';
 import './platform-user-chip.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
@@ -299,7 +299,7 @@ export class PlatformWorkItemPreview extends PlatformElement {
             : html`
                 <div class="platform-work-item-preview-portal__center">
                     ${loading
-                        ? html`<glass-spinner size="xs"></glass-spinner>`
+                        ? html`<platform-spinner size="xs"></platform-spinner>`
                         : this.t('work_item_preview.not_found')}
                 </div>
             `;

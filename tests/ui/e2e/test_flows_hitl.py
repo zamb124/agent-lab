@@ -132,7 +132,7 @@ async def test_flows_escalate_to_operator(
 
     _ = await hitl_open_react_branch_chat(page, flows_ui, branch_id=HITL_BRANCH_NODE)
     await hitl_trigger_deterministic(page, "Нужен оператор по доставке в Воронеж")
-    banner = page.locator("chat-page .input-required-banner").first
+    banner = page.locator("flows-chat-page .input-required-banner").first
     await expect(banner).to_be_visible(timeout=30_000)
     await scenario.step(
         "Запустите тестовый чат и доведите до передачи",
@@ -150,7 +150,7 @@ async def test_flows_escalate_to_operator(
         ),
     )
 
-    task_badge = page.locator("chat-page platform-work-item-badge[work-item-id]").first
+    task_badge = page.locator("flows-chat-page platform-work-item-badge[work-item-id]").first
     await expect(task_badge).to_be_visible(timeout=30_000)
     await scenario.step(
         "Проверьте карточку задачи в чате",
@@ -361,7 +361,7 @@ async def test_flows_customer_waits_for_operator(
     work_item_id = await hitl_trigger_deterministic(
         page, "Хочу вернуть куст без чека — помогите"
     )
-    banner = page.locator("chat-page .input-required-banner").first
+    banner = page.locator("flows-chat-page .input-required-banner").first
     await expect(banner).to_be_visible(timeout=30_000)
     await scenario.step(
         "Дождитесь передачи оператору",
@@ -525,7 +525,7 @@ async def test_flows_agent_logs_background_task(
     await flows_chat_send_message(page, "Перезвоните, пожалуйста, по доставке завтра")
     reply = page.get_by_text(re.compile(r"передан команде", re.IGNORECASE)).first
     await expect(reply).to_be_visible(timeout=120_000)
-    await expect(page.locator("chat-page .input-required-banner")).to_be_hidden(timeout=10_000)
+    await expect(page.locator("flows-chat-page .input-required-banner")).to_be_hidden(timeout=10_000)
     await scenario.step(
         "Попросите перезвон и получите мгновенный ответ",
         page,

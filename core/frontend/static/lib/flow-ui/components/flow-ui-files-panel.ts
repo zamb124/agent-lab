@@ -4,7 +4,7 @@
  * Thumbnails use core file-type icons — never authenticated download URLs as <img>.
  */
 
-import { LitElement, css, html, nothing } from '../../lit-shim.js';
+import { LitElement, css, html, nothing } from 'lit';
 import type { FlowUiRecord } from '../runtime/flow-ui-store.js';
 import { formatFileSize } from '../../utils/format-file-size.js';
 import { resolveFileIconKey } from '../../utils/file-icons.js';

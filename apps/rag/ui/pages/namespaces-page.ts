@@ -12,7 +12,7 @@ import type { ResourceController } from '@platform/lib/base/use-resource.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../components/namespace-card.js';
 
 export class NamespacesPage extends PlatformPage {
@@ -31,30 +31,9 @@ export class NamespacesPage extends PlatformPage {
                 gap: var(--space-6);
                 flex-grow: 1;
             }
-            .empty,
-            .loading {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
+            platform-empty-state {
                 flex-grow: 1;
-                text-align: center;
-                padding: var(--space-12);
             }
-            .empty-icon {
-                width: 80px; height: 80px;
-                display: flex; align-items: center; justify-content: center;
-                margin-bottom: var(--space-4);
-                opacity: 0.3;
-                color: var(--text-tertiary);
-            }
-            .empty-text {
-                font-size: var(--text-lg);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin-bottom: var(--space-2);
-            }
-            .empty-hint { font-size: var(--text-sm); color: var(--text-tertiary); }
         `,
     ];
 
@@ -69,11 +48,7 @@ export class NamespacesPage extends PlatformPage {
 
     override render() {
         if (this._namespaces.loading) {
-            return html`
-                <div class="loading">
-                    <glass-spinner size="lg"></glass-spinner>
-                </div>
-            `;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
 
         const items = this._namespaces.items;
@@ -93,11 +68,11 @@ export class NamespacesPage extends PlatformPage {
                     ${items.map((ns: Record<string, unknown>) => html`<namespace-card .namespace=${ns}></namespace-card>`)}
                 </div>
             ` : html`
-                <div class="empty">
-                    <div class="empty-icon"><platform-icon name="folder" size="64"></platform-icon></div>
-                    <div class="empty-text">${this.t('namespace_list.empty_title')}</div>
-                    <div class="empty-hint">${this.t('namespace_list.empty_hint')}</div>
-                </div>
+                <platform-empty-state
+                    icon="folder"
+                    title=${this.t('namespace_list.empty_title')}
+                    hint=${this.t('namespace_list.empty_hint')}
+                ></platform-empty-state>
             `}
         `;
     }

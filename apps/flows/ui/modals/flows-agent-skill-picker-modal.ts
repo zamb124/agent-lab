@@ -10,7 +10,8 @@ import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-picker-card.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -225,9 +226,9 @@ export class FlowsAgentSkillPickerModal extends PlatformModal {
                     }}
                 ></platform-modal-search-field>
                 ${this._skills.loading || this._ensureSeed.busy
-                    ? html`<div class="loading"><glass-spinner></glass-spinner></div>`
+                    ? html`<div class="loading"><platform-spinner></platform-spinner></div>`
                     : items.length === 0
-                        ? html`<div class="empty">${this.t(this._emptyMessageKey())}</div>`
+                        ? html`<platform-empty-state icon="agent" title=${this.t(this._emptyMessageKey())}></platform-empty-state>`
                         : html`
                             <div class="grid">
                                 ${items.map((item) => {

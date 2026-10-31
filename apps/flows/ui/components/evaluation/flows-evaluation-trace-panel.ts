@@ -4,6 +4,7 @@ import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 function asArray(value: unknown) {
@@ -251,7 +252,7 @@ export class FlowsEvaluationTracePanel extends PlatformElement {
                             <div class="section-title"><platform-icon name="braces" size="14"></platform-icon>${this.t('evaluation.trace.state_history')}</div>
                             <div class="kv"><pre>${objectText(stateHistory)}</pre></div>
                         </section>
-                    ` : html`<div class="content-panel-empty">${this.t('evaluation.trace.empty')}</div>`}
+                    ` : html`<platform-empty-state icon="trace-timeline" title=${this.t('evaluation.trace.empty')}></platform-empty-state>`}
                 </div>
             </section>
         `;

@@ -3,7 +3,7 @@
  * Событие ``task-cancel`` обрабатывает ``<platform-flow-ui>``.
  */
 
-import { LitElement, css, html, nothing } from '../../lit-shim.js';
+import { LitElement, css, html, nothing } from 'lit';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
 
 export class FlowUITaskControls extends LitElement {

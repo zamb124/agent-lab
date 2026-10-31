@@ -20,14 +20,14 @@
  * ></platform-tree>
  */
 
-import { css, html, nothing } from '../lit-shim.js';
+import { css, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './platform-menu.js';
 import './platform-popover.js';
-import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { PopoverAnchor } from './platform-popover.js';
 
 export interface PlatformTreeNode {

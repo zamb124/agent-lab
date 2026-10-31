@@ -41,7 +41,7 @@ class UiCanonRule:
     path_include: str | None = None
     kind: Literal["content", "file"] = "content"
     # Файлы embed-замыкания (внешние сайты без import-map) освобождены от
-    # правила — там относительные пути к assets/js/* каноничны.
+    # правила. Сейчас ни одно правило не пользуется — npm-канон един для всех.
     exempt_in_embed_closure: bool = False
     # Сканировать код без // и /* */ комментариев (для правил про разметку,
     # где упоминание класса в комментарии — ложное срабатывание).
@@ -103,7 +103,6 @@ RULES: tuple[UiCanonRule, ...] = (
         ("apps", "lib", "tests"),
         "hard",
         "from 'lit' / 'lit/directives/*' — vendored-путь дублирует модули",
-        exempt_in_embed_closure=True,
     ),
     UiCanonRule(
         "vendored_dep_path",
@@ -111,7 +110,6 @@ RULES: tuple[UiCanonRule, ...] = (
         ("apps", "lib", "tests"),
         "hard",
         "from 'marked' / 'centrifuge' — npm-пакет, не vendored-путь",
-        exempt_in_embed_closure=True,
     ),
     UiCanonRule(
         "extends_native",
@@ -198,7 +196,7 @@ RULES: tuple[UiCanonRule, ...] = (
         r"(window|document)\.addEventListener\(",
         ("apps",),
         "soft",
-        "useEvent/handleEvent базы — глобальные listeners вне helpers — отсебятина",
+        "useDomEvent базы — авто-снятие на disconnect; голые add/removeEventListener-пары и bound-поля под них — отсебятина",
     ),
     UiCanonRule(
         "manual_busy_state",

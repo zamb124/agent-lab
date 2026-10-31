@@ -30,6 +30,7 @@ from apps.flows.di import FlowsDi
 from apps.idle.di import IdleDi
 from apps.rag.config import RAGSettings
 from apps.rag.di import RagDi
+from apps.shop.di import ShopDi
 from apps.sync.di import SyncDi
 from core.config import BaseSettings, get_settings, set_settings
 from core.config.loader import load_merged_config
@@ -49,12 +50,14 @@ _SERVICE_APP_MODULES: dict[str, str] = {
     "worktracker": "apps.worktracker.main",
     "secrets": "apps.secrets.main",
     "search": "apps.search.main",
+    "shop": "apps.shop.main",
     "capability_gateway": "apps.capability_gateway.main",
 }
 
 _SERVICE_OF_DI: dict[type[ServiceDi], str] = {
     FlowsDi: "flows",
     SyncDi: "sync",
+    ShopDi: "shop",
 }
 
 

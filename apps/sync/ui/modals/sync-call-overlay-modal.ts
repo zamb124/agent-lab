@@ -35,7 +35,7 @@ import type { SyncCallPrefsSlice, SyncCallUiSlice, SyncMessagesStoreSlice } from
 import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { PlatformEvent } from '@platform/lib/events/contract.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
-import type { LkTrack, Room as LkRoom } from '@livekit/client';
+import type { Track, Room as LkRoom } from 'livekit-client';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController, ControllerFor } from '@platform/lib/base/use-resource.js';
 import { html, css, nothing } from 'lit';
@@ -47,7 +47,8 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { guestDisplayNameFromSenderId, isGuestSenderId } from '../_helpers/sync-guest-sender.js';
 import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
@@ -59,7 +60,8 @@ import {
     SYNC_CALL_RECORDING_STOPPED,
 } from '../events/types.js';
 
-type LkModule = typeof import('@livekit/client');
+type LkModule = typeof import('livekit-client');
+type LkTrack = Track;
 type LkVideoEl = HTMLVideoElement & { _lkTrack?: LkTrack | null; _pipTrackId?: string };
 
 interface CallOverlayTile {
@@ -885,6 +887,7 @@ export class SyncCallOverlayModal extends PlatformModal {
     private _pipDocVideoEl: LkVideoEl | null;
     private _room: LkRoom | null;
     private _lk: LkModule | null;
+    private _attachedAudioTracks: Set<Track>;
     private _durationTimer: number | null;
     private _copyLinkTimer: number | null;
     private _minimizeDeferTimer: number | null;
@@ -936,6 +939,7 @@ export class SyncCallOverlayModal extends PlatformModal {
 
         this._room = null;
         this._lk = null;
+        this._attachedAudioTracks = new Set();
         this._durationTimer = null;
         this._copyLinkTimer = null;
         this._minimizeDeferTimer = null;
@@ -1010,10 +1014,10 @@ export class SyncCallOverlayModal extends PlatformModal {
     override connectedCallback(): void {
         super.connectedCallback();
         this.addEventListener('pointerdown', this._onHostMinimizePointerCapture, true);
-        document.addEventListener('fullscreenchange', this._onFullscreenChange);
-        document.addEventListener('webkitfullscreenchange', this._onFullscreenChange);
-        document.addEventListener('pointerdown', this._onDocumentPointerDown, true);
-        document.addEventListener('keydown', this._onDocumentKeydown, true);
+        this.useDomEvent(document, 'fullscreenchange', this._onFullscreenChange);
+        this.useDomEvent(document, 'webkitfullscreenchange', this._onFullscreenChange);
+        this.useDomEvent(document, 'pointerdown', this._onDocumentPointerDown, true);
+        this.useDomEvent(document, 'keydown', this._onDocumentKeydown, true);
         this._durationTimer = window.setInterval(() => { this._duration += 1; }, 1000);
         this._mqlCompact = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
             ? window.matchMedia('(max-width: 640px)')
@@ -1029,10 +1033,6 @@ export class SyncCallOverlayModal extends PlatformModal {
 
     override disconnectedCallback(): void {
         this.removeEventListener('pointerdown', this._onHostMinimizePointerCapture, true);
-        document.removeEventListener('fullscreenchange', this._onFullscreenChange);
-        document.removeEventListener('webkitfullscreenchange', this._onFullscreenChange);
-        document.removeEventListener('pointerdown', this._onDocumentPointerDown, true);
-        document.removeEventListener('keydown', this._onDocumentKeydown, true);
         if (this._durationTimer !== null) {
             window.clearInterval(this._durationTimer);
             this._durationTimer = null;
@@ -1118,7 +1118,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 this._connecting = false;
                 return;
             }
-            const lk = await import('@livekit/client');
+            const lk = await import('livekit-client');
             if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             this._lk = lk;
             const room = new lk.Room({
@@ -1188,6 +1188,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             this._roomDisconnecting = false;
         }
         this._lk = null;
+        this._attachedAudioTracks.clear();
         this._tiles = [];
         this._participantsCount = 0;
     }
@@ -1229,9 +1230,9 @@ export class SyncCallOverlayModal extends PlatformModal {
         const localScreen = localPubs.find((p) => p.source === Track.Source.ScreenShare);
         const localCam = localPubs.find((p) => p.source !== Track.Source.ScreenShare);
         if (localScreen) {
-            tiles.push({ key: 'local-screen', participantIdentity: me.identity, isLocal: true, track: localScreen.track, isScreen: true });
+            tiles.push({ key: 'local-screen', participantIdentity: me.identity, isLocal: true, track: localScreen.track ?? null, isScreen: true });
         } else if (localCam) {
-            tiles.push({ key: 'local-cam', participantIdentity: me.identity, isLocal: true, track: localCam.track, isScreen: false });
+            tiles.push({ key: 'local-cam', participantIdentity: me.identity, isLocal: true, track: localCam.track ?? null, isScreen: false });
         } else {
             tiles.push({ key: 'local-ph', participantIdentity: me.identity, isLocal: true, track: null, isScreen: false });
         }
@@ -1239,7 +1240,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             const pubs = Array.from(remote.videoTrackPublications.values()).filter((p) => p.track && p.isSubscribed);
             const screen = pubs.find((p) => p.source === Track.Source.ScreenShare);
             if (screen) {
-                tiles.push({ key: `r-${remote.identity}-screen`, participantIdentity: remote.identity, isLocal: false, track: screen.track, isScreen: true });
+                tiles.push({ key: `r-${remote.identity}-screen`, participantIdentity: remote.identity, isLocal: false, track: screen.track ?? null, isScreen: true });
             } else {
                 const firstPublication = pubs[0];
                 const cam = firstPublication === undefined ? null : firstPublication;
@@ -1247,7 +1248,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                     key: cam ? `r-${remote.identity}-cam` : `r-${remote.identity}-ph`,
                     participantIdentity: remote.identity,
                     isLocal: false,
-                    track: cam ? cam.track : null,
+                    track: cam ? cam.track ?? null : null,
                     isScreen: false,
                 });
             }
@@ -1294,12 +1295,12 @@ export class SyncCallOverlayModal extends PlatformModal {
                 videoEl._lkTrack = tile.track;
             }
         });
-        // Удалённые аудиотреки — подключение глобально.
+        // Удалённые аудиотреки — подключение глобально, по одному разу на трек.
         this._room.remoteParticipants.forEach((p) => {
             for (const pub of p.audioTrackPublications.values()) {
-                if (pub.isSubscribed && pub.track && !pub.track._lkAttached) {
+                if (pub.isSubscribed && pub.track && !this._attachedAudioTracks.has(pub.track)) {
                     pub.track.attach();
-                    pub.track._lkAttached = true;
+                    this._attachedAudioTracks.add(pub.track);
                 }
             }
         });
@@ -1600,11 +1601,10 @@ export class SyncCallOverlayModal extends PlatformModal {
             if (next) {
                 this._cameraEnabledBeforeScreenShare = lp.isCameraEnabled;
                 this._sharePipDismissed = false;
-                const screenOpts = {
+                await lp.setScreenShareEnabled(true, {
                     selfBrowserSurface: 'exclude',
                     surfaceSwitching: 'include',
-                };
-                await lp.setScreenShareEnabled(true, screenOpts);
+                });
                 if (callTypeResolved !== 'audio' && this._documentPipSupported()) {
                     this._registerSharePipMediaSession();
                     const pipApi = _documentPipApi();
@@ -1837,7 +1837,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         }
     }
 
-    _activeDeviceId(kind: string) {
+    _activeDeviceId(kind: MediaDeviceKind) {
         if (!this._room) return '';
         const id = this._room.getActiveDevice(kind);
         return typeof id === 'string' ? id : '';
@@ -2457,7 +2457,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 </div>
                 <div class="chat-list" @scroll=${this._onChatScroll}>
                     ${items.length === 0 ? html`
-                        <div class="chat-empty">${this.t('call_overlay.no_messages_yet')}</div>
+                        <platform-empty-state icon="chat" title=${this.t('call_overlay.no_messages_yet')}></platform-empty-state>
                     ` : items.map((m: Record<string, any>) => {
                         const sender = m.sender !== null && typeof m.sender === 'object' ? m.sender : {};
                         const senderName = typeof sender.display_name === 'string' && sender.display_name !== ''

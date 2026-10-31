@@ -10,6 +10,7 @@ import type { ResourceItem } from '@platform/lib/events/factories/resource-colle
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function missingAsEmpty(value: unknown): string {
@@ -108,17 +109,7 @@ export class WikiHomePage extends PlatformPage {
                 font-size: var(--text-xs);
             }
 
-            .empty {
-                padding: var(--space-8);
-                text-align: center;
-                color: var(--text-tertiary);
-            }
-
-            .empty-hint {
-                margin-top: var(--space-2);
-                font-size: var(--text-sm);
-                color: var(--text-disabled);
-            }
+            platform-empty-state { margin-top: var(--space-8); }
         `,
     ];
 
@@ -157,11 +148,14 @@ export class WikiHomePage extends PlatformPage {
                     ${this.t('home.create_page')}
                 </platform-button>
 
-                ${recent.length === 0
-                    ? html`<div class="empty">
-                          ${this.t('home.empty')}
-                          <div class="empty-hint">${this.t('home.empty_hint')}</div>
-                      </div>`
+                ${this._pages.loading
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                    : recent.length === 0
+                    ? html`<platform-empty-state
+                          icon="file-text"
+                          title=${this.t('home.empty')}
+                          hint=${this.t('home.empty_hint')}
+                      ></platform-empty-state>`
                     : html`
                         <div class="section-title">${this.t('home.recent_title')}</div>
                         ${recent.map((page) => html`

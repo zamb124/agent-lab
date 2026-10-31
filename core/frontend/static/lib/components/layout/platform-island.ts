@@ -8,10 +8,10 @@
  * во всех сервисах (раньше is-scrolling выключал blur и сам вызывал snap).
  */
 import { html } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { islandHostStyles, islandStyles } from '../../styles/shared/island.styles.js';
-import '../glass-spinner.js';
+import '../platform-spinner.js';
 
 export class PlatformIsland extends PlatformElement {
     static override properties: PropertyDeclarations = {
@@ -56,7 +56,7 @@ export class PlatformIsland extends PlatformElement {
                 </div>
                 ${this.loading ? html`
                     <div class="island-loading-overlay">
-                        <glass-spinner size="lg"></glass-spinner>
+                        <platform-spinner size="lg"></platform-spinner>
                     </div>
                 ` : ''}
                 <div class="island-content ${this.loading ? 'busy' : ''}">

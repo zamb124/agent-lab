@@ -48,7 +48,8 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {
@@ -945,10 +946,10 @@ export class CRMNamespaceModal extends PlatformFormModal {
     _renderTemplates() {
         const items = this._templates.items;
         if (this._templates.loading && items.length === 0) {
-            return html`<div class="empty-templates"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (items.length === 0) {
-            return html`<div class="empty-templates">${this.t('namespace_modal.templates_empty')}</div>`;
+            return html`<platform-empty-state icon="layers" title=${this.t('namespace_modal.templates_empty')}></platform-empty-state>`;
         }
         const draft = this._createForm.draft;
         return html`
@@ -1060,7 +1061,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     _renderEditabilityBadge() {
         const result = anyRecord(this._editability.lastResult);
         if (this._editability.busy && !result) {
-            return html`<div class="meta-loading"><glass-spinner></glass-spinner></div>`;
+            return html`<div class="meta-loading"><platform-spinner></platform-spinner></div>`;
         }
         if (!result) return null;
         const usedTypeIds = result.used_type_ids;
@@ -1103,7 +1104,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                             aria-live="polite"
                             aria-busy="true"
                         >
-                            <glass-spinner size="lg"></glass-spinner>
+                            <platform-spinner size="lg"></platform-spinner>
                             <span class="create-busy-label">${this.t('namespace_modal.creating_progress')}</span>
                         </div>
                     `
@@ -1217,9 +1218,9 @@ export class CRMNamespaceModal extends PlatformFormModal {
         return html`
             <div class="form-grid">
                 ${loading
-                    ? html`<div class="empty-block"><glass-spinner></glass-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : grants.length === 0
-                        ? html`<div class="empty-block">${this.t('namespace_modal.grants_empty')}</div>`
+                        ? html`<platform-empty-state icon="user-shield" title=${this.t('namespace_modal.grants_empty')}></platform-empty-state>`
                         : html`
                             <div class="grants-list">
                                 ${grants.map((grant) => this._renderGrantItem(grant))}

@@ -1,12 +1,12 @@
 /**
- * chat-page mounts production `<platform-flow-ui>` for SPA profile
+ * flows-chat-page mounts production `<platform-flow-ui>` for SPA profile
  * and builds breadcrumbs from flow/branch names (not routes.flow_chat="Flow").
  */
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
 import { flowsResource } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
-import '../../../../apps/flows/ui/pages/chat-page.js';
+import '../../../../apps/flows/ui/pages/flows-chat-page.js';
 
 const FLOWS_CHAT_ROUTES = [
     { key: 'list', path: '', titleKey: 'routes.list' },
@@ -31,7 +31,7 @@ function crumbLabels(chatPage) {
     );
 }
 
-describe('chat-page Flow UI mount', () => {
+describe('flows-chat-page Flow UI mount', () => {
     beforeEach(async () => {
         await resetPlatformState();
         bootstrapTestBus({ factories: [flowsResource] });
@@ -43,7 +43,7 @@ describe('chat-page Flow UI mount', () => {
 
     it('mounts platform-flow-ui display=page profile=spa', async () => {
         const el = await fixture(html`
-            <chat-page flow-id="demo-flow" branch-id="base"></chat-page>
+            <flows-chat-page flow-id="demo-flow" branch-id="base"></flows-chat-page>
         `);
         await elementUpdated(el);
         const surface = el.shadowRoot.querySelector('platform-flow-ui');
@@ -65,10 +65,10 @@ describe('chat-page Flow UI mount', () => {
         });
 
         const el = await fixture(html`
-            <chat-page
+            <flows-chat-page
                 flow-id="example_graph"
                 branch-id="orders_only"
-            ></chat-page>
+            ></flows-chat-page>
         `);
         await elementUpdated(el);
         await elementUpdated(el.shadowRoot.querySelector('platform-breadcrumbs'));

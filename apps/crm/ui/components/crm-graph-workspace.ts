@@ -49,9 +49,10 @@ import {
     buildEntityTypeIconMapFromItems,
 } from '../_helpers/crm-entity-type-visuals.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/platform-empty-state.js';
 import './graph-canvas.js';
 import './mindmap-canvas.js';
 import './graph-search-pill.js';
@@ -191,7 +192,6 @@ export class CRMGraphWorkspace extends PlatformElement {
         _canvasPathHint: { state: true },
         _mergeAnchorId: { state: true },
         _entitiesById: { state: true },
-        _loading: { state: true },
         /** @type {string[]} предыдущие корни графа при drill (mind map и 3D) */
         _mindmapRootStack: { state: true },
     };
@@ -229,7 +229,6 @@ export class CRMGraphWorkspace extends PlatformElement {
     declare _canvasPathHint: string;
     declare _mergeAnchorId: string;
     declare _entitiesById: Map<string, Record<string, unknown>>;
-    declare _loading: boolean;
     declare _mindmapRootStack: string[];
 
     static override styles: CSSResultGroup = [
@@ -546,6 +545,13 @@ export class CRMGraphWorkspace extends PlatformElement {
     private _shortestPathOp: OpController;
     private _entitySearchOp: OpController;
     private _personOp: OpController;
+
+    private get _loading(): boolean {
+        return this._entityTypes.loading || this._timelineBoundsOp.busy || this._entitiesLookupOp.busy
+            || this._overviewOp.busy || this._influenceOp.busy || this._relatedOp.busy
+            || this._entityRelOp.busy || this._shortestPathOp.busy || this._entitySearchOp.busy
+            || this._personOp.busy;
+    }
     private _pendingSearchFocusId: string;
     private _relatedNodesPending: Record<string, unknown>[];
     private _relatedNodeIds: Set<string>;
@@ -593,7 +599,6 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._canvasPathHint = '';
         this._mergeAnchorId = '';
         this._entitiesById = new Map();
-        this._loading = false;
         this._searchDebounceTimer = null;
         this._timelineReloadTimer = null;
         this._mindmapRootStack = [];
@@ -647,7 +652,6 @@ export class CRMGraphWorkspace extends PlatformElement {
 
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._reloadAll());
 
-        this.useEvent(this._timelineBoundsOp.op.events.REQUESTED, () => { this._loading = true; });
         this.useEvent(this._timelineBoundsOp.op.events.SUCCEEDED, (event) => this._onTimelineBoundsLoaded(eventResult(event.payload)));
         this.useEvent(this._entitiesLookupOp.op.events.SUCCEEDED, (event) => this._onEntitiesLookupLoaded(eventResult(event.payload)));
         this.useEvent(this._overviewOp.op.events.SUCCEEDED, (event) => this._onGraphResponse(eventResult(event.payload)));
@@ -658,19 +662,11 @@ export class CRMGraphWorkspace extends PlatformElement {
         this.useEvent(this._entitySearchOp.op.events.SUCCEEDED, (event) => this._onSearchLoaded(eventResult(event.payload)));
 
         this.useEvent(this._timelineBoundsOp.op.events.FAILED, (event) => {
-            this._loading = false;
             this.toast('crm:graph_page.err_timeline', { type: 'error', vars: { message: failureMessage(event.payload) } });
         });
         this.useEvent(this._shortestPathOp.op.events.FAILED, (event) => {
-            this._loading = false;
             this.toast('crm:graph_page.err_path_build', { type: 'error', vars: { message: failureMessage(event.payload) } });
         });
-        this.useEvent(this._overviewOp.op.events.FAILED, () => { this._loading = false; });
-        this.useEvent(this._influenceOp.op.events.FAILED, () => { this._loading = false; });
-        this.useEvent(this._relatedOp.op.events.FAILED, () => { this._loading = false; });
-        this.useEvent(this._entityRelOp.op.events.FAILED, () => { this._loading = false; });
-        this.useEvent(this._entitiesLookupOp.op.events.FAILED, () => { this._loading = false; });
-        this.useEvent(this._entitySearchOp.op.events.FAILED, () => { this._loading = false; });
 
         this._bootstrapGraphWorkspaceFromRouter();
         this._normalizeBareGraphUrl();
@@ -871,7 +867,6 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     _reloadAll() {
-        this._loading = true;
         const namespace = this._currentNamespace();
         this._lastNamespaceLoaded = namespace;
         const nq = crmNamespaceForOptionalQuery(namespace);
@@ -930,7 +925,6 @@ export class CRMGraphWorkspace extends PlatformElement {
             if (rootId === null) {
                 const personRaw = await this._personOp.run(null);
                 if (personRaw === null) {
-                    this._loading = false;
                     this._mindmapErrorKey = 'mindmap.err_person';
                     return;
                 }
@@ -988,7 +982,6 @@ export class CRMGraphWorkspace extends PlatformElement {
         if (!response || typeof response !== 'object') {
             this._graphNodes = [];
             this._graphEdges = [];
-            this._loading = false;
             if (this._canvasView === 'mindmap') {
                 this._mindmapErrorKey = 'mindmap.err_graph';
             }
@@ -997,7 +990,6 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._graphNodes = Array.isArray(response.nodes) ? response.nodes : [];
         this._graphEdges = Array.isArray(response.edges) ? response.edges : [];
         this._shortestPathEdges = [];
-        this._loading = false;
         if (this._canvasView === 'mindmap') {
             const rid = typeof this._selectedRootId === 'string' ? this._selectedRootId.trim() : '';
             if (rid.length > 0) {
@@ -1046,7 +1038,6 @@ export class CRMGraphWorkspace extends PlatformElement {
 
     _onRelatedLoaded(response: Record<string, unknown> | null): void {
         if (!response || typeof response !== 'object') {
-            this._loading = false;
             return;
         }
         const nodeMap = new Map<string, Record<string, unknown>>();
@@ -1081,7 +1072,6 @@ export class CRMGraphWorkspace extends PlatformElement {
     _onEntityRelationshipsLoaded(response: Record<string, unknown> | null): void {
         const relationships = response === null ? undefined : response.relationships;
         if (!Array.isArray(relationships)) {
-            this._loading = false;
             return;
         }
         const relationType = this._relationshipTypeFilter.trim();
@@ -1099,7 +1089,6 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._graphNodes = this._relatedNodesPending;
         this._graphEdges = filtered;
         this._shortestPathEdges = [];
-        this._loading = false;
         const ridRel = typeof this._selectedRootId === 'string' ? this._selectedRootId.trim() : '';
         if (ridRel.length > 0 && this._canvasView === '3d') {
             this._rootLabelMindmap = this._rootLabelFromGraph({ nodes: this._graphNodes }, ridRel);
@@ -1110,7 +1099,6 @@ export class CRMGraphWorkspace extends PlatformElement {
         const path = response === null ? undefined : response.path;
         const edges = response === null ? undefined : response.edges;
         if (!Array.isArray(path) || !Array.isArray(edges)) {
-            this._loading = false;
             return;
         }
         const undirectedPathRaw = response === null ? undefined : response.undirected_path;
@@ -1128,7 +1116,6 @@ export class CRMGraphWorkspace extends PlatformElement {
                 type: 'warning',
                 vars: { source: this._pathSourceId, target: this._pathTargetId },
             });
-            this._loading = false;
             return;
         }
         const merged = this._mergePathEdgesByKind(edges, undirectedEdges);
@@ -1161,7 +1148,6 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._graphEdges = merged;
         this._canvasPathState = 'built';
         this._canvasPathHint = this.t('graph_page.hint_routes_dual');
-        this._loading = false;
     }
 
     _mergePathEdgesByKind(directedEdges: Record<string, unknown>[], undirectedEdges: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -1196,7 +1182,6 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._graphNodes = [];
             this._graphEdges = [];
             this.toast('crm:graph.search_empty', { type: 'warning' });
-            this._loading = false;
             return;
         }
         const entityIds = items
@@ -1249,7 +1234,6 @@ export class CRMGraphWorkspace extends PlatformElement {
         if (!this._selectedRootId) {
             this._graphNodes = [];
             this._graphEdges = [];
-            this._loading = false;
             return;
         }
         if (this._graphDataMode === 'influence') {
@@ -1271,10 +1255,8 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._graphNodes = [];
             this._graphEdges = [];
             this._shortestPathEdges = [];
-            this._loading = false;
             return;
         }
-        this._loading = true;
         const namespace = this._currentNamespace();
         const timelineParams = this._getTimelineQueryParams();
         const payload: Record<string, unknown> = {
@@ -1290,7 +1272,6 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     _buildInfluenceGraph() {
-        this._loading = true;
         const namespace = this._currentNamespace();
         const payload: Record<string, unknown> = {
             entity_id: this._selectedRootId,
@@ -1305,7 +1286,6 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     _buildRelatedGraph() {
-        this._loading = true;
         const payload: Record<string, unknown> = {
             entity_id: this._selectedRootId,
             direction: this._relatedDirection,
@@ -1319,15 +1299,12 @@ export class CRMGraphWorkspace extends PlatformElement {
 
     _buildPathGraph() {
         if (!this._pathSourceId || !this._pathTargetId) {
-            this._loading = false;
             return;
         }
         if (this._pathSourceId === this._pathTargetId) {
             this.toast('crm:graph_page.warn_source_target_same', { type: 'warning' });
-            this._loading = false;
             return;
         }
-        this._loading = true;
         const namespace = this._currentNamespace();
         const payload: Record<string, unknown> = {
             source_entity_id: this._pathSourceId,
@@ -1340,7 +1317,6 @@ export class CRMGraphWorkspace extends PlatformElement {
     }
 
     _executeSearch() {
-        this._loading = true;
         const namespace = this._currentNamespace();
         const payload: Record<string, unknown> = {
             query: this._entitySearchQuery.trim(),
@@ -2007,7 +1983,7 @@ export class CRMGraphWorkspace extends PlatformElement {
 
                 ${this._loading ? html`
                     <div class="loading-overlay">
-                        <glass-spinner size="xs"></glass-spinner>
+                        <platform-spinner size="xs"></platform-spinner>
                     </div>
                 ` : nothing}
 
@@ -2019,16 +1995,15 @@ export class CRMGraphWorkspace extends PlatformElement {
                 ` : nothing}
 
                 ${isEmpty && isFiltered ? html`
-                    <div class="empty-search-state">${this.t('graph_page.empty_search')}</div>
+                    <platform-empty-state icon="search" title=${this.t('graph_page.empty_search')}></platform-empty-state>
                 ` : nothing}
 
                 ${isEmpty && !isFiltered && !this._loading && this._canvasView === '3d' ? html`
-                    <div class="graph-empty-import-cta">
-                        <span>${this.t('graph_page.empty_import_hint')}</span>
+                    <platform-empty-state icon="import" title=${this.t('graph_page.empty_import_hint')}>
                         <button type="button" @click=${this._onGoToImport}>
                             ${this.t('graph_page.empty_import_cta')}
                         </button>
-                    </div>
+                    </platform-empty-state>
                 ` : nothing}
 
                 <crm-graph-context-menu

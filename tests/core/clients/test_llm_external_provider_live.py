@@ -26,15 +26,16 @@ from core.clients.llm.client import LLMClient
 from core.clients.llm.runtime import create_llm_transport_client as create_transport_llm_client
 from core.config import get_settings
 from core.config.llm_openai_compat import resolve_provider_openai_v1_base_url
+from core.config.openai_v1_base_url import (
+    PROVIDER_LITSERVE_PLACEHOLDER_BEARER,
+    openai_v1_base_url,
+    provider_litserve_rerank_http_url,
+)
 from core.http import ProxyStrategy
 from core.http.client import request_with_strategy
 from core.http.egress_route_preference import (
     egress_prefer_proxy_delete,
     normalized_http_origin,
-)
-from core.rag.openai_http_contracts import (
-    PROVIDER_LITSERVE_PLACEHOLDER_BEARER,
-    provider_litserve_rerank_http_url,
 )
 from core.types import JsonValue, require_json_object
 from tests.core.clients.live_llm_provider_helpers import (
@@ -354,9 +355,11 @@ async def test_live_provider_litserve_catalog_embeddings_and_rerank_work(
 
 def _provider_litserve_base_url() -> str:
     try:
-        return get_settings().provider_litserve.resolve_openai_v1_base_url()
+        return openai_v1_base_url(
+            get_settings().server.get_service_url("provider_litserve")
+        )
     except ValueError as exc:
-        pytest.skip(f"provider_litserve.api.base_url не настроен: {exc}")
+        pytest.skip(f"server.provider_litserve_service_url не настроен: {exc}")
 
 
 def _openrouter_catalog_adapter() -> OpenRouterModelCatalogAdapter:

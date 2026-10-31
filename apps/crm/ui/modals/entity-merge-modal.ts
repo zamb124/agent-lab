@@ -30,7 +30,8 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {
     CSSResultGroup,
     PropertyDeclarations,
@@ -506,7 +507,7 @@ export class CRMEntityMergeModal extends PlatformModal {
             return html`
                 <div class="side ${role}">
                     <div class="role">${this.t(`entity_merge_modal.${role}`)}</div>
-                    <glass-spinner></glass-spinner>
+                    <platform-spinner></platform-spinner>
                 </div>
             `;
         }
@@ -666,7 +667,7 @@ export class CRMEntityMergeModal extends PlatformModal {
         const sourceEntity = this._entityById(this._sourceId());
 
         if (survivorEntity === null || sourceEntity === null) {
-            return html`<div class="loading-block"><glass-spinner></glass-spinner></div>`;
+            return html`<div class="loading-block"><platform-spinner></platform-spinner></div>`;
         }
 
         const sameNamespace = survivorEntity.namespace === sourceEntity.namespace;
@@ -732,12 +733,12 @@ export class CRMEntityMergeModal extends PlatformModal {
 
                 <div class="section-title">${this.t('entity_merge_modal.section_fields')}</div>
                 ${conflictRows.length === 0 && ok_rows.length === 0
-                    ? html`<div class="empty-section">${this.t('entity_merge_modal.no_fields')}</div>`
+                    ? html`<platform-empty-state title=${this.t('entity_merge_modal.no_fields')}></platform-empty-state>`
                     : html`${conflictRows}${ok_rows}`}
 
                 <div class="section-title">${this.t('entity_merge_modal.section_attributes')}</div>
                 ${attrConflictRows.length === 0 && attrOkRows.length === 0
-                    ? html`<div class="empty-section">${this.t('entity_merge_modal.no_attributes')}</div>`
+                    ? html`<platform-empty-state title=${this.t('entity_merge_modal.no_attributes')}></platform-empty-state>`
                     : html`${attrConflictRows}${attrOkRows}`}
 
                 <div class="section-title">${this.t('entity_merge_modal.section_tags')}</div>

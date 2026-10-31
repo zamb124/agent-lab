@@ -8,7 +8,7 @@
  *   onSelect(file) — { file_id, original_name, content_type, file_size, file_category?, is_public? }
  */
 
-import { html, css, nothing } from '../lit-shim.js';
+import { html, css, nothing } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { formatPlatformDateTime } from '../utils/format-platform-date.js';
@@ -16,7 +16,7 @@ import './platform-icon.js';
 import './platform-button.js';
 import './platform-file-card.js';
 import './fields/platform-field.js';
-import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import type { OpController } from '../base/use-resource.js';
 import { isPlainRecord } from '../events/payload.js';
 import type { FactoryNameOfKind } from '../events/factory-registry.js';
@@ -391,15 +391,25 @@ export class PlatformFilePickerModal extends PlatformModal {
         return formatPlatformDateTime(iso, locale);
     }
 
-    override updated(changed: PropertyValues<this>): void {
-        super.updated(changed);
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate(changed);
         if (changed.has('open') && this.open) {
             this._error = '';
             this._searchQuery = '';
             this._searchResults = null;
             this._catalogId = '';
-            this._ensureControllers();
-            void this._loadCatalogs();
+        }
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        if (changed.has('open') && this.open) {
+            queueMicrotask(() => {
+                if (this.open) {
+                    this._ensureControllers();
+                    void this._loadCatalogs();
+                }
+            });
         }
     }
 

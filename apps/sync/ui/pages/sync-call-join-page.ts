@@ -14,7 +14,7 @@ import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 
@@ -413,7 +413,7 @@ export class SyncCallJoinPage extends PlatformPage {
             return html`
                 <glass-card class="card">
                     <div class="load-panel" role="status" aria-live="polite">
-                        <glass-spinner size="lg"></glass-spinner>
+                        <platform-spinner size="lg"></platform-spinner>
                     </div>
                 </glass-card>
             `;
@@ -437,7 +437,7 @@ export class SyncCallJoinPage extends PlatformPage {
             return html`
                 <glass-card class="card">
                     <div class="load-panel" role="status">
-                        <glass-spinner size="lg"></glass-spinner>
+                        <platform-spinner size="lg"></platform-spinner>
                     </div>
                 </glass-card>
             `;
@@ -447,7 +447,7 @@ export class SyncCallJoinPage extends PlatformPage {
             return html`
                 <glass-card class="card">
                     <div class="load-panel" role="status" aria-live="polite">
-                        <glass-spinner size="lg"></glass-spinner>
+                        <platform-spinner size="lg"></platform-spinner>
                     </div>
                 </glass-card>
             `;
@@ -457,7 +457,7 @@ export class SyncCallJoinPage extends PlatformPage {
             return html`
                 <glass-card class="card">
                     <div class="load-panel" role="status" aria-live="polite">
-                        <glass-spinner size="lg"></glass-spinner>
+                        <platform-spinner size="lg"></platform-spinner>
                         <p>${this.t('call_join.aligning_company')}</p>
                     </div>
                 </glass-card>

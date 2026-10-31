@@ -2,7 +2,8 @@
 In-process ASGI-приложение ``provider_litserve`` с явными контрактами OpenAPI.
 
 Обработчики RAG вызывают те же ``EmbeddingLitAPI`` / ``RerankerLitAPI``, что и LitServe
-в ``main``; отличие — нет очередей воркеров (один процесс). Speech-модели отражаются
+в ``main``; отличие — нет очередей воркеров (один процесс) и каталог моделей —
+``ModelCatalog.from_seed`` из конфига, без Postgres. Speech-модели отражаются
 в ``/v1/models`` как часть production-каталога, но in-process ASGI содержит только
 RAG endpoints.
 
@@ -17,6 +18,7 @@ from typing import Annotated
 from fastapi import Body, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from apps.provider_litserve.catalog import ModelCatalog
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
 from apps.provider_litserve.openai_server_contracts import (
     OpenAIEmbeddingsRequest,
@@ -29,25 +31,25 @@ from apps.provider_litserve.provider_litserve_http_schemas import (
     V1ModelsResponseBody,
 )
 from apps.provider_litserve.reranker.api import RerankerLitAPI
-from apps.provider_litserve.runtime_models import runtime_api_model_ids
 from core.config.models import ProviderLitserveInfraConfig
+from core.models.provider_litserve_model import (
+    LitserveModelKind,
+    ProviderLitserveModelPair,
+)
 from core.websocket import WsCommandError, command_failure_payload, ws_command_error_status
 
 
 def create_provider_litserve_asgi_app(
     *,
     cfg: ProviderLitserveInfraConfig,
-    embedding_dimension_for_models_list: int,
 ) -> FastAPI:
     """
     Собирает FastAPI с маршрутами ``/v1/models``, ``/health``, ``/v1/embeddings``, ``/v1/rerank``.
-
-    ``embedding_dimension_for_models_list`` — размерность вектора в метаданных GET ``/v1/models``
-    (в ``main`` берётся из ``settings.rag.embedding.api.dimension``).
     """
-    embed_api = EmbeddingLitAPI(cfg)
+    catalog = ModelCatalog.from_seed(cfg)
+    embed_api = EmbeddingLitAPI(cfg, catalog)
     embed_api.setup("cpu")
-    rerank_api = RerankerLitAPI(cfg)
+    rerank_api = RerankerLitAPI(cfg, catalog)
     rerank_api.setup("cpu")
 
     app = FastAPI(
@@ -61,21 +63,21 @@ def create_provider_litserve_asgi_app(
         ),
     )
 
+    def _pairs(kind: LitserveModelKind) -> list[ProviderLitserveModelPair]:
+        return [
+            entry
+            for entry in catalog.entries(kind)
+            if isinstance(entry, ProviderLitserveModelPair)
+        ]
+
     def get_v1_models() -> V1ModelsResponseBody:
         created = int(time.time())
         return build_provider_litserve_v1_models_response(
-            embedding_openai_model_id=cfg.embedding_openai_model_id,
-            embedding_model_ids=cfg.embedding_model_ids,
-            embedding_hf_model_id=cfg.embedding_model_id,
-            embedding_dimension=embedding_dimension_for_models_list,
-            embedding_context_length=8192,
-            rerank_openai_model_id=cfg.rerank_openai_model_id,
-            rerank_model_ids=cfg.rerank_model_ids,
-            rerank_hf_model_id=cfg.model_id,
-            rerank_context_length=8192,
-            stt_model_ids=runtime_api_model_ids("stt", cfg),
-            tts_model_ids=runtime_api_model_ids("tts", cfg),
-            vad_model_ids=runtime_api_model_ids("vad", cfg),
+            embedding_entries=_pairs("embedding"),
+            rerank_entries=_pairs("rerank"),
+            stt_model_ids=catalog.api_model_ids("stt"),
+            tts_model_ids=catalog.api_model_ids("tts"),
+            vad_model_ids=catalog.api_model_ids("vad"),
             created=created,
         )
 

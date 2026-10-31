@@ -16,6 +16,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
 type MappingSourceType = 'state' | 'var' | 'const' | 'platform';
@@ -467,7 +468,7 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 </platform-button>
             </div>
             ${empty
-                ? html`<div class="empty">${this.t('state_mapping_editor.empty')}</div>`
+                ? html`<platform-empty-state title=${this.t('state_mapping_editor.empty')}></platform-empty-state>`
                 : ''}
             ${!empty && !isOut
                 ? html`

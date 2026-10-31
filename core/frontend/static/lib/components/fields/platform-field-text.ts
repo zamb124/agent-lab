@@ -1,5 +1,5 @@
-import { html, css } from '../../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
+import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 
 export class PlatformFieldText extends PlatformElement {

@@ -97,13 +97,9 @@ export class OfficeCatalogActionsMenu extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('click', this._onDocClick, true);
+        this.useDomEvent(document, 'click', this._onDocClick, true);
     }
 
-    override disconnectedCallback(): void {
-        super.disconnectedCallback();
-        document.removeEventListener('click', this._onDocClick, true);
-    }
 
     private _onDocClick(e: MouseEvent) {
         if (!this.menuOpen) return;

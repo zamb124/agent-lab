@@ -126,6 +126,11 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-empty-state
+  doc_slug: platform-empty-state
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-field
   doc_slug: platform-field
   status: production

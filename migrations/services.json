@@ -64,6 +64,11 @@
       "name": "stock",
       "models_module": "apps.stock.models",
       "database_url_key": "stock_url"
+    },
+    {
+      "name": "shop",
+      "models_module": "apps.shop.models",
+      "database_url_key": "shop_url"
     }
   ],
   "postgres": {
@@ -81,6 +86,7 @@
       "platform_wiki",
       "platform_realtime",
       "platform_stock",
+      "platform_shop",
       "openfga"
     ],
     "vector_extensions": [

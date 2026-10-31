@@ -11,8 +11,9 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-trace-viewer.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
 
 export class FlowsTracingModal extends PlatformModal {
@@ -276,13 +277,13 @@ export class FlowsTracingModal extends PlatformModal {
         if (this._waitingForTrace(spans, busy)) {
             return html`
                 <div class="tracing-loading">
-                    <glass-spinner></glass-spinner>
+                    <platform-spinner></platform-spinner>
                     <div>${this.t('tracing_modal.waiting')}</div>
                 </div>
             `;
         }
         if (spans.length === 0) {
-            return html`<div class="tracing-empty">${this.t('tracing_modal.empty')}</div>`;
+            return html`<platform-empty-state icon="trace-timeline" title=${this.t('tracing_modal.empty')}></platform-empty-state>`;
         }
         return html`
             <platform-trace-viewer

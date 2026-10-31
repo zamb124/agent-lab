@@ -22,7 +22,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-work-item-badge.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -627,10 +627,6 @@ export class CRMEntityDetailPage extends PlatformPage {
     private _routerSearchSel: SelectController<string | undefined>;
     private _lastRequestedId: string;
     private _entityTypesQueryNs: string;
-    private _mql: MediaQueryList | null;
-    private _mqlListener: ((e: MediaQueryListEvent) => void) | null;
-    private declare _onCardToolbarStateBound: (ev: Event) => void;
-    private declare _onCardStorageTypeDraftBound: (ev: Event) => void;
     private _accessModalOpened: boolean;
 
     constructor() {
@@ -647,8 +643,6 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._templatePickerOpen = false;
         this._draftStorageTypePair = { entity_type: '', entity_subtype: '' };
         this._entityTypesQueryNs = '';
-        this._onCardToolbarStateBound = this._onCardToolbarState.bind(this);
-        this._onCardStorageTypeDraftBound = this._onCardStorageTypeDraft.bind(this);
 
         this._entities = this.useResource(ENTITIES_NAME);
         this._entityTypes = this.useResource(ENTITY_TYPES_NAME, { autoload: false });
@@ -656,24 +650,21 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._relTypes = this.useResource(REL_TYPES_NAME, { autoload: true });
         this._graphView = this.useSlice('crm/graph_view');
         this._routerSearchSel = this.select((state) => state.router.search);
-        this._mql = null;
-        this._mqlListener = null;
         this._accessModalOpened = false;
     }
 
     override connectedCallback(): void {
         super.connectedCallback();
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-            this._mql = window.matchMedia('(max-width: 767px)');
-            this._mqlListener = (e: MediaQueryListEvent) => {
+            const mql = window.matchMedia('(max-width: 767px)');
+            this.useDomEvent(mql, 'change', (e: MediaQueryListEvent) => {
                 this._isMobile = e.matches;
-            };
-            this._mql.addEventListener('change', this._mqlListener);
-            this._isMobile = this._mql.matches;
+            });
+            this._isMobile = mql.matches;
         }
         if (this.shadowRoot) {
-            this.shadowRoot.addEventListener('crm-entity-card-toolbar-state', this._onCardToolbarStateBound);
-            this.shadowRoot.addEventListener('crm-entity-card-storage-type-draft', this._onCardStorageTypeDraftBound);
+            this.useDomEvent(this.shadowRoot, 'crm-entity-card-toolbar-state', (e) => this._onCardToolbarState(e));
+            this.useDomEvent(this.shadowRoot, 'crm-entity-card-storage-type-draft', (e) => this._onCardStorageTypeDraft(e));
         }
 
         this.useEvent(this._cardOp.op.events.SUCCEEDED, (event) => {
@@ -712,13 +703,6 @@ export class CRMEntityDetailPage extends PlatformPage {
     }
 
     override disconnectedCallback(): void {
-        if (this._mql && this._mqlListener) {
-            this._mql.removeEventListener('change', this._mqlListener);
-        }
-        if (this.shadowRoot) {
-            this.shadowRoot.removeEventListener('crm-entity-card-toolbar-state', this._onCardToolbarStateBound);
-            this.shadowRoot.removeEventListener('crm-entity-card-storage-type-draft', this._onCardStorageTypeDraftBound);
-        }
         super.disconnectedCallback();
     }
 
@@ -980,7 +964,7 @@ export class CRMEntityDetailPage extends PlatformPage {
             return html`
                 <div class="body">
                     <div class="center">
-                        <glass-spinner size="lg"></glass-spinner>
+                        <platform-spinner size="lg"></platform-spinner>
                     </div>
                 </div>
             `;
@@ -1147,7 +1131,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                 ${this._templatePickerOpen
                     ? html`
                         ${typesLoading
-                            ? html`<span class="detail-template-value"><glass-spinner size="xs"></glass-spinner></span>`
+                            ? html`<span class="detail-template-value"><platform-spinner size="xs"></platform-spinner></span>`
                             : html`
                                 <platform-field
                                     class="detail-template-select"
@@ -1270,7 +1254,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                         @click=${() => this._onToolbarSave()}
                     >
                         ${this._editToolbarSubmitting
-                            ? html`<glass-spinner size="xs"></glass-spinner>`
+                            ? html`<platform-spinner size="xs"></platform-spinner>`
                             : html`<platform-icon name="check" size="18"></platform-icon>`}
                     </button>
                     <button

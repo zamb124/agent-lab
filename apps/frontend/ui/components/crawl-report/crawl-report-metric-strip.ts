@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-metric-card.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
@@ -87,7 +87,7 @@ export class CrawlReportMetricStrip extends PlatformElement {
             `;
         }
         if (!this.summary && this.busy) {
-            return html`<div class="initial-loading"><glass-spinner size="sm"></glass-spinner></div>`;
+            return html`<div class="initial-loading"><platform-spinner size="sm"></platform-spinner></div>`;
         }
         if (!this.summary) {
             return null;

@@ -17,7 +17,8 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
 function switchValue(event: Event): boolean {
@@ -74,11 +75,6 @@ export class SyncNamespaceModal extends PlatformFormModal {
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 text-align: center;
-            }
-            .center {
-                display: flex;
-                justify-content: center;
-                padding: var(--space-4);
             }
         `,
     ];
@@ -138,11 +134,11 @@ export class SyncNamespaceModal extends PlatformFormModal {
 
     override renderBody() {
         if (typeof this.name !== 'string' || this.name === '') {
-            return html`<div class="empty">${this.t('namespace_settings.no_namespace')}</div>`;
+            return html`<platform-empty-state icon="layers" title=${this.t('namespace_settings.no_namespace')}></platform-empty-state>`;
         }
         const item = this._namespaces.byId[this.name];
         if (!item && this._namespaces.loading) {
-            return html`<div class="center"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         return html`
             <div class="name">

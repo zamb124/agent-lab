@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
-
 from core.config.base import BaseSettings
 from core.config.models import (
     EmbeddingApiConfig,
     EmbeddingConfig,
     LLMConfig,
-    ProviderLitserveApiConfig,
-    ProviderLitserveConfig,
     RAGConfig,
     RAGProviderConfig,
+    ServerConfig,
 )
 from core.config.rag_provider_factory import resolve_rag_provider_bundle
 from core.rag.embedding_runtime import resolve_rag_embedding_runtime
@@ -21,7 +18,7 @@ from core.rag.embedding_runtime import resolve_rag_embedding_runtime
 def _minimal_settings(
     *,
     embedding: EmbeddingConfig,
-    provider_litserve: ProviderLitserveConfig,
+    server: ServerConfig | None = None,
     llm: LLMConfig | None = None,
 ) -> BaseSettings:
     rag = RAGConfig(
@@ -33,17 +30,19 @@ def _minimal_settings(
     return BaseSettings(
         rag=rag,
         llm=llm if llm is not None else LLMConfig(),
-        provider_litserve=provider_litserve,
+        server=server if server is not None else ServerConfig(),
     )
 
 
-def test_resolve_rag_provider_bundle_litserve_uses_resolved_v1_base() -> None:
-    lit = ProviderLitserveConfig(api=ProviderLitserveApiConfig(base_url="http://127.0.0.1:8014/v1"))
+def test_resolve_rag_provider_bundle_litserve_uses_canonical_service_url() -> None:
+    server = ServerConfig(
+        provider_litserve_service_url="http://127.0.0.1:8014"
+    )
     emb = EmbeddingConfig(
         provider="provider_litserve",
         api=EmbeddingApiConfig(model="qwen/qwen3-embedding-0.6b", dimension=1024, base_url=None, mrl_output_dimension=1024),
     )
-    settings = _minimal_settings(embedding=emb, provider_litserve=lit)
+    settings = _minimal_settings(embedding=emb, server=server)
     bundle = resolve_rag_provider_bundle(settings)
     assert bundle.embedding_runtime is not None
     assert bundle.embedding_runtime.provider == "provider_litserve"
@@ -53,7 +52,6 @@ def test_resolve_rag_provider_bundle_litserve_uses_resolved_v1_base() -> None:
 
 
 def test_resolve_rag_embedding_runtime_litserve_prefers_embedding_api_base_url() -> None:
-    lit = ProviderLitserveConfig(api=ProviderLitserveApiConfig(base_url="http://127.0.0.1:8014/v1"))
     emb = EmbeddingConfig(
         provider="provider_litserve",
         api=EmbeddingApiConfig(
@@ -63,15 +61,14 @@ def test_resolve_rag_embedding_runtime_litserve_prefers_embedding_api_base_url()
             mrl_output_dimension=1024,
         ),
     )
-    rt = resolve_rag_embedding_runtime(emb, LLMConfig(), lit)
+    rt = resolve_rag_embedding_runtime(emb, LLMConfig(), "http://127.0.0.1:8014/v1")
     assert rt.base_url == "http://192.168.1.2:8014/v1"
 
 
-def test_resolve_rag_embedding_runtime_litserve_requires_root_when_api_base_url_empty() -> None:
-    lit = ProviderLitserveConfig(api=ProviderLitserveApiConfig(base_url=None))
+def test_resolve_rag_embedding_runtime_litserve_falls_back_to_canonical_url() -> None:
     emb = EmbeddingConfig(
         provider="provider_litserve",
         api=EmbeddingApiConfig(model="qwen/qwen3-embedding-0.6b", dimension=1024, base_url=None, mrl_output_dimension=1024),
     )
-    with pytest.raises(ValueError, match="provider_litserve.api.base_url"):
-        _ = resolve_rag_embedding_runtime(emb, LLMConfig(), lit)
+    rt = resolve_rag_embedding_runtime(emb, LLMConfig(), "http://provider-litserve:8014/v1")
+    assert rt.base_url == "http://provider-litserve:8014/v1"

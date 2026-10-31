@@ -15,11 +15,12 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles, sidebarSectionStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { toolbarShellStyles } from '@platform/lib/styles/shared/toolbar-shell.styles.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-empty-state.js';
 import './flow-card.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
@@ -298,9 +299,9 @@ export class FlowsCatalogList extends PlatformElement {
                 </div>
                 <div class="section-content catalog-scroll catalog-inner-cards">
                     ${this._flows.loading && items.length === 0
-                        ? html`<glass-spinner></glass-spinner>`
+                        ? html`<platform-spinner></platform-spinner>`
                         : qTrimmed !== '' && items.length > 0 && filteredItems.length === 0
-                            ? html`<div class="flows-search-empty">${this.t('flows_sidebar.search_empty')}</div>`
+                            ? html`<platform-empty-state icon="search" title=${this.t('flows_sidebar.search_empty')}></platform-empty-state>`
                             : repeat(
                                 filteredItems,
                                 (item) => {

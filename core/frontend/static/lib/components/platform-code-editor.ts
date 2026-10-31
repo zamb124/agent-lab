@@ -2,18 +2,17 @@
  * platform-code-editor — CodeMirror viewer/editor для text/code в платформенных UI.
  */
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import type { SelectController } from '../events/select-controller.js';
 import type { CmCompartmentLike, CmEditorViewLike, CmModule } from '../codemirror/variable-extensions.js';
+import { requireCmModule } from '../codemirror/variable-extensions.js';
 import './platform-icon.js';
-
-const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 
 let _cmPromise: Promise<CmModule> | null = null;
 function loadCodeMirror(): Promise<CmModule> {
     if (!_cmPromise) {
-        _cmPromise = import(CODEMIRROR_URL);
+        _cmPromise = import('../codemirror/codemirror-lazy.js').then(requireCmModule);
     }
     return _cmPromise;
 }

@@ -27,11 +27,7 @@ from core.config.models import SILERO_V5_RU_SPEAKERS_BY_BUNDLE
 from core.models.base import StrictBaseModel
 
 if TYPE_CHECKING:
-    from core.config.models import (
-        ProviderLitserveConfig,
-        ProviderLitserveSTTModelEntry,
-        ProviderLitserveTTSModelEntry,
-    )
+    from core.models.provider_litserve_model import ProviderLitserveCatalogEntries
 
 
 class _LitserveModelWithApiId(Protocol):
@@ -78,9 +74,9 @@ class VoiceProvidersCatalogDTO(BaseModel):
 
 
 def build_voice_providers_catalog_dto(
-    pls_settings: "ProviderLitserveConfig",
+    entries: "ProviderLitserveCatalogEntries",
 ) -> VoiceProvidersCatalogDTO:
-    """Собирает каталог: статические allowlist из speech_provider_catalog, Litserve из conf."""
+    """Собирает каталог: статические allowlist из speech_provider_catalog, Litserve из PG-каталога."""
 
     credential_field_groups: dict[str, list[list[str]]] = {
         "cloud_ru": [["api_key"]],
@@ -91,9 +87,8 @@ def build_voice_providers_catalog_dto(
     def _pull_ids(items: Sequence[_LitserveModelWithApiId]) -> list[str]:
         return [entry.api_model_id for entry in items]
 
-    infra = pls_settings.infra
-    stt_models: list[ProviderLitserveSTTModelEntry] = infra.stt_models
-    tts_models: list[ProviderLitserveTTSModelEntry] = infra.tts_models
+    stt_models = list(entries.stt)
+    tts_models = list(entries.tts)
     voice_hints: list[TtsLitserveVoiceHint] = []
     for tts in tts_models:
         bundle = tts.silero_bundle.strip().lower()
@@ -117,7 +112,7 @@ def build_voice_providers_catalog_dto(
             speech_langs.add(base[:2])
 
     vad_rates: set[int] = set(VAD_SAMPLE_RATE_BASE_IDS)
-    for vad in infra.vad_models:
+    for vad in entries.vad:
         sr = vad.sample_rate
         if sr is not None:
             vad_rates.add(sr)

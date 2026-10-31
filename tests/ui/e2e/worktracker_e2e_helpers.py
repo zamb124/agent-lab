@@ -527,8 +527,8 @@ async def crm_open_work_item_page(
 
 
 async def flows_user_chat_wait_text(page: Page, text_pattern: re.Pattern[str] | str) -> None:
-    """Текст в чате покупателя (flows chat-page) — в т.ч. ответ оператора по Emitter."""
-    chat = page.locator("chat-page").first
+    """Текст в чате покупателя (flows flows-chat-page) — в т.ч. ответ оператора по Emitter."""
+    chat = page.locator("flows-chat-page").first
     await expect(chat).to_be_visible(timeout=30_000)
     pattern = (
         text_pattern

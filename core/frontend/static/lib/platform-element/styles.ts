@@ -1,7 +1,7 @@
 /**
  * Базовые стили для PlatformElement
  */
-import { css } from '../../assets/js/lit/lit.min.js';
+import { css } from 'lit';
 
 export const baseStyles = css`
     :host {

@@ -3,8 +3,8 @@
  * на него; отправка, отмена, загрузка файлов и голос — методы хоста ``<platform-flow-ui>``.
  */
 
-import { unsafeHTML } from '../../../assets/js/lit/directives/unsafe-html.min.js';
-import { LitElement, html, nothing, type PropertyValues } from '../../lit-shim.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import { formatFileSize } from '../../utils/format-file-size.js';
 import { blockStyles, renderBlocks } from '../blocks/registry.js';
 import { activityChips } from '../blocks/platform.js';

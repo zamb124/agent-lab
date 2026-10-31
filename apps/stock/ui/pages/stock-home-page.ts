@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 interface PulseQuantRow {
     product_id?: unknown;
@@ -74,7 +75,7 @@ export class StockHomePage extends PlatformPage {
             }
             th { color: var(--text-tertiary); font-weight: var(--font-medium); }
             .num { text-align: right; font-variant-numeric: tabular-nums; }
-            .empty { padding: var(--space-8); text-align: center; color: var(--text-tertiary); }
+            platform-empty-state { margin-top: var(--space-8); }
             .actions { margin-top: var(--space-4); display: flex; gap: var(--space-2); }
         `,
     ];
@@ -101,7 +102,11 @@ export class StockHomePage extends PlatformPage {
         return html`
             <div class="wrap">
                 <h1>${this.t('home.title')}</h1>
-                ${!pulse ? html`<div class="empty">${this.t('home.empty')}</div>` : html`
+                ${this._warehouses.loading || this._pulse.busy
+                    ? html`<platform-empty-state loading></platform-empty-state>`
+                    : !pulse
+                    ? html`<platform-empty-state icon="box" title=${this.t('home.empty')}></platform-empty-state>`
+                    : html`
                     <div class="section">
                         <div class="section-title">${this.t('home.quants')}</div>
                         <table>

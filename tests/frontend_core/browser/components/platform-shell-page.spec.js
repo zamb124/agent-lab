@@ -1,13 +1,13 @@
 /**
  * platform-shell-page: 404 / server-error.
- * + app-loader, platform-deployment-version, pwa-install-banner — простой
+ * + platform-spinner, platform-deployment-version, pwa-install-banner — простой
  * presentational smoke.
  */
 
 import { fixture, html, expect } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/platform-shell-page.js';
-import '@platform/lib/components/app-loader.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/pwa-install-banner.js';
 import '@platform/lib/components/platform-help-hint.js';
@@ -26,11 +26,11 @@ describe('platform-shell-page', () => {
     });
 });
 
-describe('app-loader / pwa-install-banner / platform-deployment-version / platform-help-hint smoke', () => {
+describe('platform-spinner / pwa-install-banner / platform-deployment-version / platform-help-hint smoke', () => {
     beforeEach(() => { resetPlatformState(); bootstrapTestBus(); });
 
-    it('app-loader рендерится', async () => {
-        const el = await fixture(html`<app-loader></app-loader>`);
+    it('platform-spinner рендерится', async () => {
+        const el = await fixture(html`<platform-spinner size="xl"></platform-spinner>`);
         expect(el.shadowRoot).to.exist;
     });
 

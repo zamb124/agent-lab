@@ -136,17 +136,11 @@ export class FlowsCanvasContextMenu extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('pointerdown', this._onDocPointerDown, true);
-        document.addEventListener('contextmenu', this._onDocPointerDown, true);
-        document.addEventListener('keydown', this._onDocKeyDown, true);
+        this.useDomEvent(document, 'pointerdown', this._onDocPointerDown, true);
+        this.useDomEvent(document, 'contextmenu', this._onDocPointerDown, true);
+        this.useDomEvent(document, 'keydown', this._onDocKeyDown, true);
     }
 
-    override disconnectedCallback(): void {
-        document.removeEventListener('pointerdown', this._onDocPointerDown, true);
-        document.removeEventListener('contextmenu', this._onDocPointerDown, true);
-        document.removeEventListener('keydown', this._onDocKeyDown, true);
-        super.disconnectedCallback();
-    }
 
     _onDocPointerDown(e: Event) {
         const path = typeof e.composedPath === 'function' ? e.composedPath() : [];

@@ -135,20 +135,11 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
-_NODE_MODULES = Path(__file__).parent.parent.parent / "node_modules"
 mount_service_spa(
     app,
     public_segment="crm",
     ui_dir=Path(__file__).parent / "ui",
-    excluded_prefixes=("api/", "ui/static/", "ui/vendor/"),
-    extra_static_mounts=(
-        (
-            "/crm/ui/vendor/3d-force-graph",
-            _NODE_MODULES / "3d-force-graph" / "dist",
-            "crm_ui_vendor_3d_force_graph",
-        ),
-        ("/crm/ui/vendor/three", _NODE_MODULES / "three" / "build", "crm_ui_vendor_three"),
-    ),
+    excluded_prefixes=("api/", "ui/static/"),
 )
 
 

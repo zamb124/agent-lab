@@ -5,8 +5,8 @@
  * Hover preview — `<platform-work-item-preview>` (если `show-preview`).
  */
 
-import { html, css } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import type { OpController } from '../base/use-resource.js';
 import type { SelectController } from '../events/select-controller.js';

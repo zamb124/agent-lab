@@ -21,7 +21,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import type {
     CSSResultGroup,
     PropertyDeclarations,
@@ -179,7 +179,7 @@ export class CRMEntityDeleteModal extends PlatformModal {
                 <div class="entity-name">${title}</div>
                 ${entityType.length > 0 ? html`<div class="entity-type">${entityType}</div>` : nothing}
                 <p class="hint">${this.t('entity_delete_modal.hint')}</p>
-                ${entity === null ? html`<div style="text-align:center;"><glass-spinner></glass-spinner></div>` : nothing}
+                ${entity === null ? html`<div style="text-align:center;"><platform-spinner></platform-spinner></div>` : nothing}
             </div>
         `;
     }

@@ -3,8 +3,8 @@
  * DnD между колонками → worktracker/work_item_move { work_item_id, state }.
  */
 
-import { html, css } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import type { OpController } from '../base/use-resource.js';
 import './platform-work-item-row.js';

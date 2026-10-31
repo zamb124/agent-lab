@@ -21,7 +21,7 @@ _STABLE_LAYOUT_FRAMES = 6
 # Lit-корни платформенных SPA в E2E (см. tests/ui/apps.py).
 _SHELL_SELECTOR = "sync-app, crm-app, rag-app, flows-app, frontend-app, office-app"
 LOADING_SELECTOR = (
-    "glass-spinner, "
+    "platform-spinner, "
     ".loading-container, "
     ".loading-spinner, "
     ".loading-state, "

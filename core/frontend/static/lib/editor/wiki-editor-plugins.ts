@@ -29,7 +29,7 @@ function nt(schema: PmSchemaLike, name: string): PmNodeTypeLike {
  */
 
 /**
- * @param {object} pm — модуль prosemirror-bundle
+ * @param {object} pm — модуль prosemirror-lazy
  * @param {object} schema
  * @returns {object[]} плагины input rules
  */

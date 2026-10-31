@@ -13,6 +13,7 @@ import '../components/worktracker-list-section.js';
 import '../components/worktracker-page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-row.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 export class WorktrackerMyTasksPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
@@ -80,10 +81,7 @@ export class WorktrackerMyTasksPage extends PlatformPage {
                     `)}
                 </worktracker-list-section>
             ` : html`
-                <div class="wt-empty">
-                    <platform-icon class="wt-empty-icon" name="list-check" size="48"></platform-icon>
-                    <p class="wt-empty-title">${this.t('my_page.empty')}</p>
-                </div>
+                <platform-empty-state icon="list-check" title=${this.t('my_page.empty')}></platform-empty-state>
             `}
         `;
     }

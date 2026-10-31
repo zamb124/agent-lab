@@ -7,6 +7,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-json-editor.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../editors/flows-code-editor.js';
 import { evaluationCatalogNameKey } from '../../_helpers/evaluation-catalog-labels.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
@@ -1098,10 +1099,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         if (suiteId.length === 0) {
             return html`
                 <section class="content-panel">
-                    <div class="empty">
-                        <span class="empty-mark"><platform-icon name="checklist" size="20"></platform-icon></span>
-                        <span>${this.t('evaluation.case_editor.no_suite')}</span>
-                    </div>
+                    <platform-empty-state icon="checklist" title=${this.t('evaluation.case_editor.no_suite')}></platform-empty-state>
                 </section>
             `;
         }

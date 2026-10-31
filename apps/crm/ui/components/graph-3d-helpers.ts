@@ -4,7 +4,7 @@
 
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-// THREE.js грузится рантайм-скриптом (вне ts-бандла); типизируем как any-фасад.
+// THREE.js грузится lazy-чанком на window (общий инстанс с 3d-force-graph); any-фасад.
 declare global {
     interface Window {
         THREE?: any;

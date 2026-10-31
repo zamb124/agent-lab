@@ -1,5 +1,5 @@
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
@@ -46,6 +46,7 @@ export class PlatformFileViewerModal extends PlatformModal {
     declare _viewModeFileId: string;
 
     private _headerDragState: { dx: number; dy: number; width: number; height: number } | null;
+    private _headerDragUnsubs: Array<() => void> = [];
     private _boundHeaderMouseMove: (e: MouseEvent) => void;
     private _boundHeaderMouseUp: () => void;
 
@@ -563,8 +564,10 @@ export class PlatformFileViewerModal extends PlatformModal {
         };
         this._headerDragging = true;
         this.toggleAttribute('data-header-dragging', true);
-        document.addEventListener('mousemove', this._boundHeaderMouseMove);
-        document.addEventListener('mouseup', this._boundHeaderMouseUp);
+        this._headerDragUnsubs = [
+            this.useDomEvent(document, 'mousemove', this._boundHeaderMouseMove),
+            this.useDomEvent(document, 'mouseup', this._boundHeaderMouseUp),
+        ];
         event.preventDefault();
     }
 
@@ -616,8 +619,10 @@ export class PlatformFileViewerModal extends PlatformModal {
         this._headerDragging = false;
         this._headerDragState = null;
         this.toggleAttribute('data-header-dragging', false);
-        document.removeEventListener('mousemove', this._boundHeaderMouseMove);
-        document.removeEventListener('mouseup', this._boundHeaderMouseUp);
+        for (const unsub of this._headerDragUnsubs) {
+            unsub();
+        }
+        this._headerDragUnsubs = [];
     }
 
     _onEditorError(event: CustomEvent<{ detail?: unknown; code?: unknown }>): void {

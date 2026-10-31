@@ -10,7 +10,7 @@
  * (enabled, email) и список провайдеров — из state.auth (prefetch в PlatformApp).
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';

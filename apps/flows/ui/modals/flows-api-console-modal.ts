@@ -11,7 +11,7 @@ import { buildScenarioDocumentationUrl } from '@platform/lib/utils/documentation
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../components/editors/flows-code-editor.js';
 import { asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -1629,7 +1629,7 @@ ${jsRequest}${asyncJsSuffix}`,
                         </platform-button>
                         <platform-button variant="primary" ?disabled=${this._run.busy} @click=${() => void this._runRequest()}>
                             ${this._run.busy
-                                ? html`<glass-spinner size="sm"></glass-spinner>${this.t('api_console.running')}`
+                                ? html`<platform-spinner size="sm"></platform-spinner>${this.t('api_console.running')}`
                                 : html`<platform-icon name="play" size="14"></platform-icon>${this.t('api_console.run')}`}
                         </platform-button>
                     </div>

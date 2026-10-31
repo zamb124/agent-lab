@@ -1,0 +1,161 @@
+"""Публичная витрина: снапшот, ETag/304, host-рерайт, видимость по статусу."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from httpx2 import AsyncClient
+
+from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
+
+_SHOPS = f"{API_PREFIX}/shops"
+
+
+async def _published_shop(
+    client: AsyncClient, slug: str
+) -> dict[str, Any]:
+    resp = await client.post(
+        _SHOPS, json={"slug": slug, "name": f"Store {slug}", "kind": "cafe"}
+    )
+    assert resp.status_code == 200, resp.text
+    shop = resp.json()
+    resp = await client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
+    assert resp.status_code == 200, resp.text
+    return shop
+
+
+class TestStorefrontSnapshot:
+    async def test_published_shop_served_anonymously(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"sf-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={"name": "Латте", "price_minor": 25000},
+        )
+        assert resp.status_code == 200
+        snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert snap.status_code == 200, snap.text
+        body = snap.json()
+        assert body["slug"] == slug
+        assert body["name"] == f"Store {slug}"
+
+    async def test_etag_and_304(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"etag-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert resp.status_code == 200
+        etag = resp.headers.get("etag")
+        assert etag
+        cached = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/storefront/{slug}", headers={"If-None-Match": etag}
+        )
+        assert cached.status_code == 304
+        assert not cached.content
+
+    async def test_draft_and_missing_slug_404(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        draft_slug = f"draft-{unique_id[:8]}"
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": draft_slug, "name": "Draft"}
+        )
+        assert resp.status_code == 200
+        resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{draft_slug}")
+        assert resp.status_code == 404
+        resp = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/storefront/never-{unique_id[:8]}"
+        )
+        assert resp.status_code == 404
+
+    async def test_suspended_shop_hidden(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"susp-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        assert (
+            await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        ).status_code == 200
+        await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/suspend")
+        resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert resp.status_code == 404
+
+    async def test_unavailable_product_not_in_snapshot(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"hide-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={"name": "Скрытый", "price_minor": 100},
+        )
+        product = resp.json()
+        await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
+            json={"is_available": False},
+        )
+        snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert snap.status_code == 200
+        names = [p["name"] for p in snap.json()["products"]]
+        assert "Скрытый" not in names
+
+
+class TestHostMiddleware:
+    async def test_slug_host_root_rewrites_to_storefront(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """GET / на <slug>.linnex.io отдаёт HTML-витрину, а не SPA."""
+        slug = f"host-{unique_id[:8]}"
+        await _published_shop(shop_client, slug)
+        from apps.shop.main import app
+
+        from httpx2 import ASGITransport
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url=f"http://{slug}.linnex.io",
+            headers={"Host": f"{slug}.linnex.io"},
+        ) as client:
+            resp = await client.get("/")
+            assert resp.status_code == 200, resp.text[:200]
+            assert "text/html" in resp.headers.get("content-type", "")
+            assert f"Store {slug}" in resp.text
+
+    async def test_platform_host_root_not_rewritten(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Платформенный хост не превращается в витрину."""
+        await _published_shop(shop_client, f"nois-{unique_id[:8]}")
+        from apps.shop.main import app
+
+        from httpx2 import ASGITransport
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://humanitec.ru",
+            headers={"Host": "humanitec.ru"},
+        ) as client:
+            resp = await client.get("/")
+            assert resp.status_code != 200 or "text/html" not in resp.headers.get(
+                "content-type", ""
+            ) or "snapshot" not in resp.text[:5000]
+
+
+class TestStorefrontPage:
+    async def test_storefront_page_renders_menu(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        slug = f"page-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={"name": "Борщ", "price_minor": 35000, "description": "Со сметаной"},
+        )
+        resp = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert slug in resp.text
+        assert resp.headers.get("etag")

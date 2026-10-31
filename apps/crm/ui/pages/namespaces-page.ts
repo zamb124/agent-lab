@@ -17,7 +17,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import type {
@@ -81,16 +81,7 @@ export class CRMNamespacesPage extends PlatformPage {
                 overflow-y: auto;
             }
 
-            .center {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-3);
-                color: var(--text-tertiary);
-                text-align: center;
-                padding: var(--space-6);
-            }
+            platform-empty-state { margin-top: var(--space-8); }
 
             .grid {
                 display: grid;
@@ -252,14 +243,12 @@ export class CRMNamespacesPage extends PlatformPage {
             </div>
             <div class="body">
                 ${loading
-                    ? html`<div class="center"><glass-spinner size="lg"></glass-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : items.length === 0
-                        ? html`
-                            <div class="center">
-                                <platform-icon name="folder" size="48"></platform-icon>
-                                <p>${this.t('namespaces_page.empty_message')}</p>
-                            </div>
-                        `
+                        ? html`<platform-empty-state
+                            icon="folder"
+                            title=${this.t('namespaces_page.empty_message')}
+                        ></platform-empty-state>`
                         : html`
                             <div class="grid">
                                 ${items.map((ns) => this._renderCard(ns))}

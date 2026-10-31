@@ -31,7 +31,7 @@ export class LandingAbout extends PlatformElement {
                 font-size: 32px;
                 font-weight: 500;
                 line-height: 1.3;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0 0 24px 0;
             }
             
@@ -39,7 +39,7 @@ export class LandingAbout extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.6;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
+                color: var(--text-secondary);
                 max-width: 800px;
                 margin: 0 auto;
             }
@@ -52,8 +52,8 @@ export class LandingAbout extends PlatformElement {
             }
             
             .stat-card {
-                background: radial-gradient(circle at top left, rgba(87, 104, 254, 0.1), transparent);
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                background: radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 10%, transparent), transparent);
+                border: 1px solid var(--glass-border-medium);
                 border-radius: 20px;
                 padding: 30px;
                 backdrop-filter: blur(10px);
@@ -61,23 +61,23 @@ export class LandingAbout extends PlatformElement {
             }
             
             .stat-card:hover {
-                border-color: var(--landing-primary);
+                border-color: var(--marketing-product-accent);
                 transform: translateY(-5px);
-                box-shadow: 0 10px 40px rgba(87, 104, 254, 0.2);
+                box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 20%, transparent);
             }
             
             .stat-value {
                 font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 48px;
                 font-weight: 700;
-                color: var(--landing-primary);
+                color: var(--marketing-product-accent);
                 margin: 0 0 8px 0;
             }
             
             .stat-label {
                 font-family: var(--font-sans);
                 font-size: 18px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 margin: 0;
             }
             
@@ -90,7 +90,7 @@ export class LandingAbout extends PlatformElement {
             .integrations-title {
                 font-family: var(--font-sans);
                 font-size: 20px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 text-align: center;
                 margin: 0 0 20px 0;
             }
@@ -107,11 +107,11 @@ export class LandingAbout extends PlatformElement {
             
             .integration-badge {
                 padding: 12px 20px;
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.05));
-                border: 1px solid var(--landing-panel-border-strong, rgba(255, 255, 255, 0.15));
+                background: var(--glass-bg-subtle);
+                border: 1px solid var(--glass-border-strong);
                 border-radius: 24px;
                 font-size: 14px;
-                color: var(--landing-secondary);
+                color: var(--text-secondary);
                 text-decoration: none;
                 backdrop-filter: blur(10px);
                 transition: var(--motion-transition-interactive);
@@ -138,27 +138,27 @@ export class LandingAbout extends PlatformElement {
             .integration-badge:nth-child(18) { animation-delay: 0.85s; transform: translateY(-2px); }
             
             .integration-badge:hover {
-                border-color: var(--landing-primary);
+                border-color: var(--marketing-product-accent);
                 transform: translateY(-8px) scale(1.05);
                 animation-play-state: paused;
-                box-shadow: 0 8px 24px rgba(87, 104, 254, 0.3);
+                box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 30%, transparent);
             }
             
             .integration-badge.product {
                 text-decoration: none;
                 cursor: pointer;
-                border-color: var(--landing-primary);
-                background: rgba(87, 104, 254, 0.15);
+                border-color: var(--marketing-product-accent);
+                background: color-mix(in srgb, var(--accent) 15%, transparent);
                 font-weight: 500;
             }
             
             .integration-badge.product:hover {
-                background: rgba(87, 104, 254, 0.3);
+                background: color-mix(in srgb, var(--accent) 30%, transparent);
             }
             
             .integration-badge.highlight {
-                background: rgba(87, 104, 254, 0.08);
-                border-color: rgba(87, 104, 254, 0.4);
+                background: color-mix(in srgb, var(--accent) 8%, transparent);
+                border-color: color-mix(in srgb, var(--accent) 40%, transparent);
             }
             
             @keyframes float {

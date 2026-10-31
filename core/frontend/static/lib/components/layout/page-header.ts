@@ -17,7 +17,7 @@
  * сохранён как no-op для обратной совместимости и будет удалён позже.
  */
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { mobileStickyHeaderPageHeaderShellStyles } from '../../styles/shared/mobile-sticky-header.styles.js';
 import '../platform-icon.js';

@@ -17,6 +17,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import './../components/sync-channel-row.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 export class SyncForwardModal extends PlatformModal {
     static modalKind = 'sync.forward';
@@ -142,7 +143,7 @@ export class SyncForwardModal extends PlatformModal {
                 }}
             ></platform-field>
             ${channels.length === 0
-                ? html`<div class="empty">${this.t('chat_view.no_other_channels')}</div>`
+                ? html`<platform-empty-state icon="forward" title=${this.t('chat_view.no_other_channels')}></platform-empty-state>`
                 : html`<div class="list">
                     ${channels.map((c: Record<string, any>) => html`
                         <div

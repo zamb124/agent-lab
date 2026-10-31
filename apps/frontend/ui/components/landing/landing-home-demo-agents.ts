@@ -6,7 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/flow-ui/shell/drawer.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-button.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '@platform/lib/voice/voice-http-origin.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
@@ -57,7 +57,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: var(--text-md);
                 line-height: 1.6;
-                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.72));
+                color: var(--text-secondary);
                 max-width: 40rem;
                 margin: 0 auto;
             }
@@ -77,7 +77,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 object-fit: cover;
                 border-radius: var(--radius-md);
                 display: block;
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.06));
+                background: var(--glass-bg-subtle);
             }
             .card-body {
                 padding: var(--space-4) 0 0;
@@ -93,7 +93,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
             }
             .card-desc {
                 font-size: var(--text-sm);
-                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.65));
+                color: var(--text-secondary);
                 margin: 0;
                 line-height: 1.5;
                 flex: 1;
@@ -112,10 +112,10 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 gap: var(--space-4);
                 min-height: 160px;
                 font-family: var(--font-sans);
-                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.7));
+                color: var(--text-secondary);
             }
             .err {
-                color: #f87171;
+                color: var(--error);
                 text-align: center;
                 max-width: 36rem;
             }
@@ -290,7 +290,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 </header>
 
                 ${busy && allItems.length === 0
-                    ? html`<div class="state-center"><glass-spinner></glass-spinner></div>`
+                    ? html`<div class="state-center"><platform-spinner></platform-spinner></div>`
                     : ''}
                 ${err !== null && allItems.length === 0
                     ? html`<div class="state-center err">${this.t('digital_workers.load_error')}</div>`

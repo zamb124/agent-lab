@@ -5,7 +5,7 @@
  * Канон: value = markdown; change detail = { value, htmlValue, textValue }.
  */
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { markdownToHtml } from '../utils/markdown.js';
@@ -21,31 +21,9 @@ import {
     htmlToPlainText,
     MARKDOWN_EDITOR_MAX_ATTACHMENT_BYTES,
 } from '../utils/markdown-html.js';
-import { createVariableExtensions, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
+import { createVariableExtensions, isCmModule, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
 import type { CmCompartmentLike, CmEditorViewLike, CmModule, CmViewUpdateLike } from '../codemirror/variable-extensions.js';
 import { isPlainRecord } from '../events/payload.js';
-
-const CM_EXPORTS = [
-    'EditorState',
-    'EditorView',
-    'Compartment',
-    'keymap',
-    'history',
-    'autocompletion',
-    'oneDark',
-    'syntaxHighlighting',
-    'defaultHighlightStyle',
-    'lineNumbers',
-    'highlightActiveLine',
-    'highlightActiveLineGutter',
-    'defaultKeymap',
-    'historyKeymap',
-] as const;
-
-function isCmModule(value: unknown): value is CmModule {
-    if (!isPlainRecord(value)) return false;
-    return CM_EXPORTS.every((name) => value[name] !== undefined && value[name] !== null);
-}
 
 interface VariableCatalogEntry {
     name: string;
@@ -1066,7 +1044,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
     override async firstUpdated(): Promise<void> {
         this._loadIcons();
         this._boundEscapeHandler = this._handleEscape.bind(this);
-        document.addEventListener('keydown', this._boundEscapeHandler);
+        this.useDomEvent(document, 'keydown', this._boundEscapeHandler);
         if (this._isComposeSurface()) {
             this._editorEl = this.renderRoot.querySelector('.editor-body');
             this._syncWysiwygFromProp();
@@ -1192,7 +1170,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
     }
 
     async _initCodeMirror(): Promise<void> {
-        const loaded: unknown = await import('/static/core/assets/codemirror/codemirror-bundle.js');
+        const loaded: unknown = await import('../codemirror/codemirror-lazy.js');
         if (!isCmModule(loaded)) {
             throw new Error('platform-markdown-editor: CodeMirror bundle is incomplete');
         }
@@ -1822,9 +1800,6 @@ export class PlatformMarkdownEditor extends PlatformElement {
         if (this._editorView) {
             this._editorView.destroy();
             this._editorView = null;
-        }
-        if (this._boundEscapeHandler) {
-            document.removeEventListener('keydown', this._boundEscapeHandler);
         }
         if (this.fullscreenMode) {
             document.body.style.overflow = '';

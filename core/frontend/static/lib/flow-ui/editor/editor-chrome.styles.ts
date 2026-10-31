@@ -1,7 +1,7 @@
 /**
  * Токены хрома редактора Flow UI (рамка выделения, линия вставки) поверх Design Standard.
  */
-import { css } from '../../lit-shim.js';
+import { css } from 'lit';
 
 export const flowUIEditorChromeTokens = css`
     :host {

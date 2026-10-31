@@ -17,15 +17,14 @@ CI (`scripts/gates/voice/resolver_usage.py`).
    `TTSProvidersConfig`, `VADProvidersConfig`).
 
 4. **LitServe api id по каталогу** — если итоговый провайдер `litserve`, а поле
-   `model` после шагов 1–3 пустое, подставляется
-   `provider_litserve.infra.<stt|tts|vad>_default_api_model_id` (должно
-   совпадать с моделью в конфиге процесса `provider_litserve`).
+   `model` после шагов 1–3 пустое, подставляется `api_model_id` самой старой
+   ready-записи PG-каталога `provider_litserve_models` (порядок seed).
 
 5. **TTS LitServe + язык сессии** — если задан `SpeechOverride.language` (query
-   `language` на WebSocket voice или поле company для `tts`) и в каталоге
-   `provider_litserve.infra.tts_models` есть запись с тем же `synthesis_locale`
-   (ISO 639-1), её `api_model_id` подменяет результат шагов 1–4 для выбора
-   модели Silero TTS по локали.
+   `language` на WebSocket voice или поле company для `tts`) и в PG-каталоге
+   `provider_litserve_models` (`litserve_catalog_entries`, TTL-кэш) есть
+   ready-запись TTS с тем же `synthesis_locale` (ISO 639-1), её `api_model_id`
+   подменяет результат шагов 1–4 для выбора модели Silero TTS по локали.
 
 Если итоговое значение обязательного поля после всех шагов отсутствует —
 `raise ValueError` без маскировки.
@@ -41,6 +40,7 @@ CI (`scripts/gates/voice/resolver_usage.py`).
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -70,6 +70,10 @@ from core.clients.voice_observability import ObservedSTTClient, ObservedTTSClien
 from core.config import get_settings
 from core.config.models import ProviderLitserveTTSModelEntry
 from core.logging import get_logger
+from core.models.provider_litserve_model import (
+    LitserveCatalogEntry,
+    litserve_catalog_entries,
+)
 from core.models.voice_models import CompanyVoiceProvider, VoiceKind
 
 logger = get_logger(__name__)
@@ -163,17 +167,12 @@ def _validate_override(override: SpeechOverride | None) -> SpeechOverride:
 def _fallback_litserve_api_model_id(
     *,
     resolved: str | None,
-    kind: Literal["stt", "tts", "vad"],
+    entries: Sequence[LitserveCatalogEntry],
 ) -> str | None:
-    """Если ``voice.<kind>.default_model`` и override/company пусты, берём api id каталога LitServe."""
+    """Если ``voice.<kind>.default_model`` и override/company пусты — самая старая ready-запись каталога."""
     if resolved is not None and resolved != "":
         return resolved
-    infra = get_settings().provider_litserve.infra
-    if kind == "stt":
-        return infra.stt_default_api_model_id
-    if kind == "tts":
-        return infra.tts_default_api_model_id
-    return infra.vad_default_api_model_id
+    return entries[0].api_model_id if entries else None
 
 
 def _normalize_iso639_1_session_locale(value: str | None) -> str | None:
@@ -326,7 +325,8 @@ async def resolve_stt_settings(
         default_value=settings_voice_stt.default_model,
     )
     if provider_name == "litserve":
-        model = _fallback_litserve_api_model_id(resolved=model, kind="stt")
+        entries = await litserve_catalog_entries()
+        model = _fallback_litserve_api_model_id(resolved=model, entries=entries.stt)
     language = _resolve_str(
         override_value=override.language,
         company_value=company_language,
@@ -494,15 +494,15 @@ async def get_tts_client(
         default_value=None,
     )
     if provider_name == "litserve":
-        model = _fallback_litserve_api_model_id(resolved=model, kind="tts")
+        entries = await litserve_catalog_entries()
+        model = _fallback_litserve_api_model_id(resolved=model, entries=entries.tts)
         if locale_for_tts:
-            infra = get_settings().provider_litserve.infra
             model = _pick_tts_api_model_for_synthesis_locale(
-                tts_models=infra.tts_models,
+                tts_models=list(entries.tts),
                 session_locale=locale_for_tts,
                 tier_model=model or "",
             )
-            model = _fallback_litserve_api_model_id(resolved=model, kind="tts")
+            model = _fallback_litserve_api_model_id(resolved=model, entries=entries.tts)
     voice = _resolve_optional_str(
         override_value=override.voice,
         company_value=company_row.voice if company_row else None,
@@ -591,7 +591,8 @@ async def get_vad_client(
         default_value=cfg.default_model,
     )
     if provider_name == "litserve":
-        model = _fallback_litserve_api_model_id(resolved=model, kind="vad")
+        entries = await litserve_catalog_entries()
+        model = _fallback_litserve_api_model_id(resolved=model, entries=entries.vad)
     sample_rate = _resolve_int(
         override_value=override.sample_rate,
         company_value=None,

@@ -259,12 +259,11 @@ export class PlatformBottomSheet extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('keydown', this._boundEscape);
+        this.useDomEvent(document, 'keydown', this._boundEscape);
     }
 
     override disconnectedCallback(): void {
         super.disconnectedCallback();
-        document.removeEventListener('keydown', this._boundEscape);
         // Лист удаляется из DOM (через el.remove() в PlatformBottomSheetStack либо
         // переезжает на портал) — оба случая допустимы. Восстанавливать предка не нужно:
         // когда PlatformBottomSheetStack снимает лист, обратное вкорневление в стек

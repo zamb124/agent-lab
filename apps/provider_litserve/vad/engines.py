@@ -1,7 +1,7 @@
 """Движок для локального VAD в provider_litserve.
 
 Список доступных моделей и их параметры (``sample_rate``, ``threshold``)
-берутся из ``cfg.vad_models``. Дефолт — ``cfg.vad_default_api_model_id``.
+берутся из ``cfg.vad_models``. Дефолт — самая старая ready-запись каталога.
 
 Бэкенд по умолчанию — Silero VAD. При расширении ``cfg.vad_models`` другими
 моделями сюда подключаются их адаптеры — диспатч по ``api_model_id``.
@@ -18,11 +18,7 @@ from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
 from silero_vad import get_speech_timestamps, load_silero_vad
 
-from apps.provider_litserve.model_registry import find_vad_entry
-from apps.provider_litserve.runtime_models import (
-    allowed_api_model_ids,
-    resolve_hf_model_id,
-)
+from apps.provider_litserve.catalog import ModelCatalog
 from core.config.models import (
     ProviderLitserveInfraConfig,
     ProviderLitserveVADModelEntry,
@@ -121,7 +117,7 @@ def parse_vad_body(
     if requested_model == "":
         raise WsCommandError(
             "unprocessable",
-            "VAD: model is required (explicitly or vad_default_api_model_id in config)",
+            "VAD: model is required (explicitly or default catalog entry)",
             error_code="ws_invalid_payload",
         )
 
@@ -150,10 +146,11 @@ def parse_vad_body(
 
 
 class LocalVADEngine:
-    """VAD-инференс. Параметры (sample_rate/threshold) — из cfg.vad_models."""
+    """VAD-инференс. Параметры (sample_rate/threshold) — из ``ModelCatalog``."""
 
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         self._cfg: ProviderLitserveInfraConfig = cfg
+        self._catalog: ModelCatalog = catalog
         self._models: dict[str, tuple[SileroVADModel, SpeechTimestampGetter]] = {}
         self._device: str = "cpu"
 
@@ -161,16 +158,11 @@ class LocalVADEngine:
         self._device = device or "cpu"
 
     def _resolve_entry(self, requested_api_model_id: str) -> ProviderLitserveVADModelEntry:
-        allowed = allowed_api_model_ids("vad", self._cfg)
-        hf = resolve_hf_model_id("vad", requested_api_model_id, self._cfg)
-        if hf is None:
-            raise ValueError(
-                f"VAD: unknown model {requested_api_model_id!r}; available: {sorted(allowed)}"
-            )
-        entry = find_vad_entry(self._cfg, requested_api_model_id)
+        entry = self._catalog.find_typed("vad", requested_api_model_id)
         if entry is None:
             raise ValueError(
-                f"VAD: for api_model_id={requested_api_model_id!r} has no entry in cfg.vad_models"
+                f"VAD: unknown model {requested_api_model_id!r}; "
+                + f"available: {sorted(self._catalog.allowed_ids('vad'))}"
             )
         return entry
 

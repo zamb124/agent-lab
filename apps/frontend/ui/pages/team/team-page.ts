@@ -18,7 +18,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
@@ -205,15 +205,7 @@ export class FrontendTeamPage extends PlatformPage {
                 font-size: var(--text-xs); color: var(--text-secondary);
             }
             .role-tag.owner { background: var(--accent); color: white; }
-
-            .empty {
-                padding: var(--space-8) var(--space-6);
-                text-align: center; color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: 1px dashed var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-            }
-            .empty .empty-title { color: var(--text-primary); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
+            platform-empty-state { margin-top: var(--space-4); }
         `,
         frontendIslandPageBodyStyles,
     ];
@@ -364,18 +356,20 @@ export class FrontendTeamPage extends PlatformPage {
 
     _renderEmpty() {
         return html`
-            <div class="empty">
-                <div class="empty-title">${this.t('team_page.empty_title')}</div>
-                <div>${this.t('team_page.empty_description')}</div>
-            </div>
+            <platform-empty-state
+                icon="users"
+                title=${this.t('team_page.empty_title')}
+                hint=${this.t('team_page.empty_description')}
+            ></platform-empty-state>
         `;
     }
 
     _renderFilterEmpty() {
         return html`
-            <div class="empty">
-                <div class="empty-title">${this.t('team_page.filter_empty')}</div>
-            </div>
+            <platform-empty-state
+                icon="search"
+                title=${this.t('team_page.filter_empty')}
+            ></platform-empty-state>
         `;
     }
 
@@ -464,7 +458,7 @@ export class FrontendTeamPage extends PlatformPage {
             ${this._renderInviteToolbar()}
             ${this._renderRoleFilters()}
             ${loading && members.length === 0
-                ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
+                ? html`<platform-empty-state loading></platform-empty-state>`
                 : members.length === 0
                     ? this._renderEmpty()
                     : this._renderMemberList(members)

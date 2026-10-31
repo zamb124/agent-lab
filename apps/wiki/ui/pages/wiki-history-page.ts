@@ -6,14 +6,14 @@
  */
 
 import { html, css } from 'lit';
-import type { PropertyValues } from '@platform/lib/lit-shim.js';
+import type { PropertyValues } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
@@ -313,7 +313,7 @@ export class WikiHistoryPage extends PlatformPage {
             return html`<div class="state">${this.t('history.current')}</div>`;
         }
         if (this._revisionRead.busy) {
-            return html`<div class="state"><glass-spinner size="sm"></glass-spinner></div>`;
+            return html`<div class="state"><platform-spinner size="sm"></platform-spinner></div>`;
         }
         return html`
             <platform-button variant="primary" size="sm" data-wiki-restore @click=${() => this._restore()}>

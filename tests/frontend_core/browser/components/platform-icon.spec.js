@@ -27,6 +27,19 @@ describe('platform-icon', () => {
         expect(el.shadowRoot.innerHTML).to.contain('id="x"');
     });
 
+    it('переключение name на уже кешированную иконку отображает новый svg', async () => {
+        const bus = getPlatformBus();
+        bus.dispatch(ICON_EVENTS.UI_LOADED, { name: 'plus', svg: '<svg id="plus"></svg>' });
+        bus.dispatch(ICON_EVENTS.UI_LOADED, { name: 'minus', svg: '<svg id="minus"></svg>' });
+        const el = await fixture(html`<platform-icon name="plus"></platform-icon>`);
+        await elementUpdated(el);
+        expect(el.shadowRoot.innerHTML).to.contain('id="plus"');
+        el.name = 'minus';
+        await elementUpdated(el);
+        expect(el.shadowRoot.innerHTML).to.contain('id="minus"');
+        expect(el.shadowRoot.innerHTML).to.not.contain('id="plus"');
+    });
+
     it('size меняет CSS-переменную', async () => {
         const el = await fixture(html`<platform-icon name="plus" size="32"></platform-icon>`);
         await elementUpdated(el);

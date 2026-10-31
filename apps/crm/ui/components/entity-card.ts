@@ -39,7 +39,8 @@ function textControlValue(event: Event): string {
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { fieldPillStyles } from '@platform/lib/styles/shared/field-pill.styles.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-work-item-badge.js';
@@ -1874,7 +1875,7 @@ export class CRMEntityCard extends PlatformElement {
                     </div>
                 `;
             }
-            return html`<div class="attrs-grid empty-section">${this.t('entity_modal.attrs_empty')}</div>`;
+            return html`<platform-empty-state icon="schema" title=${this.t('entity_modal.attrs_empty')}></platform-empty-state>`;
         }
         return html`
             <div class="attrs-grid">
@@ -1957,10 +1958,10 @@ export class CRMEntityCard extends PlatformElement {
     _renderTypeStep() {
         const items = this._entityTypes.items;
         if (this._entityTypes.loading && items.length === 0) {
-            return html`<div class="empty-hint"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (items.length === 0) {
-            return html`<div class="empty-hint">${this.t('entity_modal.types_empty')}</div>`;
+            return html`<platform-empty-state icon="columns" title=${this.t('entity_modal.types_empty')}></platform-empty-state>`;
         }
         return html`
             <div class="form-row">
@@ -2273,7 +2274,7 @@ export class CRMEntityCard extends PlatformElement {
     _renderRelationshipsList(options: { readOnly?: boolean } = {}): TemplateResult {
         const readOnly = options.readOnly === true;
         if (this._relationshipsData.length === 0) {
-            return html`<div class="empty-soft">${this.t('entity_modal.relationships_empty')}</div>`;
+            return html`<platform-empty-state icon="circular-connection" title=${this.t('entity_modal.relationships_empty')}></platform-empty-state>`;
         }
         const rows = this._neighborRowsFromLocalState();
         return html`
@@ -2430,7 +2431,7 @@ export class CRMEntityCard extends PlatformElement {
                     />
                 </div>
                 ${this._addRelSearching
-                    ? html`<div class="empty-soft">${this.t('entity_modal.searching')}</div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : nothing}
                 ${this._addRelSearchResults.length > 0
                     ? html`
@@ -2793,7 +2794,7 @@ export class CRMEntityCard extends PlatformElement {
 
     _renderRelated() {
         if (this._relatedOp.busy) {
-            return html`<div class="empty-soft"><glass-spinner size="sm"></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         const result = this._relatedOp.lastResult;
         const items = isPlainRecord(result) && Array.isArray(result.items) ? result.items : [];
@@ -2901,14 +2902,14 @@ export class CRMEntityCard extends PlatformElement {
         const entity = this._resolveEntity();
         if (!entity) {
             if (this.entityId && this._entities.loading) {
-                return html`<div class="loading-block"><glass-spinner></glass-spinner></div>`;
+                return html`<platform-empty-state loading></platform-empty-state>`;
             }
             return html`
-                <div class="empty">
-                    <platform-icon name="folder" size="48"></platform-icon>
-                    <div class="empty-title">${this.t('entity_card.empty_pick_title')}</div>
-                    <div class="empty-subtitle">${this.t('entity_card.empty_pick_subtitle')}</div>
-                </div>
+                <platform-empty-state
+                    icon="folder"
+                    title=${this.t('entity_card.empty_pick_title')}
+                    hint=${this.t('entity_card.empty_pick_subtitle')}
+                ></platform-empty-state>
             `;
         }
 
@@ -2972,7 +2973,7 @@ export class CRMEntityCard extends PlatformElement {
                     ${this._grantsExpanded
                         ? html`
                             <div class="collapsible-content">
-                                <div class="empty-soft"><glass-spinner size="sm"></glass-spinner></div>
+                                <platform-empty-state loading></platform-empty-state>
                             </div>
                         `
                         : nothing}
@@ -2996,7 +2997,7 @@ export class CRMEntityCard extends PlatformElement {
         }
         const type = this._selectedType();
         if (!type) {
-            return html`<div class="scroll"><div class="empty-hint">${this.t('entity_modal.type_missing')}</div></div>`;
+            return html`<div class="scroll"><platform-empty-state icon="alert-triangle" title=${this.t('entity_modal.type_missing')}></platform-empty-state></div>`;
         }
         const form = this._createForm;
         const draft = form.draft;
@@ -3081,7 +3082,7 @@ export class CRMEntityCard extends PlatformElement {
         }
         const type = this._selectedType();
         if (!type) {
-            return html`<div class="scroll"><div class="empty-hint">${this.t('entity_modal.type_missing')}</div></div>`;
+            return html`<div class="scroll"><platform-empty-state icon="alert-triangle" title=${this.t('entity_modal.type_missing')}></platform-empty-state></div>`;
         }
         const draft = this._createForm.draft;
         const syntheticEntity = {
@@ -3221,13 +3222,13 @@ export class CRMEntityCard extends PlatformElement {
 
     _renderEditBody() {
         if (this._loadingCard && !this._entityData) {
-            return html`<div class="loading-block"><glass-spinner></glass-spinner></div>`;
+            return html`<div class="loading-block"><platform-spinner></platform-spinner></div>`;
         }
         if (this._loadError && !this._entityData) {
             return html`<div class="error-block">${this._loadError}</div>`;
         }
         if (!this._entityData) {
-            return html`<div class="loading-block"><glass-spinner></glass-spinner></div>`;
+            return html`<div class="loading-block"><platform-spinner></platform-spinner></div>`;
         }
         const draft = this._editForm.draft;
         const showRelAtt = this.layoutVariant === 'full';

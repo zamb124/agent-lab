@@ -9,6 +9,8 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import './flows-base-resource-editor.js';
 import { isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { dataTableCreateRequest } from '../../_helpers/flows-resource-defaults.js';
@@ -310,7 +312,7 @@ export class FlowsDataTableResourceEditor extends PlatformElement {
                     ${this.t('data_table_resource_editor.open')}
                 </platform-button>
                 ${this._snapshotOp.busy ? html`
-                    <p class="status">${this.t('data_table_resource_editor.schema_loading')}</p>
+                    <p class="status"><platform-spinner size="xs"></platform-spinner> ${this.t('data_table_resource_editor.schema_loading')}</p>
                 ` : totals.tables > 0 ? html`
                     <div class="stats">
                         <span class="stat">
@@ -372,11 +374,7 @@ export class FlowsDataTableResourceEditor extends PlatformElement {
 
     _renderUnbound() {
         return html`
-            <div class="empty">
-                <div class="empty-lead">
-                    <platform-icon name="table" size="28"></platform-icon>
-                    <p class="empty-title">${this.t('data_table_resource_editor.empty_title')}</p>
-                </div>
+            <platform-empty-state icon="table" title=${this.t('data_table_resource_editor.empty_title')}>
                 <div class="actions">
                     <platform-field
                         type="string"
@@ -403,7 +401,7 @@ export class FlowsDataTableResourceEditor extends PlatformElement {
                     .placeholder=${this.t('data_table_resource_editor.file_id_placeholder')}
                     @change=${this._onFileIdChange}
                 ></platform-field>
-            </div>
+            </platform-empty-state>
         `;
     }
 

@@ -2,7 +2,7 @@
  * Безопасный рендер HTML-письма: CID, remote images, wrap+CSP.
  * Санитайзер (DOMPurify) — только в браузере.
  */
-import DOMPurify from '../../assets/js/dompurify/purify.es.mjs';
+import DOMPurify from 'dompurify';
 
 import { isPlainRecord } from '../events/payload.js';
 import { escapeHtml } from './escape-html.js';

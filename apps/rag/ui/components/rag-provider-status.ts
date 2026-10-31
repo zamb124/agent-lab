@@ -1,7 +1,5 @@
-// ui-canon: allow custom_primitive — доменная панель статуса провайдера в sidebar,
-// не примитив UI Kit (композиция PlatformElement + platform-icon + glass-spinner).
 /**
- * RagProviderBadge — компактный бейдж с активным RAG-провайдером.
+ * RagProviderStatus — компактная панель активного RAG-провайдера.
  *
  * Используется в sidebar-е. Источник правды — slice фабрики `rag/providers`
  * (`useOp`, поле `state.current` обновляется из `extraReducer` фабрики
@@ -13,9 +11,9 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 
-export class RagProviderBadge extends PlatformElement {
+export class RagProviderStatus extends PlatformElement {
     static i18nNamespace = 'rag';
 
     private _providers: OpController;
@@ -71,7 +69,7 @@ export class RagProviderBadge extends PlatformElement {
             <div class="badge">
                 <div class="label">${this.t('sidebar.provider_label')}</div>
                 ${loading
-                    ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : html`
                         <div class="provider-info">
                             <span class="status"></span>
@@ -83,4 +81,4 @@ export class RagProviderBadge extends PlatformElement {
     }
 }
 
-customElements.define('rag-provider-badge', RagProviderBadge);
+customElements.define('rag-provider-status', RagProviderStatus);

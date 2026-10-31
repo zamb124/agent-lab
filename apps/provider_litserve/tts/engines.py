@@ -2,7 +2,7 @@
 
 Параметры моделей (``silero_bundle``, ``silero_language``, ``voice``, ``sample_rate``,
 ``hf_model_id``, опциональная ``revision``) берутся из ``cfg.tts_models``. Дефолт —
-``cfg.tts_default_api_model_id``. Никаких хардкодов выбранной модели в коде.
+самой старой ready-записи каталога. Никаких хардкодов выбранной модели в коде.
 
 Бэкенд — Silero TTS (``silero.silero_tts`` + ``apply_tts``) по ``api_model_id`` из конфига.
 Один HTTP-запрос может синтезировать длинный текст: строка режется на сегменты (до 900 символов,
@@ -22,11 +22,7 @@ from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
 from silero import silero_tts
 
-from apps.provider_litserve.model_registry import find_tts_entry
-from apps.provider_litserve.runtime_models import (
-    allowed_api_model_ids,
-    resolve_hf_model_id,
-)
+from apps.provider_litserve.catalog import ModelCatalog
 from core.config.models import (
     SILERO_V5_RU_SPEAKERS_BY_BUNDLE,
     ProviderLitserveInfraConfig,
@@ -116,7 +112,7 @@ def parse_tts_body(
     if requested_model == "":
         raise WsCommandError(
             "unprocessable",
-            "TTS: model is required (explicitly in payload or tts_default_api_model_id in config)",
+            "TTS: model is required (explicitly or default catalog entry)",
             error_code="ws_invalid_payload",
         )
 
@@ -222,10 +218,11 @@ def _split_text_for_silero_apply(text: str, *, max_chars: int) -> list[str]:
 
 
 class LocalTTSEngine:
-    """Multi-model TTS: загрузка Silero по записи ``cfg.tts_models``."""
+    """Multi-model TTS: модели и их параметры — из ``ModelCatalog``."""
 
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         self._cfg: ProviderLitserveInfraConfig = cfg
+        self._catalog: ModelCatalog = catalog
         self._models: dict[tuple[str, str, str, str], SileroTTSModel] = {}
         self._device: str = "cpu"
 
@@ -243,19 +240,11 @@ class LocalTTSEngine:
         return d
 
     def _resolve_entry(self, requested_api_model_id: str) -> ProviderLitserveTTSModelEntry:
-        allowed = allowed_api_model_ids("tts", self._cfg)
-        hf = resolve_hf_model_id("tts", requested_api_model_id, self._cfg)
-        if hf is None:
-            message = (
-                f"TTS: неизвестная модель {requested_api_model_id!r}; "
-                + f"доступные: {sorted(allowed)}"
-            )
-            raise ValueError(message)
-        entry = find_tts_entry(self._cfg, requested_api_model_id)
+        entry = self._catalog.find_typed("tts", requested_api_model_id)
         if entry is None:
             message = (
-                f"TTS: для api_model_id={requested_api_model_id!r} нет entry в cfg.tts_models "
-                + "(должна быть синхронизация с реестром)"
+                f"TTS: неизвестная модель {requested_api_model_id!r}; "
+                + f"доступные: {sorted(self._catalog.allowed_ids('tts'))}"
             )
             raise ValueError(message)
         return entry
@@ -293,13 +282,13 @@ class LocalTTSEngine:
     def warmup_pipeline(self, api_model_id: str | None) -> TTSWarmupInfo:
         """Загрузить веса Silero TTS без синтеза речи (только torch-модель).
 
-        Вызывается из ``TTSLitAPI.setup`` для ``tts_default_api_model_id`` при старте воркера.
+        Вызывается из ``TTSLitAPI.setup`` для дефолтной модели каталога при старте воркера.
         ``api_model_id`` — api id из ``cfg.tts_models``; ``None`` — дефолт из конфига.
         """
-        mid = (api_model_id or "").strip() or self._cfg.tts_default_api_model_id.strip()
+        mid = (api_model_id or "").strip() or self._catalog.default_api_model_id("tts")
         if mid == "":
             raise ValueError(
-                "TTS warmup: set tts_default_api_model_id and a non-empty tts_models list in infra"
+                "TTS warmup: no ready tts entries in catalog"
             )
         entry = self._resolve_entry(mid)
         key = self._cache_key(entry)
@@ -418,21 +407,21 @@ class LocalTTSEngine:
 
 
 _shared_tts_engine: LocalTTSEngine | None = None
-_shared_tts_engine_cfg_id: int | None = None
+_shared_tts_engine_key: tuple[int, int] | None = None
 
 
-def get_local_tts_engine(cfg: ProviderLitserveInfraConfig) -> LocalTTSEngine:
+def get_local_tts_engine(cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> LocalTTSEngine:
     """Один ``LocalTTSEngine`` на процесс воркера LitServe (кэш моделей общий)."""
-    global _shared_tts_engine, _shared_tts_engine_cfg_id
-    cid = id(cfg)
-    if _shared_tts_engine is None or _shared_tts_engine_cfg_id != cid:
-        _shared_tts_engine = LocalTTSEngine(cfg)
-        _shared_tts_engine_cfg_id = cid
+    global _shared_tts_engine, _shared_tts_engine_key
+    key = (id(cfg), id(catalog))
+    if _shared_tts_engine is None or _shared_tts_engine_key != key:
+        _shared_tts_engine = LocalTTSEngine(cfg, catalog)
+        _shared_tts_engine_key = key
     return _shared_tts_engine
 
 
 def reset_local_tts_engine_for_tests() -> None:
     """Только для тестов: сбросить singleton (изолировать процессы)."""
-    global _shared_tts_engine, _shared_tts_engine_cfg_id
+    global _shared_tts_engine, _shared_tts_engine_key
     _shared_tts_engine = None
-    _shared_tts_engine_cfg_id = None
+    _shared_tts_engine_key = None

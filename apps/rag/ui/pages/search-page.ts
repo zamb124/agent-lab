@@ -15,6 +15,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/rag/platform-rag-retrieval-panel.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 interface RagSearchResultItem {
     document_name?: unknown;
@@ -102,12 +103,7 @@ export class SearchPage extends PlatformPage {
                 font-size: var(--text-xs); font-weight: var(--font-semibold);
             }
             .result-content { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6; }
-            .empty {
-                flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-                padding: var(--space-12); text-align: center;
-            }
-            .empty-text { font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--text-primary); margin-bottom: var(--space-2); }
-            .empty-hint { font-size: var(--text-sm); color: var(--text-tertiary); }
+            platform-empty-state { flex: 1; }
         `,
     ];
 
@@ -309,11 +305,12 @@ export class SearchPage extends PlatformPage {
                 ` : ''}
             </form>
 
-            ${hasResults ? this._renderResults() : (loading ? '' : html`
-                <div class="empty">
-                    <div class="empty-text">${this.t('search_view.empty_no_results_title')}</div>
-                    <div class="empty-hint">${this.t('search_view.empty_hint')}</div>
-                </div>
+            ${hasResults ? this._renderResults() : (loading ? html`<platform-empty-state loading></platform-empty-state>` : html`
+                <platform-empty-state
+                    icon="search"
+                    title=${this.t('search_view.empty_no_results_title')}
+                    hint=${this.t('search_view.empty_hint')}
+                ></platform-empty-state>
             `)}
         `;
     }

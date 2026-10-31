@@ -19,6 +19,7 @@ import '../components/worktracker-icon-action.js';
 import '../components/worktracker-list-section.js';
 import '../components/worktracker-page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 function eventRecord(payload: unknown): Record<string, unknown> | null {
     return isPlainRecord(payload) ? payload : null;
@@ -297,10 +298,7 @@ export class WorktrackerInboxPage extends PlatformPage {
 
     private _renderEmpty(messageKey: string) {
         return html`
-            <div class="wt-empty">
-                <platform-icon class="wt-empty-icon" name="inbox" size="48"></platform-icon>
-                <p class="wt-empty-title">${this.t(messageKey)}</p>
-            </div>
+            <platform-empty-state icon="inbox" title=${this.t(messageKey)}></platform-empty-state>
         `;
     }
 
@@ -310,15 +308,13 @@ export class WorktrackerInboxPage extends PlatformPage {
         }
         if (this._memberQueueIds.length === 0) {
             return html`
-                <div class="wt-empty">
-                    <platform-icon class="wt-empty-icon" name="inbox" size="48"></platform-icon>
-                    <p class="wt-empty-title">${this.t('inbox_page.empty_no_queue_membership')}</p>
+                <platform-empty-state icon="inbox" title=${this.t('inbox_page.empty_no_queue_membership')}>
                     <button
                         type="button"
                         class="btn btn-primary queue-empty-cta"
                         @click=${() => this.navigate('queues', {})}
                     >${this.t('inbox_page.go_to_queues')}</button>
-                </div>
+                </platform-empty-state>
             `;
         }
         if (this._queueItems.length > 0) {

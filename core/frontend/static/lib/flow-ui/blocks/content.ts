@@ -1,7 +1,7 @@
 /** Контент: heading, text, image, video, audio, code, badge, alert, metric, progress, status, empty_state, divider. */
 
-import { unsafeHTML } from '../../../assets/js/lit/directives/unsafe-html.min.js';
-import { html, nothing } from '../../lit-shim.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import { html, nothing } from 'lit';
 import { flowUIMediaSrc } from '../runtime/agent-identity-image.js';
 import { blockText as text, blockUrl } from '../runtime/templating.js';
 import { markdownToHtml } from '../../utils/markdown.js';

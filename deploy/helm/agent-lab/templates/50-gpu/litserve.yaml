@@ -97,18 +97,16 @@ spec:
               value: 0.0.0.0
             - name: PROVIDER_LITSERVE__INFRA__GATEWAY_PORT
               value: {{ .Values.litserve.port | quote }}
-            - name: PROVIDER_LITSERVE__INFRA__MODEL_ID
-              value: {{ .Values.litserve.modelId | quote }}
+            - name: PROVIDER_LITSERVE__INFRA__RERANK_MODEL_ID
+              value: {{ .Values.litserve.rerankModelId | quote }}
             - name: PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID
               value: {{ .Values.litserve.embeddingModelId | quote }}
-            - name: PROVIDER_LITSERVE__INFRA__SQLITE_PATH
-              value: /var/lib/provider_litserve/registry.db
-            - name: PROVIDER_LITSERVE__INFRA__STT_DEFAULT_API_MODEL_ID
-              value: {{ .Values.litserve.sttDefaultApiModelId | quote }}
-            - name: PROVIDER_LITSERVE__INFRA__TTS_DEFAULT_API_MODEL_ID
-              value: {{ .Values.litserve.ttsDefaultApiModelId | quote }}
-            - name: PROVIDER_LITSERVE__INFRA__VAD_DEFAULT_API_MODEL_ID
-              value: {{ .Values.litserve.vadDefaultApiModelId | quote }}
+            - name: LIT_SERVER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: lit-server-api-key
+                  optional: true
             - name: PROVIDER_LITSERVE__INFRA__EMBEDDING_USE_BF16
               value: {{ .Values.litserve.embeddingUseBf16 | default "true" | quote }}
             - name: HF_HOME
@@ -127,8 +125,6 @@ spec:
             {{- include "agentlab.confVolumeMount" . | nindent 12 }}
             - name: model-cache
               mountPath: /root/.cache/huggingface
-            - name: registry-data
-              mountPath: /var/lib/provider_litserve
           livenessProbe:
             httpGet:
               path: /health
@@ -168,6 +164,4 @@ spec:
         - name: model-cache
           persistentVolumeClaim:
             claimName: litserve-model-cache
-        - name: registry-data
-          emptyDir: {}
 {{- end }}

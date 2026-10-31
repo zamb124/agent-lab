@@ -28,6 +28,10 @@ import httpx2
 from pydantic import BaseModel, Field
 
 from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
+from core.config.openai_v1_base_url import (
+    provider_litserve_api_key,
+    provider_litserve_service_url,
+)
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.http import get_httpx_client
 from core.logging import get_logger
@@ -158,6 +162,7 @@ class LitserveTTSClient(BaseTTSClient):
         default_response_format: str,
         default_sample_rate: int,
         timeout: float,
+        api_key: str | None = None,
     ) -> None:
         if base_url == "":
             raise ValueError("TTS litserve base_url cannot be empty.")
@@ -176,6 +181,7 @@ class LitserveTTSClient(BaseTTSClient):
         self._default_format: str = default_response_format
         self._default_sample_rate: int = default_sample_rate
         self._timeout: float = timeout
+        self._api_key: str | None = api_key
 
     @override
     async def synthesize(
@@ -209,8 +215,11 @@ class LitserveTTSClient(BaseTTSClient):
         if chosen_sample_rate:
             payload["sample_rate"] = chosen_sample_rate
 
+        headers: dict[str, str] = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         async with get_httpx_client(timeout=self._timeout) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, json=payload, headers=headers)
         if response.is_error:
             detail = _tts_upstream_error_summary(response)
             logger.warning(
@@ -504,8 +513,11 @@ class TTSClientFactory:
                     "TTS litserve: model is set neither in override nor in "
                     + "`voice.tts.default_model`."
                 )
+            resolved_base_url = backend.base_url
+            if resolved_base_url is None:
+                resolved_base_url = provider_litserve_service_url()
             return LitserveTTSClient(
-                base_url=backend.base_url,
+                base_url=resolved_base_url,
                 model=chosen_model,
                 default_voice=default_voice or cfg.default_voice,
                 default_response_format=(
@@ -513,6 +525,7 @@ class TTSClientFactory:
                 ),
                 default_sample_rate=default_sample_rate or cfg.default_sample_rate,
                 timeout=timeout_s if timeout_s is not None else backend.timeout_s,
+                api_key=provider_litserve_api_key(),
             )
         if provider_name == "cloud_ru":
             backend = cfg.cloud_ru

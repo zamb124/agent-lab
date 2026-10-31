@@ -4,7 +4,7 @@
  */
 
 import { isPlainRecord } from '../../events/payload.js';
-import { html } from '../../lit-shim.js';
+import { html } from 'lit';
 import { blockText as text } from '../runtime/templating.js';
 import { flowUIText } from '../utils/text.js';
 import type { FlowUiBlock, FlowUiBlockRenderer, FlowUiRenderContext } from '../runtime/flow-ui-store.js';

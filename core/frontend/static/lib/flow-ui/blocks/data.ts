@@ -1,7 +1,7 @@
 /** Данные: data_table, chart (SVG без библиотек), json_view, file_card, file_list. */
 
 import { isPlainRecord } from '../../events/payload.js';
-import { html, nothing } from '../../lit-shim.js';
+import { html, nothing } from 'lit';
 import { formatFileSize } from '../../utils/format-file-size.js';
 import { blockText as text, valueAtPath } from '../runtime/templating.js';
 import { flowUIGlyph } from '../utils/glyph.js';

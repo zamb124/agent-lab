@@ -2,61 +2,19 @@
  * platform-mermaid-host — Mermaid SVG в Lit (lazy script, antiscript, platform theme).
  */
 import { html, css } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
-const MERMAID_URL = '/static/core/assets/js/mermaid/mermaid.min.js';
-
-interface MermaidApi {
-    initialize(config: Record<string, unknown>): void;
-    render(id: string, source: string): Promise<{ svg: string }>;
-}
+type MermaidApi = typeof import('mermaid').default;
 
 let _mermaidPromise: Promise<MermaidApi> | null = null;
 let _mermaidInitialized = false;
 let _renderSeq = 0;
 
-function isMermaidApi(value: unknown): value is MermaidApi {
-    if (typeof value !== 'object' || value === null) return false;
-    if (!('initialize' in value) || !('render' in value)) return false;
-    return typeof value.initialize === 'function' && typeof value.render === 'function';
-}
-
-function mermaidGlobal(win: Window): MermaidApi | null {
-    const host: unknown = win;
-    if (typeof host !== 'object' || host === null || !('mermaid' in host)) return null;
-    const api = host.mermaid;
-    if (api === undefined) return null;
-    if (!isMermaidApi(api)) {
-        throw new Error('mermaid global is not the Mermaid API');
-    }
-    return api;
-}
-
 function loadMermaid(): Promise<MermaidApi> {
-    const ready = mermaidGlobal(window);
-    if (ready !== null) {
-        return Promise.resolve(ready);
+    if (!_mermaidPromise) {
+        _mermaidPromise = import('mermaid').then((mod) => mod.default);
     }
-    if (_mermaidPromise) {
-        return _mermaidPromise;
-    }
-    _mermaidPromise = new Promise<MermaidApi>((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = MERMAID_URL;
-        script.async = true;
-        script.dataset.platformMermaid = '1';
-        script.onload = () => {
-            const loaded = mermaidGlobal(window);
-            if (loaded === null) {
-                reject(new Error('mermaid global missing after load'));
-                return;
-            }
-            resolve(loaded);
-        };
-        script.onerror = () => reject(new Error(`mermaid load failed: ${MERMAID_URL}`));
-        document.head.appendChild(script);
-    });
     return _mermaidPromise;
 }
 

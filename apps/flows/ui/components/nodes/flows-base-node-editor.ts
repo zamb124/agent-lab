@@ -21,7 +21,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
@@ -32,6 +32,7 @@ import '@platform/lib/components/platform-json-editor.js';
 import { FlowsNodeRunControl } from '../flows-node-run-control.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/fields/platform-field-shell.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { fieldPillStyles } from '@platform/lib/styles/shared/field-pill.styles.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import {
@@ -913,7 +914,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             if (typeof op.error === 'string' && op.error.length > 0) {
                 return html`<div class="field-hint">${op.error}</div>`;
             }
-            return html`<glass-spinner></glass-spinner>`;
+            return html`<platform-spinner></platform-spinner>`;
         }
         return html`
             <platform-field
@@ -1381,7 +1382,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                     <span class="field-label">${this.t('base_node_editor.max_visits_per_run')}</span>
                     ${typeof this._executionLimitsOp.error === 'string' && this._executionLimitsOp.error.length > 0
                         ? html`<div class="field-hint">${this._executionLimitsOp.error}</div>`
-                        : html`<glass-spinner></glass-spinner>`}
+                        : html`<platform-spinner></platform-spinner>`}
                 </div>
                 ` : html`
                 <div class="field">
@@ -1710,13 +1711,13 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 </div>
             `;
         }
-        return html`<div class="dataflow-empty">${this.t('base_node_editor.dataflow_inputs_empty')}</div>`;
+        return html`<platform-empty-state title=${this.t('base_node_editor.dataflow_inputs_empty')}></platform-empty-state>`;
     }
 
     _renderDataflowWrites(writes: unknown) {
         const visible = Array.isArray(writes) ? writes.slice(0, 10) : [];
         if (visible.length === 0) {
-            return html`<div class="dataflow-empty">${this.t('base_node_editor.dataflow_outputs_empty')}</div>`;
+            return html`<platform-empty-state title=${this.t('base_node_editor.dataflow_outputs_empty')}></platform-empty-state>`;
         }
         return html`
             <div class="dataflow-list">

@@ -469,8 +469,6 @@ export class FrontendApp extends PlatformApp {
                 hasBundle: !state.i18n.loading && isPlainRecord(landing),
             };
         });
-        this._frontendMql = null;
-        this._onFrontendMobileMql = null;
         this._frontendMobile =
             typeof window !== 'undefined' &&
             typeof window.matchMedia === 'function' &&
@@ -483,8 +481,6 @@ export class FrontendApp extends PlatformApp {
     private _companiesSel: SelectController<CompanyRecord[]>;
     private _companiesLoadingSel: SelectController<boolean>;
     private _i18nPublicMetaSel: SelectController<{ locale: string; hasBundle: boolean }>;
-    private _frontendMql: MediaQueryList | null = null;
-    private _onFrontendMobileMql: (() => void) | null = null;
     private _frontendMobile: unknown;
 
 
@@ -494,16 +490,15 @@ export class FrontendApp extends PlatformApp {
             return;
         }
         const mql = window.matchMedia('(max-width: 767px)');
-        this._frontendMql = mql;
-        this._onFrontendMobileMql = () => {
+        const onFrontendMobileMql = () => {
             const next = mql.matches;
             if (next !== this._frontendMobile) {
                 this._frontendMobile = next;
                 this.requestUpdate();
             }
         };
-        this._frontendMql.addEventListener('change', this._onFrontendMobileMql);
-        const next = this._frontendMql.matches;
+        this.useDomEvent(mql, 'change', onFrontendMobileMql);
+        const next = mql.matches;
         if (next !== this._frontendMobile) {
             this._frontendMobile = next;
             this.requestUpdate();
@@ -519,7 +514,7 @@ export class FrontendApp extends PlatformApp {
                 min-height: 100vh;
                 background: var(--bg-gradient);
             }
-            :host([landing]) { background: var(--landing-bg, var(--bg-gradient)); }
+            :host([landing]) { background: var(--marketing-page-bg); }
             .console {
                 display: flex;
                 width: 100%;
@@ -642,9 +637,6 @@ export class FrontendApp extends PlatformApp {
     }
 
     override disconnectedCallback(): void {
-        if (this._frontendMql && this._onFrontendMobileMql) {
-            this._frontendMql.removeEventListener('change', this._onFrontendMobileMql);
-        }
         super.disconnectedCallback();
         if (typeof document !== 'undefined' && document.documentElement) {
             document.documentElement.classList.remove('frontend-landing-public');

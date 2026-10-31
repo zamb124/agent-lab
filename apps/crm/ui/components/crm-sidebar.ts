@@ -295,7 +295,7 @@ export class CRMSidebar extends PlatformElement {
     override connectedCallback(): void {
         super.connectedCallback();
         if (typeof window !== 'undefined') {
-            window.addEventListener('popstate', this._onPopState);
+            this.useDomEvent(window, 'popstate', this._onPopState);
         }
         this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => this.requestUpdate());
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
@@ -307,12 +307,6 @@ export class CRMSidebar extends PlatformElement {
         this._reloadEntityTypesForSidebar();
     }
 
-    override disconnectedCallback(): void {
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('popstate', this._onPopState);
-        }
-        super.disconnectedCallback();
-    }
 
     _closeMobileNav() {
         const shell = this.renderRoot.querySelector('platform-service-sidebar');

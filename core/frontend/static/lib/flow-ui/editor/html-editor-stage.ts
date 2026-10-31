@@ -3,7 +3,7 @@
  * Viewport / theme / Reload живут на тулбаре превью, не в шапке модалки.
  */
 
-import { css, html, nothing, type TemplateResult } from '../../lit-shim.js';
+import { css, html, nothing, type TemplateResult } from 'lit';
 import { HTML_EDITOR_SNIPPETS, HTML_EDITOR_VIEWPORTS } from './html-editor-api.js';
 import type { HtmlEditorT } from './html-editor-inspector.js';
 

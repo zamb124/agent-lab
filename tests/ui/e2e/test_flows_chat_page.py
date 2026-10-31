@@ -1,4 +1,4 @@
-"""Playwright E2E: flows SPA chat-page через `<platform-flow-ui>`."""
+"""Playwright E2E: flows SPA flows-chat-page через `<platform-flow-ui>`."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
 
 @pytest.fixture
 def flows_chat_browser_stack_ready(flows_service, taskiq_worker):
-    """HTTP flows + TaskIQ worker перед browser-сценарием chat-page."""
+    """HTTP flows + TaskIQ worker перед browser-сценарием flows-chat-page."""
     _ = flows_service, taskiq_worker
     yield
 
@@ -85,7 +85,7 @@ async def test_flows_chat_page_send_and_stream_reply(
         await flows_open_chat_page(page, flows_ui, flow_id)
         await flows_chat_send_message(page, user_line)
         await expect(
-            page.locator("chat-page platform-flow-ui .bubble.user").filter(has_text=user_line)
+            page.locator("flows-chat-page platform-flow-ui .bubble.user").filter(has_text=user_line)
         ).to_be_visible(timeout=5_000)
 
     await expect(page.get_by_text(f"chat-ok:{user_line}", exact=True)).to_be_visible(timeout=120_000)
@@ -112,7 +112,7 @@ async def test_flows_chat_page_task_feed_after_reply(
     await flows_chat_send_message(page, user_line)
     await expect(page.get_by_text(f"chat-ok:{user_line}", exact=True)).to_be_visible(timeout=120_000)
     await expect(
-        page.locator("chat-page platform-flow-ui .task-feed, chat-page platform-flow-ui .task").first
+        page.locator("flows-chat-page platform-flow-ui .task-feed, flows-chat-page platform-flow-ui .task").first
     ).to_be_visible(timeout=30_000)
 
 

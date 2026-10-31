@@ -476,8 +476,6 @@ export class FlowsEditorHeader extends PlatformElement {
     private _problemsAnchor: HTMLElement | null;
     private _outsideCloseArmed: boolean;
     private _outsideCloseFrame: number | null;
-    private _editorMql: MediaQueryList | null;
-    private _onEditorMobileMql: (() => void) | null;
     private _onDocPointer: (event: Event) => void;
     private _overflowPortalHost: HTMLElement | null;
     private _problemsPortalHost: HTMLElement | null;
@@ -500,8 +498,6 @@ export class FlowsEditorHeader extends PlatformElement {
         this._problemsAnchor = null;
         this._outsideCloseArmed = false;
         this._outsideCloseFrame = null;
-        this._editorMql = null;
-        this._onEditorMobileMql = null;
         this._overflowPortalHost = null;
         this._problemsPortalHost = null;
         this._onDocPointer = (e: Event) => {
@@ -549,22 +545,17 @@ export class FlowsEditorHeader extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        document.addEventListener('pointerdown', this._onDocPointer);
-        if (typeof window !== 'undefined') {
-        }
+        this.useDomEvent(document, 'pointerdown', this._onDocPointer);
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
             return;
         }
         const editorMql = window.matchMedia('(max-width: 767px)');
-        this._editorMql = editorMql;
-        const onEditorMobileMql = () => {
+        this.useDomEvent(editorMql, 'change', () => {
             const nextMobile = editorMql.matches;
             if (nextMobile !== this._isMobile) {
                 this._isMobile = nextMobile;
             }
-        };
-        this._onEditorMobileMql = onEditorMobileMql;
-        editorMql.addEventListener('change', onEditorMobileMql);
+        });
         const next = editorMql.matches;
         if (next !== this._isMobile) {
             this._isMobile = next;
@@ -572,14 +563,6 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     override disconnectedCallback(): void {
-        const editorMql = this._editorMql;
-        const onEditorMobileMql = this._onEditorMobileMql;
-        if (editorMql !== null && onEditorMobileMql !== null) {
-            editorMql.removeEventListener('change', onEditorMobileMql);
-        }
-        document.removeEventListener('pointerdown', this._onDocPointer);
-        if (typeof window !== 'undefined') {
-        }
         if (this._outsideCloseFrame !== null) {
             cancelAnimationFrame(this._outsideCloseFrame);
             this._outsideCloseFrame = null;

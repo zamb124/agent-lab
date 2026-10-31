@@ -31,23 +31,16 @@ core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" /
 app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
 ```
 
-### 2. Import Map в HTML
+### 2. Стили и бандл в HTML
+
+Зависимости — npm-пакеты, собранные esbuild в `ui-dist/`; import map
+не нужен: bare-спецификаторы в бандле отсутствуют, lazy-части —
+динамические чанки `chunks/`.
 
 ```html
-<script type="importmap">
-{
-    "imports": {
-        "lit": "/static/core/assets/js/lit/lit.min.js",
-        "lit/decorators.js": "/static/core/assets/js/lit/decorators.min.js",
-        "lit/directives/class-map.js": "/static/core/assets/js/lit/directives/class-map.min.js",
-        "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
-        "@platform/lib/": "/static/core/lib/"
-    }
-}
-</script>
-
 <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
 <link rel="stylesheet" href="/static/core/assets/css/reset.css">
+<script type="module" src="/<svc>/ui/static/index.js"></script>
 ```
 
 ### 3. Использование компонентов

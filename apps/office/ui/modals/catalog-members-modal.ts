@@ -15,7 +15,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -213,10 +213,10 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
     _renderMembers() {
         const items = this._activeMembers();
         if (this._members.busy && items.length === 0) {
-            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         if (items.length === 0) {
-            return html`<div class="empty">—</div>`;
+            return html`<platform-empty-state icon="users" title=${this.t('catalog_members_modal.members_empty')}></platform-empty-state>`;
         }
         return html`
             <div class="members-list">
@@ -250,11 +250,14 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
                 @change=${this._onQueryChange}
             ></platform-field>
             ${candidates.length === 0 ? html`
-                <div class="empty">${
-                    this._query.trim().length > 0
-                        ? this.t('catalog_members_modal.no_member_matches')
-                        : this.t('catalog_members_modal.all_in_catalog')
-                }</div>
+                <platform-empty-state
+                    icon="search"
+                    title=${
+                        this._query.trim().length > 0
+                            ? this.t('catalog_members_modal.no_member_matches')
+                            : this.t('catalog_members_modal.all_in_catalog')
+                    }
+                ></platform-empty-state>
             ` : html`
                 <div class="candidate-list">
                     ${candidates.map((u: Record<string, unknown>) => html`

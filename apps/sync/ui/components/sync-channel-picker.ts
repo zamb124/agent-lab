@@ -21,6 +21,7 @@ import { html, css } from 'lit';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/glass-card.js';
+import '@platform/lib/components/platform-empty-state.js';
 import './sync-chat-header.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { channelDisplayTitle } from './_helpers/sync-channel-display.js';
@@ -175,7 +176,7 @@ export class SyncChannelPicker extends PlatformElement {
             ></sync-chat-header>
             <div class="body">
                 ${channels.length === 0 ? html`
-                    <div class="empty">${this.t('channel_picker.empty')}</div>
+                    <platform-empty-state icon="chat" title=${this.t('channel_picker.empty')}></platform-empty-state>
                 ` : html`
                     <div class="grid">
                         ${channels.map((c) => html`

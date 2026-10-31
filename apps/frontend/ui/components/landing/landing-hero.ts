@@ -46,7 +46,7 @@ export class LandingHero extends PlatformElement {
                 min-height: var(--app-vh, 100vh);
                 position: relative;
                 overflow: hidden;
-                background: var(--landing-hero-bg, #0F0F0F);
+                background: var(--marketing-hero-bg);
             }
             
             .hero-container {
@@ -76,7 +76,7 @@ export class LandingHero extends PlatformElement {
                 font-size: 280px;
                 line-height: 320px;
                 text-align: center;
-                color: var(--landing-primary, #5768FE);
+                color: var(--marketing-product-accent);
                 margin: 0;
                 text-transform: capitalize;
                 z-index: 1;
@@ -97,7 +97,7 @@ export class LandingHero extends PlatformElement {
                 width: 100%;
                 height: auto;
                 object-fit: contain;
-                filter: var(--landing-hero-image-filter, drop-shadow(0 0 60px rgba(87, 104, 254, 0.4)));
+                filter: var(--marketing-hero-image-filter);
             }
 
             .hero-search {
@@ -111,9 +111,9 @@ export class LandingHero extends PlatformElement {
                 border-radius: 30px;
                 padding: 10px;
                 box-sizing: border-box;
-                background: var(--landing-search-bg, rgba(29, 29, 29, 0.9));
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.11));
-                box-shadow: var(--landing-search-shadow, 0 26px 90px rgba(0, 0, 0, 0.44));
+                background: var(--glass-bg-strong);
+                border: 1px solid var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-ultra);
                 backdrop-filter: blur(28px);
             }
 
@@ -128,7 +128,7 @@ export class LandingHero extends PlatformElement {
             .hero-search-icon {
                 display: grid;
                 place-items: center;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.66));
+                color: var(--text-secondary);
             }
 
             input[type='search'] {
@@ -137,7 +137,7 @@ export class LandingHero extends PlatformElement {
                 border: 0;
                 outline: none;
                 background: transparent;
-                color: var(--landing-text, #fff);
+                color: var(--text-primary);
                 font-family: var(--font-sans);
                 font-weight: 500;
                 font-size: 20px;
@@ -146,7 +146,7 @@ export class LandingHero extends PlatformElement {
             }
 
             input[type='search']::placeholder {
-                color: var(--landing-text-faint, rgba(232, 232, 232, 0.48));
+                color: var(--text-disabled);
             }
 
             .hero-search-submit,
@@ -157,15 +157,15 @@ export class LandingHero extends PlatformElement {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: var(--landing-on-primary, #fff);
-                background: var(--landing-primary, #5768FE);
+                color: var(--text-on-accent);
+                background: var(--marketing-product-accent);
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease, opacity 180ms ease;
             }
 
             .hero-search-submit:hover,
             .hero-tool-icon:hover {
-                background: #6877ff;
+                background: var(--accent);
                 transform: translateY(-1px);
             }
 
@@ -200,8 +200,8 @@ export class LandingHero extends PlatformElement {
                 align-items: center;
                 gap: 8px;
                 padding: 0 13px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.74));
-                background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.07));
+                color: var(--text-secondary);
+                background: var(--glass-bg-medium);
                 font-family: var(--font-sans);
                 font-weight: 500;
                 font-size: 14px;
@@ -212,22 +212,22 @@ export class LandingHero extends PlatformElement {
             }
 
             .hero-mode-chip:hover {
-                color: var(--landing-text, #fff);
-                background: var(--landing-panel-border-strong, rgba(255, 255, 255, 0.13));
+                color: var(--text-primary);
+                background: var(--glass-border-strong);
                 transform: translateY(-1px);
             }
 
             .hero-mode-chip[aria-pressed='true'] {
-                color: var(--landing-on-primary, #fff);
-                background: rgba(87, 104, 254, 0.36);
-                box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.36);
+                color: var(--text-on-accent);
+                background: color-mix(in srgb, var(--accent) 36%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent);
             }
 
             .hero-tool-icon {
                 width: 36px;
                 height: 36px;
-                background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.08));
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.76));
+                background: var(--glass-bg-medium);
+                color: var(--text-secondary);
             }
 
             .hero-file-input {
@@ -260,9 +260,9 @@ export class LandingHero extends PlatformElement {
                 gap: 8px;
                 padding: 0 7px 0 10px;
                 border-radius: 999px;
-                color: var(--landing-text-soft, rgba(245, 245, 243, 0.86));
-                background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.075));
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.08));
+                color: var(--text-secondary);
+                background: var(--glass-bg-medium);
+                border: 1px solid var(--glass-border-medium);
                 box-sizing: border-box;
             }
 
@@ -284,7 +284,7 @@ export class LandingHero extends PlatformElement {
 
             .hero-file-size {
                 flex-shrink: 0;
-                color: var(--landing-text-faint, rgba(245, 245, 243, 0.48));
+                color: var(--text-disabled);
                 font-size: 12px;
                 line-height: 1;
             }
@@ -296,15 +296,15 @@ export class LandingHero extends PlatformElement {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: var(--landing-text-subtle, rgba(245, 245, 243, 0.58));
+                color: var(--text-secondary);
                 background: transparent;
                 cursor: pointer;
                 transition: color 160ms ease, background 160ms ease;
             }
 
             .hero-file-remove:hover {
-                color: var(--landing-text, #fff);
-                background: var(--landing-panel-border, rgba(255, 255, 255, 0.10));
+                color: var(--text-primary);
+                background: var(--glass-border-medium);
             }
             
             .hero-text-left {
@@ -314,7 +314,7 @@ export class LandingHero extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 22px;
                 line-height: 1.4;
-                color: var(--landing-secondary, #E8E8E8);
+                color: var(--text-secondary);
                 max-width: 260px;
                 z-index: 3;
             }
@@ -326,7 +326,7 @@ export class LandingHero extends PlatformElement {
                 font-family: var(--font-sans);
                 font-size: 22px;
                 line-height: 1.4;
-                color: var(--landing-secondary, #E8E8E8);
+                color: var(--text-secondary);
                 max-width: 260px;
                 text-align: right;
                 z-index: 3;
@@ -359,13 +359,13 @@ export class LandingHero extends PlatformElement {
                 box-shadow: none;
                 text-align: center;
                 text-decoration: none;
-                background: var(--landing-primary, #5768FE);
-                color: var(--landing-on-primary, #FFFFFF);
+                background: var(--marketing-product-accent);
+                color: var(--text-on-accent);
                 border: none;
             }
             
             .hero-cta:hover {
-                background: #6877ff;
+                background: var(--accent);
                 transform: translateY(-2px);
             }
             

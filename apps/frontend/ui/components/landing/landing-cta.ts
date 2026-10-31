@@ -26,7 +26,7 @@ export class LandingCta extends PlatformElement {
                 position: absolute;
                 width: 1000px;
                 height: 800px;
-                background: rgba(87, 104, 254, 0.6);
+                background: color-mix(in srgb, var(--accent) 60%, transparent);
                 filter: blur(150px);
                 border-radius: 50%;
                 top: 50%;
@@ -40,7 +40,7 @@ export class LandingCta extends PlatformElement {
                 position: absolute;
                 width: 1200px;
                 height: 400px;
-                background: var(--landing-panel-border-strong, rgba(255, 255, 255, 0.2));
+                background: var(--glass-border-strong);
                 filter: blur(100px);
                 bottom: 0;
                 right: -300px;
@@ -61,7 +61,7 @@ export class LandingCta extends PlatformElement {
                 font-size: 40px;
                 font-weight: 500;
                 line-height: 1.2;
-                color: var(--landing-on-primary, #FFFFFF);
+                color: var(--text-on-accent);
                 margin: 0 0 32px 0;
             }
 
@@ -71,8 +71,8 @@ export class LandingCta extends PlatformElement {
                 justify-content: center;
                 gap: 12px;
                 padding: 20px 48px;
-                background: var(--landing-primary);
-                color: var(--landing-secondary);
+                background: var(--marketing-product-accent);
+                color: var(--text-secondary);
                 border: none;
                 border-radius: 40px;
                 font-family: var(--font-sans);
@@ -84,16 +84,16 @@ export class LandingCta extends PlatformElement {
                     box-shadow 0.25s ease,
                     background 0.25s ease;
                 box-shadow:
-                    0 10px 40px rgba(87, 104, 254, 0.45),
-                    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+                    0 10px 40px color-mix(in srgb, var(--accent) 45%, transparent),
+                    0 0 0 1px var(--glass-tint-strong) inset;
             }
 
             .cta-button:hover {
-                background: #6877ff;
+                background: var(--accent);
                 transform: translateY(-3px);
                 box-shadow:
-                    0 16px 48px rgba(87, 104, 254, 0.55),
-                    0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+                    0 16px 48px color-mix(in srgb, var(--accent) 55%, transparent),
+                    0 0 0 1px var(--glass-tint-strong) inset;
             }
 
             .cta-button platform-icon {

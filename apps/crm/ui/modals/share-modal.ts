@@ -36,7 +36,8 @@ function grantUserId(user: { user_id: string } | null): string {
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {
     CSSResultGroup,
@@ -613,7 +614,7 @@ export class CRMShareModal extends PlatformModal {
                     </div>
                     <div class="meta">
                         <div class="name">${this.entityId}</div>
-                        <div class="sub"><glass-spinner></glass-spinner></div>
+                        <div class="sub"><platform-spinner></platform-spinner></div>
                     </div>
                 </div>
             `;
@@ -637,9 +638,9 @@ export class CRMShareModal extends PlatformModal {
         return html`
             <div class="section-title">${this.t('share_modal.current_grants')}</div>
             ${loading
-                ? html`<div class="empty-block"><glass-spinner></glass-spinner></div>`
+                ? html`<platform-empty-state loading></platform-empty-state>`
                 : grants.length === 0
-                    ? html`<div class="empty-block">${this.t('share_modal.empty_grants')}</div>`
+                    ? html`<platform-empty-state icon="user-shield" title=${this.t('share_modal.empty_grants')}></platform-empty-state>`
                     : html`
                         <div class="grants-list">
                             ${grants.map((g) => this._renderGrantItem(g))}

@@ -6,7 +6,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-document-viewer-host.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
@@ -60,18 +60,21 @@ export class OfficePublicPreviewPage extends PlatformPage {
     static override properties: PropertyDeclarations = {
         token: { type: String },
         _errorKey: { state: true },
-        _loading: { state: true },
         _resolve: { state: true },
         _openConfig: { state: true },
         _catalogItems: { state: true },
     }
     declare token: string;
     declare _errorKey: string;
-    declare _loading: boolean;
     declare _resolve: PublicResolveResult | null;
     declare _openConfig: PublicOpenConfig | null;
     declare _catalogItems: PublicCatalogItem[];
     private _publicResolve: OpController;
+
+    private get _loading(): boolean {
+        return this._publicResolve.busy || this._publicOpen.busy
+            || this._publicCatalogItems.busy || this._publicCatalogBindingOpen.busy;
+    }
     private _publicOpen: OpController;
     private _publicCatalogItems: OpController;
     private _publicCatalogBindingOpen: OpController;
@@ -145,7 +148,6 @@ export class OfficePublicPreviewPage extends PlatformPage {
         super();
         this.token = '';
         this._errorKey = '';
-        this._loading = true;
         this._resolve = null;
         this._openConfig = null;
         this._catalogItems = [];
@@ -165,46 +167,38 @@ export class OfficePublicPreviewPage extends PlatformPage {
     private async _load(): Promise<void> {
         const token = this.token.trim();
         this._errorKey = '';
-        this._loading = true;
         this._openConfig = null;
         this._catalogItems = [];
         if (token.length === 0) {
             this._errorKey = 'public_preview.invalidToken';
-            this._loading = false;
             return;
         }
         const resolve = await this._publicResolve.run({ token });
         if (!isPublicResolve(resolve)) {
             this._errorKey = 'public_preview.notFound';
-            this._loading = false;
             return;
         }
         this._resolve = resolve;
         if (resolve.resource_kind === 'catalog') {
             this._catalogItems = catalogItems(await this._publicCatalogItems.run({ token }));
-            this._loading = false;
             return;
         }
         const openConfig = await this._publicOpen.run({ token });
         if (!isPublicOpenConfig(openConfig)) {
             this._errorKey = 'public_preview.openFailed';
-            this._loading = false;
             return;
         }
         this._openConfig = openConfig;
-        this._loading = false;
     }
 
     private async _openFileItem(item: PublicCatalogItem) {
         const token = this.token.trim();
         if (typeof item.file_id !== 'string' || item.file_id.length === 0) return;
         if (token.length === 0) return;
-        this._loading = true;
         const openConfig = await this._publicCatalogBindingOpen.run({
             token,
             fileId: item.file_id,
         });
-        this._loading = false;
         if (!isPublicOpenConfig(openConfig)) {
             this._errorKey = 'public_preview.openFailed';
             return;
@@ -222,7 +216,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                 <span class="title">${title}</span>
             </div>
             <div class="body">
-                ${this._loading ? html`<div class="status"><glass-spinner size="lg"></glass-spinner></div>` : ''}
+                ${this._loading ? html`<div class="status"><platform-spinner size="lg"></platform-spinner></div>` : ''}
                 ${this._errorKey ? html`<div class="error">${this.t(this._errorKey)}</div>` : ''}
                 ${!this._loading && !this._errorKey && this._resolve && this._resolve.resource_kind === 'catalog'
                     ? html`
@@ -245,7 +239,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
                             .fileId=${this._openConfig.file_id}
                             .openConfig=${this._openConfig}
                         >
-                            <glass-spinner slot="loading"></glass-spinner>
+                            <platform-spinner slot="loading"></platform-spinner>
                         </platform-document-viewer-host>
                     </div>
                 ` : ''}

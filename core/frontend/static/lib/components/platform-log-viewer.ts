@@ -5,10 +5,10 @@
  */
 
 import { html, css, nothing } from 'lit';
-import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 
 const LEVEL_COLORS = Object.freeze({
     error: 'var(--color-error, #e53e3e)',
@@ -271,7 +271,7 @@ export class PlatformLogViewer extends PlatformElement {
         if (this.loading && list.length === 0) {
             return html`
                 <div class="log-viewer-root">
-                    <div class="log-viewer-loading"><glass-spinner></glass-spinner></div>
+                    <div class="log-viewer-loading"><platform-spinner></platform-spinner></div>
                 </div>
             `;
         }

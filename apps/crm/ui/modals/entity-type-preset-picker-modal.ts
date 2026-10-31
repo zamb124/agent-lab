@@ -7,7 +7,8 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED } from '../_helpers/entity-type-create-events.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type {
@@ -553,7 +554,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
             return html`
                 <div class="content-area">
                     <div class="loading">
-                        <glass-spinner></glass-spinner>
+                        <platform-spinner></platform-spinner>
                     </div>
                 </div>
             `;
@@ -562,7 +563,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
         if (list.length === 0) {
             return html`
                 <div class="content-area">
-                    <div class="empty">${this.t('entity_type_preset_picker_modal.empty_no_templates')}</div>
+                    <platform-empty-state icon="layers" title=${this.t('entity_type_preset_picker_modal.empty_no_templates')}></platform-empty-state>
                 </div>
             `;
         }
@@ -572,7 +573,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
                 <p class="intro">${this.t('entity_type_preset_picker_modal.intro')}</p>
                 <div class="content-area">
                     <div class="loading">
-                        <glass-spinner></glass-spinner>
+                        <platform-spinner></platform-spinner>
                     </div>
                 </div>
             `;
@@ -664,7 +665,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
                         </div>
                         <div class="main-scroll">
                             ${filtered.length === 0
-                                ? html`<div class="empty">${this._emptyMessage()}</div>`
+                                ? html`<platform-empty-state icon="search" title=${this._emptyMessage()}></platform-empty-state>`
                                 : html`
                                       <div class="grid">
                                           ${filtered.map((r) => {

@@ -7,7 +7,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
@@ -580,7 +580,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
         }
         const ns = this._namespace();
         if (ns === null) {
-            return html`<div class="center"><glass-spinner size="lg"></glass-spinner></div>`;
+            return html`<div class="center"><platform-spinner size="lg"></platform-spinner></div>`;
         }
 
         const amoRow = this._amoManifestRow();
@@ -603,7 +603,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
             </div>
             <div class="scroll">
                 ${this._manifestLoading
-                    ? html`<div class="center"><glass-spinner size="md"></glass-spinner></div>`
+                    ? html`<div class="center"><platform-spinner size="md"></platform-spinner></div>`
                     : html`
                 <div class="panel">
                     <div class="panel-title">

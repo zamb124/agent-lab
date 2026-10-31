@@ -1,7 +1,7 @@
 /**
  * flows-code-editor — обёртка над vendored CodeMirror.
  *
- * Lazy-импортирует `/static/core/assets/codemirror/codemirror-bundle.js` при
+ * Lazy-импортирует `@platform/lib/codemirror/codemirror-lazy.js` при
  * первом mount. Поддерживает языки раннеров, `json` и `text`. Тема
  * переключается по `select(s => s.theme.mode)`.
  *
@@ -34,7 +34,6 @@ import { editorBodyPortalZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from 'lit';
 
-const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 const LSP_LANGUAGES = new Set(['python', 'javascript', 'typescript', 'go', 'csharp']);
 
 interface CodeMirrorDoc {
@@ -187,7 +186,7 @@ function ensureFlowsCmTooltipMount() {
 let _cmPromise: Promise<CodeMirrorModule> | null = null;
 function loadCodeMirror(): Promise<CodeMirrorModule> {
     if (_cmPromise === null) {
-        _cmPromise = import(CODEMIRROR_URL).then(
+        _cmPromise = import('@platform/lib/codemirror/codemirror-lazy.js').then(
             (mod) => {
                 if (!isCodeMirrorModule(mod)) {
                     throw new Error('flows-code-editor: codemirror bundle required');
@@ -469,7 +468,7 @@ export class FlowsCodeEditor extends PlatformElement {
 
     override connectedCallback(): void {
         super.connectedCallback();
-        window.addEventListener('keydown', this._onWindowKeydown, true);
+        this.useDomEvent(window, 'keydown', this._onWindowKeydown, true);
         this.updateComplete.then(() => {
             if (!this.isConnected || this.headerOnly) {
                 return;
@@ -479,7 +478,6 @@ export class FlowsCodeEditor extends PlatformElement {
     }
 
     override disconnectedCallback(): void {
-        window.removeEventListener('keydown', this._onWindowKeydown, true);
         this._stopLsp();
         if (this._lspRestartTimer) {
             window.clearTimeout(this._lspRestartTimer);

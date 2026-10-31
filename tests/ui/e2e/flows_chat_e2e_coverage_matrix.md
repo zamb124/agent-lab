@@ -4,7 +4,7 @@
 
 | Surface | Route / host | Component |
 |---|---|---|
-| `flow_chat` | `/flows/:flowId` | `chat-page` → `<platform-flow-ui display="page" profile="spa">` |
+| `flow_chat` | `/flows/:flowId` | `flows-chat-page` → `<platform-flow-ui display="page" profile="spa">` |
 | Lara drawer | PlatformApp | `<flow-ui-drawer>` → `<platform-flow-ui display="drawer">` |
 | Execution Run | flow editor Run | `<flows-execution-panel>` → `<platform-flow-ui>` |
 | Embed | CDN autoload | `flow-ui-drawer` / `platform-flow-ui` |

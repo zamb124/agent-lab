@@ -148,7 +148,7 @@ async def test_hitl_activity_comment_not_in_customer_feed(
     await hitl_api_assert_conversation_lacks_text(
         flows_ui.origin, auth_token_system, work_item_id, internal
     )
-    customer_text = await ui_page_system.locator("chat-page").inner_text()
+    customer_text = await ui_page_system.locator("flows-chat-page").inner_text()
     if internal in customer_text:
         raise AssertionError("activity comment leaked into customer chat")
 

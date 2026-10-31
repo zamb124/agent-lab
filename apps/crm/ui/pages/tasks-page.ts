@@ -13,7 +13,8 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-row.js';
 import '@platform/lib/components/platform-work-item-board.js';
 import '@platform/lib/components/platform-work-item-detail.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import '../modals/activity-task-create-modal.js';
 import type {
     CSSResultGroup,
@@ -95,25 +96,6 @@ export class CRMTasksPage extends CRMNamespacePage {
                 border-radius: var(--radius-lg);
                 overflow: hidden;
                 background: var(--bg-elevated, var(--glass-solid-medium));
-            }
-            .empty {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-3);
-                padding: var(--space-10);
-                color: var(--text-secondary);
-                text-align: center;
-            }
-            .empty p {
-                margin: 0;
-                max-width: 28rem;
-            }
-            .loading {
-                display: flex;
-                justify-content: center;
-                padding: var(--space-8);
             }
         `,
     ];
@@ -268,16 +250,14 @@ export class CRMTasksPage extends CRMNamespacePage {
                 </page-header>
 
                 ${loading
-                    ? html`<div class="loading"><glass-spinner></glass-spinner></div>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : items.length === 0
                         ? html`
-                            <div class="empty">
-                                <platform-icon name="checklist" size="40"></platform-icon>
-                                <p>${this.t('tasks_page.empty')}</p>
+                            <platform-empty-state icon="checklist" title=${this.t('tasks_page.empty')}>
                                 <platform-button variant="primary" @click=${() => this._openCreate()}>
                                     ${this.t('tasks_page.create')}
                                 </platform-button>
-                            </div>
+                            </platform-empty-state>
                           `
                         : html`
                             <div class="workspace">

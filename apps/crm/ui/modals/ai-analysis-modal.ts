@@ -36,8 +36,9 @@ import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { CRM_NOTE_UPDATED } from '../events/types.js';
 import type {
@@ -2007,7 +2008,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         if (entity === null) {
             return html`
                 <div class="loading-state">
-                    <glass-spinner></glass-spinner>
+                    <platform-spinner></platform-spinner>
                     <span>${this.t('ai_analysis_modal.loading_1')}</span>
                 </div>
             `;
@@ -2072,7 +2073,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                                 @click=${() => this._onRepairDraftAi()}
                             >
                                 ${repairBusy
-                                    ? html`<glass-spinner size="sm"></glass-spinner>`
+                                    ? html`<platform-spinner size="sm"></platform-spinner>`
                                     : html`<platform-icon name="sparkle" size="16"></platform-icon>`}
                             </button>
                             <button
@@ -2096,31 +2097,24 @@ export class CRMAiAnalysisModal extends PlatformModal {
         const analyzing = this._analyzeOp.busy;
         if (analyzing) {
             return html`
-                <div class="loading-state">
-                    <glass-spinner></glass-spinner>
-                    <span>${this.t('ai_analysis_modal.loading_2')}</span>
-                </div>
+                <platform-empty-state loading></platform-empty-state>
             `;
         }
         if (applied) {
             return html`
-                <div class="empty-state">
-                    <platform-icon name="check" size="32"></platform-icon>
-                    <div class="hint">${this.t('ai_analysis_modal.empty_applied')}</div>
+                <platform-empty-state icon="check" title=${this.t('ai_analysis_modal.empty_applied')}>
                     <button class="btn" type="button" @click=${() => this._onAnalyze()}>
                         ${this.t('ai_analysis_modal.action_re_analyze')}
                     </button>
-                </div>
+                </platform-empty-state>
             `;
         }
         return html`
-            <div class="empty-state">
-                <platform-icon name="sparkle" size="32"></platform-icon>
-                <div class="hint">${this.t('ai_analysis_modal.empty_no_draft')}</div>
+            <platform-empty-state icon="sparkle" title=${this.t('ai_analysis_modal.empty_no_draft')}>
                 <button class="btn btn-primary" type="button" @click=${() => this._onAnalyze()}>
                     ${this.t('ai_analysis_modal.action_analyze')}
                 </button>
-            </div>
+            </platform-empty-state>
         `;
     }
 
@@ -2588,7 +2582,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         if (rows.length === 0 && !(draftId in this._attrAddUiById)) {
             return html`
                 <div class="attr-fields-editor">
-                    <div class="attr-schema-empty">${this.t('ai_analysis_modal.attrs_schema_empty')}</div>
+                    <platform-empty-state icon="schema" title=${this.t('ai_analysis_modal.attrs_schema_empty')}></platform-empty-state>
                 </div>
             `;
         }
@@ -2598,7 +2592,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         return html`
             <div class="attr-fields-editor">
                 ${rows.length === 0
-                    ? html`<div class="attr-schema-empty">${this.t('ai_analysis_modal.attrs_schema_empty')}</div>`
+                    ? html`<platform-empty-state icon="schema" title=${this.t('ai_analysis_modal.attrs_schema_empty')}></platform-empty-state>`
                     : nothing}
                 ${rows.map(({ key, def, required, custom, customType }) => {
                     const fieldType = this._fieldType(def, key);

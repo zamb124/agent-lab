@@ -14,7 +14,7 @@ import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import './flows-trigger-editor-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
@@ -223,7 +223,7 @@ export class FlowsTriggersModal extends PlatformModal {
     _renderRows() {
         const items = this._filteredItems();
         if (this._listOp.busy && items.length === 0 && this._query.trim().length === 0) {
-            return html`<tr><td colspan="5"><glass-spinner></glass-spinner></td></tr>`;
+            return html`<tr><td colspan="5"><platform-spinner></platform-spinner></td></tr>`;
         }
         if (items.length === 0) {
             return html`<tr><td colspan="5" class="trg-empty">${this.t('triggers_modal.empty')}</td></tr>`;

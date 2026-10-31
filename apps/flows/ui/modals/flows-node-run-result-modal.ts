@@ -11,6 +11,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-segmented-control.js';
+import '@platform/lib/components/platform-empty-state.js';
 import { getBranchNodes, isPlainObject } from '../_helpers/flows-resolvers.js';
 import {
     buildNodeRunChangeRows,
@@ -589,7 +590,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
                     ></platform-modal-search-field>
                 </div>
                 <div class="content-panel-body">
-                    ${visible.length === 0 ? html`<p class="content-panel-empty">${this.t('node_run_result_modal.empty_diff')}</p>` : html`
+                    ${visible.length === 0 ? html`<platform-empty-state title=${this.t('node_run_result_modal.empty_diff')}></platform-empty-state>` : html`
                         <div class="fields-list">
                             ${visible.map((row) => html`
                                 <article
@@ -634,7 +635,7 @@ export class FlowsNodeRunResultModal extends PlatformModal {
         if (this._selectedPath.length === 0) {
             return html`
                 <div class="content-panel viewer-pane">
-                    <p class="content-panel-empty">${this.t('node_run_result_modal.no_selection')}</p>
+                    <platform-empty-state title=${this.t('node_run_result_modal.no_selection')}></platform-empty-state>
                 </div>
             `;
         }

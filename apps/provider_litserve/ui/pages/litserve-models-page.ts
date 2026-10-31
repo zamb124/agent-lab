@@ -15,7 +15,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 const KIND_ENUM_VALUES = ['embedding', 'rerank'];
 
@@ -133,14 +133,7 @@ export class HumanitecModelsPage extends PlatformPage {
                 display: flex;
                 gap: var(--space-2);
             }
-            .empty {
-                border: 1px dashed var(--glass-border-medium);
-                border-radius: var(--radius-xl);
-                padding: var(--space-6);
-                text-align: center;
-                color: var(--text-tertiary);
-            }
-            .loading { color: var(--text-secondary); }
+            platform-empty-state { margin-top: var(--space-6); }
             @media (max-width: 900px) {
                 .add-grid { grid-template-columns: 1fr; }
             }
@@ -311,11 +304,11 @@ export class HumanitecModelsPage extends PlatformPage {
                 </section>
 
                 ${loading
-                    ? html`<glass-spinner></glass-spinner>`
+                    ? html`<platform-empty-state loading></platform-empty-state>`
                     : ''}
 
                 ${!loading && items.length === 0
-                    ? html`<div class="empty">${this.t('models.empty')}</div>`
+                    ? html`<platform-empty-state icon="agent" title=${this.t('models.empty')}></platform-empty-state>`
                     : ''}
 
                 <section class="models-grid">

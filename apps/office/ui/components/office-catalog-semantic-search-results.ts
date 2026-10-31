@@ -5,7 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 export class OfficeCatalogSemanticSearchResults extends PlatformElement {
@@ -82,13 +82,6 @@ export class OfficeCatalogSemanticSearchResults extends PlatformElement {
                 color: var(--text-secondary);
                 line-height: 1.6;
             }
-            .empty,
-            .loading {
-                padding: var(--space-8);
-                text-align: center;
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-            }
         `,
     ];
 
@@ -119,15 +112,15 @@ export class OfficeCatalogSemanticSearchResults extends PlatformElement {
 
     override render(): TemplateResult {
         if (this.loading) {
-            return html`<div class="loading"><glass-spinner size="lg"></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
         const items = Array.isArray(this.items) ? this.items : [];
         const query = typeof this.query === 'string' ? this.query.trim() : '';
         if (query.length === 0) {
-            return html`<div class="empty">${this.t('semantic_search.empty_query')}</div>`;
+            return html`<platform-empty-state icon="search" title=${this.t('semantic_search.empty_query')}></platform-empty-state>`;
         }
         if (items.length === 0) {
-            return html`<div class="empty">${this.t('semantic_search.no_results')}</div>`;
+            return html`<platform-empty-state icon="search" title=${this.t('semantic_search.no_results')}></platform-empty-state>`;
         }
         return html`
             <div class="results">

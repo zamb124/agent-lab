@@ -12,8 +12,8 @@
  * </platform-popover>
  */
 
-import { css, html, nothing } from '../lit-shim.js';
-import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
+import { css, html, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 
 import { PlatformElement } from '../platform-element/index.js';

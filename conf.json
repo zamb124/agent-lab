@@ -12,10 +12,10 @@
     "guest_runtime_service_url": "http://localhost:8024",
     "realtime_service_url": "http://localhost:8025",
     "stock_service_url": "http://localhost:8026",
+    "shop_service_url": "http://localhost:8027",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "search_service_url": "http://localhost:8010",
-    "provider_litserve_service_url": "https://humanitec.ru/litserve",
     "voice_service_url": "http://localhost:8015",
     "capability_gateway_service_url": "http://localhost:8016",
     "code_runner_python_service_url": "http://localhost:8017",
@@ -39,6 +39,7 @@
     "wiki_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_wiki",
     "realtime_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_realtime",
     "stock_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_stock",
+    "shop_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_shop",
     "redis_url": "redis://localhost:63791/0"
   },
   "openfga": {
@@ -554,7 +555,6 @@
       "mock_transcript_text": "Тестовая транскрипция",
       "litserve": {
         "enabled": true,
-        "base_url": "https://humanitec.ru/litserve",
         "timeout_s": 120.0
       },
       "cloud_ru": {
@@ -573,7 +573,6 @@
       "default_response_format": "wav",
       "litserve": {
         "enabled": true,
-        "base_url": "https://humanitec.ru/litserve",
         "timeout_s": 120.0
       }
     }
@@ -694,11 +693,6 @@
         "https://onlyoffice.linnex.io",
         "https://onlyoffice.humanitec.ru"
       ],
-      "provider_litserve": {
-        "api": {
-          "base_url": "https://humanitec.ru/litserve/v1"
-        }
-      },
       "llm": {
         "provider": "humanitec_llm",
         "default_model": "auto",
@@ -749,12 +743,7 @@
         "port": 8003
       },
       "note_attachment_markdown_format_enabled": true,
-      "note_markdown_format_service_timeout_seconds": 120,
-      "provider_litserve": {
-        "api": {
-          "base_url": "https://humanitec.ru/litserve/v1"
-        }
-      }
+      "note_markdown_format_service_timeout_seconds": 120
     },
     "sync": {
       "recording_max_duration_seconds": 3600,
@@ -772,9 +761,6 @@
     },
     "provider_litserve": {
       "provider_litserve": {
-        "api": {
-          "base_url": "https://humanitec.ru/litserve/v1"
-        },
         "infra": {
           "backend": "flagllm",
           "host": "0.0.0.0",
@@ -789,16 +775,15 @@
           "max_passage_chars": 64000,
           "max_length": 8192,
           "model_batch_size": 4,
-          "model_id": "Qwen/Qwen3-Reranker-0.6B",
           "embedding_model_id": "Qwen/Qwen3-Embedding-0.6B",
           "embedding_openai_model_id": "qwen/qwen3-embedding-0.6b",
           "rerank_openai_model_id": "qwen/qwen3-reranker-0.6b",
           "embedding_model_ids": [],
-          "sqlite_path": "./data/provider_litserve/registry.db",
           "rerank_model_ids": [],
           "use_fp16": true,
           "use_bf16": false,
-          "normalize_scores": true
+          "normalize_scores": true,
+          "rerank_model_id": "Qwen/Qwen3-Reranker-0.6B"
         }
       }
     },
@@ -809,11 +794,6 @@
         "port": 8004,
         "debug": true
       },
-      "provider_litserve": {
-        "api": {
-          "base_url": "https://humanitec.ru/litserve/v1"
-        }
-      },
       "rag": {
         "providers": {
           "agentset": {
@@ -823,13 +803,7 @@
         }
       }
     },
-    "rag_worker": {
-      "provider_litserve": {
-        "api": {
-          "base_url": "https://humanitec.ru/litserve/v1"
-        }
-      }
-    },
+    "rag_worker": {},
     "office": {
       "server": {
         "name": "documents",
@@ -889,6 +863,14 @@
         "name": "stock",
         "host": "0.0.0.0",
         "port": 8026,
+        "debug": true
+      }
+    },
+    "shop": {
+      "server": {
+        "name": "shop",
+        "host": "0.0.0.0",
+        "port": 8027,
         "debug": true
       }
     },

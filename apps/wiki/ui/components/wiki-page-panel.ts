@@ -12,7 +12,7 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import type { PropertyValues } from '@platform/lib/lit-shim.js';
+import type { PropertyValues } from 'lit';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import type { OpController } from '@platform/lib/base/use-resource.js';
 
@@ -26,7 +26,7 @@ interface WikiOutlineItem {
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
@@ -574,7 +574,7 @@ export class WikiPagePanel extends PlatformElement {
 
     private _renderRevisionDetails() {
         if (this._revisionRead.busy) {
-            return html`<div class="muted"><glass-spinner size="sm"></glass-spinner></div>`;
+            return html`<div class="muted"><platform-spinner size="sm"></platform-spinner></div>`;
         }
         const revision = isPlainRecord(this._revisionRead.lastResult) ? this._revisionRead.lastResult : null;
         if (!revision) {

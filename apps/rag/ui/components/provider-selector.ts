@@ -14,7 +14,7 @@ interface RagProviderItem {
     [key: string]: unknown;
 }
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-empty-state.js';
 
 export class ProviderSelector extends PlatformElement {
     static i18nNamespace = 'rag';
@@ -96,7 +96,7 @@ export class ProviderSelector extends PlatformElement {
         const current = this._providers.state.current;
 
         if (this._providers.busy && items.length === 0) {
-            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+            return html`<platform-empty-state loading></platform-empty-state>`;
         }
 
         return html`

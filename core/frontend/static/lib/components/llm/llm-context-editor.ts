@@ -1,8 +1,8 @@
-import { html, css, nothing } from '../../lit-shim.js';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../glass-button.js';
-import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from '../../lit-shim.js';
+import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
 
 const PROFILE_VALUES = Object.freeze(['off', 'compact', 'standard', 'agent']);
 const MODE_VALUES = Object.freeze(['off', 'window', 'smart', 'agent']);

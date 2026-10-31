@@ -691,8 +691,8 @@ async def flows_open_chat_page(
     url = f"{flows_ui.origin}/flows/{flow_id}{branch_segment}"
     await page.goto(url, wait_until=wait_until)
     await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
-    await expect(page.locator("chat-page")).to_be_visible(timeout=30_000)
-    await expect(page.locator("chat-page platform-flow-ui")).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-chat-page")).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-chat-page platform-flow-ui")).to_be_visible(timeout=30_000)
 
 
 FLOW_UI_COMPOSER_SELECTOR = 'textarea[data-canon="composer"]'
@@ -702,7 +702,7 @@ FLOW_UI_READ_ONLY_PATTERN = re.compile(r"Read only|Только просмотр
 FLOW_UI_READ_ONLY_STATUS_PATTERN = re.compile(r"Live read-only view|Просмотр без изменений")
 
 
-def flows_chat_composer(page: Page, chat_selector: str = "chat-page platform-flow-ui") -> Locator:
+def flows_chat_composer(page: Page, chat_selector: str = "flows-chat-page platform-flow-ui") -> Locator:
     return page.locator(chat_selector).first.locator(FLOW_UI_COMPOSER_SELECTOR).first
 
 
@@ -710,7 +710,7 @@ async def flows_chat_send_message(
     page: Page,
     text: str,
     *,
-    chat_selector: str = "chat-page platform-flow-ui",
+    chat_selector: str = "flows-chat-page platform-flow-ui",
 ) -> None:
     root = page.locator(chat_selector).first
     await expect(root).to_be_attached(timeout=30_000)
@@ -724,7 +724,7 @@ async def flows_chat_send_message(
 
 async def flows_chat_click_clear(page: Page) -> None:
     clear_btn = (
-        page.locator("chat-page platform-button")
+        page.locator("flows-chat-page platform-button")
         .filter(has_text=re.compile(r"New screen|Новый экран"))
         .first
     )
@@ -735,7 +735,7 @@ async def flows_chat_click_clear(page: Page) -> None:
 async def flows_chat_wait_ready(
     page: Page,
     *,
-    chat_selector: str = "chat-page platform-flow-ui",
+    chat_selector: str = "flows-chat-page platform-flow-ui",
 ) -> None:
     """Interface loaded, context opened (ListTasks replayed) and the page rendered."""
     root = page.locator(chat_selector).first
@@ -758,7 +758,7 @@ async def flows_chat_type_composer(
     page: Page,
     text: str,
     *,
-    chat_selector: str = "chat-page platform-flow-ui",
+    chat_selector: str = "flows-chat-page platform-flow-ui",
 ) -> None:
     """Type into the conversation composer without sending; the value stays in the browser."""
     textarea = flows_chat_composer(page, chat_selector)
@@ -769,7 +769,7 @@ async def flows_chat_type_composer(
 async def flows_chat_composer_value(
     page: Page,
     *,
-    chat_selector: str = "chat-page platform-flow-ui",
+    chat_selector: str = "flows-chat-page platform-flow-ui",
 ) -> str:
     textarea = flows_chat_composer(page, chat_selector)
     await expect(textarea).to_be_visible(timeout=30_000)
@@ -782,7 +782,7 @@ async def flows_chat_composer_value(
 async def flows_chat_task_count(
     page: Page,
     *,
-    chat_selector: str = "chat-page platform-flow-ui",
+    chat_selector: str = "flows-chat-page platform-flow-ui",
 ) -> int:
     root = page.locator(chat_selector).first
     count = await root.evaluate("(el) => el.store.orderedTasks().length")
@@ -795,7 +795,7 @@ async def flows_chat_state_value(
     page: Page,
     path: str,
     *,
-    chat_selector: str = "chat-page platform-flow-ui",
+    chat_selector: str = "flows-chat-page platform-flow-ui",
 ) -> Any:
     """Top-level field of the ``state`` artifact projection as seen by this client."""
     root = page.locator(chat_selector).first
@@ -820,7 +820,7 @@ async def flows_chat_create_share(
     page: Page,
     *,
     permission: str = "viewer",
-    chat_selector: str = "chat-page platform-flow-ui",
+    chat_selector: str = "flows-chat-page platform-flow-ui",
     redacted_paths: list[str] | None = None,
 ) -> FlowUIShareLink:
     root = page.locator(chat_selector).first
@@ -2622,17 +2622,17 @@ async def flows_open_logs_from_chat(page: Page) -> Locator:
 async def flows_open_durable_history_modal(page: Page) -> Locator:
     """Открывает историю выполнения через openModal (без overflow/menu кликов)."""
     await flows_dismiss_blocking_overlays(page)
-    chat = page.locator("chat-page").first
+    chat = page.locator("flows-chat-page").first
     await expect(chat).to_be_visible(timeout=5_000)
     opened = await chat.evaluate(
         """
         (el) => {
             if (typeof el._sessionId !== 'function' || typeof el._openHistory !== 'function') {
-                throw new Error('chat-page history API is unavailable');
+                throw new Error('flows-chat-page history API is unavailable');
             }
             const sessionId = el._sessionId();
             if (!sessionId) {
-                throw new Error('chat-page has no active session for durable history');
+                throw new Error('flows-chat-page has no active session for durable history');
             }
             el._openHistory();
             return sessionId;
@@ -4439,8 +4439,8 @@ async def flows_e2e_attach_skill_to_llm_node(page: Page, skill_query: str) -> No
 
 
 async def flows_e2e_expect_skill_load_chip(page: Page, skill_name: str) -> Locator:
-    # chat-page — основной чат агента; Lara FAB часто attached в DOM и перехватывает поиск.
-    chat = page.locator("chat-page platform-flow-ui").first
+    # flows-chat-page — основной чат агента; Lara FAB часто attached в DOM и перехватывает поиск.
+    chat = page.locator("flows-chat-page platform-flow-ui").first
     if await chat.count() == 0:
         chat = page.locator('platform-flow-ui[flow-id="lara"]').first
     if await chat.count() == 0:
@@ -4469,7 +4469,7 @@ async def flows_e2e_expect_reflection_chip(
     if host is None:
         host = page.locator("flows-execution-panel platform-flow-ui").first
         if await host.count() == 0:
-            host = page.locator("chat-page platform-flow-ui").first
+            host = page.locator("flows-chat-page platform-flow-ui").first
         if await host.count() == 0:
             host = page.locator("platform-flow-ui").first
     group = host.get_by_role(
@@ -4624,7 +4624,7 @@ async def flows_e2e_expect_agent_plan_block(
     *,
     completed_title: str,
     in_progress_title: str | None = None,
-    chat_selector: str = "chat-page platform-flow-ui",
+    chat_selector: str = "flows-chat-page platform-flow-ui",
 ) -> Locator:
     """Ждёт checklist AgentPlan в чате: completed (+ опционально in_progress)."""
     chat = page.locator(chat_selector).first

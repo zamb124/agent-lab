@@ -1,7 +1,7 @@
 """Движок для локального STT в provider_litserve.
 
 Список доступных моделей и их параметры (HF id, revision, backend) —
-в ``cfg.stt_models``. Дефолт — ``cfg.stt_default_api_model_id``.
+в ``cfg.stt_models``. Дефолт — самая старая ready-запись каталога.
 
 Backend выбирается полем ``entry.backend``:
 
@@ -50,11 +50,7 @@ from transformers import (
     pipeline,
 )
 
-from apps.provider_litserve.model_registry import find_stt_entry
-from apps.provider_litserve.runtime_models import (
-    allowed_api_model_ids,
-    resolve_hf_model_id,
-)
+from apps.provider_litserve.catalog import ModelCatalog
 from core.config.models import (
     ProviderLitserveInfraConfig,
     ProviderLitserveSTTModelEntry,
@@ -291,7 +287,7 @@ def parse_stt_body(
     if requested_model == "":
         raise WsCommandError(
             "unprocessable",
-            "STT: model is required (explicitly in payload or stt_default_api_model_id in config)",
+            "STT: model is required (explicitly in payload or default catalog entry)",
             error_code="ws_invalid_payload",
         )
 
@@ -533,10 +529,11 @@ class _WhisperAdapter(_BaseSTTAdapter[WhisperASRPipeline]):
 
 
 class LocalSTTEngine:
-    """Multi-backend STT-движок: загружает требуемую модель из ``cfg.stt_models``."""
+    """Multi-backend STT-движок: модели и их параметры — из ``ModelCatalog``."""
 
-    def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
+    def __init__(self, cfg: ProviderLitserveInfraConfig, catalog: ModelCatalog) -> None:
         self._cfg: ProviderLitserveInfraConfig = cfg
+        self._catalog: ModelCatalog = catalog
         self._device: str = "cpu"
         self._gigaam_models: dict[STTModelCacheKey, GigaAMModel] = {}
         self._ctc_models: dict[STTModelCacheKey, CTCBundle] = {}
@@ -546,9 +543,8 @@ class LocalSTTEngine:
         self._device = device or "cpu"
 
     def _resolve_entry(self, requested_api_model_id: str) -> ProviderLitserveSTTModelEntry:
-        allowed = allowed_api_model_ids("stt", self._cfg)
-        hf = resolve_hf_model_id("stt", requested_api_model_id, self._cfg)
-        if hf is None:
+        entry = self._catalog.find_typed("stt", requested_api_model_id)
+        if entry is None:
             raise WsCommandError(
                 "unprocessable",
                 f"STT: unknown model {requested_api_model_id!r}",
@@ -556,15 +552,8 @@ class LocalSTTEngine:
                 error_params={
                     "reason": "unknown_stt_model",
                     "model": requested_api_model_id,
-                    "allowed": sorted(allowed),
+                    "allowed": sorted(self._catalog.allowed_ids("stt")),
                 },
-            )
-        entry = find_stt_entry(self._cfg, requested_api_model_id)
-        if entry is None:
-            raise WsCommandError(
-                "unprocessable",
-                f"STT: for api_model_id={requested_api_model_id!r} has no entry in cfg.stt_models",
-                error_code="ws_invalid_payload",
             )
         return entry
 

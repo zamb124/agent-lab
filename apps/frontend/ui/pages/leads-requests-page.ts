@@ -17,7 +17,7 @@ function textOrDash(value: unknown): string {
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-spinner.js';
 import type {CSSResultGroup, TemplateResult} from 'lit';
 import type { CursorListController } from '@platform/lib/base/use-resource.js';
 
@@ -152,7 +152,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                         @click=${() => this._list.loadMore()}
                     >
                         ${this._list.loadingMore
-                            ? html`<glass-spinner size="xs"></glass-spinner>`
+                            ? html`<platform-spinner size="xs"></platform-spinner>`
                             : this.t('leads_page.load_more')}
                     </button>
                 </div>
@@ -168,7 +168,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
         const error = this._list.error;
         let body;
         if (loading && list.length === 0) {
-            body = html`<div class="state"><glass-spinner></glass-spinner></div>`;
+            body = html`<div class="state"><platform-spinner></platform-spinner></div>`;
         } else if (terminal === 'forbidden') {
             body = this._renderForbidden();
         } else if (error) {
@@ -189,7 +189,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                     ?disabled=${loading}
                     @click=${() => this._list.load()}
                 >
-                    ${loading ? html`<glass-spinner size="xs"></glass-spinner>` : this.t('leads_page.reload')}
+                    ${loading ? html`<platform-spinner size="xs"></platform-spinner>` : this.t('leads_page.reload')}
                 </button>
             </div>
             ${body}
