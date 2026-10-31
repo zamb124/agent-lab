@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from httpx2 import AsyncClient
 
 from tests.fixtures.shop import API_PREFIX, PUBLIC_PREFIX
@@ -135,3 +133,34 @@ class TestAggregate:
         assert all(
             item["shop_slug"] != slug for item in resp.json()["items"]
         )
+
+    async def test_search_matches_description_and_typos(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """pg_trgm-поиск: совпадение по описанию и устойчивость к опечатке."""
+        slug = f"trgm-{unique_id[:8]}"
+        resp = await shop_client.post(
+            _SHOPS, json={"slug": slug, "name": "TrgmRest", "kind": "restaurant"}
+        )
+        shop = resp.json()
+        await shop_client.post(f"{_SHOPS}/{shop['shop_id']}/publish")
+        marker = unique_id[:6]
+        await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products",
+            json={
+                "name": f"Суп дня {marker}",
+                "price_minor": 100,
+                "description": f"с пампушками {marker} и сметаной",
+            },
+        )
+        by_desc = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/aggregate/search",
+            params={"q": f"пампушками {marker}"},
+        )
+        assert by_desc.status_code == 200
+        assert any(i["shop_slug"] == slug for i in by_desc.json()["items"])
+        by_typo = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/aggregate/search",
+            params={"q": f"пампушкамы {marker}"},
+        )
+        assert any(i["shop_slug"] == slug for i in by_typo.json()["items"])

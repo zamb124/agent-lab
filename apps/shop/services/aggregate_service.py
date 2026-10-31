@@ -2,22 +2,66 @@
 
 Индекс — прямой запрос по ``shop_products`` опубликованных магазинов с
 pg_trgm-индексами по name/description; пересборка задачи актуализирует
-снапшоты витрин. MVP-стратегия чтения: ``ILIKE``+trigram similarity по
-индексу — полного скана таблицы нет.
+снапшоты витрин. Стратегия чтения: ILIKE-подстрока или триграммное
+совпадение ``%`` (устойчиво к опечаткам), ранжирование по
+``word_similarity`` — индекс используется и для фильтра, и для ILIKE.
 """
 
 from __future__ import annotations
 
-from apps.shop.models import Shop, ShopProduct, ShopStatus
+from typing import cast
+
+from oxyde import execute_raw
+
+from apps.shop.models import Shop, ShopStatus
 from apps.shop.services.storefront_service import StorefrontService
 from core.pagination import OffsetPage
+
+_SEARCH_WHERE = """
+    FROM shop_products
+    WHERE is_available
+      AND shop_id IN ({in_clause})
+      AND (
+          name ILIKE $2 ESCAPE '\\'
+          OR COALESCE(description, '') ILIKE $2 ESCAPE '\\'
+          OR name % $1::text
+          OR name <% $1::text
+          OR COALESCE(description, '') % $1::text
+          OR COALESCE(description, '') <% $1::text
+      )
+"""
+
+_SEARCH_SELECT = (
+    """
+    SELECT shop_id, shop_product_id, name, description, price_minor, photo_file_id,
+           GREATEST(
+               word_similarity($1::text, name),
+               word_similarity($1::text, COALESCE(description, '')) * 0.5
+           ) AS score
+    """
+    + _SEARCH_WHERE
+    + """
+    ORDER BY score DESC, name ASC
+    LIMIT {limit_param} OFFSET {offset_param}
+"""
+)
+
+_SEARCH_COUNT = "SELECT count(*) AS total " + _SEARCH_WHERE
+
+
+def _like_pattern(needle: str) -> str:
+    """ILIKE-паттерн подстроки: экранирует ``%``/``_``/``\\`` в запросе."""
+    escaped = (
+        needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+    return f"%{escaped}%"
 
 
 class AggregateService:
     """Агрегатор: каталог published-витрин и поиск по товарам."""
 
     def __init__(self, storefront: StorefrontService) -> None:
-        self._storefront = storefront
+        self._storefront: StorefrontService = storefront
 
     async def list_shops(self, *, city: str | None = None) -> list[Shop]:
         shops = await Shop.list_published()
@@ -35,7 +79,11 @@ class AggregateService:
         limit: int = 20,
         offset: int = 0,
     ) -> OffsetPage[dict[str, object]]:
-        """Поиск товара по всем published-витринам: name/description + pg_trgm."""
+        """Поиск товара по всем published-витринам: name/description + pg_trgm.
+
+        Подстрока ILIKE ловит точные вхождения, оператор ``%`` — опечатки;
+        результат ранжируется по ``word_similarity`` (имя весомее описания).
+        """
         needle = query.strip()
         if not needle:
             return OffsetPage(items=[], total=0, limit=limit, offset=offset)
@@ -46,31 +94,39 @@ class AggregateService:
         if not shop_ids:
             return OffsetPage(items=[], total=0, limit=limit, offset=offset)
         by_shop = {s.shop_id: s for s in shops}
-        rows = await ShopProduct.objects.filter(
-            shop_id__in=shop_ids,
-            is_available=True,
-            name__icontains=needle,
-        ).offset(offset).limit(limit).all()
-        total = await ShopProduct.objects.filter(
-            shop_id__in=shop_ids,
-            is_available=True,
-            name__icontains=needle,
-        ).count()
-        items = [
+        like = _like_pattern(needle)
+        in_clause = ", ".join(f"${i + 3}" for i in range(len(shop_ids)))
+        tail = len(shop_ids) + 3
+        rows = await execute_raw(
+            _SEARCH_SELECT.format(
+                in_clause=in_clause,
+                limit_param=f"${tail}",
+                offset_param=f"${tail + 1}",
+            ),
+            [needle, like, *shop_ids, limit, offset],
+            using="shop",
+        )
+        count_rows = await execute_raw(
+            _SEARCH_COUNT.format(in_clause=in_clause),
+            [needle, like, *shop_ids],
+            using="shop",
+        )
+        total = cast(int, count_rows[0]["total"]) if count_rows else 0
+        items: list[dict[str, object]] = [
             {
-                "product_id": p.shop_product_id,
-                "name": p.name,
-                "description": p.description,
-                "price_minor": p.price_minor,
-                "photo_file_id": p.photo_file_id,
-                "shop_slug": by_shop[p.shop_id].slug,
-                "shop_name": by_shop[p.shop_id].name,
-                "shop_kind": by_shop[p.shop_id].kind.value,
-                "shop_city": by_shop[p.shop_id].city,
-                "currency": by_shop[p.shop_id].currency,
+                "product_id": row["shop_product_id"],
+                "name": row["name"],
+                "description": row["description"],
+                "price_minor": row["price_minor"],
+                "photo_file_id": row["photo_file_id"],
+                "shop_slug": by_shop[row["shop_id"]].slug,
+                "shop_name": by_shop[row["shop_id"]].name,
+                "shop_kind": by_shop[row["shop_id"]].kind.value,
+                "shop_city": by_shop[row["shop_id"]].city,
+                "currency": by_shop[row["shop_id"]].currency,
             }
-            for p in rows
-            if p.shop_id in by_shop
+            for row in rows
+            if row["shop_id"] in by_shop
         ]
         return OffsetPage(items=items, total=total, limit=limit, offset=offset)
 
