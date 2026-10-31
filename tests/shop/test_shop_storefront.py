@@ -194,6 +194,21 @@ class TestStorefrontPage:
         assert "flashRing" in html.text
         assert "get('p')" in html.text
 
+    async def test_theme_preview_params_override_snapshot(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """?tmode=/?tpreset=/?taccent= — мгновенный предпросмотр темы конструктора."""
+        slug = f"prev-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        html = await shop_public_client.get(
+            f"{PUBLIC_PREFIX}/s/{slug}?tmode=light&taccent=%233f8cff"
+        )
+        assert html.status_code == 200
+        assert 'body class="light"' in html.text
+        assert "--accent:#3f8cff" in html.text
+        saved = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert "--accent:#3f8cff" not in saved.text
+
     async def test_working_hours_in_snapshot(
         self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
     ) -> None:

@@ -210,6 +210,11 @@ export class ShopBuilderPage extends PlatformPage {
         return html`<span class="wire"><span class="hero"></span><span class="ln"></span><span class="ln"></span><span class="ln"></span></span>`;
     }
 
+    private _previewSrc(base: string): string {
+        const q = `tpreset=${this._preset}&taccent=${encodeURIComponent(this._accent)}&tmode=${this._mode}`;
+        return `${base}${base.includes('?') ? '&' : '?'}${q}`;
+    }
+
     private async _save() {
         const result = await this._updateOp.run({
             shop_id: this.shopId,
@@ -282,7 +287,7 @@ export class ShopBuilderPage extends PlatformPage {
                             ?disabled=${!this._dirty}
                             @click=${() => this._save()}
                         >${this.t('builder.save')}</platform-button>
-                        <platform-button ?disabled=${!this._dirty} @click=${() => { this._preset = this._savedPreset; this._accent = this._savedAccent; }}>
+                        <platform-button ?disabled=${!this._dirty} @click=${() => { this._preset = this._savedPreset; this._accent = this._savedAccent; this._mode = this._savedMode; }}>
                             ${this.t('builder.reset')}
                         </platform-button>
                     </div>
@@ -301,7 +306,7 @@ export class ShopBuilderPage extends PlatformPage {
                     </div>
                     ${storefrontUrl === ''
                         ? html`<platform-empty-state icon="store" title=${this.t('builder.preview_unavailable')}></platform-empty-state>`
-                        : html`<iframe class=${this._device === 'desktop' ? 'desktop' : ''} src=${storefrontUrl} title="storefront"></iframe>`}
+                        : html`<iframe class=${this._device === 'desktop' ? 'desktop' : ''} src=${this._previewSrc(storefrontUrl)} title="storefront"></iframe>`}
                 </div>
             </div>
         `;

@@ -49,6 +49,23 @@ async def _snapshot_or_404(di: Di, slug: str) -> JsonObject:
     return snapshot
 
 
+_THEME_PREVIEW_KEYS: dict[str, str] = {
+    "tpreset": "preset",
+    "taccent": "accent_color",
+    "tmode": "mode",
+}
+
+
+def _theme_preview(request: Request) -> JsonObject | None:
+    """Переопределение темы из query-параметров конструктора; None — без превью."""
+    overrides: JsonObject = {}
+    for param, field in _THEME_PREVIEW_KEYS.items():
+        value = request.query_params.get(param)
+        if value:
+            overrides[field] = value
+    return overrides or None
+
+
 @router.get("/storefront/{slug}", response_model=None)
 async def get_storefront(slug: str, request: Request, di: Di) -> Response:
     """Снапшот витрины с ETag: If-None-Match → 304 без тела."""
@@ -64,11 +81,19 @@ async def get_storefront(slug: str, request: Request, di: Di) -> Response:
 
 @router.get("/s/{slug}", response_model=None)
 async def get_storefront_page(slug: str, request: Request, di: Di) -> HTMLResponse:
-    """SSR-lite HTML витрины: снапшот inline, меню и корзина — клиентский JS."""
+    """SSR-lite HTML витрины: снапшот inline, меню и корзина — клиентский JS.
+
+    ``?tpreset=``, ``?taccent=``, ``?tmode=`` — мгновенный предпросмотр темы
+    из конструктора: переопределяют theme до сохранения; кэш отключается.
+    """
     snapshot = await _snapshot_or_404(di, slug)
+    preview = _theme_preview(request)
     etag = di.storefront_service.snapshot_etag(snapshot)
-    if request.headers.get("if-none-match") == etag:
+    if preview is None and request.headers.get("if-none-match") == etag:
         return HTMLResponse(status_code=304, headers={"ETag": etag})
+    if preview is not None:
+        theme = snapshot.get("theme")
+        snapshot["theme"] = {**(theme if isinstance(theme, dict) else {}), **preview}
     canonical = f"https://{slug}.{di.settings.storefront_domain_suffix}"
     image_id = snapshot.get("cover_file_id") or snapshot.get("logo_file_id")
     image_url = (
