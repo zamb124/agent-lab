@@ -110,9 +110,9 @@ class TestHostMiddleware:
         """GET / на <slug>.linnex.io отдаёт HTML-витрину, а не SPA."""
         slug = f"host-{unique_id[:8]}"
         await _published_shop(shop_client, slug)
-        from apps.shop.main import app
-
         from httpx2 import ASGITransport
+
+        from apps.shop.main import app
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -129,9 +129,9 @@ class TestHostMiddleware:
     ) -> None:
         """Платформенный хост не превращается в витрину."""
         await _published_shop(shop_client, f"nois-{unique_id[:8]}")
-        from apps.shop.main import app
-
         from httpx2 import ASGITransport
+
+        from apps.shop.main import app
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -159,3 +159,22 @@ class TestStorefrontPage:
         assert "text/html" in resp.headers["content-type"]
         assert slug in resp.text
         assert resp.headers.get("etag")
+
+    async def test_working_hours_in_snapshot(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Часы работы и timezone попадают в публичный снапшот витрины."""
+        slug = f"wh-{unique_id[:8]}"
+        shop = await _published_shop(shop_client, slug)
+        resp = await shop_client.patch(
+            f"{_SHOPS}/{shop['shop_id']}",
+            json={"working_hours": {"0": "09:00-22:00", "6": "11:00-18:00"}},
+        )
+        assert resp.status_code == 200, resp.text
+        snap = await shop_public_client.get(f"{PUBLIC_PREFIX}/storefront/{slug}")
+        assert snap.status_code == 200
+        body = snap.json()
+        assert body["working_hours"] == {"0": "09:00-22:00", "6": "11:00-18:00"}
+        assert body["timezone"]
+        html = await shop_public_client.get(f"{PUBLIC_PREFIX}/s/{slug}")
+        assert "hoursBadge" in html.text

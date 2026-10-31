@@ -40,6 +40,7 @@ export class ShopSettingsPage extends PlatformPage {
     private _uploadOp: OpController;
     private _logoFileId = '';
     private _coverFileId = '';
+    private _hours: Array<{ open: string; close: string; closed: boolean }> = [];
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -56,6 +57,7 @@ export class ShopSettingsPage extends PlatformPage {
         _botToken: { state: true },
         _logoFileId: { state: true },
         _coverFileId: { state: true },
+        _hours: { state: true },
     };
 
     static override styles = [
@@ -109,6 +111,12 @@ export class ShopSettingsPage extends PlatformPage {
                 text-align: center;
             }
             .brand-tile:hover { border-color: var(--accent); color: var(--accent); }
+            .hours { display: flex; flex-direction: column; gap: var(--space-2); }
+            .day-row { display: grid; grid-template-columns: 32px 1fr 12px 1fr auto; gap: var(--space-2); align-items: center; }
+            .day-row.off platform-field { opacity: 0.4; pointer-events: none; }
+            .day-name { font-size: var(--text-sm); color: var(--text-secondary); font-weight: var(--font-medium); }
+            .dash { text-align: center; color: var(--text-tertiary); }
+            .closed-label { font-size: var(--text-xs); color: var(--text-tertiary); display: flex; align-items: center; gap: var(--space-2); }
             .qr { border-radius: var(--radius-sm); background: #fff; padding: var(--space-1); }
             .qr-link { color: var(--accent); font-size: var(--text-sm); }
             .embed { display: block; font-size: var(--text-xs); color: var(--text-tertiary); background: var(--bg-inset); border-radius: var(--radius-sm); padding: var(--space-2); word-break: break-all; user-select: all; }
@@ -152,11 +160,43 @@ export class ShopSettingsPage extends PlatformPage {
         this._minOrder = String((Number(shop.min_order_minor ?? 0) / 100) || '');
         this._logoFileId = typeof shop.logo_file_id === 'string' ? shop.logo_file_id : '';
         this._coverFileId = typeof shop.cover_file_id === 'string' ? shop.cover_file_id : '';
+        const wh = shop.working_hours !== null && typeof shop.working_hours === 'object'
+            ? shop.working_hours as Record<string, unknown>
+            : {};
+        this._hours = Array.from({ length: 7 }, (_, day) => {
+            const raw = wh[String(day)];
+            const range = typeof raw === 'string' ? raw.split('-') : [];
+            return {
+                open: range[0]?.trim() ?? '',
+                close: range[1]?.trim() ?? '',
+                closed: typeof raw !== 'string' || raw.trim() === '',
+            };
+        });
     }
 
     private _toMinor(value: string): number {
         const parsed = parseFloat(value.replace(',', '.'));
         return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : 0;
+    }
+
+    private _collectHours(): Record<string, string> {
+        const hours: Record<string, string> = {};
+        const re = /^\d{1,2}:\d{2}$/;
+        this._hours.forEach((day, index) => {
+            if (day.closed) return;
+            if (re.test(day.open) && re.test(day.close)) {
+                hours[String(index)] = `${day.open}-${day.close}`;
+            }
+        });
+        return hours;
+    }
+
+    private _setHour(index: number, key: 'open' | 'close' | 'closed', value: unknown) {
+        this._hours = this._hours.map((day, i) => {
+            if (i !== index) return day;
+            if (key === 'closed') return { ...day, closed: Boolean(value) };
+            return { ...day, [key]: typeof value === 'string' ? value : '' };
+        });
     }
 
     private async _save() {
@@ -171,6 +211,7 @@ export class ShopSettingsPage extends PlatformPage {
             pickup_enabled: this._pickupEnabled,
             delivery_fee_minor: this._toMinor(this._deliveryFee),
             min_order_minor: this._toMinor(this._minOrder),
+            working_hours: this._collectHours(),
         });
         if (result !== null) await this._shops.load();
     }
@@ -268,7 +309,7 @@ export class ShopSettingsPage extends PlatformPage {
                                 </div>
                             </div>
                             <div class="hint">${this.t('settings.embed_hint')}</div>
-                            <code class="embed">&lt;iframe src="${storefrontUrl}" style="width:100%;max-width:480px;height:640px;border:0;border-radius:16px"&gt;&lt;/iframe&gt;</code>`
+                            <code class="embed">&lt;iframe src="${storefrontUrl}?embed=1" style="width:100%;max-width:480px;height:640px;border:0;border-radius:16px"&gt;&lt;/iframe&gt;</code>`
                         : html``}
                 </div>
 
@@ -326,6 +367,31 @@ export class ShopSettingsPage extends PlatformPage {
                             @change=${(e: CustomEvent<{ value?: unknown }>) => { this._minOrder = typeof e.detail.value === 'string' ? String(e.detail.value) : ''; }}
                         ></platform-field>
                     </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">${this.t('settings.hours_title')}</div>
+                    <div class="hours">
+                        ${this._hours.map((day, index) => html`
+                            <div class="day-row ${day.closed ? 'off' : ''}">
+                                <span class="day-name">${this.t(`settings.day_${index}`)}</span>
+                                <platform-field type="string" mode="edit" label=${this.t('settings.hours_from')} .value=${day.open}
+                                    @change=${(e: CustomEvent<{ value?: unknown }>) => this._setHour(index, 'open', e.detail.value)}
+                                ></platform-field>
+                                <span class="dash">—</span>
+                                <platform-field type="string" mode="edit" label=${this.t('settings.hours_to')} .value=${day.close}
+                                    @change=${(e: CustomEvent<{ value?: unknown }>) => this._setHour(index, 'close', e.detail.value)}
+                                ></platform-field>
+                                <span class="closed-label">
+                                    <platform-switch ?checked=${day.closed}
+                                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._setHour(index, 'closed', e.detail.value)}
+                                    ></platform-switch>
+                                    ${this.t('settings.closed')}
+                                </span>
+                            </div>
+                        `)}
+                    </div>
+                    <div class="hint">${this.t('settings.hours_hint')}</div>
                 </div>
 
                 <div class="card">

@@ -37,6 +37,9 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .hero .desc{{font-size:14px;color:#e8ded0;margin-top:4px;text-shadow:0 1px 8px rgba(0,0,0,.7);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
 .meta{{padding:14px 2px 6px;color:var(--muted);font-size:13.5px;display:flex;gap:14px;flex-wrap:wrap}}
 .meta span{{display:inline-flex;align-items:center;gap:6px}}
+.ob-open,.ob-closed{{font-weight:650}}
+.ob-open{{color:#4ade80}}
+.ob-closed{{color:#f0b45c}}
 .tabs{{position:sticky;top:0;z-index:5;display:flex;gap:8px;overflow-x:auto;padding:12px 2px;background:linear-gradient(180deg,var(--bg) 85%,transparent);scrollbar-width:none}}
 .tabs::-webkit-scrollbar{{display:none}}
 .tabs button{{font:inherit;font-size:14.5px;padding:9px 16px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--card);cursor:pointer;white-space:nowrap;transition:all .15s}}
@@ -100,8 +103,31 @@ button.big:disabled{{opacity:.45;cursor:default}}
 <script>
 const S=JSON.parse(document.getElementById('snapshot').textContent);
 const PRESET=(S.theme&&S.theme.preset)||'menu';
+const EMBED=new URLSearchParams(location.search).has('embed');
 const fmt=v=>(v/100).toLocaleString('ru-RU')+' ₽';
 const IMG=u=>u?`/shop/api/v1/files/download/${{u}}`:'';
+const DAYS=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+function hoursBadge(){{
+  const wh=S.working_hours||{{}};
+  if(!Object.keys(wh).length)return null;
+  const tz=S.timezone||'Europe/Moscow';
+  let now;
+  try{{now=new Date(new Date().toLocaleString('en-US',{{timeZone:tz}}));}}catch(e){{now=new Date();}}
+  const day=(now.getDay()+6)%7;
+  const mins=now.getHours()*60+now.getMinutes();
+  const hm=v=>{{const p=v.split(':');return (+p[0])*60+(+p[1]||0);}};
+  const range=v=>{{if(typeof v!=='string')return null;const p=v.split('-');return p.length<2?null:{{o:p[0],c:p[1],om:hm(p[0]),cm:hm(p[1])}};}};
+  const today=range(wh[String(day)]);
+  if(today){{
+    if(mins>=today.om&&mins<today.cm)return{{t:'Открыто · до '+today.c,open:true}};
+    if(mins<today.om)return{{t:'Откроемся в '+today.o,open:false}};
+  }}
+  for(let d=1;d<=7;d++){{
+    const nd=(day+d)%7,tr=range(wh[String(nd)]);
+    if(tr)return{{t:'Откроемся '+DAYS[nd]+' в '+tr.o,open:false}};
+  }}
+  return null;
+}}
 const cart=new Map();
 const app=document.getElementById('app');
 const byId=id=>S.products.find(x=>x.id===id);
@@ -117,8 +143,9 @@ const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
   const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
   const other=S.products.filter(p=>!p.category_id);
+  const hb=hoursBadge();
   let h=`<div class="hero">${{photo(S.cover_file_id,'bg')}}<div class="veil"></div><div class="head">${{photo(S.logo_file_id,'logo')}}<div><h1 class="serif">${{esc(S.name)}}</h1>${{S.description?`<div class="desc">${{esc(S.description)}}</div>`:''}}</div></div></div>
-  <div class="meta">${{S.city||S.address?`<span>📍 ${{esc([S.city,S.address].filter(Boolean).join(', '))}}</span>`:''}}${{S.phone?`<span>☎ ${{esc(S.phone)}}</span>`:''}}${{S.delivery_enabled?'<span>🛵 Доставка</span>':''}}${{S.pickup_enabled?'<span>🛍 Самовывоз</span>':''}}</div>`;
+  <div class="meta">${{hb?`<span class="${{hb.open?'ob-open':'ob-closed'}}">${{hb.t}}</span>`:''}}${{S.city||S.address?`<span>📍 ${{esc([S.city,S.address].filter(Boolean).join(', '))}}</span>`:''}}${{S.phone?`<span>☎ ${{esc(S.phone)}}</span>`:''}}${{S.delivery_enabled?'<span>🛵 Доставка</span>':''}}${{S.pickup_enabled?'<span>🛍 Самовывоз</span>':''}}</div>`;
   if(!S.products.length){{app.innerHTML=h+`<div class="empty">Меню скоро появится</div>`;return;}}
   h+=`<div class="tabs">${{cats.map(c=>`<button data-cat="${{c.id}}" onclick="jump('${{c.id}}')">${{esc(c.name)}}</button>`).join('')}}${{other.length?`<button data-cat="other" onclick="jump('other')">Ещё</button>`:''}}</div>`;
   for(const c of cats){{h+=`<h2 class="cat serif" id="c-${{c.id}}">${{esc(c.name)}}</h2>`+ITEMS(S.products.filter(p=>p.category_id===c.id));}}
@@ -163,6 +190,7 @@ window.submit=async()=>{{
     delivery_type:dtype,
     address:dtype==='delivery'?(document.getElementById('ca')?.value||''):'',
     comment:document.getElementById('cc').value,
+    source:EMBED?'embed':'web',
     idempotency_key:crypto.randomUUID()}};
   const r=await fetch(`/shop/api/v1/public/storefront/${{S.slug}}/orders`,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});
   if(!r.ok){{alert('Не удалось оформить заказ');return;}}

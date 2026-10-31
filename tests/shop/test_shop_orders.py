@@ -245,3 +245,24 @@ class TestOrderStatusFlow:
         )
         resp = await shop_client_company2.get(f"{_SHOPS}/{shop['shop_id']}/orders")
         assert resp.status_code == 404
+
+    async def test_order_embed_source_persisted(
+        self, shop_client: AsyncClient, shop_public_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Заказ из embed-виджета помечается source=embed и виден в админ-списке."""
+        slug = f"emb-{unique_id[:8]}"
+        shop, product = await _shop_with_product(shop_client, slug)
+        created = (
+            await shop_public_client.post(
+                f"{PUBLIC_PREFIX}/storefront/{slug}/orders",
+                json=_order_body(product["shop_product_id"], source="embed"),
+            )
+        )
+        assert created.status_code == 200, created.text
+        orders = (
+            await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/orders")
+        ).json()
+        row = next(
+            o for o in orders["items"] if o["public_code"] == created.json()["public_code"]
+        )
+        assert row["source"] == "embed"

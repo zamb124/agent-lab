@@ -110,6 +110,7 @@ class StorefrontService:
             "city": shop.city,
             "address": shop.address,
             "working_hours": shop.working_hours,
+            "timezone": shop.timezone,
             "delivery_enabled": shop.delivery_enabled,
             "pickup_enabled": shop.pickup_enabled,
             "delivery_fee_minor": shop.delivery_fee_minor,

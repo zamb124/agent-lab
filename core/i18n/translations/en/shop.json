@@ -147,7 +147,19 @@
         "cover": "Storefront cover",
         "upload": "Upload",
         "replace_photo": "Replace",
-        "brand_hint": "Logo and cover are the first things a guest sees"
+        "brand_hint": "Logo and cover are the first things a guest sees",
+        "hours_title": "Working hours",
+        "hours_hint": "Guests see on the storefront whether you are open now",
+        "hours_from": "from",
+        "hours_to": "to",
+        "closed": "closed",
+        "day_0": "Mon",
+        "day_1": "Tue",
+        "day_2": "Wed",
+        "day_3": "Thu",
+        "day_4": "Fri",
+        "day_5": "Sat",
+        "day_6": "Sun"
     },
     "toast": {
         "shop_created": "Shop created",
