@@ -424,7 +424,7 @@ class TestAiOperations:
                     "type": "text",
                     "content": (
                         '{"items": ['
-                        '{"name": "Маргарита", "price_minor": 45000, "description": "Томатный соус, моцарелла", "category": "Пицца"},'
+                        '{"name": "Маргарита", "price_minor": 45000, "description": "Томатный соус, моцарелла", "portion": "450 г", "category": "Пицца"},'
                         '{"name": "Латте", "price_minor": 22000, "description": "", "category": "Напитки"}'
                         ']}'
                     ),
@@ -439,6 +439,7 @@ class TestAiOperations:
         items = resp.json()["items"]
         assert [item["name"] for item in items] == ["Маргарита", "Латте"]
         assert items[0]["price_minor"] == 45000
+        assert items[0]["portion"] == "450 г"
         assert items[0]["category"] == "Пицца"
 
     async def test_ai_parse_menu_empty_fails_closed(

@@ -55,6 +55,7 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .pcard img{{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--card2)}}
 .pcard .b{{padding:11px 13px 13px}}
 .pcard h3{{font-size:14.5px;font-weight:600}}
+.pcard .portion{{font-size:12px;font-weight:500;color:var(--muted);margin-left:6px;white-space:nowrap}}
 .pcard .price{{margin-top:6px;font-size:15px;font-weight:650;font-variant-numeric:tabular-nums}}
 .pcard .from{{margin-top:6px;font-size:12px;color:var(--muted);display:inline-block;background:var(--card2);border-radius:99px;padding:3px 10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .empty{{text-align:center;color:var(--muted);padding:56px 20px;font-size:15px}}
@@ -121,7 +122,7 @@ function debounced(){{clearTimeout(timer);timer=setTimeout(runSearch,350);}}
 let lastQ='';
 const pcardHtml=p=>`<a class="pcard" href="${{LINK(p.shop_slug)}}?p=${{esc(p.product_id)}}">
   ${{p.photo_file_id?`<img src="${{IMG(p.photo_file_id)}}" loading="lazy" alt="">`:''}}
-  <span class="b"><h3>${{esc(p.name)}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`;
+  <span class="b"><h3>${{esc(p.name)}}${{p.portion?`<span class="portion">${{esc(p.portion)}}</span>`:''}}</h3><div class="price">${{fmt(p.price_minor)}}</div><span class="from">${{esc(p.shop_name)}}</span></span></a>`;
 function searchUrl(q,offset){{let url=`/shop/api/v1/public/aggregate/search?q=${{encodeURIComponent(q)}}&limit=24&offset=${{offset}}`;
   if(fKind)url+=`&kind=${{fKind}}`;if(fCity)url+=`&city=${{encodeURIComponent(fCity)}}`;return url;}}
 function syncMore(total){{const g=document.getElementById('hitsGrid');

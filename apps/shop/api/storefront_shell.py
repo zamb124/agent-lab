@@ -57,6 +57,7 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .item img{{width:92px;height:92px;border-radius:var(--radius);object-fit:cover;background:var(--card2);flex-shrink:0}}
 .item .b{{flex:1;min-width:0}}
 .item h3{{font-size:16.5px;font-weight:600}}
+.portion{{font-size:13px;font-weight:500;color:var(--muted);margin-left:6px;white-space:nowrap}}
 .item p{{font-size:13.5px;color:var(--muted);margin-top:4px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}
 .item .row{{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}}
 .price{{font-size:16.5px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}}
@@ -187,6 +188,7 @@ function promoApplies(a,pid){{if(!a)return false;
   const ids=a.product_ids;if(Array.isArray(ids)&&ids.length)return ids.includes(pid);
   if(a.type==='fixed_bundle_price'&&Array.isArray(a.items))return a.items.some(i=>i.product_id===pid);
   return a.type==='n_plus_m_free'||a.type==='percent_items';}}
+function portionOf(p){{return p.portion?`<span class="portion">${{esc(p.portion)}}</span>`:'';}}
 function badge(pid){{const pr=(S.promos||[]).find(x=>promoApplies(x.action,pid));
   return pr?`<span class="pbadge">${{esc(pr.name)}}</span>`:'';}}
 function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;
@@ -196,9 +198,9 @@ function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;
   if(!n)return `<button class="add" onclick="addPlain('${{p.id}}',1)">В корзину</button>`;
   return `<span class="stepper"><button class="ghost" onclick="addPlain('${{p.id}}',-1)">−</button><span>${{n}}</span><button onclick="addPlain('${{p.id}}',1)">+</button></span>`;}}
 function refreshQty(pid){{document.querySelectorAll(`[data-qty="${{pid}}"]`).forEach(el=>{{el.innerHTML=qtyCtl(byId(pid));}});}}
-function rowList(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
-function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${{esc(p.id)}}">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
-function rowCompact(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
+function rowList(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
+function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${{esc(p.id)}}">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
+function rowCompact(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
   const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));

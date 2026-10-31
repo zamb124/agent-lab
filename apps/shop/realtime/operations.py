@@ -338,6 +338,7 @@ def _product_response(product: ShopProduct) -> ShopProductResponse:
         category_id=product.category_id,
         name=product.name,
         description=product.description,
+        portion=product.portion,
         price_minor=product.price_minor,
         photo_file_id=product.photo_file_id,
         is_available=product.is_available,

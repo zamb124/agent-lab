@@ -9,6 +9,7 @@
           "name": { "type": "string" },
           "price_minor": { "type": "integer" },
           "description": { "type": "string" },
+          "portion": { "type": "string" },
           "category": { "type": "string" }
         },
         "required": ["name", "price_minor"],

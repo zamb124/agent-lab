@@ -186,14 +186,17 @@ class TestCatalog:
             55000,
             category_id=cat["shop_category_id"],
             description="Томат, моцарелла, базилик",
+            portion="450 г",
         )
         assert product["category_id"] == cat["shop_category_id"]
+        assert product["portion"] == "450 г"
         resp = await shop_client.patch(
             f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}",
-            json={"price_minor": 59000, "is_available": False},
+            json={"price_minor": 59000, "is_available": False, "portion": "32 см"},
         )
         body = resp.json()
         assert body["price_minor"] == 59000
+        assert body["portion"] == "32 см"
         assert body["is_available"] is False
         resp = await shop_client.delete(
             f"{_SHOPS}/{shop['shop_id']}/products/{product['shop_product_id']}"

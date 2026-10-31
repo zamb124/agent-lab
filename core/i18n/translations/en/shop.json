@@ -53,6 +53,7 @@
         "new_category": "New category",
         "field_name": "Dish / product",
         "field_price": "Price, ₽",
+        "field_portion": "Portion (400 g, 0.5 l)",
         "field_description": "Description",
         "add_product": "Add",
         "empty": "No products yet — add the first one above",

@@ -34,6 +34,7 @@ class ShopProduct(PlatformModel):
     category_id: str | None = DbField(default=None, max_length=64)
     name: str = DbField(max_length=300)
     description: str = DbField(default="", db_type="TEXT")
+    portion: str = DbField(default="", max_length=50)
     price_minor: int = DbField(ge=0)
     photo_file_id: str | None = DbField(default=None, max_length=64)
     is_available: bool = DbField(default=True)

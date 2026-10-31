@@ -108,6 +108,7 @@ class ShopProductResponse(StrictBaseModel):
     category_id: str | None
     name: str
     description: str
+    portion: str
     price_minor: int
     photo_file_id: str | None
     is_available: bool
@@ -118,6 +119,7 @@ class ShopProductCreateRequest(StrictBaseModel):
     category_id: str | None = None
     name: str = Field(min_length=1, max_length=300)
     description: str = ""
+    portion: str = Field(default="", max_length=50)
     price_minor: int = Field(ge=0)
     photo_file_id: str | None = None
 
@@ -126,6 +128,7 @@ class ShopProductUpdateRequest(StrictBaseModel):
     category_id: str | None = None
     name: str | None = Field(default=None, max_length=300)
     description: str | None = None
+    portion: str | None = Field(default=None, max_length=50)
     price_minor: int | None = Field(default=None, ge=0)
     photo_file_id: str | None = None
     is_available: bool | None = None
@@ -135,6 +138,7 @@ class ShopProductUpdateRequest(StrictBaseModel):
 class ShopProductImportItem(StrictBaseModel):
     name: str = Field(min_length=1, max_length=300)
     description: str = ""
+    portion: str = Field(default="", max_length=50)
     price_minor: int = Field(ge=0)
 
 
@@ -236,6 +240,7 @@ class ShopAiMenuItem(StrictBaseModel):
     name: str
     price_minor: int = Field(ge=0, le=10_000_000)
     description: str = ""
+    portion: str = Field(default="", max_length=50)
     category: str = ""
 
 

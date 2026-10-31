@@ -31,6 +31,7 @@ interface ProductRow {
     price_minor: number;
     photo_file_id: string | null;
     is_available: boolean;
+    portion: string;
     sort: number;
 }
 
@@ -63,16 +64,18 @@ export class ShopMenuPage extends PlatformPage {
     private _newCategory = '';
     private _newName = '';
     private _newPrice = '';
+    private _newPortion = '';
     private _newDescription = '';
     private _newPhotoFileId = '';
     private _newPhotoPreview = '';
     private _editingId = '';
     private _editName = '';
     private _editPrice = '';
+    private _editPortion = '';
     private _editDescription = '';
     private _importOpen = false;
     private _importText = '';
-    private _aiItems: Array<{ name: string; description: string; price_minor: number }> | null = null;
+    private _aiItems: Array<{ name: string; description: string; portion: string; price_minor: number }> | null = null;
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -82,12 +85,14 @@ export class ShopMenuPage extends PlatformPage {
         _newCategory: { state: true },
         _newName: { state: true },
         _newPrice: { state: true },
+        _newPortion: { state: true },
         _newDescription: { state: true },
         _newPhotoFileId: { state: true },
         _newPhotoPreview: { state: true },
         _editingId: { state: true },
         _editName: { state: true },
         _editPrice: { state: true },
+        _editPortion: { state: true },
         _editDescription: { state: true },
         _importOpen: { state: true },
         _importText: { state: true },
@@ -144,6 +149,7 @@ export class ShopMenuPage extends PlatformPage {
             th { color: var(--text-tertiary); font-weight: var(--font-medium); }
             .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
             .desc { color: var(--text-tertiary); font-size: var(--text-xs); max-width: 320px; }
+            .portion { color: var(--text-tertiary); font-size: var(--text-xs); margin-left: var(--space-1); white-space: nowrap; }
             .desc-cell { display: flex; gap: var(--space-2); align-items: end; }
             .desc-cell > platform-field { flex: 1; }
             .photo-pick {
@@ -314,6 +320,7 @@ export class ShopMenuPage extends PlatformPage {
         this._editingId = p.shop_product_id;
         this._editName = p.name;
         this._editPrice = (p.price_minor / 100).toString();
+        this._editPortion = p.portion;
         this._editDescription = p.description;
     }
 
@@ -330,6 +337,7 @@ export class ShopMenuPage extends PlatformPage {
         const name = this._editName.trim();
         if (name !== '' && name !== p.name) payload.name = name;
         if (Number.isFinite(price) && price >= 0 && price !== p.price_minor) payload.price_minor = price;
+        if (this._editPortion !== p.portion) payload.portion = this._editPortion;
         if (this._editDescription !== p.description) payload.description = this._editDescription;
         if (Object.keys(payload).length > 2) {
             await this._productUpdateOp.run(payload);
@@ -428,12 +436,14 @@ export class ShopMenuPage extends PlatformPage {
             category_id: this._activeCategory,
             name,
             description: this._newDescription.trim(),
+            portion: this._newPortion.trim(),
             price_minor: price,
             photo_file_id: this._newPhotoFileId === '' ? null : this._newPhotoFileId,
         });
         if (result !== null) {
             this._newName = '';
             this._newPrice = '';
+            this._newPortion = '';
             this._newDescription = '';
             this._newPhotoFileId = '';
             this._newPhotoPreview = '';
@@ -483,11 +493,12 @@ export class ShopMenuPage extends PlatformPage {
             const items = (result as { items?: unknown }).items;
             if (Array.isArray(items)) {
                 this._aiItems = items
-                    .filter((item): item is { name: string; description: string; price_minor: number; category?: string } =>
+                    .filter((item): item is { name: string; description: string; portion: string; price_minor: number; category?: string } =>
                         typeof item === 'object' && item !== null && 'name' in item && 'price_minor' in item)
                     .map((item) => ({
                         name: String(item.name),
                         description: typeof item.description === 'string' ? item.description : '',
+                        portion: typeof item.portion === 'string' ? item.portion : '',
                         price_minor: Number(item.price_minor),
                     }));
             }
@@ -671,6 +682,15 @@ export class ShopMenuPage extends PlatformPage {
                             this._newPrice = typeof event.detail.value === 'string' ? String(event.detail.value) : '';
                         }}
                     ></platform-field>
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        label=${this.t('menu.field_portion')}
+                        .value=${this._newPortion}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                            this._newPortion = typeof event.detail.value === 'string' ? event.detail.value : '';
+                        }}
+                    ></platform-field>
                     <span class="desc-cell">
                         <platform-field
                             type="text"
@@ -722,6 +742,9 @@ export class ShopMenuPage extends PlatformPage {
                                                 <platform-field type="number" mode="edit" label=${this.t('menu.field_price')} .value=${this._editPrice}
                                                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editPrice = typeof e.detail.value === 'string' ? String(e.detail.value) : ''; }}
                                                 ></platform-field>
+                                                <platform-field type="text" mode="edit" label=${this.t('menu.field_portion')} .value=${this._editPortion}
+                                                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editPortion = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
+                                                ></platform-field>
                                                 <platform-field type="text" mode="edit" label=${this.t('menu.field_description')} .value=${this._editDescription}
                                                     @change=${(e: CustomEvent<{ value?: unknown }>) => { this._editDescription = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                                                 ></platform-field>
@@ -739,7 +762,7 @@ export class ShopMenuPage extends PlatformPage {
                                                 ? html`<img class="thumb" src="/shop/api/v1/files/download/${p.photo_file_id}" alt="" loading="lazy">`
                                                 : html`<span class="thumb-empty"></span>`}
                                         </td>
-                                        <td>${p.name}</td>
+                                        <td>${p.name}${p.portion !== '' ? html`<span class="portion">${p.portion}</span>` : html``}</td>
                                         <td class="desc">${p.description}</td>
                                         <td class="num">${this._money(p.price_minor)}</td>
                                         <td class="num">

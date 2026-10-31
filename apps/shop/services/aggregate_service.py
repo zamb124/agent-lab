@@ -31,7 +31,7 @@ _SEARCH_WHERE = """
 
 _SEARCH_SELECT = (
     """
-    SELECT shop_id, shop_product_id, name, description, price_minor, photo_file_id,
+    SELECT shop_id, shop_product_id, name, description, portion, price_minor, photo_file_id,
            GREATEST(
                word_similarity($1::text, name),
                word_similarity($1::text, COALESCE(description, '')) * 0.5
@@ -115,6 +115,7 @@ class AggregateService:
                 "product_id": row["shop_product_id"],
                 "name": row["name"],
                 "description": row["description"],
+                "portion": row["portion"],
                 "price_minor": row["price_minor"],
                 "photo_file_id": row["photo_file_id"],
                 "shop_slug": by_shop[row["shop_id"]].slug,

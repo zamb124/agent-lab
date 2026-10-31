@@ -53,6 +53,7 @@
         "new_category": "Новая категория",
         "field_name": "Блюдо / товар",
         "field_price": "Цена, ₽",
+        "field_portion": "Порция (400 г, 0.5 л)",
         "field_description": "Описание",
         "add_product": "Добавить",
         "empty": "Товаров пока нет — добавьте первый выше",

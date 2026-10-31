@@ -169,6 +169,7 @@ class StorefrontService:
                     "category_id": p.category_id,
                     "name": p.name,
                     "description": p.description,
+                    "portion": p.portion,
                     "price_minor": p.price_minor,
                     "price_from_minor": min_price_minor(
                         p, modifier_tree.get(p.shop_product_id, [])
