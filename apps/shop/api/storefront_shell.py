@@ -227,6 +227,7 @@ function renderSheet(){{
   const sub=total();
   const fee=dtype==='delivery'?(S.delivery_fee_minor||0):0;
   const below=S.min_order_minor&&sub<S.min_order_minor;
+  const hb=hoursBadge();
   const seg=(S.delivery_enabled&&S.pickup_enabled)?`<div class="seg">
     <button class="${{dtype==='delivery'?'on':''}}" onclick="setDtype('delivery')">🛵 Доставка</button>
     <button class="${{dtype==='pickup'?'on':''}}" onclick="setDtype('pickup')">🛍 Самовывоз</button></div>`:'';
@@ -240,6 +241,7 @@ function renderSheet(){{
   <input class="f" id="cn" placeholder="Ваше имя"><input class="f" id="cp" type="tel" placeholder="Телефон">
   ${{dtype==='delivery'?'<input class="f" id="ca" placeholder="Адрес доставки">':''}}<input class="f" id="cc" placeholder="Комментарий к заказу">
   ${{below?`<div class="minwarn">Минимальный заказ — ${{fmt(S.min_order_minor)}}</div>`:''}}
+  ${{hb&&!hb.open?`<div class="minwarn">Сейчас закрыто — оформите предзаказ, примем к открытию</div>`:''}}
   <button class="big" id="payBtn" ${{below?'disabled':''}} onclick="submit()">Оформить заказ · ${{fmt(sub+fee)}}</button>`;
   refreshSavings();
 }};
