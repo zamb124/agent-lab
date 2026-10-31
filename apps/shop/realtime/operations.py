@@ -27,6 +27,8 @@ from apps.shop.models.api import (
     ShopOrderStatusResponse,
     ShopProductCreateRequest,
     ShopProductResponse,
+    ShopProductsImportRequest,
+    ShopProductsImportResponse,
     ShopProductUpdateRequest,
     ShopResponse,
     ShopTheme,
@@ -95,6 +97,10 @@ class ShopProductIdPayload(StrictBaseModel):
 
 
 class ShopProductCreatePayload(ShopProductCreateRequest):
+    shop_id: str = Field(min_length=1)
+
+
+class ShopProductsImportPayload(ShopProductsImportRequest):
     shop_id: str = Field(min_length=1)
 
 
@@ -441,6 +447,23 @@ async def op_products_update(
     shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
     await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
     return _product_response(product)
+
+
+async def op_products_import(
+    payload: ShopProductsImportPayload, *, user: User, di: Di
+) -> ShopProductsImportResponse:
+    """Пакетный импорт позиций меню — одна команда вместо N create."""
+    scope = await require_company_admin(di.authz_service)
+    _ = user
+    try:
+        created = await di.shop_service.import_products(
+            scope.company_id, payload.shop_id, payload
+        )
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc)
+    shop = await di.shop_service.get_shop(scope.company_id, payload.shop_id)
+    await _enqueue_rebuild(di, shop.shop_id, shop.slug, catalog_changed=True)
+    return ShopProductsImportResponse(created=created)
 
 
 async def op_products_remove(

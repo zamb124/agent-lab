@@ -45,6 +45,7 @@ export class ShopMenuPage extends PlatformPage {
     private _productCreateOp: OpController;
     private _productUpdateOp: OpController;
     private _productRemoveOp: OpController;
+    private _importOp: OpController;
     private _aiDescribeOp: OpController;
     private _aiEnhanceOp: OpController;
     private _aiGenerateOp: OpController;
@@ -64,6 +65,8 @@ export class ShopMenuPage extends PlatformPage {
     private _editName = '';
     private _editPrice = '';
     private _editDescription = '';
+    private _importOpen = false;
+    private _importText = '';
 
     static override properties = {
         shopId: { type: String, attribute: 'shop-id' },
@@ -80,6 +83,8 @@ export class ShopMenuPage extends PlatformPage {
         _editName: { state: true },
         _editPrice: { state: true },
         _editDescription: { state: true },
+        _importOpen: { state: true },
+        _importText: { state: true },
     };
 
     static override styles = [
@@ -169,6 +174,28 @@ export class ShopMenuPage extends PlatformPage {
             @media (max-width: 767px) {
                 .add-row { grid-template-columns: 1fr; }
             }
+            .page-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+            .page-head h1 { margin: 0; flex: 1; }
+            .import-panel {
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--bg-surface);
+                padding: var(--space-4);
+                margin-bottom: var(--space-4);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .import-title { font-weight: var(--font-semibold); color: var(--text-primary); }
+            .import-hint { font-size: var(--text-xs); color: var(--text-tertiary); line-height: 1.5; }
+            .import-panel platform-field::part(field-pill-textarea),
+            .import-panel platform-field {
+                min-height: 150px;
+            }
+            .import-stats { display: flex; gap: var(--space-4); font-size: var(--text-sm); }
+            .import-stats .ok { color: var(--success); }
+            .import-stats .bad { color: var(--warning); }
+            .import-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
         `,
     ];
 
@@ -181,6 +208,7 @@ export class ShopMenuPage extends PlatformPage {
         this._productCreateOp = this.useOp('shop/product_create');
         this._productUpdateOp = this.useOp('shop/product_update');
         this._productRemoveOp = this.useOp('shop/product_remove');
+        this._importOp = this.useOp('shop/products_import');
         this._aiDescribeOp = this.useOp('shop/ai_describe');
         this._aiEnhanceOp = this.useOp('shop/ai_enhance_photo');
         this._aiGenerateOp = this.useOp('shop/ai_generate_photo');
@@ -397,6 +425,40 @@ export class ShopMenuPage extends PlatformPage {
         await this._reload();
     }
 
+    private _parseImport(): { items: Array<{ name: string; description: string; price_minor: number }>; invalid: number } {
+        const items: Array<{ name: string; description: string; price_minor: number }> = [];
+        let invalid = 0;
+        for (const raw of this._importText.split('\n')) {
+            const line = raw.trim();
+            if (line === '') continue;
+            const parts = line.split(';').map((p) => p.trim());
+            const name = parts[0] ?? '';
+            const priceText = (parts[1] ?? '').replace(/[^\d.,-]/g, '').replace(',', '.');
+            const price = parts.length >= 2 ? Math.round(parseFloat(priceText) * 100) : NaN;
+            if (name === '' || !Number.isFinite(price) || price < 0) {
+                invalid += 1;
+                continue;
+            }
+            items.push({ name, description: parts.slice(2).join('; '), price_minor: price });
+        }
+        return { items, invalid };
+    }
+
+    private async _runImport() {
+        const { items } = this._parseImport();
+        if (items.length === 0) return;
+        const result = await this._importOp.run({
+            shop_id: this.shopId,
+            category_id: this._activeCategory,
+            items,
+        });
+        if (result !== null) {
+            this._importText = '';
+            this._importOpen = false;
+            await this._reload();
+        }
+    }
+
     private async _removeProduct(product: ProductRow) {
         await this._productRemoveOp.run({
             shop_id: this.shopId,
@@ -410,9 +472,44 @@ export class ShopMenuPage extends PlatformPage {
             ? this._products
             : this._products.filter((p) => p.category_id === this._activeCategory);
         const busy = this._categoriesOp.busy || this._productsOp.busy;
+        const parsed = this._importOpen ? this._parseImport() : { items: [], invalid: 0 };
         return html`
             <div class="wrap">
-                <h1>${this.t('menu.title')}</h1>
+                <div class="page-head">
+                    <h1>${this.t('menu.title')}</h1>
+                    <platform-button size="sm" @click=${() => { this._importOpen = !this._importOpen; }}>
+                        <platform-icon name="upload" size="14"></platform-icon> ${this.t('menu.import_button')}
+                    </platform-button>
+                </div>
+                ${this._importOpen ? html`
+                    <div class="import-panel">
+                        <div class="import-title">${this.t('menu.import_title')}</div>
+                        <div class="import-hint">${this.t('menu.import_hint')}</div>
+                        <platform-field
+                            type="text"
+                            mode="edit"
+                            label=${this.t('menu.import_placeholder')}
+                            .value=${this._importText}
+                            @change=${(event: CustomEvent<{ value?: unknown }>) => {
+                                this._importText = typeof event.detail.value === 'string' ? event.detail.value : '';
+                            }}
+                        ></platform-field>
+                        <div class="import-stats">
+                            <span class="ok">${this.t('menu.import_preview')} ${parsed.items.length}</span>
+                            ${parsed.invalid > 0 ? html`<span class="bad">${parsed.invalid} ${this.t('menu.import_invalid')}</span>` : html``}
+                        </div>
+                        <div class="import-actions">
+                            <platform-button size="sm" @click=${() => { this._importOpen = false; }}>${this.t('menu.import_close')}</platform-button>
+                            <platform-button
+                                size="sm"
+                                variant="primary"
+                                ?busy=${this._importOp.busy}
+                                ?disabled=${parsed.items.length === 0}
+                                @click=${() => this._runImport()}
+                            >${this.t('menu.import_run')} · ${parsed.items.length}</platform-button>
+                        </div>
+                    </div>
+                ` : html``}
                 <div class="chips">
                     ${this._categories.map((cat) => html`
                         <button

@@ -58,7 +58,15 @@
         "cancel": "Cancel",
         "edit": "Edit",
         "ai_generate": "Generate photo",
-        "ai_generate_hint": "AI draws an appetising dish photo from the name"
+        "ai_generate_hint": "AI draws an appetising dish photo from the name",
+        "import_button": "Import menu",
+        "import_title": "Paste your menu",
+        "import_hint": "One dish per line: name, then «;» price and optional description. Example: «Borscht; 350; With sour cream»",
+        "import_placeholder": "Borscht; 350; With sour cream\nCaesar salad; 420\nLemonade; 120",
+        "import_preview": "Items to add:",
+        "import_invalid": "lines not recognised — check the format",
+        "import_run": "Add to menu",
+        "import_close": "Close"
     },
     "builder": {
         "title": "Storefront appearance",
@@ -163,6 +171,8 @@
         "ai_enhance_failed": "AI could not enhance the photo",
         "ai_generate_failed": "AI could not generate the photo",
         "telegram_connect_failed": "Failed to connect the bot: check the token",
-        "telegram_disconnect_failed": "Failed to disconnect the bot"
+        "telegram_disconnect_failed": "Failed to disconnect the bot",
+        "products_imported": "Items added to the menu",
+        "products_import_failed": "Menu import failed"
     }
 }

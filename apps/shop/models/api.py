@@ -129,6 +129,21 @@ class ShopProductUpdateRequest(StrictBaseModel):
     sort: int | None = None
 
 
+class ShopProductImportItem(StrictBaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    description: str = ""
+    price_minor: int = Field(ge=0)
+
+
+class ShopProductsImportRequest(StrictBaseModel):
+    category_id: str | None = None
+    items: list[ShopProductImportItem] = Field(min_length=1, max_length=500)
+
+
+class ShopProductsImportResponse(StrictBaseModel):
+    created: int
+
+
 class ShopAiDescribeRequest(StrictBaseModel):
     name: str = Field(min_length=1, max_length=300)
     category_name: str | None = Field(default=None, max_length=200)

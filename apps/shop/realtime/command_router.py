@@ -20,6 +20,7 @@ from apps.shop.realtime.operations import (
     ShopOrderSetStatusPayload,
     ShopProductCreatePayload,
     ShopProductIdPayload,
+    ShopProductsImportPayload,
     ShopProductUpdatePayload,
     ShopPublicOrderStatusPayload,
     ShopTelegramConnectPayload,
@@ -38,6 +39,7 @@ from apps.shop.realtime.operations import (
     op_orders_list,
     op_orders_set_status,
     op_products_create,
+    op_products_import,
     op_products_list,
     op_products_remove,
     op_products_update,
@@ -90,6 +92,9 @@ SHOP_OPERATIONS: dict[str, RegisteredOperation[ShopDi]] = {
     ),
     "shop/products/create_requested": Operation(
         payload_model=ShopProductCreatePayload, fn=op_products_create
+    ),
+    "shop/products/import_requested": Operation(
+        payload_model=ShopProductsImportPayload, fn=op_products_import
     ),
     "shop/products/update_requested": Operation(
         payload_model=ShopProductUpdatePayload, fn=op_products_update

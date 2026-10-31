@@ -15,6 +15,7 @@ from apps.shop.models.api import (
     ShopCategoryUpdateRequest,
     ShopCreateRequest,
     ShopProductCreateRequest,
+    ShopProductsImportRequest,
     ShopProductUpdateRequest,
     ShopUpdateRequest,
 )
@@ -181,6 +182,37 @@ class ShopService:
             updated_at=now,
         )
         return await ShopProduct.create(product)
+
+    async def import_products(
+        self, company_id: str, shop_id: str, payload: ShopProductsImportRequest
+    ) -> int:
+        """Пакетное создание товаров одной командой — импорт меню из текста."""
+        _ = await self.get_shop(company_id, shop_id)
+        if payload.category_id is not None:
+            category = await ShopCategory.get_by_id(payload.category_id)
+            if category is None or category.shop_id != shop_id:
+                raise PlatformNotFoundError(
+                    "Category not found", error_code="category_not_found"
+                )
+        now = utcnow()
+        base_sort = await ShopProduct.next_sort(shop_id, payload.category_id)
+        products = [
+            ShopProduct(
+                shop_product_id=new_id("shopprod"),
+                shop_id=shop_id,
+                category_id=payload.category_id,
+                name=item.name,
+                description=item.description,
+                price_minor=item.price_minor,
+                photo_file_id=None,
+                sort=base_sort + index,
+                created_at=now,
+                updated_at=now,
+            )
+            for index, item in enumerate(payload.items)
+        ]
+        created = await ShopProduct.objects.bulk_create(products)
+        return len(created)
 
     async def update_product(
         self, company_id: str, shop_id: str, product_id: str, payload: ShopProductUpdateRequest

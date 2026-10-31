@@ -19,6 +19,8 @@ from apps.shop.models.api import (
     ShopOrderResponse,
     ShopProductCreateRequest,
     ShopProductResponse,
+    ShopProductsImportRequest,
+    ShopProductsImportResponse,
     ShopProductUpdateRequest,
     ShopResponse,
     ShopTelegramConnectRequest,
@@ -42,6 +44,7 @@ from apps.shop.realtime.operations import (
     ShopOrderSetStatusPayload,
     ShopProductCreatePayload,
     ShopProductIdPayload,
+    ShopProductsImportPayload,
     ShopProductUpdatePayload,
     ShopTelegramConnectPayload,
     ShopUpdatePayload,
@@ -59,6 +62,7 @@ from apps.shop.realtime.operations import (
     op_orders_list,
     op_orders_set_status,
     op_products_create,
+    op_products_import,
     op_products_list,
     op_products_remove,
     op_products_update,
@@ -209,6 +213,19 @@ async def create_product(
 ) -> ShopProductResponse:
     return await op_products_create(
         ShopProductCreatePayload.model_validate(
+            {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
+        ),
+        user=require_context().user,
+        di=di,
+    )
+
+
+@router.post("/{shop_id}/products/import", response_model=ShopProductsImportResponse)
+async def import_products(
+    shop_id: str, payload: ShopProductsImportRequest, di: Di
+) -> ShopProductsImportResponse:
+    return await op_products_import(
+        ShopProductsImportPayload.model_validate(
             {"shop_id": shop_id, **payload.model_dump(exclude_unset=True)}
         ),
         user=require_context().user,

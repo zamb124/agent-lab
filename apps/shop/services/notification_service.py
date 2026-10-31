@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import secrets
 
-
 from apps.shop.config import ShopSettings
 from apps.shop.models import Shop, ShopOrder, ShopOrderItem
 from core.errors.boundary import (

@@ -164,6 +164,16 @@ export const shopProductUpdateOp = createAsyncOp({
     restMirror: { method: 'PATCH', path: '/shop/api/v1/shops/{shop_id}/products/{shop_product_id}' },
 });
 
+export const shopProductsImportOp = createAsyncOp({
+    name: 'shop/products_import',
+    successToastKey: 'shop:toast.products_imported',
+    errorToastKey: 'shop:toast.products_import_failed',
+    commandType: 'shop/products/import_requested',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: { method: 'POST', path: '/shop/api/v1/shops/{shop_id}/products/import' },
+});
+
 export const shopProductRemoveOp = createAsyncOp({
     name: 'shop/product_remove',
     errorToastKey: 'shop:toast.product_remove_failed',
@@ -282,6 +292,7 @@ declare module '@platform/lib/events/factory-registry.js' {
         'shop/product_create': typeof shopProductCreateOp;
         'shop/product_update': typeof shopProductUpdateOp;
         'shop/product_remove': typeof shopProductRemoveOp;
+        'shop/products_import': typeof shopProductsImportOp;
         'shop/orders_list': typeof shopOrdersListOp;
         'shop/order_set_status': typeof shopOrderSetStatusOp;
         'shop/domain_add': typeof shopDomainAddOp;

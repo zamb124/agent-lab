@@ -230,3 +230,61 @@ class TestCatalog:
         ):
             resp = await shop_client_company2.get(url)
             assert resp.status_code == 404, url
+
+    async def test_products_import_bulk(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        """Импорт списка блюд одной командой: сортировка, категория, итоговый список."""
+        shop = await _make_shop(shop_client, f"imp-{unique_id[:8]}")
+        category = await _make_category(shop_client, shop["shop_id"], "Горячее")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products/import",
+            json={
+                "category_id": category["shop_category_id"],
+                "items": [
+                    {"name": "Борщ", "price_minor": 35000, "description": "Со сметаной"},
+                    {"name": "Пюре с котлетой", "price_minor": 42000},
+                    {"name": "Компот", "price_minor": 12000},
+                ],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["created"] == 3
+
+        listed = await shop_client.get(f"{_SHOPS}/{shop['shop_id']}/products")
+        assert listed.status_code == 200
+        items = listed.json()["items"]
+        assert len(items) == 3
+        assert [p["name"] for p in items] == [
+            "Борщ",
+            "Пюре с котлетой",
+            "Компот",
+        ]
+        assert all(p["category_id"] == category["shop_category_id"] for p in items)
+        assert items[0]["description"] == "Со сметаной"
+        assert [p["sort"] for p in items] == sorted(p["sort"] for p in items)
+
+    async def test_products_import_foreign_category_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop_a = await _make_shop(shop_client, f"impa-{unique_id[:8]}")
+        shop_b = await _make_shop(shop_client, f"impb-{unique_id[:8]}")
+        cat_b = await _make_category(shop_client, shop_b["shop_id"], "Чужая")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop_a['shop_id']}/products/import",
+            json={
+                "category_id": cat_b["shop_category_id"],
+                "items": [{"name": "X", "price_minor": 100}],
+            },
+        )
+        assert resp.status_code == 404
+
+    async def test_products_import_empty_rejected(
+        self, shop_client: AsyncClient, unique_id: str
+    ) -> None:
+        shop = await _make_shop(shop_client, f"impe-{unique_id[:8]}")
+        resp = await shop_client.post(
+            f"{_SHOPS}/{shop['shop_id']}/products/import",
+            json={"items": []},
+        )
+        assert resp.status_code == 422
