@@ -249,7 +249,7 @@ export class CRMApp extends PlatformApp {
         super();
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
-        this._laraActiveCompanySel = this.select((s: Record<string, unknown>) => s.auth.activeCompanyId);
+        this._laraActiveCompanySel = this.select((s) => s.auth.activeCompanyId);
         this._laraSummary = this.useOp('crm/lara_summary');
         this._crmMobile =
             typeof window !== 'undefined' &&

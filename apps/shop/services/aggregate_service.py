@@ -9,8 +9,6 @@ pg_trgm-индексами по name/description; пересборка зада�
 
 from __future__ import annotations
 
-from typing import cast
-
 from oxyde import execute_raw
 
 from apps.shop.models import Shop, ShopStatus
@@ -128,8 +126,8 @@ class AggregateService:
                 "portion": row["portion"],
                 "badges": [
                     badge_defs[row["shop_id"]][key]
-                    for key in cast(list[str], row["badges"] or [])
-                    if key in badge_defs[row["shop_id"]]
+                    for key in row["badges"] or []
+                    if isinstance(key, str) and key in badge_defs[row["shop_id"]]
                 ],
                 "price_minor": row["price_minor"],
                 "photo_file_id": row["photo_file_id"],

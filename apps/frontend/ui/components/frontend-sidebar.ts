@@ -101,8 +101,8 @@ export class FrontendSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._routeKeySel = this.select((s: Record<string, unknown>) => s.router && s.router.routeKey);
-        this._authSel = this.select((s: Record<string, unknown>) => ({
+        this._routeKeySel = this.select((s) => s.router && s.router.routeKey);
+        this._authSel = this.select((s) => ({
             activeCompanyId: s.auth.activeCompanyId,
         }));
     }

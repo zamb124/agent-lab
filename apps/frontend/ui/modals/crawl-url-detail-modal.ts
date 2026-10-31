@@ -8,16 +8,13 @@ import '@platform/lib/components/platform-spinner.js';
 import '@platform/lib/components/platform-empty-state.js';
 import '../components/crawl-report/crawl-report-metadata-panels.js';
 import type {CSSResultGroup, PropertyDeclarations, PropertyValues} from 'lit';
-import type { OpController } from '@platform/lib/base/use-resource.js';
+import type { OpControllerOf } from '@platform/lib/base/use-resource.js';
+import type { PlatformFactoryRegistry } from '@platform/lib/events/factory-registry.js';
 import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 
-function detailRecord(value: unknown): Record<string, unknown> | null {
-    if (!isPlainRecord(value)) return null;
-    const row: Record<string, unknown> = {};
-    for (const [key, field] of Object.entries(value)) row[key] = field;
-    return row;
-}
+import type { CrawlUrlDetail } from '@platform/lib/events/wire/search.gen.js';
+
 
 function textOrDash(value: unknown): string {
     if (typeof value === 'string' && value.length > 0) return value;
@@ -130,16 +127,10 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         this._activeTab = 'metadata';
         this._loaded = false;
         this._detailOp = this.useOp('search/crawl_url_detail');
-        this._localeSel = this.select((state: Record<string, unknown>) => {
-            const locale = state.i18n.locale;
-            if (typeof locale !== 'string' || locale.length === 0) {
-                throw new Error('crawl-url-detail-modal: i18n.locale is required');
-            }
-            return locale;
-        });
+        this._localeSel = this.select((state) => state.i18n.locale);
         this.size = 'lg';
     }
-    private _detailOp: OpController;
+    private _detailOp: OpControllerOf<PlatformFactoryRegistry['search/crawl_url_detail']>;
     private _localeSel: SelectController<any>;
 
 
@@ -167,7 +158,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         return formatPlatformDateTime(value as string | number | Date, this._localeSel.value as string);
     }
 
-    _renderMetadata(detail: Record<string, unknown>) {
+    _renderMetadata(detail: CrawlUrlDetail) {
         const url = detail.url;
         return html`
             <div class="meta-grid">
@@ -205,7 +196,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         `;
     }
 
-    _renderMarkdownTab(markdown: string, emptyKey: string) {
+    _renderMarkdownTab(markdown: string | null | undefined, emptyKey: string) {
         if (!markdown || !markdown.trim()) {
             return html`<div class="state">${this.t(emptyKey)}</div>`;
         }
@@ -213,7 +204,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         return html`<div class="markdown-preview">${unsafeHTML(htmlContent)}</div>`;
     }
 
-    _renderIndexedTab(detail: Record<string, unknown>) {
+    _renderIndexedTab(detail: CrawlUrlDetail) {
         const indexed = detail.indexed_content;
         if (!detail.url.document_id) {
             return html`<div class="state">${this.t('crawl_report_page.url_detail_indexed_not_ready')}</div>`;
@@ -238,11 +229,9 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         `;
     }
 
-    _detailForCurrentUrl(): Record<string, unknown> | null {
-        const detail = detailRecord(this._detailOp.state.lastResult);
-        if (detail === null) return null;
-        const url = detailRecord(detail.url);
-        if (url === null || url.crawl_url_id !== this.crawl_url_id) return null;
+    _detailForCurrentUrl(): CrawlUrlDetail | null {
+        const detail = this._detailOp.state.lastResult;
+        if (detail === null || detail.url.crawl_url_id !== this.crawl_url_id) return null;
         return detail;
     }
 

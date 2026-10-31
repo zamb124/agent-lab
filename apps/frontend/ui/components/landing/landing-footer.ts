@@ -222,7 +222,7 @@ export class LandingFooter extends PlatformElement {
         super();
         this._bundle = this.useOp('frontend/public_site_bundle');
         this._cookieConsent = this.useSlice('frontend/cookie_consent');
-        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
     private _bundle: OpController;
     private _cookieConsent: ControllerFor<'frontend/cookie_consent'>;

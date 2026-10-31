@@ -18,6 +18,7 @@ import { isPlainRecord, recordField } from '../../events/payload.js';
 import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import { buildFlowSessionFileCreateSpecJson } from '../../utils/file-create-spec.js';
 import { resolvePlatformFileRefs } from '../../utils/platform-file-upload.js';
+import { getPlatformBrandBootstrap } from '../../utils/platform-brand.js';
 import { stopStreamTtsPlayback } from '../../voice/stream-tts-registry.js';
 import type { VoiceAgentBridge } from '../../voice/voice-agent-bridge.js';
 import type { VoiceMediaSession } from '../../voice/voice-media-session.js';
@@ -582,7 +583,8 @@ export class PlatformFlowUI extends LitElement {
         const identity = flowRecord(this.interface === null ? undefined : this.interface.flow_identity);
         if (identity && typeof identity.title === 'string' && identity.title.trim() !== '') return identity.title;
         const pageTitle = resolvedText(page.title, this.store.state);
-        return pageTitle !== null && pageTitle !== '' ? pageTitle : 'Linnex';
+        if (pageTitle !== null && pageTitle !== '') return pageTitle;
+        return getPlatformBrandBootstrap()?.platformName ?? 'AI';
     }
 
     private _topActions(chromeMode: string, locale: string) {

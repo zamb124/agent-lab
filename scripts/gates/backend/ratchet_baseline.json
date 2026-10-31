@@ -10,7 +10,7 @@
   "logger_fstring": 0,
   "logger_percent": 0,
   "logger_sentence": 0,
-  "tests_monkeypatch_internal": 129,
-  "tests_asyncmock": 10,
-  "tests_skip_markers": 101
+  "tests_monkeypatch_internal": 124,
+  "tests_asyncmock": 9,
+  "tests_skip_markers": 99
 }

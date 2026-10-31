@@ -56,6 +56,15 @@ _HEADER = """/**
 """
 
 
+def _model_name(model: Any) -> str | None:
+    """`__name__` модели или None для typing-конструкций без имени."""
+    try:
+        name = model.__name__
+    except AttributeError:
+        return None
+    return name if isinstance(name, str) else None
+
+
 def _unwrap_return(annotation: Any) -> Any:
     """Success-тип из return-аннотации op_*: убирает `| None` и Awaitable."""
     import types
@@ -95,16 +104,16 @@ def _iter_wire_models(
     models: list[Any] = []
     commands: list[tuple[str, Any, Any]] = []
     for command_type, op in catalog.items():
-        payload_model = getattr(op, "payload_model", None)
+        payload_model = op.payload_model
         if payload_model is not None:
             models.append(payload_model)
-        fn = getattr(op, "fn", None)
+        fn = op.fn
         ret = None
         if fn is not None:
             try:
                 ret = typing.get_type_hints(fn).get("return")
             except Exception:  # noqa: BLE001 — неразрешимые ForwardRef пропускаем
-                ret = getattr(fn, "__annotations__", {}).get("return")
+                ret = fn.__annotations__.get("return")
             ret = _unwrap_return(ret)
             if ret is not None:
                 models.append(ret)
@@ -154,7 +163,7 @@ def _schema_json(
             continue
         nested = schema.pop("$defs", {})
         schemas.update(nested)
-        name = getattr(model, "__name__", None)
+        name = _model_name(model)
         if name is not None and ("type" in schema or "properties" in schema or "$ref" in schema):
             schemas.setdefault(name, schema)
         title = schema.get("title")
@@ -168,7 +177,7 @@ def _schema_json(
     emitted = {_safe_ident(k) for k in schemas if isinstance(schemas[k], dict)}
 
     def _model_ident(model: Any) -> str:
-        name = getattr(model, "__name__", None)
+        name = _model_name(model)
         if name is None:
             return "unknown"
         ident = _safe_ident(name)

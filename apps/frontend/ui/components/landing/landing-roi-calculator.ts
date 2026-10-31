@@ -120,7 +120,7 @@ export class LandingRoiCalculator extends PlatformElement {
         super();
         this._headcount = 200;
         this._monthlySpendRub = 800000;
-        this._localeSel = this.select((s: Record<string, unknown>) => {
+        this._localeSel = this.select((s) => {
             const loc = s.i18n && typeof s.i18n.locale === 'string' ? s.i18n.locale.trim() : '';
             if (loc.length > 0) {
                 return loc;

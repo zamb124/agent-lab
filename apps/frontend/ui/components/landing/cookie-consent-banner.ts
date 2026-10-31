@@ -127,9 +127,9 @@ export class CookieConsentBanner extends PlatformElement {
         this._consent = this.useSlice('frontend/cookie_consent');
         this._recordOp = this.useOp('frontend/cookie_consent_record');
         this._siteBundle = this.useOp('frontend/public_site_bundle');
-        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
-        this._routeSel = this.select((s: Record<string, unknown>) => s.router.routeKey);
-        this._consentSel = this.select((s: Record<string, unknown>) => s.frontendCookieConsent);
+        this._localeSel = this.select((s) => s.i18n.locale);
+        this._routeSel = this.select((s) => s.router.routeKey);
+        this._consentSel = this.select((s) => s.frontendCookieConsent);
         this.useEvent(CoreEvents.STORAGE_LOADED, (event) => this._onStorageLoaded(event));
     }
     private _consent: ControllerFor<'frontend/cookie_consent'>;

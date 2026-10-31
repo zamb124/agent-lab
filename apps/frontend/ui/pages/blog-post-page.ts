@@ -42,7 +42,7 @@ export class BlogPostPage extends PlatformPage {
         super();
         this.slug = '';
         this._postOp = this.useOp('frontend/public_blog_post');
-        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
     private _postOp: OpController;
     private _localeSel: SelectController<any>;

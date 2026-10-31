@@ -22,6 +22,7 @@ import { PlatformServiceSidebar } from '@platform/lib/components/layout/platform
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { ModalStackItem } from '@platform/lib/events/reducers/modals.js';
+import type { ChannelRead } from '@platform/lib/events/wire/sync.gen.js';
 import '@platform/lib/components/platform-icon.js';
 import { channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
@@ -49,7 +50,7 @@ export class SyncChannelRow extends PlatformElement {
         pickMode: { type: Boolean, attribute: 'pick-mode' },
         _avatarImgFailed: { state: true },
     };
-    declare channel: Record<string, unknown> | null;
+    declare channel: ChannelRead | null;
     declare pickMode: boolean;
     declare _avatarImgFailed: boolean;
 
@@ -328,11 +329,9 @@ export class SyncChannelRow extends PlatformElement {
     override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (this.channel) {
-            const isDm = this.channel.type === 'direct' && this.channel.peer
-                && typeof this.channel.peer.user_id === 'string';
+            const peer = this.channel.peer;
             let sig;
-            if (isDm) {
-                const peer = this.channel.peer;
+            if (this.channel.type === 'direct' && peer) {
                 const au = typeof peer.avatar_url === 'string' ? peer.avatar_url : '';
                 sig = `dm:${peer.user_id}|${au}`;
             } else {
@@ -405,9 +404,9 @@ export class SyncChannelRow extends PlatformElement {
         if (this.pickMode) return;
         if (!this.channel) return;
         const ch = this.channel;
-        const isDm = ch.type === 'direct' && ch.peer && typeof ch.peer.user_id === 'string' && ch.peer.user_id !== '';
-        if (isDm) {
-            this.openModal('platform.user_info', { userId: ch.peer.user_id });
+        const peer = ch.peer;
+        if (ch.type === 'direct' && peer && peer.user_id !== '') {
+            this.openModal('platform.user_info', { userId: peer.user_id });
             return;
         }
         if (typeof ch.channel_id === 'string' && ch.channel_id !== '') {
@@ -418,24 +417,22 @@ export class SyncChannelRow extends PlatformElement {
     _renderAvatar() {
         const channel = this.channel;
         if (!channel) return html``;
-        const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
-        if (isDm) {
-            const member = findCompanyMember(this._members.items, channel.peer.user_id);
+        const peer = channel.peer;
+        if (channel.type === 'direct' && peer) {
+            const member = findCompanyMember(this._members.items, peer.user_id);
             const online = isOnline(member);
-            const name = typeof channel.peer.display_name === 'string' && channel.peer.display_name !== ''
-                ? channel.peer.display_name
-                : channel.peer.user_id;
-            const hueVar = syncAvatarHueVar(channel.peer.user_id);
+            const name = peer.display_name !== '' ? peer.display_name : peer.user_id;
+            const hueVar = syncAvatarHueVar(peer.user_id);
             if (this._avatarImgFailed) {
                 return html`<span class="avatar pastel-initials" style=${hueVar}>
                     ${initialsFromName(name)}
                     ${online ? html`<span class="presence-dot"></span>` : ''}
                 </span>`;
             }
-            const peerUrl = typeof channel.peer.avatar_url === 'string' && channel.peer.avatar_url !== ''
-                ? channel.peer.avatar_url
+            const peerUrl = typeof peer.avatar_url === 'string' && peer.avatar_url !== ''
+                ? peer.avatar_url
                 : null;
-            const resolved = resolveAvatarImageSrc({ avatarUrl: peerUrl, seed: channel.peer.user_id });
+            const resolved = resolveAvatarImageSrc({ avatarUrl: peerUrl, seed: peer.user_id });
             return html`<span class="avatar">
                 <img src=${resolved.src} alt="" @error=${this._onRowAvatarError} />
                 ${online ? html`<span class="presence-dot"></span>` : ''}

@@ -121,7 +121,7 @@ export class CRMEntityHoverPreview extends PlatformElement {
         this.entityId = '';
         this.anchorRect = null;
         this._entities = this.useResource('crm/entities');
-        this._locale = this.select((s: Record<string, unknown>) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
+        this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
     }
 
     _formatDate(value: unknown): string {

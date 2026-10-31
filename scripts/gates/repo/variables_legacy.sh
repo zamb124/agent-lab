@@ -18,6 +18,8 @@ GLOB_EXCLUDES=(
   --glob '!.cursor/plans/**'
   --glob '!scripts/gates/repo/variables_legacy.sh'
   --glob '!core/frontend/static/assets/**'
+  --glob '!core/frontend/embed-dist/**'
+  --glob '!**/ui-dist/**'
 )
 
 PATTERNS=(

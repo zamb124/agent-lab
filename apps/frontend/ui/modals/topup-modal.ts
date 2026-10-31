@@ -64,7 +64,7 @@ export class FrontendTopupModal extends PlatformFormModal {
         this._amount = AMOUNT_MIN;
         this.size = 'sm';
         this._topup = this.useOp('frontend/billing_topup');
-        this._locale = this.select((s: Record<string, unknown>) => {
+        this._locale = this.select((s) => {
             const locale = s.i18n.locale;
             if (typeof locale !== 'string' || locale.length === 0) {
                 throw new Error('FrontendTopupModal: i18n.locale is required');

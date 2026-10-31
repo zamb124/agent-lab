@@ -188,7 +188,7 @@ export class CRMNamespacesPage extends PlatformPage {
     constructor() {
         super();
         this._namespaces = this.useResource(NAMESPACES_NAME, { autoload: true });
-        this._authSel = this.select((s: Record<string, unknown>) => s.auth.user);
+        this._authSel = this.select((s) => s.auth.user);
     }
 
     _onCreate() {

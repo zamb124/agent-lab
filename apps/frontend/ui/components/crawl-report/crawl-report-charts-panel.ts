@@ -4,6 +4,7 @@ import '@platform/lib/components/platform-mini-bar-chart.js';
 import '@platform/lib/components/platform-sparkline.js';
 import '@platform/lib/components/platform-metric-card.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import type { CrawlDomain, CrawlJob, CrawlProfileSummary } from '@platform/lib/events/wire/search.gen.js';
 import {
     CATEGORY_CHART_COLORS,
     DOMAIN_STATUS_CHART_COLORS,
@@ -36,9 +37,9 @@ export class CrawlReportChartsPanel extends PlatformElement {
         contentTypeLabel: { attribute: false },
         topicLabel: { attribute: false },
     }
-    declare summary: Record<string, unknown> | null;
-    declare jobs: Array<Record<string, unknown>>;
-    declare domains: Array<Record<string, unknown>>;
+    declare summary: CrawlProfileSummary | null;
+    declare jobs: CrawlJob[];
+    declare domains: CrawlDomain[];
     declare locale: string;
     declare collapsed: boolean;
     declare statusLabel: (status: string) => string;
@@ -179,7 +180,7 @@ export class CrawlReportChartsPanel extends PlatformElement {
             .slice(-24);
         return sorted.map((job) => ({
             label: job.started_at,
-            value: job.urls_indexed,
+            value: job.urls_indexed ?? 0,
         }));
     }
 
@@ -187,10 +188,10 @@ export class CrawlReportChartsPanel extends PlatformElement {
         const runningJob = this.summary && this.summary.running_job;
         if (runningJob) {
             return {
-                fetched: runningJob.urls_fetched,
-                indexed: runningJob.urls_indexed,
-                enriched: runningJob.urls_enriched,
-                errors: runningJob.errors,
+                fetched: runningJob.urls_fetched ?? 0,
+                indexed: runningJob.urls_indexed ?? 0,
+                enriched: runningJob.urls_enriched ?? 0,
+                errors: runningJob.errors ?? 0,
             };
         }
         let fetched = 0;
@@ -198,10 +199,10 @@ export class CrawlReportChartsPanel extends PlatformElement {
         let enriched = 0;
         let errors = 0;
         for (const job of this.jobs.slice(0, 12)) {
-            fetched += job.urls_fetched;
-            indexed += job.urls_indexed;
-            enriched += job.urls_enriched;
-            errors += job.errors;
+            fetched += job.urls_fetched ?? 0;
+            indexed += job.urls_indexed ?? 0;
+            enriched += job.urls_enriched ?? 0;
+            errors += job.errors ?? 0;
         }
         return { fetched, indexed, enriched, errors };
     }

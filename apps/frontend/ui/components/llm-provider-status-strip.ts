@@ -8,6 +8,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
 import '@platform/lib/components/platform-help-hint.js';
 import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from 'lit';
+import type { LLMProviderRuntimeStatus } from '@platform/lib/events/wire/frontend.gen.js';
 
 export const LLM_PROVIDER_ERROR_CLASS_I18N = Object.freeze({
     rate_limited: 'settings_page.model_scoring.error_rate_limited',
@@ -45,7 +46,7 @@ export class LlmProviderStatusStrip extends PlatformElement {
     static override properties: PropertyDeclarations = {
         providers: { attribute: false },
     }
-    declare providers: unknown;
+    declare providers: LLMProviderRuntimeStatus[];
 ;
 
     static override styles: CSSResultGroup = [
@@ -90,13 +91,13 @@ export class LlmProviderStatusStrip extends PlatformElement {
         `,
     ];
 
-    _tone(provider: Record<string, unknown>) {
+    _tone(provider: LLMProviderRuntimeStatus) {
         if (provider.availability === 'not_configured') {
             return 'tertiary';
         }
         if (
-            llmProviderErrorClassIsBlocking(provider.error_class)
-            || (provider.last_probe !== null && provider.last_probe.ok === false)
+            (provider.error_class != null && llmProviderErrorClassIsBlocking(provider.error_class))
+            || (provider.last_probe != null && provider.last_probe.ok === false)
         ) {
             return 'error';
         }
@@ -109,7 +110,7 @@ export class LlmProviderStatusStrip extends PlatformElement {
         throw new Error(`llm-provider-status-strip: unknown availability ${provider.availability}`);
     }
 
-    _chipMeta(provider: Record<string, unknown>) {
+    _chipMeta(provider: LLMProviderRuntimeStatus) {
         if (provider.availability === 'not_configured') {
             return this.t('settings_page.model_scoring.meta_no_key');
         }
@@ -123,28 +124,28 @@ export class LlmProviderStatusStrip extends PlatformElement {
             return this.t('settings_page.model_scoring.status_cooldown');
         }
         if (
-            provider.last_probe !== null
+            provider.last_probe != null
             && provider.last_probe.ok === false
-            && provider.last_probe.error_class !== null
+            && provider.last_probe.error_class != null
         ) {
             return llmProviderErrorClassLabel((key: string) => this.t(key), provider.last_probe.error_class);
         }
         return '';
     }
 
-    _hintText(provider: Record<string, unknown>) {
-        const parts: any[] = [];
+    _hintText(provider: LLMProviderRuntimeStatus) {
+        const parts: string[] = [];
         const translate = (key: string) => this.t(key);
-        if (provider.error_class !== null) {
+        if (provider.error_class != null) {
             parts.push(llmProviderErrorClassLabel(translate, provider.error_class));
         }
         if (typeof provider.error_text === 'string' && provider.error_text !== '') {
             parts.push(provider.error_text);
         }
         if (
-            provider.last_probe !== null
+            provider.last_probe != null
             && provider.last_probe.ok === false
-            && provider.last_probe.error_class !== null
+            && provider.last_probe.error_class != null
         ) {
             const probeLabel = llmProviderErrorClassLabel(translate, provider.last_probe.error_class);
             if (!parts.includes(probeLabel)) {
@@ -152,7 +153,7 @@ export class LlmProviderStatusStrip extends PlatformElement {
             }
         }
         if (
-            provider.last_probe !== null
+            provider.last_probe != null
             && typeof provider.last_probe.error_text === 'string'
             && provider.last_probe.error_text !== ''
             && provider.last_probe.error_text !== provider.error_text

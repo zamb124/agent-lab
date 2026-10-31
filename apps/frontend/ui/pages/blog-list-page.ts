@@ -20,7 +20,7 @@ export class BlogListPage extends PlatformPage {
     constructor() {
         super();
         this._listOp = this.useOp('frontend/public_blog_list');
-        this._localeSel = this.select((s: Record<string, unknown>) => s.i18n.locale);
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
     private _listOp: OpController;
     private _localeSel: SelectController<any>;

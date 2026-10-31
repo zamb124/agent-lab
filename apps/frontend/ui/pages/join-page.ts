@@ -85,8 +85,8 @@ export class JoinPage extends PlatformPage {
         super();
         this._invite = this.useOp('frontend/invite_accept');
         this._preview = this.useOp('frontend/invite_preview');
-        this._authStatus = this.select((s: Record<string, unknown>) => s.auth.status);
-        this._authUser = this.select((s: Record<string, unknown>) => s.auth.user);
+        this._authStatus = this.select((s) => s.auth.status);
+        this._authUser = this.select((s) => s.auth.user);
         this._oauthLoading = false;
         this._oauthError = '';
         this._previewRanFor = null;

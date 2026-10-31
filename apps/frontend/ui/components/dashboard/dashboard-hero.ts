@@ -69,11 +69,11 @@ export class DashboardHero extends PlatformElement {
 
     constructor() {
         super();
-        this._auth = this.select((s: Record<string, unknown>) => ({
+        this._auth = this.select((s) => ({
             user: s.auth.user,
             activeCompanyId: s.auth.activeCompanyId,
         }));
-        this._companies = this.select((s: Record<string, unknown>) => s.companies.list);
+        this._companies = this.select((s) => s.companies.list);
     }
     private _auth: SelectController<any>;
     private _companies: SelectController<any>;

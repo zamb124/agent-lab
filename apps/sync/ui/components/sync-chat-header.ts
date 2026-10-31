@@ -21,6 +21,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { isPlainRecord } from '@platform/lib/events/payload.js';
 import type { AuthUser } from '@platform/lib/events/reducers/auth.js';
 import type { NetworkState } from '@platform/lib/events/reducers/network.js';
+import type { ChannelRead } from '@platform/lib/events/wire/sync.gen.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
@@ -376,10 +377,9 @@ export class SyncChatHeader extends PlatformElement {
         super.updated?.(changed);
         const channel = this._channel();
         if (channel) {
-            const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
+            const peer = channel.peer;
             let sig;
-            if (isDm) {
-                const peer = channel.peer;
+            if (channel.type === 'direct' && peer) {
                 const au = typeof peer.avatar_url === 'string' ? peer.avatar_url : '';
                 sig = `dm:${peer.user_id}|${au}`;
             } else {
@@ -395,8 +395,8 @@ export class SyncChatHeader extends PlatformElement {
         }
     }
 
-    _channel(): Record<string, unknown> | undefined {
-        return this._channels.items.find((c: Record<string, unknown>) => c.channel_id === this.channelId);
+    _channel(): ChannelRead | undefined {
+        return this._channels.items.find((c) => c.channel_id === this.channelId);
     }
 
     _onBackClick() {
@@ -477,8 +477,8 @@ export class SyncChatHeader extends PlatformElement {
         this._callHangup.run({ call_id: callUi.activeCall.call_id });
     }
 
-    _onPeerClick(channel: Record<string, unknown> | null) {
-        if (channel === null || !isPlainRecord(channel.peer)) return;
+    _onPeerClick(channel: ChannelRead | null) {
+        if (channel === null || !channel.peer) return;
         const userId = channel.peer.user_id;
         if (typeof userId !== 'string') return;
         this.openModal('platform.user_info', { userId });
@@ -488,7 +488,7 @@ export class SyncChatHeader extends PlatformElement {
         this._headerAvatarFailed = true;
     }
 
-    _renderAvatar(channel: Record<string, unknown>) {
+    _renderAvatar(channel: ChannelRead) {
         const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
         if (isDm) {
             const member = findCompanyMember(this._members.items, channel.peer.user_id);
@@ -573,9 +573,10 @@ export class SyncChatHeader extends PlatformElement {
             myUserId,
             members: this._members.items,
         });
+        const peerUserId = channel.peer?.user_id;
         const isPeerOnline = channel.type === 'direct'
-            && channel.peer && typeof channel.peer.user_id === 'string'
-            && isOnline(findCompanyMember(this._members.items, channel.peer.user_id));
+            && peerUserId !== undefined
+            && isOnline(findCompanyMember(this._members.items, peerUserId));
         const ac = callUi !== undefined && callUi.activeCall ? callUi.activeCall : null;
         const chId = typeof this.channelId === 'string' ? this.channelId : '';
         const byChannelId = ac !== null && typeof ac.channel_id === 'string' && ac.channel_id === chId;

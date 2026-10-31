@@ -285,9 +285,9 @@ export class CRMSidebar extends PlatformElement {
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._onPopState = () => this.requestUpdate();
-        this._routeKeySel = this.select((s: Record<string, unknown>) => s.router.routeKey);
-        this._authSel = this.select((s: Record<string, unknown>) => s.auth.user);
-        this._namespaceSelectionByCompany = this.select((s: Record<string, unknown>) => s.ui.namespace.selectionByCompany);
+        this._routeKeySel = this.select((s) => s.router.routeKey);
+        this._authSel = this.select((s) => s.auth.user);
+        this._namespaceSelectionByCompany = this.select((s) => s.ui.namespace.selectionByCompany);
         this._namespaces = this.useResource('crm/namespaces', { autoload: true });
         this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
     }

@@ -111,7 +111,7 @@ export class CRMTasksPage extends CRMNamespacePage {
         this._selectedId = '';
         this._selectedItem = null;
         this._workItems = null;
-        this._routeParamsSel = this.select((s: Record<string, unknown>) => s.router.params);
+        this._routeParamsSel = this.select((s) => s.router.params);
     }
 
     override connectedCallback(): void {
@@ -202,7 +202,7 @@ export class CRMTasksPage extends CRMNamespacePage {
         const showPanel = Boolean(selectedId) && !isMobileViewport();
         this.toggleAttribute('data-no-panel', !showPanel);
 
-        const routeKey = this.select((s: Record<string, unknown>) => s.router.routeKey).value;
+        const routeKey = this.select((s) => s.router.routeKey).value;
         const fromCache = selectedId && this._workItems && this._workItems.byId
             ? this._workItems.byId[selectedId]
             : null;

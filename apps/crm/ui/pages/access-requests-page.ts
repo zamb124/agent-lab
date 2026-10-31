@@ -293,7 +293,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
         this._status = STATUS_PENDING;
         this._requests = this.useResource(RESOURCE_NAME);
         this._updateOp = this.useOp(UPDATE_OP);
-        this._locale = this.select((s: Record<string, unknown>) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
+        this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
     }
 
     _formatDate(value: unknown): string {
