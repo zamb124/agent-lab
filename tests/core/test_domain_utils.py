@@ -112,7 +112,7 @@ def test_is_allowed_integration_return_origin_linnex() -> None:
     assert is_allowed_integration_return_origin("https://acme.linnex.io", "https://linnex.io") is True
 
 
-def test_is_allowed_integration_return_origin_linnex() -> None:
+def test_is_allowed_integration_return_origin_linnex_rejects_foreign() -> None:
     pub = "https://linnex.io"
     assert is_allowed_integration_return_origin("https://acme.linnex.io", pub) is True
     assert is_allowed_integration_return_origin("https://other.ru", pub) is False

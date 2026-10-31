@@ -15,24 +15,24 @@ async def test_platform_brand_linnex(frontend_client) -> None:
     payload = response.json()
     assert payload["base_domain"] == "linnex.io"
     assert payload["platform_name"] == "Linnex"
-    assert payload["support_email"] == "helpme@linnex.io"
+    assert payload["support_email"] == "info@linnex.io"
     assert payload["apex_origin"] == "https://linnex.io/"
-    assert "linnex.io" in payload["supported_domains"]
     assert "linnex.io" in payload["supported_domains"]
 
 
 @pytest.mark.asyncio
-async def test_platform_brand_linnex(frontend_client) -> None:
+async def test_platform_brand_agents_lab(frontend_client) -> None:
     response = await frontend_client.get(
         "/frontend/api/platform/brand",
-        headers={"Host": "linnex.io"},
+        headers={"Host": "agents-lab.ru"},
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["base_domain"] == "linnex.io"
+    assert payload["base_domain"] == "agents-lab.ru"
     assert payload["platform_name"] == "Linnex"
-    assert payload["support_email"] == "info@linnex.io"
-    assert payload["apex_origin"] == "https://linnex.io/"
+    assert payload["support_email"] == "helpme@linnex.io"
+    assert payload["apex_origin"] == "https://agents-lab.ru/"
+    assert "agents-lab.ru" in payload["supported_domains"]
 
 
 @pytest.mark.asyncio
@@ -102,10 +102,10 @@ async def test_public_legal_linnex(frontend_client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_public_legal_linnex_same_operator(frontend_client) -> None:
+async def test_public_legal_agents_lab(frontend_client) -> None:
     response = await frontend_client.get(
         "/frontend/api/public/legal",
-        headers={"Host": "linnex.io"},
+        headers={"Host": "agents-lab.ru"},
     )
     assert response.status_code == 200
     legal = response.json()
@@ -133,7 +133,7 @@ async def test_public_site_bundle_linnex(frontend_client) -> None:
 
 @pytest.mark.parametrize("host,short_name", [
     ("linnex.io", "Linnex"),
-    ("linnex.io", "Linnex"),
+    ("agents-lab.ru", "Linnex"),
 ])
 @pytest.mark.asyncio
 async def test_pwa_manifest_host_aware(
@@ -164,7 +164,7 @@ async def test_pwa_manifest_host_aware(
             },
         ),
         (
-            "linnex.io",
+            "agents-lab.ru",
             {
                 "models_product_name": "Linnex Models",
                 "voice_product_name": "Linnex Voice",
@@ -194,7 +194,7 @@ async def test_platform_brand_product_names(
     "host,platform_name",
     [
         ("linnex.io", "Linnex"),
-        ("linnex.io", "Linnex"),
+        ("agents-lab.ru", "Linnex"),
     ],
 )
 @pytest.mark.asyncio
@@ -217,7 +217,7 @@ async def test_llms_txt_host_aware(
     "host,platform_name",
     [
         ("linnex.io", "Linnex"),
-        ("linnex.io", "Linnex"),
+        ("agents-lab.ru", "Linnex"),
     ],
 )
 @pytest.mark.asyncio

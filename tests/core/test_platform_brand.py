@@ -36,7 +36,7 @@ def test_resolve_brand_linnex() -> None:
     assert brand.platform_name == "Linnex"
 
 
-def test_resolve_brand_linnex() -> None:
+def test_resolve_brand_linnex_apex() -> None:
     brand = resolve_brand("linnex.io")
     assert brand.platform_name == "Linnex"
 

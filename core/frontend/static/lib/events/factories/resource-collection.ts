@@ -161,7 +161,7 @@ export interface ResourceCollectionOptions<
     wsTimeoutMs?: number;
     itemPathTemplate?: string;
     listQuery?: (payload: Record<string, unknown>) => Record<string, unknown>;
-    mapItem?: (item: ResourceItem) => TItem;
+    mapItem?: (item: TItem) => TItem;
     listFetchAllPages?: boolean;
     listPreserveItemsOnRefresh?: boolean;
     buildItemUrl?: (id: string | number) => string;
@@ -312,7 +312,7 @@ export function createResourceCollection<
 
     const sliceKey = options.sliceKey || deriveSliceKey(name);
     const listQuery = options.listQuery || (() => ({ limit: 200 }));
-    const mapItem: (item: ResourceItem) => ResourceItem = options.mapItem || ((x) => x);
+    const mapItem: (item: TItem) => TItem = options.mapItem || ((x) => x);
     const listFetchAllPages = options.listFetchAllPages === true;
     const listPreserveItemsOnRefresh = options.listPreserveItemsOnRefresh === true;
     const buildItemUrl = options.buildItemUrl || ((id) => `${baseUrl}/${encodeURIComponent(id)}`);
@@ -406,8 +406,8 @@ export function createResourceCollection<
     const hasCreate = operations.includes('create');
 
     function _withItems(state: S, items: ResourceItem[], listTotal?: number): S {
-        const list = items.map(mapItem);
-        const byId: Record<string, ResourceItem> = {};
+        const list = (items as TItem[]).map(mapItem);
+        const byId: Record<string, TItem> = {};
         for (const item of list) {
             byId[String(item[idField])] = item;
         }
@@ -426,7 +426,7 @@ export function createResourceCollection<
     }
 
     function _withItem(state: S, item: ResourceItem): S {
-        const mapped = mapItem(item);
+        const mapped = mapItem(item as TItem);
         const id = String(mapped[idField]);
         const idx = state.items.findIndex((x) => x[idField] === mapped[idField]);
         const items = idx === -1 ? [...state.items, mapped] : state.items.map((x, i) => (i === idx ? mapped : x));

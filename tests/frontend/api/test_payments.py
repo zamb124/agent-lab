@@ -239,7 +239,7 @@ class TestPaymentModels:
             "https://acme.linnex.io/billing?payment=success&transaction_id=co1:abc123def456"
         )
 
-    def test_return_url_follows_linnex_host(self) -> None:
+    def test_return_url_follows_linnex_host_fail(self) -> None:
         url = payment_browser_return_url(
             host="acme.linnex.io",
             company_subdomain="acme",
