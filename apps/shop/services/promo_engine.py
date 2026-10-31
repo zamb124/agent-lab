@@ -18,7 +18,7 @@ from apps.shop.models.promo import ShopPromo
 from core.types import JsonObject, JsonValue
 
 
-def _as_int(v: object) -> int:
+def _as_int(v: JsonValue) -> int:
     """Число из JSON-значения с безопасным нулём по умолчанию."""
     if isinstance(v, bool):
         return int(v)

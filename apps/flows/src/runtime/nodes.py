@@ -24,7 +24,7 @@ import json
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
-from typing import ClassVar, Literal, TypeAlias, cast, overload, override
+from typing import ClassVar, Literal, TypeAlias, overload, override
 
 from a2a.types import Artifact, Message, Part
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
@@ -1469,14 +1469,24 @@ class LlmNode(BaseNode):
                 exc_allow = [ExceptionAbsorbAllowName(str(item)) for item in raw_allow]
             raw_capability = self.config.get("llm_capability")
             if raw_capability is not None:
-                if (
-                    not isinstance(raw_capability, str)
-                    or raw_capability not in LLM_CAPABILITY_VALUES
-                ):
+                if not isinstance(raw_capability, str):
                     raise ValueError(
                         f"llm_capability: expected one of {sorted(LLM_CAPABILITY_VALUES)}, got {raw_capability!r}"
                     )
-                llm_capability = cast(LLMCapability, raw_capability)
+                match raw_capability:
+                    case (
+                        "llm_chat"
+                        | "llm_summarize"
+                        | "llm_format_markdown"
+                        | "llm_codegen"
+                        | "llm_vision"
+                        | "image_gen"
+                    ):
+                        llm_capability = raw_capability
+                    case _:
+                        raise ValueError(
+                            f"llm_capability: expected one of {sorted(LLM_CAPABILITY_VALUES)}, got {raw_capability!r}"
+                        )
         resources = {
             key: ResourceReference.model_validate(value)
             for key, value in _config_resource_refs(self.config).items()
