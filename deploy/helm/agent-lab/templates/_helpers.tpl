@@ -80,6 +80,8 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_realtime
 - name: DATABASE__STOCK_URL
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_stock
+- name: DATABASE__SHOP_URL
+  value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_shop
 - name: OPENFGA__API_URL
   value: http://openfga:8080
 {{- /* Server (Deployment) смотрит openfga.enabled; client authz включаем только с pin ids — иначе CrashLoop на первом деплое до bootstrap. */}}
