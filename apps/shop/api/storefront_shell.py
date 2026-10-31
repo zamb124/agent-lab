@@ -53,6 +53,9 @@ body{{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;ba
 .mchunk{{animation:fade .3s ease}}
 .msk{{height:96px;border-radius:var(--radius);margin:14px 0;background:linear-gradient(100deg,var(--card2) 40%,var(--card) 50%,var(--card2) 60%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}}
 @keyframes shimmer{{from{{background-position:120% 0}}to{{background-position:-80% 0}}}}
+.item,.gcard{{cursor:pointer}}
+.phero{{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:var(--radius);margin-bottom:12px}}
+.pdesc{{color:var(--muted);font-size:14px;line-height:1.55;margin:4px 0 14px}}
 .item{{display:flex;gap:14px;padding:16px 2px;border-bottom:1px solid var(--line);animation:fade .3s ease}}
 .flash{{animation:flashRing 2.6s ease}}
 @keyframes flashRing{{0%,55%{{box-shadow:0 0 0 3px var(--accent);border-radius:14px}}100%{{box-shadow:0 0 0 0 transparent}}}}
@@ -206,9 +209,10 @@ function qtyCtl(p){{const hasMod=p.modifier_groups&&p.modifier_groups.length;
   if(!n)return `<button class="add" onclick="addPlain('${{p.id}}',1)">В корзину</button>`;
   return `<span class="stepper"><button class="ghost" onclick="addPlain('${{p.id}}',-1)">−</button><span>${{n}}</span><button onclick="addPlain('${{p.id}}',1)">+</button></span>`;}}
 function refreshQty(pid){{document.querySelectorAll(`[data-qty="${{pid}}"]`).forEach(el=>{{el.innerHTML=qtyCtl(byId(pid));}});}}
-function rowList(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
-function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${{esc(p.id)}}">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row"><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
-function rowCompact(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div>`).join('');}}
+const STOP=`onclick="event.stopPropagation()"`;
+function rowList(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row" ${{STOP}}><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('');}}
+function rowGrid(ps){{return `<div class="grid">`+ps.map(p=>`<div class="gcard" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')">${{photo(p.photo_file_id)}}<div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}<div class="row" ${{STOP}}><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}">${{qtyCtl(p)}}</span></div></div></div>`).join('')+`</div>`;}}
+function rowCompact(ps){{return ps.map(p=>`<div class="item" data-pid="${{esc(p.id)}}" onclick="openProduct('${{p.id}}')"><div class="b"><h3>${{esc(p.name)}}${{badge(p.id)}}${{tags(p)}}${{portionOf(p)}}</h3>${{p.description?`<p>${{esc(p.description)}}</p>`:''}}</div><span class="price">${{priceLabel(p)}}</span><span data-qty="${{p.id}}" ${{STOP}}>${{qtyCtl(p)}}</span></div>`).join('');}}
 const ITEMS=PRESET==='grid'?rowGrid:(PRESET==='compact'?rowCompact:rowList);
 function render(){{
   const cats=S.categories.filter(c=>S.products.some(p=>p.category_id===c.id));
@@ -370,6 +374,7 @@ function applyDefaults(pid){{const p=byId(pid);
   walk(p.modifier_groups||[]);}}
 window.customize=pid=>{{cust={{pid,sel:new Map(),qty:1}};applyDefaults(pid);
   renderCust();document.getElementById('csheet').classList.add('show');}};
+window.openProduct=pid=>customize(pid);
 window.closeCust=()=>document.getElementById('csheet').classList.remove('show');
 function groupSelectedQty(g){{let n=0;for(const o of g.options)n+=cust.sel.get(o.id)||0;return n;}}
 window.optToggle=(pid,gid,oid)=>{{const g=findGroup(pid,gid);if(!g)return;
@@ -414,7 +419,9 @@ function groupHtml(p,g,depth){{const n=groupSelectedQty(g);const req=g.min_selec
   return h+'</div>';}}
 function renderCust(){{if(!cust)return;const p=byId(cust.pid);if(!p)return;
   const ok=selValid(p);const u=unitPrice(p,cust.sel);
-  document.getElementById('cpanel').innerHTML=`<h2>${{esc(p.name)}}</h2>`+
+  document.getElementById('cpanel').innerHTML=
+    `${{photo(p.photo_file_id,'phero')}}<h2>${{esc(p.name)}}${{tags(p)}}${{portionOf(p)}}</h2>`+
+    `${{p.description?`<p class="pdesc">${{esc(p.description)}}</p>`:''}}`+
     (p.modifier_groups||[]).map(g=>groupHtml(p,g,0)).join('')+
     `<div class="crow"><span class="stepper"><button class="ghost" onclick="custQty(-1)">−</button><span>${{cust.qty}}</span><button onclick="custQty(1)">+</button></span></div>`+
     `<button class="big"${{ok?'':' disabled'}} onclick="addCustom()">В корзину · ${{fmt(u*cust.qty)}}</button>`;}}
